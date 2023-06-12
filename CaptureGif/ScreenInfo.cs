@@ -29,6 +29,22 @@ namespace CaptureGif
 
         public double DpiScaleY { get; private set; }
 
+        public double ConvertScaleX => _dpiScaleToBasicX * _dpiScaleToMainX;
+
+        public double ConvertScaleY => _dpiScaleToBasicY * _dpiScaleToMainY;
+        
+        private double _mainDpiScaleX => MainScreen.DpiScaleX;
+
+        private double _mainDpiScaleY => MainScreen.DpiScaleY;
+
+        private double _dpiScaleToMainX => DpiScaleX / _mainDpiScaleX;
+
+        private double _dpiScaleToMainY => DpiScaleY / _mainDpiScaleY;
+
+        private double _dpiScaleToBasicX => 1 / DpiScaleX;
+
+        private double _dpiScaleToBasicY => 1 / DpiScaleY;
+
         private ScreenInfo(Screen screen)
         {
             Screen = screen;
@@ -40,6 +56,59 @@ namespace CaptureGif
             Screen.GetDpi(DpiType.Effective, out uint dpiX, out uint dpiY);
             DpiScaleX = dpiX / 96.0;
             DpiScaleY = dpiY / 96.0;
+        }
+        
+        public RectangleF GetConvertedIntersectionRegion(Rectangle rect)
+        {
+            var rectF = ConvertToScaleRectangle(rect);
+            rectF.Intersect(Screen.Bounds);
+            return rectF;
+        }
+
+        public PointF ConvertToScalePoint(Point point)
+        {
+            return ConvertToScalePoint(point.X, point.Y);
+        }
+
+        public PointF ConvertToScalePoint(double x, double y)
+        {
+            return new PointF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY));
+        }
+
+        public RectangleF ConvertToScaleRectangle(Rectangle rect)
+        {
+            return ConvertToScaleRectangle(rect.X, rect.Y, rect.Width, rect.Height);
+        }
+
+        public RectangleF ConvertToScaleRectangle(double x, double y, double width, double height)
+        {
+            return new RectangleF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY), (float)(width /
+                ConvertScaleX), (float)(height / ConvertScaleY));
+        }
+
+        public float? ConvertToScaleX(double? x)
+        {
+            if (x.HasValue)
+            {
+                return (int)(x / ConvertScaleX);
+            }
+
+            return null;
+        }
+
+        public float? ConvertToScaleY(double? y)
+        {
+            if (y.HasValue)
+            {
+                return (int)(y / ConvertScaleY);
+            }
+
+            return null;
+        }
+
+        public override string ToString()
+        {
+            return DeviceName;
         }
 
         public static ScreenInfo GetScreenInfo(Screen screen)

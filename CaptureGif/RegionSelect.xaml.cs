@@ -66,9 +66,9 @@ namespace CaptureGif
             Topmost = false;
         }
 
-        public Task<(bool, DRectangle)> WaitForResult()
+        public Task<(bool, SelectedRegionResult)> WaitForResult()
         {
-            var tcs = new TaskCompletionSource<(bool, DRectangle)>();
+            var tcs = new TaskCompletionSource<(bool, SelectedRegionResult)>();
             var timer = new Timer(100);
             timer.Elapsed += (s, e) =>
             {
@@ -76,15 +76,18 @@ namespace CaptureGif
                 {
                     timer.Stop();
                     var rect = SelectedRange;
+                    var regions = _allScreens.Select(x => new ScreenRegion(x, x.GetConvertedIntersectionRegion(rect)))
+                        .Where(x => x.Rectangle != default)
+                        .ToArray();
+                    var result = new SelectedRegionResult(rect, regions);
                     if (_confirm && rect != default)
                     {
-                        using (var bitmap = new Bitmap(rect.Width, rect.Height))
-                        using (var graphics = Graphics.FromImage(bitmap))
-                        {
-                            graphics.DrawImage(_screenBitmap, 0, 0, rect, GraphicsUnit.Pixel);
-                        }
+                        tcs.SetResult((_confirm, result));
                     }
-                    tcs.SetResult((_confirm, _confirm ? SelectedRange : default));
+                    else
+                    {
+                        tcs.SetResult((_confirm, null));
+                    }
                 }
             };
             timer.Start();
@@ -297,15 +300,6 @@ namespace CaptureGif
         private void Window_DpiChanged(object sender, DpiChangedEventArgs e)
         {
             if (_closing) return;
-        }
-    }
-
-    internal static class Extensions
-    {
-        public static BitmapSource ToBitmapSource(this Bitmap bitmap)
-        {
-            return System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(bitmap.GetHbitmap(),
-                IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
         }
     }
 }

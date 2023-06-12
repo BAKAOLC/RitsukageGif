@@ -19,26 +19,6 @@ namespace CaptureGif
 
         public bool IsCurrent { get; private set; }
 
-        private double _dpiScaleX => Screen.DpiScaleX;
-
-        private double _dpiScaleY => Screen.DpiScaleY;
-
-        private double _mainDpiScaleX => ScreenInfo.MainScreen.DpiScaleX;
-
-        private double _mainDpiScaleY => ScreenInfo.MainScreen.DpiScaleY;
-
-        private double _dpiScaleToMainX => _dpiScaleX / _mainDpiScaleX;
-
-        private double _dpiScaleToMainY => _dpiScaleY / _mainDpiScaleY;
-
-        private double _dpiScaleToBasicX => 1 / _dpiScaleX;
-
-        private double _dpiScaleToBasicY => 1 / _dpiScaleY;
-
-        private double _scaleX => _dpiScaleToBasicX * _dpiScaleToMainX;
-
-        private double _scaleY => _dpiScaleToBasicY * _dpiScaleToMainY;
-
         private const int _forbidMarginTipGrid = 50;
 
         private static readonly string _tipModeString = "当前感知模式  {0}";
@@ -54,13 +34,12 @@ namespace CaptureGif
 
         public void UpdateView()
         {
-            var dpiScaleX = _dpiScaleToBasicX * _dpiScaleToMainX;
             HorizontalAlignment = HorizontalAlignment.Left;
             VerticalAlignment = VerticalAlignment.Top;
-            Margin = new Thickness(Screen.Bounds.Left * _scaleX, Screen.Bounds.Top * _scaleY, 0, 0);
+            Margin = new Thickness(Screen.Bounds.Left * Screen.ConvertScaleX, Screen.Bounds.Top * Screen.ConvertScaleY, 0, 0);
             Width = Screen.Bounds.Width;
             Height = Screen.Bounds.Height;
-            RenderTransform = new ScaleTransform(_scaleX, _scaleY);
+            RenderTransform = new ScaleTransform(Screen.ConvertScaleX, Screen.ConvertScaleY);
         }
 
         public void UpdateScreenBitmap(BitmapSource source)
@@ -74,14 +53,14 @@ namespace CaptureGif
 
         public void UpdateMousePosition(DPoint point)
         {
-            point = ConvertToScalePoint(point);
-            IsCurrent = Screen.Bounds.Contains(point);
+            var pointF = Screen.ConvertToScalePoint(point);
+            IsCurrent = Screen.Bounds.Contains(pointF);
             if (IsCurrent)
             {
                 TipGrid.Visibility = Visibility.Visible;
-                if (point.X >= Screen.Bounds.Left + TipGrid.Margin.Left && point.Y >= Screen.Bounds.Top + TipGrid.Margin.Top
-                    && point.X <= Screen.Bounds.Left + TipGrid.Margin.Left + TipGrid.ActualWidth + _forbidMarginTipGrid
-                    && point.Y <= Screen.Bounds.Top + TipGrid.Margin.Top + TipGrid.ActualHeight + _forbidMarginTipGrid)
+                if (pointF.X >= Screen.Bounds.Left + TipGrid.Margin.Left && pointF.Y >= Screen.Bounds.Top + TipGrid.Margin.Top
+                    && pointF.X <= Screen.Bounds.Left + TipGrid.Margin.Left + TipGrid.ActualWidth + _forbidMarginTipGrid
+                    && pointF.Y <= Screen.Bounds.Top + TipGrid.Margin.Top + TipGrid.ActualHeight + _forbidMarginTipGrid)
                 {
                     TipGrid.VerticalAlignment = VerticalAlignment.Bottom;
                 }
@@ -105,12 +84,12 @@ namespace CaptureGif
             }
             else
             {
-                x = ConvertToScaleX(x);
-                y = ConvertToScaleY(y);
-                if (x.HasValue && x.Value >= Screen.Bounds.Left && x.Value <= Screen.Bounds.Right)
+                var sx = Screen.ConvertToScaleX(x);
+                var sy = Screen.ConvertToScaleY(y);
+                if (sx.HasValue && sx.Value >= Screen.Bounds.Left && sx.Value <= Screen.Bounds.Right)
                 {
-                    LineVertical.X1 = x.Value - Screen.Bounds.Left;
-                    LineVertical.X2 = x.Value - Screen.Bounds.Left;
+                    LineVertical.X1 = sx.Value - Screen.Bounds.Left;
+                    LineVertical.X2 = sx.Value - Screen.Bounds.Left;
                     LineVertical.Y1 = 0;
                     LineVertical.Y2 = Screen.Bounds.Height;
                     LineVertical.Visibility = Visibility.Visible;
@@ -119,12 +98,12 @@ namespace CaptureGif
                 {
                     LineVertical.Visibility = Visibility.Hidden;
                 }
-                if (y.HasValue && y.Value >= Screen.Bounds.Top && y.Value <= Screen.Bounds.Bottom)
+                if (sy.HasValue && sy.Value >= Screen.Bounds.Top && sy.Value <= Screen.Bounds.Bottom)
                 {
                     LineHorizontal.X1 = 0;
                     LineHorizontal.X2 = Screen.Bounds.Width;
-                    LineHorizontal.Y1 = y.Value - Screen.Bounds.Top;
-                    LineHorizontal.Y2 = y.Value - Screen.Bounds.Top;
+                    LineHorizontal.Y1 = sy.Value - Screen.Bounds.Top;
+                    LineHorizontal.Y2 = sy.Value - Screen.Bounds.Top;
                     LineHorizontal.Visibility = Visibility.Visible;
                 }
                 else
@@ -136,9 +115,8 @@ namespace CaptureGif
 
         public void UpdateSelectedRegion(DRectangle rect)
         {
-            rect = ConvertToScaleRectangle(rect);
-            rect.Intersect(Screen.Bounds);
-            if (rect == default)
+            var rectF = Screen.GetConvertedIntersectionRegion(rect);
+            if (rectF == default)
             {
                 RegionImageGrid.Visibility
                 = LineRegionLeft.Visibility
@@ -150,48 +128,48 @@ namespace CaptureGif
             else
             {
                 RegionImageGrid.Visibility = Visibility.Visible;
-                RegionImageGrid.Margin = new Thickness(rect.X - Screen.Bounds.Left, rect.Y - Screen.Bounds.Top, 0, 0);
-                RegionImageGrid.Width = rect.Width;
-                RegionImageGrid.Height = rect.Height;
-                RegionImage.Margin = new Thickness(-rect.X, -rect.Y, 0, 0);
-                if (rect.X > Screen.Bounds.Left)
+                RegionImageGrid.Margin = new Thickness(rectF.X - Screen.Bounds.Left, rectF.Y - Screen.Bounds.Top, 0, 0);
+                RegionImageGrid.Width = rectF.Width;
+                RegionImageGrid.Height = rectF.Height;
+                RegionImage.Margin = new Thickness(-rectF.X, -rectF.Y, 0, 0);
+                if (rectF.X > Screen.Bounds.Left)
                 {
-                    LineRegionLeft.X1 = LineRegionLeft.X2 = rect.X - Screen.Bounds.Left;
-                    LineRegionLeft.Y1 = rect.Y - Screen.Bounds.Top;
-                    LineRegionLeft.Y2 = rect.Y - Screen.Bounds.Top + rect.Height;
+                    LineRegionLeft.X1 = LineRegionLeft.X2 = rectF.X - Screen.Bounds.Left;
+                    LineRegionLeft.Y1 = rectF.Y - Screen.Bounds.Top;
+                    LineRegionLeft.Y2 = rectF.Y - Screen.Bounds.Top + rectF.Height;
                     LineRegionLeft.Visibility = Visibility.Visible;
                 }
                 else
                 {
                     LineRegionLeft.Visibility = Visibility.Hidden;
                 }
-                if (rect.X + rect.Width < Screen.Bounds.Right)
+                if (rectF.X + rectF.Width < Screen.Bounds.Right)
                 {
-                    LineRegionRight.X1 = LineRegionRight.X2 = rect.X - Screen.Bounds.Left + rect.Width;
-                    LineRegionRight.Y1 = rect.Y - Screen.Bounds.Top;
-                    LineRegionRight.Y2 = rect.Y - Screen.Bounds.Top + rect.Height;
+                    LineRegionRight.X1 = LineRegionRight.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
+                    LineRegionRight.Y1 = rectF.Y - Screen.Bounds.Top;
+                    LineRegionRight.Y2 = rectF.Y - Screen.Bounds.Top + rectF.Height;
                     LineRegionRight.Visibility = Visibility.Visible;
                 }
                 else
                 {
                     LineRegionRight.Visibility = Visibility.Hidden;
                 }
-                if (rect.Y + rect.Height < Screen.Bounds.Bottom)
+                if (rectF.Y + rectF.Height < Screen.Bounds.Bottom)
                 {
-                    LineRegionBottom.X1 = rect.X - Screen.Bounds.Left;
-                    LineRegionBottom.X2 = rect.X - Screen.Bounds.Left + rect.Width;
-                    LineRegionBottom.Y1 = LineRegionBottom.Y2 = rect.Y - Screen.Bounds.Top + rect.Height;
+                    LineRegionBottom.X1 = rectF.X - Screen.Bounds.Left;
+                    LineRegionBottom.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
+                    LineRegionBottom.Y1 = LineRegionBottom.Y2 = rectF.Y - Screen.Bounds.Top + rectF.Height;
                     LineRegionBottom.Visibility = Visibility.Visible;
                 }
                 else
                 {
                     LineRegionBottom.Visibility = Visibility.Hidden;
                 }
-                if (rect.Y > Screen.Bounds.Top)
+                if (rectF.Y > Screen.Bounds.Top)
                 {
-                    LineRegionTop.X1 = rect.X - Screen.Bounds.Left;
-                    LineRegionTop.X2 = rect.X - Screen.Bounds.Left + rect.Width;
-                    LineRegionTop.Y1 = LineRegionTop.Y2 = rect.Y - Screen.Bounds.Top;
+                    LineRegionTop.X1 = rectF.X - Screen.Bounds.Left;
+                    LineRegionTop.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
+                    LineRegionTop.Y1 = LineRegionTop.Y2 = rectF.Y - Screen.Bounds.Top;
                     LineRegionTop.Visibility = Visibility.Visible;
                 }
                 else
@@ -218,44 +196,6 @@ namespace CaptureGif
                     PerceptionTipLabel.Content = string.Format(_tipModeString, "水平+竖直");
                     break;
             }
-        }
-
-        private DPoint ConvertToScalePoint(DPoint point)
-        {
-            return ConvertToScalePoint(point.X, point.Y);
-        }
-
-        private DPoint ConvertToScalePoint(double x, double y)
-        {
-            return new DPoint((int)(x / _scaleX), (int)(y / _scaleY));
-        }
-
-        private DRectangle ConvertToScaleRectangle(DRectangle rect)
-        {
-            return ConvertToScaleRectangle(rect.X, rect.Y, rect.Width, rect.Height);
-        }
-
-        private DRectangle ConvertToScaleRectangle(double x, double y, double width, double height)
-        {
-            return new DRectangle((int)(x / _scaleX), (int)(y / _scaleY), (int)(width / _scaleX), (int)(height / _scaleY));
-        }
-
-        private int? ConvertToScaleX(double? x)
-        {
-            if (x.HasValue)
-            {
-                return (int)(x / _scaleX);
-            }
-            return null;
-        }
-
-        private int? ConvertToScaleY(double? y)
-        {
-            if (y.HasValue)
-            {
-                return (int)(y / _scaleY);
-            }
-            return null;
         }
     }
 }

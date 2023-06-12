@@ -1,17 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 using DRectangle = System.Drawing.Rectangle;
 
 namespace CaptureGif
@@ -21,7 +9,7 @@ namespace CaptureGif
     /// </summary>
     public partial class MainWindow : Window
     {
-        public DRectangle? Region { get; private set; }
+        public SelectedRegionResult Region { get; private set; }
 
         public MainWindow()
         {
@@ -35,10 +23,18 @@ namespace CaptureGif
         {
             var regionSelect = RegionSelect.Begin();
             (var confirm, var region) = await regionSelect.WaitForResult().ConfigureAwait(false);
-            if (confirm && region != default)
+            if (confirm)
             {
-                Region = region;
-                MessageBox.Show($"Selected region: {region}");
+                if (region != default)
+                {
+                    Region = region;
+                    MessageBox.Show($"Selected region: {Environment.NewLine}{region}");
+                }
+                else
+                {
+                    Region = null;
+                    MessageBox.Show("No region selected");
+                }
             }
         }
 
