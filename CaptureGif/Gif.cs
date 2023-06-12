@@ -3,6 +3,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -11,7 +12,7 @@ namespace CaptureGif
 {
     public static class Gif
     {
-        public static RecordInfo Begin(string path, Rectangle rectangle, int delay, double scale, bool cursor,
+        public static RecordInfo BeginWithMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
             CancellationToken recordingToken, CancellationToken processingToken)
         {
             var info = new RecordInfo
@@ -74,6 +75,49 @@ namespace CaptureGif
                     Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
                 }
             }, processingToken);
+            return info;
+        }
+        public static RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
+            CancellationToken recordingToken, CancellationToken processingToken)
+        {
+            var info = new RecordInfo
+            {
+                Path = path
+            };
+            var provider = new ScreenFrameProvider(rectangle);
+            var lastMilliseconds = 0L;
+            var recordFrames = 0;
+            var processedFrames = 0;
+            var sw = new Stopwatch();
+            Task.Run(() =>
+            {
+                using (var gifCreator = AnimatedGif.AnimatedGif.Create(path, delay))
+                {
+                    while (!recordingToken.IsCancellationRequested)
+                    {
+                        var t = sw.ElapsedMilliseconds;
+                        var dt = t - lastMilliseconds;
+                        lastMilliseconds = t;
+                        var img = provider.Capture(cursor, scale);
+                        Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
+                        gifCreator.AddFrame(img, delay: (int)dt, quality: GifQuality.Bit8);
+                        img.Dispose();
+                        Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
+                        if (dt > delay)
+                        {
+                            var d = (int)(delay - (dt - delay));
+                            Thread.Sleep(d > 0 ? d : 1);
+                        }
+                        else
+                        {
+                            Thread.Sleep(delay);
+                        }
+                    }
+                }
+                sw.Stop();
+                Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
+            }, recordingToken);
+            sw.Start();
             return info;
         }
         

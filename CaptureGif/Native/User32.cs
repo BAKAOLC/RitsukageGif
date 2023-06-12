@@ -14,6 +14,10 @@ namespace CaptureGif.Native
         public static extern bool GetCursorPos(ref Point lpPoint);
 
         [DllImport(DllName)]
+        public static extern bool SetCursorPos(int x, int y);
+        
+
+        [DllImport(DllName)]
         public static extern bool DrawIconEx(
             IntPtr hDC,
             int Left,
@@ -39,6 +43,15 @@ namespace CaptureGif.Native
 
         [DllImport(DllName)]
         public static extern IntPtr GetForegroundWindow();
+
+        [DllImport(DllName)]
+        public static extern IntPtr ChildWindowFromPointEx(IntPtr pHwnd, Point point, uint uFlgs);
+
+        [DllImport(DllName)]
+        public static extern int SendMessage(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport(DllName)]
+        public static extern bool ScreenToClient(IntPtr hWnd, out Point lpPoint);
 
         [DllImport(DllName)]
         public static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
