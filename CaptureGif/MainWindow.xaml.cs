@@ -1,9 +1,17 @@
-﻿using System.IO;
+﻿using System;
+using NHotkey.Wpf;
+using System.IO;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using NHotkey;
+using WpfAnimatedGif;
+using Clipboard = System.Windows.Clipboard;
+using DpiChangedEventArgs = System.Windows.DpiChangedEventArgs;
 
 namespace CaptureGif
 {
@@ -35,74 +43,160 @@ namespace CaptureGif
 
         public Gif.RecordInfo RecordInfo { get; private set; }
 
-        private CancellationTokenSource _cancellationTokenSource;
+        private bool _canBeginRecord;
+        private bool _canChangeRegion;
+        private byte[] lastRecordGifClipboardBytes;
+        private CancellationTokenSource _recordingCancellationTokenSource;
+        private CancellationTokenSource _processingCancellationTokenSource;
 
         public MainWindow()
         {
             InitializeComponent();
-            FPS = 30;
+            GifFrameInteger.Value = FPS = 20;
+            GifScaleInteger.Value = Scale = 2;
+            _canBeginRecord = false;
+            _canChangeRegion = true;
+            RegisterHotKeys();
+        }
+
+        private void RegisterHotKeys()
+        {
+            bool success1 = true, success2 = true;
+            try
+            {
+                HotkeyManager.Current.AddOrReplace("PushRecordGif", Key.A, ModifierKeys.Control | ModifierKeys.Shift,
+                    OnHotKey_PushRecordGif);
+            }
+            catch
+            {
+                success1 = false;
+            }
+            try
+            {
+                HotkeyManager.Current.AddOrReplace("SelectRegion", Key.S, ModifierKeys.Control | ModifierKeys.Shift,
+                    OnHotKey_SelectRegion);
+            }
+            catch
+            {
+                success2 = false;
+            }
+            if (success1 && success2) return;
+            var sb = new StringBuilder();
+            sb.AppendLine("以下快捷键注册失败，请检查是否有其他程序占用了快捷键。");
+            if (!success1)
+                sb.AppendLine("Ctrl + Shift + A：开始/停止录制");
+            if (!success2)
+                sb.AppendLine("Ctrl + Shift + S：选择录制区域");
+            Task.Run(() =>
+            {
+                MessageBox.Show(sb.ToString(),
+                    "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            }).ConfigureAwait(false);
+        }
+
+        private void RemoveHotKeys()
+        {
+            HotkeyManager.Current.Remove("PushRecordGif");
+            HotkeyManager.Current.Remove("SelectRegion");
+        }
+
+        private void OnHotKey_PushRecordGif(object sender, HotkeyEventArgs e)
+        {
+            if (!_canBeginRecord) return;
+            RecordButton_Click(null, null);
+        }
+
+        private void OnHotKey_SelectRegion(object sender, HotkeyEventArgs e)
+        {
+            if (!_canChangeRegion) return;
+            RegionSelectButton_Click(null, null);
         }
 
         private async void RecordButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!_canBeginRecord) return;
             if (Recording)
             {
+                _canChangeRegion = true;
                 Recording = false;
                 RecordButton.Content = "开始录制";
                 RecordButton.Background = Brushes.White;
-                GifScaleInterger.IsEnabled = true;
-                GifFrameInterger.IsEnabled = true;
+                RegionSelectButton.IsEnabled = true;
+                GifScaleInteger.IsEnabled = true;
+                GifFrameInteger.IsEnabled = true;
                 RecordCursorCheckBox.IsEnabled = true;
-                _cancellationTokenSource?.Cancel();
+                _recordingCancellationTokenSource?.Cancel();
             }
             else
             {
+                _canChangeRegion = false;
                 Recording = true;
                 RecordButton.Content = "停止录制";
                 RecordButton.Background = Brushes.Red;
-                GifScaleInterger.IsEnabled = false;
-                GifFrameInterger.IsEnabled = false;
+                RegionSelectButton.IsEnabled = false;
+                GifScaleInteger.IsEnabled = false;
+                GifFrameInteger.IsEnabled = false;
                 RecordCursorCheckBox.IsEnabled = false;
-                _cancellationTokenSource = new CancellationTokenSource();
-                Gif.RecordInfo info = null;
-                Task task1 = Task.Run(() =>
-                {
-                    Gif.Begin(Path.GetTempFileName(), Region.Converted,
-                        _delay, Scale, RecordCursor, _cancellationTokenSource.Token, out info);
-                    RecordInfo = info;
-                }, _cancellationTokenSource.Token);
-                Task task2 = Task.Run(() =>
+                _recordingCancellationTokenSource?.Cancel();
+                _processingCancellationTokenSource?.Cancel();
+                var tokenRecording = new CancellationTokenSource();
+                var tokenProcessing = new CancellationTokenSource();
+                _recordingCancellationTokenSource = tokenRecording;
+                _processingCancellationTokenSource = tokenProcessing;
+                var info = Gif.Begin(Path.GetTempFileName(), Region.Converted,
+                    _delay, (double)1 / Scale, RecordCursor, tokenRecording.Token, tokenProcessing.Token);
+                RecordInfo = info;
+                await Task.Run(() =>
                 {
                     do
                     {
                         Thread.Sleep(30);
                         Dispatcher.Invoke(() =>
                         {
+                            GifFramesLabel.Content = $"{info.ProcessedFrames} / {info.Frames}";
                         });
-                    }
-                    while (!(info != null && info.Completed));
+                    } while (!(info.Completed || tokenProcessing.IsCancellationRequested));
+                    if (tokenProcessing.IsCancellationRequested) return;
                     var file = new FileInfo(info.Path);
                     Dispatcher.Invoke(() =>
                     {
                         if (file.Length > 1024 * 1024)
-                            GifSizeLable.Content = $"文件大小：{(double)file.Length / 1024 / 1024:F2}MB";
+                            GifSizeLabel.Content = $"文件大小：{(double)file.Length / 1024 / 1024:F2}MB";
                         else if (file.Length > 1024)
-                            GifSizeLable.Content = $"文件大小：{(double)file.Length / 1024:F2}KB";
+                            GifSizeLabel.Content = $"文件大小：{(double)file.Length / 1024:F2}KB";
                         else
-                            GifSizeLable.Content = $"文件大小：{(double)file.Length:F2}B";
+                            GifSizeLabel.Content = $"文件大小：{(double)file.Length:F2}B";
                     });
-                    string path = file.FullName.Replace("\\", "/");
+                    var path = file.FullName.Replace("\\", "/");
                     var sb = new StringBuilder();
                     sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
-                    sb.AppendFormat("<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>", path);
-                    var data = new MemoryStream(Encoding.Default.GetBytes(sb.ToString()));
-                    Clipboard.SetData("Html Format", data);
-                }, _cancellationTokenSource.Token);
+                    sb.AppendFormat(
+                        "<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>",
+                        path);
+                    lastRecordGifClipboardBytes = Encoding.Default.GetBytes(sb.ToString());
+                    Dispatcher.Invoke(() =>
+                    {
+                        var data = new MemoryStream(lastRecordGifClipboardBytes);
+                        Clipboard.SetData("Html Format", data);
+                    });
+                    Dispatcher.Invoke(() =>
+                    {
+                        GifView.Visibility = Visibility.Visible;
+                        var image = new BitmapImage();
+                        image.BeginInit();
+                        var ms = new MemoryStream(File.ReadAllBytes(path));
+                        image.StreamSource = ms;
+                        image.EndInit();
+                        ImageBehavior.SetAnimatedSource(GifView, image);
+                    });
+                }, tokenProcessing.Token).ConfigureAwait(false);
             }
         }
 
         private async void RegionSelectButton_Click(object sender, RoutedEventArgs e)
         {
+            if (!_canChangeRegion) return;
+            _canBeginRecord = false;
             var regionSelect = RegionSelect.Begin();
             (var confirm, var region) = await regionSelect.WaitForResult().ConfigureAwait(false);
             if (confirm)
@@ -120,6 +214,7 @@ namespace CaptureGif
             {
                 if (Region != default)
                 {
+                    _canBeginRecord = true;
                     RecordButton.IsEnabled = true;
                 }
                 else
@@ -129,12 +224,12 @@ namespace CaptureGif
             });
         }
 
-        private void GifScaleInterger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void GifScaleInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             Scale = (int)e.NewValue;
         }
 
-        private void GifFrameInterger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void GifFrameInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             FPS = (int)e.NewValue;
         }
@@ -147,6 +242,12 @@ namespace CaptureGif
         private void RecordCursorCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             RecordCursor = false;
+        }
+
+        private void GifView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var data = new MemoryStream(lastRecordGifClipboardBytes);
+            Clipboard.SetData("Html Format", data);
         }
 
         private void Window_DpiChanged(object sender, DpiChangedEventArgs e)

@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
+using System.Windows.Forms;
 
 namespace CaptureGif.Native
 {
@@ -92,5 +93,11 @@ namespace CaptureGif.Native
 
         [DllImport(DllName)]
         public static extern int ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport(DllName, SetLastError = true)]
+        public static extern bool RegisterHotKey(IntPtr hWnd, int id, KeyModifiers fsModifiers, Keys vk);
+        
+        [DllImport(DllName, SetLastError = true)]
+        public static extern bool RemoveRegisterHotKey(IntPtr hWnd, int id);
     }
 }

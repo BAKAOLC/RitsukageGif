@@ -1,75 +1,35 @@
 ﻿using CaptureGif.Native;
-using System;
 using System.Drawing;
 
 namespace CaptureGif
 {
-    public class ScreenFrameProvider : IDisposable
+    public class ScreenFrameProvider
     {
-        public int Width { get; }
-
-        public int Height { get; }
-
-        private readonly Rectangle _rectangle;
-        private readonly IntPtr _hdcSrc;
-        private readonly GdiDeviceContext _dcTarget;
-
-        private class GdiDeviceContext : IDisposable
-        {
-            readonly IntPtr _hdcDest, _hBitmap;
-
-            public GdiDeviceContext(IntPtr srcDc, int width, int height)
-            {
-                _hdcDest = Gdi32.CreateCompatibleDC(srcDc);
-                _hBitmap = Gdi32.CreateCompatibleBitmap(srcDc, width, height);
-                Gdi32.SelectObject(_hdcDest, _hBitmap);
-            }
-
-            public void Dispose()
-            {
-                Gdi32.DeleteDC(_hdcDest);
-                Gdi32.DeleteObject(_hBitmap);
-            }
-
-            public IntPtr GetDc() => _hdcDest;
-
-            public Bitmap GetBitmap()
-            {
-                return Image.FromHbitmap(_hBitmap);
-            }
-        }
+        public Rectangle Rectangle { get; }
 
         public ScreenFrameProvider(Rectangle rectangle)
         {
-            _rectangle = rectangle;
-            Width = rectangle.Size.Width;
-            Height = rectangle.Size.Height;
-            _hdcSrc = User32.GetDC(IntPtr.Zero);
-            _dcTarget = new GdiDeviceContext(_hdcSrc, Width, Height);
+            Rectangle = rectangle;
         }
 
-        private void OnCapture(bool cursor = false)
+        public Bitmap Capture(bool cursor = false, double scale = 1)
         {
-            Rectangle rect = _rectangle;
-            IntPtr hdcDest = _dcTarget.GetDc();
-            Gdi32.StretchBlt(hdcDest, 0, 0, Width, Height, _hdcSrc, rect.X, rect.Y, Width, Height, (int)CopyPixelOperation.SourceCopy);
-            if (cursor)
+            var width = (int)(Rectangle.Width * scale);
+            var height = (int)(Rectangle.Height * scale);
+            var bitmap = new Bitmap(width, height);
+            using (var source = new Bitmap(Rectangle.Width, Rectangle.Height))
+            using (var graphicsBitmap = Graphics.FromImage(bitmap))
+            using (var graphicsSource = Graphics.FromImage(source))
             {
-                Cursor.Draw(hdcDest, p => new Point(p.X - _rectangle.X, p.Y - _rectangle.Y));
+                graphicsSource.CopyFromScreen(Rectangle.X, Rectangle.Y, 0, 0, Rectangle.Size);
+                if (cursor)
+                {
+                    Cursor.Draw(graphicsSource, p => new Point(p.X - Rectangle.X, p.Y - Rectangle.Y));
+                }
+
+                graphicsBitmap.DrawImage(source, 0, 0, width, height);
             }
-        }
-
-        public Bitmap Capture(bool cursor = false)
-        {
-            OnCapture(cursor);
-            Bitmap img = _dcTarget.GetBitmap();
-            return img;
-        }
-
-        public void Dispose()
-        {
-            _dcTarget.Dispose();
-            User32.ReleaseDC(IntPtr.Zero, _hdcSrc);
+            return bitmap;
         }
     }
 }

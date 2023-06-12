@@ -13,21 +13,16 @@ namespace CaptureGif.Native
             var hIcon = GetIcon(transform, out var location);
             if (hIcon == IntPtr.Zero)
                 return;
-            var bmp = Icon.FromHandle(hIcon).ToBitmap();
-            User32.DestroyIcon(hIcon);
-            try
+            using (var bmp = Icon.FromHandle(hIcon).ToBitmap())
             {
-                using (bmp)
+                User32.DestroyIcon(hIcon);
+                try
                 {
-                    Pen pen = new Pen(Color.Red);
-                    int width = 32;
-                    g.DrawEllipse(pen, location.X - width, location.Y - width, width * 2, width * 2);
                     g.DrawImage(bmp, new Rectangle(location, bmp.Size));
-                    pen.Dispose();
                 }
-            }
-            catch (ArgumentException)
-            {
+                catch (ArgumentException)
+                {
+                }
             }
         }
 
@@ -38,11 +33,6 @@ namespace CaptureGif.Native
                 return;
             try
             {
-                Gdi32.SelectObject(deviceContext, Gdi32.GetStockObject(StockObjects.DC_PEN));
-                Gdi32.SelectObject(deviceContext, Gdi32.GetStockObject(StockObjects.NULL_BRUSH));
-                Gdi32.SetDCPenColor(deviceContext, 0x000000FF);
-                int width = 32;
-                Gdi32.Ellipse(deviceContext, location.X - width, location.Y - width, location.X + width, location.Y + width);
                 User32.DrawIconEx(deviceContext, location.X, location.Y, hIcon, 0, 0, 0, IntPtr.Zero, DrawIconExFlags.Normal);
             }
             finally

@@ -11,53 +11,48 @@ namespace CaptureGif
 {
     public static class Gif
     {
-        public static void Begin(string path, Rectangle rectangle, int delay, int scale, bool cursor, CancellationToken ct, out RecordInfo info)
+        public static RecordInfo Begin(string path, Rectangle rectangle, int delay, double scale, bool cursor,
+            CancellationToken recordingToken, CancellationToken processingToken)
         {
-            var _info = new RecordInfo();
-            info = _info;
-            BlockingCollection<Frame> bitmaps = new BlockingCollection<Frame>(1000);
-            int recordFrames = 0;
-            int processedFrames = 0;
-            Task task1 = Task.Run(() =>
+            var info = new RecordInfo
             {
-                int innerDelay = delay;
-                Stopwatch sw = new Stopwatch();
-                sw.Start();
-                using (ScreenFrameProvider provider = new ScreenFrameProvider(rectangle))
+                Path = path
+            };
+            var bitmaps = new BlockingCollection<Frame>(1000);
+            var provider = new ScreenFrameProvider(rectangle);
+            var lastMilliseconds = 0L;
+            var recordFrames = 0;
+            var processedFrames = 0;
+            var sw = new Stopwatch();
+            Task.Run(() =>
+            {
+                while (!recordingToken.IsCancellationRequested)
                 {
-                    TimeSpan prev = sw.Elapsed;
-                    while (!ct.IsCancellationRequested)
+                    var t = sw.ElapsedMilliseconds;
+                    var dt = t - lastMilliseconds;
+                    lastMilliseconds = t;
+                    var img = provider.Capture(cursor, scale);
+                    bitmaps.Add(new Frame()
                     {
-                        innerDelay = delay;
-                        var curr = sw.Elapsed;
-                        int usedt = (int)(curr - prev).TotalMilliseconds;
-                        if (usedt < innerDelay)
-                        {
-                            int a = innerDelay - usedt;
-                            Sleep(a);
-                        }
-                        else
-                        {
-                            innerDelay = usedt;
-                        }
-                        prev = curr;
-                        Bitmap img = provider.Capture(cursor);
-                        bitmaps.Add(new Frame()
-                        {
-                            Bitmap = img,
-                            Delay = innerDelay
-                        });
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            _info.ElapsedSeconds = (int)sw.Elapsed.TotalSeconds;
-                            _info.Frames = ++recordFrames;
-                        });
+                        Bitmap = img,
+                        Delay = (int)dt
+                    });
+                    Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
+                    if (dt > delay)
+                    {
+                        var d = (int)(delay - (dt - delay));
+                        Thread.Sleep(d > 0 ? d : 1);
                     }
-                    bitmaps.CompleteAdding();
+                    else
+                    {
+                        Thread.Sleep(delay);
+                    }
                 }
+                bitmaps.CompleteAdding();
                 sw.Stop();
-            }, ct);
-            Task task2 = Task.Run(() =>
+            }, recordingToken);
+            sw.Start();
+            Task.Run(() =>
             {
                 using (var gifCreator = AnimatedGif.AnimatedGif.Create(path, delay))
                 {
@@ -71,35 +66,17 @@ namespace CaptureGif
                         catch (InvalidOperationException)
                         {
                         }
-                        if (frame != null)
-                        {
-                            gifCreator.AddFrame(frame.Bitmap, delay: frame.Delay, quality: GifQuality.Bit8);
-                            frame.Bitmap.Dispose();
-                            Application.Current.Dispatcher.Invoke(() =>
-                            {
-                                _info.ProcessedFrames = ++processedFrames;
-                            });
-                        }
+                        if (frame == null) continue;
+                        gifCreator.AddFrame(frame.Bitmap, delay: frame.Delay, quality: GifQuality.Bit8);
+                        frame.Bitmap.Dispose();
+                        Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
                     }
+                    Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
                 }
-            }, ct);
-            Task.WaitAll(task1, task2);
+            }, processingToken);
+            return info;
         }
-
-        private static void Sleep(int ms)
-        {
-            var sw = Stopwatch.StartNew();
-            var sleepMs = ms - 16;
-            if (sleepMs > 0)
-            {
-                Thread.Sleep(sleepMs);
-            }
-            while (sw.ElapsedMilliseconds < ms)
-            {
-                Thread.SpinWait(1);
-            }
-        }
-
+        
         public class RecordInfo : NotifyPropertyChanged
         {
             private string _path;
@@ -107,19 +84,6 @@ namespace CaptureGif
             {
                 get => _path;
                 set => Set(ref _path, value);
-            }
-
-            private bool _recording = false;
-            public bool Recording {
-                get => _recording;
-                set => Set(ref _recording, value);
-            }
-
-            private int _elapsedSeconds;
-            public int ElapsedSeconds
-            {
-                get => _elapsedSeconds;
-                set => Set(ref _elapsedSeconds, value);
             }
 
             private int _frames;
