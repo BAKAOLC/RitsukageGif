@@ -41,7 +41,8 @@
                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                 TextAlignment="Center" FontSize="12"
                                 Width="50" Height="20" Margin="10,115,0,0"
-                                Value="2" Increment="1" Maximum="16" Minimum="1"/>
+                                Value="2" Increment="1" Maximum="16" Minimum="1"
+                                ValueChanged="GifScaleInterger_ValueChanged"/>
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="5,140,0,0"
                    Content="帧率"/>
@@ -49,7 +50,14 @@
                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                 TextAlignment="Center" FontSize="12"
                                 Width="50" Height="20" Margin="10,165,0,0"
-                                Value="30" Increment="1" Maximum="60" Minimum="1"/>
+                                Value="30" Increment="1" Maximum="60" Minimum="1"
+                                ValueChanged="GifFrameInterger_ValueChanged"/>
+            <CheckBox x:Name="RecordCursorCheckBox"
+                      HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Margin="10,220,0,0"
+                      Content="录制鼠标指针"
+                      Checked="RecordCursorCheckBox_Checked"
+                      Unchecked="RecordCursorCheckBox_Unchecked"/>
         </Grid>
     </Grid>
 </Window>
