@@ -18,12 +18,11 @@
                              Margin="0,0,0,40"
                              FontSize="16"
                              TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Visible"/>
+                             VerticalScrollBarVisibility="Visible" FontFamily="SimSun"/>
                     <Button VerticalAlignment="Bottom"
                             Height="40"
-                            FontSize="20"
                             Content="确定"
-                            Click="ButtonBase_OnClick"/>
+                            Click="ButtonBase_OnClick" FontSize="16"/>
                 </Grid>
             </Border>
         </Grid>
