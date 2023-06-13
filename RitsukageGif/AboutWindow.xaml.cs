@@ -112,5 +112,10 @@ namespace RitsukageGif
             _instance.Close();
             _instance = null;
         }
+
+        private void ButtonBase_OnClick(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
     }
 }
