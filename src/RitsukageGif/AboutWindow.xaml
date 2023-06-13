@@ -22,7 +22,8 @@
                     <Button VerticalAlignment="Bottom"
                             Height="40"
                             FontSize="20"
-                            Content="确定"/>
+                            Content="确定"
+                            Click="ButtonBase_OnClick"/>
                 </Grid>
             </Border>
         </Grid>

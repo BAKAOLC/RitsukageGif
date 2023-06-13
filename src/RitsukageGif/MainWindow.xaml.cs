@@ -60,6 +60,7 @@ namespace RitsukageGif
         public MainWindow()
         {
             InitializeComponent();
+            Title += $" ver {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
         }
 
         private void SetDefaultConfig()
