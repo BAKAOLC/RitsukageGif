@@ -9,11 +9,12 @@
     <RepositoryUrl>https://github.com/BAKAOLC/RitsukageGif</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/BAKAOLC/RitsukageGif</PackageProjectUrl>
-    <AssemblyVersion>1.0.0.2</AssemblyVersion>
-    <FileVersion>1.0.0.2</FileVersion>
+    <AssemblyVersion>1.0.0.3</AssemblyVersion>
+    <FileVersion>1.0.0.3</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="About.txt" />
     <None Remove="Background.png" />
   </ItemGroup>
 
@@ -22,6 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="About.txt" />
     <Resource Include="Background.png" />
   </ItemGroup>
 

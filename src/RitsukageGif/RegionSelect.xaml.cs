@@ -1,17 +1,18 @@
-﻿using RitsukageGif.Native;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO.Ports;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Timers;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using DPoint = System.Drawing.Point;
 using DRectangle = System.Drawing.Rectangle;
 using FScreen = System.Windows.Forms.Screen;
-using WPoint = System.Windows.Point;
 
 namespace RitsukageGif
 {
@@ -59,6 +60,7 @@ namespace RitsukageGif
         }
 
         private bool _selecting;
+        private bool _selectingMoved;
         private DPoint _selectingStartPoint;
         private DPoint _selectingEndPoint;
         private DRectangle SelectingRange
@@ -83,6 +85,8 @@ namespace RitsukageGif
         private DPoint _mousePositionForScreen;
         private DPoint _perceptionPoint;
 
+        private WinWindow[] _windows;
+
         private bool _shiftKey;
         private bool _shiftKeyHolding;
         private readonly Timer _shiftKeyTimer = new Timer(500);
@@ -106,7 +110,7 @@ namespace RitsukageGif
             };
         }
 
-        public Task<(bool, SelectedRegionResult)> WaitForResult()
+        public Task<(bool, SelectedRegionResult)> WaitForResultAsync()
         {
             var tcs = new TaskCompletionSource<(bool, SelectedRegionResult)>();
             var timer = new Timer(100);
@@ -134,30 +138,11 @@ namespace RitsukageGif
             return tcs.Task;
         }
 
-        public void ProcessPerceptionProgramArea(int x, int y)
+        public void ProcessPerceptionProgramArea(DPoint point)
         {
-            IsEnabled = false;
-            var pt = new WPoint(x, y);
-            var intPtr = User32.ChildWindowFromPointEx(User32.GetDesktopWindow(), pt, 3U);
-            if (intPtr != IntPtr.Zero)
-            {
-                var intPtr2 = intPtr;
-                for (; ; )
-                {
-                    User32.ScreenToClient(intPtr2, out pt);
-                    intPtr2 = User32.ChildWindowFromPointEx(intPtr2, pt, 0U);
-                    if (intPtr2 == IntPtr.Zero || intPtr2 == intPtr)
-                    {
-                        break;
-                    }
-                    intPtr = intPtr2;
-                    pt.X = x;
-                    pt.Y = y;
-                }
-                User32.GetWindowRect(intPtr, out var rect);
-                PerceptionProgramArea = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
-            }
-            IsEnabled = true;
+            var windows = _windows.FirstOrDefault(x => x.IsAlive && x.Bounds.Contains(point));
+            PerceptionProgramArea = windows?.Bounds ?? default;
+            Activate();
         }
 
         public void ProcessPerceptionNearPoint(DPoint MousePoint, bool horizontal, bool vertical)
@@ -283,7 +268,20 @@ namespace RitsukageGif
         {
             UpdateSizeToScreenSize();
             UpdateScreenBitmap();
-            UpdateSelectedRegion(false);
+            UpdateWindowEnums();
+            var point = Mouse.GetPosition(this);
+            _mousePositionForScreen = new DPoint((int)point.X, (int)point.Y);
+            UpdateMousePosition();
+            UpdateSelectedRegion();
+        }
+
+        private void UpdateWindowEnums()
+        {
+            var currentHandle = new WindowInteropHelper(this).Handle;
+            _windows = WinWindow.Enumerate()
+                .Where(x => x.Handle != currentHandle && x.IsVisible)
+                .SelectMany(GetAllChildren)
+                .ToArray();
         }
 
         private void UpdateScreens()
@@ -357,7 +355,7 @@ namespace RitsukageGif
             }
         }
 
-        private void UpdateView()
+        private void UpdateMousePosition()
         {
             _perceptionPoint = InvalidPerceptionPoint;
             foreach (var view in _allScreenViewGrids)
@@ -369,12 +367,29 @@ namespace RitsukageGif
             }
         }
 
-        private void UpdateSelectedRegion(bool isSelecting = false)
+        private void UpdateSelectedRegion()
         {
-            DRectangle rect = isSelecting ? SelectingRange : SelectedRange;
+            DRectangle rect;
+            bool needConvert = false;
+            double opacity = 1;
+            if (_selecting)
+            {
+                rect = SelectingRange;
+                needConvert = true;
+            }
+            else if (_selected)
+            {
+                rect = SelectedRange;
+                needConvert = true;
+            }
+            else
+            {
+                rect = PerceptionProgramArea;
+                opacity = 0.8;
+            }
             foreach (var view in _allScreenViewGrids)
             {
-                view.UpdateSelectedRegion(rect);
+                view.UpdateSelectedRegion(rect, needConvert, opacity);
             }
         }
 
@@ -410,7 +425,7 @@ namespace RitsukageGif
         private void NextPerceptionMode()
         {
             _perceptionMode = (PerceptionMode)(((int)_perceptionMode + 1) % 4);
-            UpdateView();
+            UpdateMousePosition();
         }
 
         private DPoint GetPointWithPerception(DPoint point)
@@ -438,6 +453,7 @@ namespace RitsukageGif
             if (e.LeftButton == MouseButtonState.Pressed)
             {
                 _selecting = true;
+                _selectingMoved = false;
                 var position = e.GetPosition(this);
                 var point = new DPoint((int)position.X, (int)position.Y);
                 point = GetPointWithPerception(point);
@@ -458,12 +474,13 @@ namespace RitsukageGif
             var point = new DPoint((int)position.X, (int)position.Y);
             _mousePositionForScreen = point;
             if (_closing) return;
-            UpdateView();
             if (_selecting)
             {
+                _selectingMoved = true;
                 _selectingEndPoint = _mousePositionForScreen;
-                UpdateSelectedRegion(true);
             }
+            UpdateMousePosition();
+            UpdateSelectedRegion();
         }
 
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
@@ -475,13 +492,24 @@ namespace RitsukageGif
                 {
                     _selecting = false;
                     _selected = true;
-                    var position = e.GetPosition(this);
-                    var point = new DPoint((int)position.X, (int)position.Y);
-                    point = GetPointWithPerception(point);
-                    _selectingEndPoint = point;
-                    _selectedStartPoint = _selectingStartPoint;
-                    _selectedEndPoint = _selectingEndPoint;
-                    UpdateSelectedRegion(false);
+                    if (_selectingMoved)
+                    {
+                        var position = e.GetPosition(this);
+                        var point = new DPoint((int)position.X, (int)position.Y);
+                        point = GetPointWithPerception(point);
+                        _selectingEndPoint = point;
+                        _selectedStartPoint = _selectingStartPoint;
+                        _selectedEndPoint = _selectingEndPoint;
+                        UpdateSelectedRegion();
+                    }
+                    else
+                    {
+                        var view = ScreenInfo.MainScreen;
+                        if (view == null) return;
+                        _selectedStartPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
+                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right, PerceptionProgramArea.Bottom));
+                        UpdateSelectedRegion();
+                    }
                 }
             }
         }
@@ -495,12 +523,12 @@ namespace RitsukageGif
                     if (_selecting)
                     {
                         _selecting = false;
-                        UpdateSelectedRegion(false);
+                        UpdateSelectedRegion();
                     }
                     else if (_selected)
                     {
                         _selected = false;
-                        UpdateSelectedRegion(false);
+                        UpdateSelectedRegion();
                     }
                     else
                     {
@@ -536,6 +564,22 @@ namespace RitsukageGif
         private void Window_DpiChanged(object sender, DpiChangedEventArgs e)
         {
             if (_closing) return;
+        }
+
+        private static IEnumerable<WinWindow> GetAllChildren(WinWindow window)
+        {
+            var children = window
+                .EnumerateChildren()
+                .Where(w => w.IsVisible);
+            foreach (var child in children)
+            {
+                foreach (var grandchild in GetAllChildren(child))
+                {
+                    yield return grandchild;
+                }
+            }
+
+            yield return window;
         }
     }
 }

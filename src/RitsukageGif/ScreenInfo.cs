@@ -58,9 +58,9 @@ namespace RitsukageGif
             DpiScaleY = dpiY / 96.0;
         }
         
-        public RectangleF GetConvertedIntersectionRegion(Rectangle rect)
+        public RectangleF GetConvertedIntersectionRegion(Rectangle rect, bool needConvert = true)
         {
-            var rectF = ConvertToScaleRectangle(rect);
+            var rectF = needConvert ? ConvertToScaleRectangle(rect) : rect;
             rectF.Intersect(Screen.Bounds);
             return rectF;
         }
@@ -70,9 +70,19 @@ namespace RitsukageGif
             return ConvertToScalePoint(point.X, point.Y);
         }
 
+        public Point ConvertFromScalePoint(PointF point)
+        {
+            return ConvertFromScalePoint(point.X, point.Y);
+        }
+
         public PointF ConvertToScalePoint(double x, double y)
         {
             return new PointF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY));
+        }
+
+        public Point ConvertFromScalePoint(double x, double y)
+        {
+            return new Point((int)(x * ConvertScaleX), (int)(y * ConvertScaleY));
         }
 
         public RectangleF ConvertToScaleRectangle(Rectangle rect)
@@ -80,10 +90,21 @@ namespace RitsukageGif
             return ConvertToScaleRectangle(rect.X, rect.Y, rect.Width, rect.Height);
         }
 
+        public Rectangle ConvertFromScaleRectangle(RectangleF rect)
+        {
+            return ConvertFromScaleRectangle(rect.X, rect.Y, rect.Width, rect.Height);
+        }
+
         public RectangleF ConvertToScaleRectangle(double x, double y, double width, double height)
         {
             return new RectangleF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY), (float)(width /
                 ConvertScaleX), (float)(height / ConvertScaleY));
+        }
+
+        public Rectangle ConvertFromScaleRectangle(double x, double y, double width, double height)
+        {
+            return new Rectangle((int)(x * ConvertScaleX), (int)(y * ConvertScaleY), (int)(width *
+                ConvertScaleX), (int)(height * ConvertScaleY));
         }
 
         public float ConvertToScaleX(double x)

@@ -90,18 +90,19 @@ namespace RitsukageGif
             }
             else
             {
-                Main.ProcessPerceptionProgramArea(x, y);
                 var sx = Screen.ConvertToScaleX(x);
                 var sy = Screen.ConvertToScaleY(y);
-                bool horizontal = PerceptionMode == PerceptionMode.Horizontal || PerceptionMode == PerceptionMode.Both;
-                bool vertical = PerceptionMode == PerceptionMode.Vertical || PerceptionMode == PerceptionMode.Both;
-                Main.ProcessPerceptionNearPoint(new DPoint((int)sx, (int)sy), horizontal, vertical);
+                var sp = new DPoint((int)sx, (int)sy);
+                Main.ProcessPerceptionProgramArea(sp);
+                var horizontal = PerceptionMode == PerceptionMode.Horizontal || PerceptionMode == PerceptionMode.Both;
+                var vertical = PerceptionMode == PerceptionMode.Vertical || PerceptionMode == PerceptionMode.Both;
+                Main.ProcessPerceptionNearPoint(sp, horizontal, vertical);
                 if (Main.PerceptionImagePoint != Main.InvalidPerceptionPoint)
                 {
-                    int px = Main.PerceptionImagePoint.X;
-                    int py = Main.PerceptionImagePoint.Y;
-                    bool fx = false;
-                    bool fy = false;
+                    var px = Main.PerceptionImagePoint.X;
+                    var py = Main.PerceptionImagePoint.Y;
+                    var fx = false;
+                    var fy = false;
                     if (px != -1 && px >= Screen.Bounds.Left && px <= Screen.Bounds.Right)
                     {
                         LineVertical.X1 = px - Screen.Bounds.Left;
@@ -140,9 +141,9 @@ namespace RitsukageGif
             return Main.InvalidPerceptionPoint;
         }
 
-        public void UpdateSelectedRegion(DRectangle rect)
+        public void UpdateSelectedRegion(DRectangle rect, bool needConvert = true, double opacity = 1)
         {
-            var rectF = Screen.GetConvertedIntersectionRegion(rect);
+            var rectF = Screen.GetConvertedIntersectionRegion(rect, needConvert);
             if (rectF == default)
             {
                 RegionImageGrid.Visibility
@@ -155,7 +156,9 @@ namespace RitsukageGif
             else
             {
                 RegionImageGrid.Visibility = Visibility.Visible;
-                RegionImageGrid.Margin = new Thickness(rectF.X - Screen.Bounds.Left, rectF.Y - Screen.Bounds.Top, 0, 0);
+                RegionImageGrid.Opacity = opacity;
+                RegionImageGrid.Margin =
+                    new Thickness(rectF.X - Screen.Bounds.Left, rectF.Y - Screen.Bounds.Top, 0, 0);
                 RegionImageGrid.Width = rectF.Width;
                 RegionImageGrid.Height = rectF.Height;
                 RegionImage.Margin = new Thickness(-rectF.X, -rectF.Y, 0, 0);
@@ -170,6 +173,7 @@ namespace RitsukageGif
                 {
                     LineRegionLeft.Visibility = Visibility.Hidden;
                 }
+
                 if (rectF.X + rectF.Width < Screen.Bounds.Right)
                 {
                     LineRegionRight.X1 = LineRegionRight.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
@@ -181,6 +185,7 @@ namespace RitsukageGif
                 {
                     LineRegionRight.Visibility = Visibility.Hidden;
                 }
+
                 if (rectF.Y + rectF.Height < Screen.Bounds.Bottom)
                 {
                     LineRegionBottom.X1 = rectF.X - Screen.Bounds.Left;
@@ -192,6 +197,7 @@ namespace RitsukageGif
                 {
                     LineRegionBottom.Visibility = Visibility.Hidden;
                 }
+
                 if (rectF.Y > Screen.Bounds.Top)
                 {
                     LineRegionTop.X1 = rectF.X - Screen.Bounds.Left;

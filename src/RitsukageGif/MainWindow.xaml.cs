@@ -269,7 +269,7 @@ namespace RitsukageGif
             _canBeginRecord = false;
             _canChangeRegion = false;
             var regionSelect = RegionSelect.Begin();
-            (var confirm, var region) = await regionSelect.WaitForResult().ConfigureAwait(false);
+            (var confirm, var region) = await regionSelect.WaitForResultAsync().ConfigureAwait(false);
             _canChangeRegion = true;
             if (confirm)
             {
