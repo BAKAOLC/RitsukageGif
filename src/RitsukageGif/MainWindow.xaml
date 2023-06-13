@@ -10,13 +10,13 @@
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         Title="RitsukageGif"
-        Width="320" Height="450"
+        Width="287" Height="450"
         Loaded="Window_Loaded"
         Closing="Window_Closing"
         DpiChanged="Window_DpiChanged">
     <Grid>
-        <Image HorizontalAlignment="Right" VerticalAlignment="Bottom"
-               Source="Background.png" Stretch="UniformToFill"/>
+        <Image
+               Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
         <Grid>
             <Button x:Name="RecordButton"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -58,25 +58,25 @@
                    Margin="120,5,0,0" FontSize="14"
                    Content="录制帧数"/>
             <Label x:Name="GifFramesLabel"
-                   HorizontalAlignment="Left" VerticalAlignment="Top"
-                   Margin="220,5,0,0" FontSize="14"
+                   HorizontalAlignment="Right" VerticalAlignment="Top"
+                   Margin="0,5,2,0" FontSize="14"
                    Content="N/A"/>
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="120,30,0,0" FontSize="14"
-                   Content="录制文件大小"/>
+                   Content="文件大小"/>
             <Label x:Name="GifSizeLabel"
-                   HorizontalAlignment="Left" VerticalAlignment="Top"
-                   Margin="220,30,0,0" FontSize="14"
+                   HorizontalAlignment="Right" VerticalAlignment="Top"
+                   Margin="0,30,2,0" FontSize="14"
                    Content="N/A"/>
             <CheckBox x:Name="RecordCursorCheckBox"
                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                      Margin="125,65,0,0" FontSize="14"
+                      Margin="125,61,0,0" FontSize="14"
                       Content="录制鼠标指针"
                       Checked="RecordCursorCheckBox_Checked"
                       Unchecked="RecordCursorCheckBox_Unchecked"/>
             <CheckBox x:Name="MemoryRecordCheckBox"
                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                      Margin="125,90,0,0" FontSize="14"
+                      Margin="125,86,0,0" FontSize="14"
                       Content="使用内存录制"
                       Checked="MemoryRecordCheckBox_Checked"
                       Unchecked="MemoryRecordCheckBox_Unchecked"/>
