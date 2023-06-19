@@ -12,7 +12,8 @@ namespace RitsukageGif
         private static AboutWindow _instance = null;
         private bool _closeFlag = false;
 
-        private static readonly string AboutHeaderText = $@"RitsukageGif ver {Assembly.GetExecutingAssembly().GetName().Version}
+        private static readonly string AboutHeaderText =
+            $@"RitsukageGif ver {Assembly.GetExecutingAssembly().GetName().Version}
 构建日期: {File.GetLastWriteTime(typeof(AboutWindow).Assembly.Location)}
 
 {AboutText}";

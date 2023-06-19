@@ -29,6 +29,7 @@ namespace RitsukageGif
         private int _delay;
 
         private int _fps;
+
         public int FPS
         {
             get => _fps;
@@ -90,6 +91,7 @@ namespace RitsukageGif
             {
                 success1 = false;
             }
+
             try
             {
                 HotkeyManager.Current.AddOrReplace("SelectRegion", Key.S, ModifierKeys.Control | ModifierKeys.Shift,
@@ -99,6 +101,7 @@ namespace RitsukageGif
             {
                 success2 = false;
             }
+
             if (success1 && success2) return;
             var sb = new StringBuilder();
             sb.AppendLine("以下快捷键注册失败，请检查是否有其他程序占用了快捷键。");
@@ -196,19 +199,31 @@ namespace RitsukageGif
                 var path = GenerateTempFileName(".gif");
                 _tempFileList.Add(path);
                 var info = RecordInMemory
-                    ? Gif.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor, tokenRecording.Token, tokenProcessing.Token)
-                    : Gif.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor, tokenRecording.Token, tokenProcessing.Token);
+                    ? Gif.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                        tokenRecording.Token, tokenProcessing.Token)
+                    : Gif.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                        tokenRecording.Token, tokenProcessing.Token);
                 _recordInfo = info;
                 await Task.Run(() =>
                 {
+                    Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Visible; });
                     do
                     {
                         Thread.Sleep(30);
                         Dispatcher.Invoke(() =>
                         {
-                            GifFramesLabel.Content = $"{info.ProcessedFrames} / {info.Frames}";
+                            if (tokenProcessing.IsCancellationRequested)
+                            {
+                                GifEncodingLabelGrid.Visibility = Visibility.Hidden;
+                            }
+                            else
+                            {
+                                GifFramesLabel.Content = $"{info.ProcessedFrames} / {info.Frames}";
+                            }
                         });
                     } while (!(info.Completed || tokenProcessing.IsCancellationRequested));
+
+                    Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Hidden; });
                     if (tokenProcessing.IsCancellationRequested) return;
                     var file = new FileInfo(path);
                     Dispatcher.Invoke(() =>
@@ -228,6 +243,7 @@ namespace RitsukageGif
                             GifSizeLabel.Foreground = Brushes.Black;
                             GifSizeLabel.FontWeight = FontWeights.Normal;
                         }
+
                         if (file.Length > 1024 * 1024)
                             GifSizeLabel.Content = $"{(double)file.Length / 1024 / 1024:F2}MB";
                         else if (file.Length > 1024)
@@ -282,6 +298,7 @@ namespace RitsukageGif
                     Region = null;
                 }
             }
+
             Dispatcher.Invoke(() =>
             {
                 if (Region != default)

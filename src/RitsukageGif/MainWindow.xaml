@@ -16,77 +16,91 @@
         DpiChanged="Window_DpiChanged">
     <Grid>
         <Image
-               Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
+            Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
         <Grid>
             <Button x:Name="RecordButton"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Background="White"
                     Width="100" Height="35" Margin="10,10,0,0"
                     Content="开始录制" IsEnabled="False"
-                    Click="RecordButton_Click"/>
+                    ToolTip="开始/停止录制GIF"
+                    Click="RecordButton_Click" />
             <Button x:Name="RegionSelectButton"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Background="White"
-                    Width="80" Height="35" Margin="10,50,0,0" 
+                    Width="80" Height="35" Margin="10,50,0,0"
                     Content="选择区域"
-                    Click="RegionSelectButton_Click"/>
+                    ToolTip="选择录制区域"
+                    Click="RegionSelectButton_Click" />
             <Button x:Name="AboutButton"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
                     Background="White"
-                    Width="60" Height="35" Margin="10,90,0,0" 
+                    Width="60" Height="35" Margin="10,90,0,0"
                     Content="说明"
-                    Click="AboutButton_Click"/>
+                    ToolTip="打开说明窗口"
+                    Click="AboutButton_Click" />
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="5,130,0,0"
-                   Content="缩小倍率"/>
+                   Content="缩小倍率" />
             <xctk:IntegerUpDown x:Name="GifScaleInteger"
                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                 TextAlignment="Center" FontSize="12"
                                 Width="50" Height="20" Margin="10,155,0,0"
+                                ToolTip="将图像缩小为原本的 1/x"
                                 Value="2" Increment="1" Maximum="16" Minimum="1"
-                                ValueChanged="GifScaleInteger_ValueChanged"/>
+                                ValueChanged="GifScaleInteger_ValueChanged" />
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="5,175,0,0"
-                   Content="帧率"/>
+                   Content="帧率" />
             <xctk:IntegerUpDown x:Name="GifFrameInteger"
                                 HorizontalAlignment="Left" VerticalAlignment="Top"
                                 TextAlignment="Center" FontSize="12"
                                 Width="50" Height="20" Margin="10,201,0,0"
+                                ToolTip="每秒录制的帧数（不使用内存录制时可能不准确）"
                                 Value="20" Increment="1" Maximum="30" Minimum="1"
-                                ValueChanged="GifFrameInteger_ValueChanged"/>
+                                ValueChanged="GifFrameInteger_ValueChanged" />
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="120,5,0,0" FontSize="14"
-                   Content="录制帧数"/>
+                   Content="录制帧数" />
             <Label x:Name="GifFramesLabel"
                    HorizontalAlignment="Right" VerticalAlignment="Top"
                    Margin="0,5,2,0" FontSize="14"
-                   Content="N/A"/>
+                   Content="N/A" />
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="120,30,0,0" FontSize="14"
-                   Content="文件大小"/>
+                   Content="文件大小" />
             <Label x:Name="GifSizeLabel"
                    HorizontalAlignment="Right" VerticalAlignment="Top"
                    Margin="0,30,2,0" FontSize="14"
-                   Content="N/A"/>
+                   Content="N/A" />
             <CheckBox x:Name="RecordCursorCheckBox"
                       HorizontalAlignment="Left" VerticalAlignment="Top"
                       Margin="125,61,0,0" FontSize="14"
                       Content="录制鼠标指针"
+                      ToolTip="录制时将鼠标指针绘制进Gif中"
                       Checked="RecordCursorCheckBox_Checked"
-                      Unchecked="RecordCursorCheckBox_Unchecked"/>
+                      Unchecked="RecordCursorCheckBox_Unchecked" />
             <CheckBox x:Name="MemoryRecordCheckBox"
                       HorizontalAlignment="Left" VerticalAlignment="Top"
                       Margin="125,86,0,0" FontSize="14"
                       Content="使用内存录制"
+                      ToolTip="帧率稳定，但会增加内存使用，请谨慎使用！&#x0a;警告：编码效率不足时会导致停止录制时需要等待编码才能显示"
                       Checked="MemoryRecordCheckBox_Checked"
-                      Unchecked="MemoryRecordCheckBox_Unchecked"/>
+                      Unchecked="MemoryRecordCheckBox_Unchecked" />
         </Grid>
         <Grid HorizontalAlignment="Left" VerticalAlignment="Bottom"
               Width="150" Height="180" Margin="5,5,5,5">
             <Image x:Name="GifView" Visibility="Hidden"
                    gif:ImageBehavior.RepeatBehavior="Forever"
                    PreviewMouseLeftButtonDown="GifView_OnPreviewMouseLeftButtonDownPreviewMouseLeftButtonDown"
-                   MouseRightButtonDown="GifView_OnMouseRightButtonDown"/>
+                   MouseRightButtonDown="GifView_OnMouseRightButtonDown" />
+        </Grid>
+        <Grid x:Name="GifEncodingLabelGrid" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+              Background="#B0000000" Visibility="Hidden"
+              Margin="5,5,5,5">
+            <Label HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                   FontSize="14" Foreground="Red" FontWeight="Bold"
+                   Content="●正在对录制的GIF进行编码..." />
         </Grid>
     </Grid>
 </Window>

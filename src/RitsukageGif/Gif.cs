@@ -49,6 +49,7 @@ namespace RitsukageGif
                         Thread.Sleep(delay);
                     }
                 }
+
                 bitmaps.CompleteAdding();
                 sw.Stop();
             }, recordingToken);
@@ -67,17 +68,21 @@ namespace RitsukageGif
                         catch (InvalidOperationException)
                         {
                         }
+
                         if (frame == null) continue;
                         gifCreator.AddFrame(frame.Bitmap, delay: frame.Delay, quality: GifQuality.Bit8);
                         frame.Bitmap.Dispose();
                         Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
                     }
+
                     Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
                 }
             }, processingToken);
             return info;
         }
-        public static RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
+
+        public static RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale,
+            bool cursor,
             CancellationToken recordingToken, CancellationToken processingToken)
         {
             var info = new RecordInfo
@@ -114,16 +119,18 @@ namespace RitsukageGif
                         }
                     }
                 }
+
                 sw.Stop();
                 Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
             }, recordingToken);
             sw.Start();
             return info;
         }
-        
+
         public class RecordInfo : NotifyPropertyChanged
         {
             private string _path;
+
             public string Path
             {
                 get => _path;
@@ -131,6 +138,7 @@ namespace RitsukageGif
             }
 
             private int _frames;
+
             public int Frames
             {
                 get => _frames;
@@ -138,6 +146,7 @@ namespace RitsukageGif
             }
 
             private int _processedFrames;
+
             public int ProcessedFrames
             {
                 get => _processedFrames;
@@ -145,6 +154,7 @@ namespace RitsukageGif
             }
 
             private bool _completed;
+
             public bool Completed
             {
                 get => _completed;

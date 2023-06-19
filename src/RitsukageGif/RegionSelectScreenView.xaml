@@ -10,34 +10,34 @@
               ClipToBounds="True">
             <Image x:Name="BackgroundImage"
                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                   Stretch="None"/>
+                   Stretch="None" />
         </Grid>
-        <Grid Background="#7F000000"/>
+        <Grid Background="#7F000000" />
         <Grid x:Name="RegionImageGrid"
               HorizontalAlignment="Left" VerticalAlignment="Top"
               ClipToBounds="True">
             <Image x:Name="RegionImage"
                    HorizontalAlignment="Left" VerticalAlignment="Top"
-                   Stretch="None"/>
+                   Stretch="None" />
         </Grid>
         <Line x:Name="LineRegionLeft"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Stroke="Red" StrokeThickness="1"/>
+              Stroke="Red" StrokeThickness="1" />
         <Line x:Name="LineRegionRight"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Stroke="Red" StrokeThickness="1"/>
+              Stroke="Red" StrokeThickness="1" />
         <Line x:Name="LineRegionBottom"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Stroke="Red" StrokeThickness="1"/>
+              Stroke="Red" StrokeThickness="1" />
         <Line x:Name="LineRegionTop"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Stroke="Red" StrokeThickness="1"/>
+              Stroke="Red" StrokeThickness="1" />
         <Line x:Name="LineHorizontal"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Stroke="Red" StrokeThickness="1"/>
+              Stroke="Red" StrokeThickness="1" />
         <Line x:Name="LineVertical"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Stroke="Red" StrokeThickness="1"/>
+              Stroke="Red" StrokeThickness="1" />
         <Grid x:Name="TipGrid"
               HorizontalAlignment="Left" VerticalAlignment="Top"
               Width="300" Height="110"
@@ -48,7 +48,7 @@
                            HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
                            Foreground="White">
                         <Label.Effect>
-                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2"/>
+                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
                     <Label Content="无选择时右键会自动应用当前感知区域"
@@ -56,7 +56,7 @@
                            Foreground="White"
                            Margin="0,20,0,0">
                         <Label.Effect>
-                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2"/>
+                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
                     <Label Content="单击 ESC键 取消操作，单击 SHIFT键 切换感知模式"
@@ -64,7 +64,7 @@
                            Foreground="White"
                            Margin="0,40,0,0">
                         <Label.Effect>
-                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2"/>
+                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
                     <Label Content="保持按住 SHIFT键 时，将自动禁用感知吸附功能"
@@ -72,7 +72,7 @@
                            Foreground="White"
                            Margin="0,60,0,0">
                         <Label.Effect>
-                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2"/>
+                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
                     <Label x:Name="PerceptionTipLabel"
@@ -81,7 +81,7 @@
                            Foreground="White"
                            Margin="0,80,0,0">
                         <Label.Effect>
-                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2"/>
+                            <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
                 </Grid>

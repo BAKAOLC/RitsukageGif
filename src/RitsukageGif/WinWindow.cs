@@ -45,6 +45,7 @@ namespace RitsukageGif
                         return Rectangle.Empty;
                     }
                 }
+
                 return new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
             }
         }
@@ -59,6 +60,7 @@ namespace RitsukageGif
             {
                 throw new ArgumentException("Invalid window handle", nameof(handle));
             }
+
             Handle = handle;
         }
 

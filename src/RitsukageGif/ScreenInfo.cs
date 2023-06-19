@@ -32,7 +32,7 @@ namespace RitsukageGif
         public double ConvertScaleX => _dpiScaleToBasicX * _dpiScaleToMainX;
 
         public double ConvertScaleY => _dpiScaleToBasicY * _dpiScaleToMainY;
-        
+
         private double _mainDpiScaleX => MainScreen.DpiScaleX;
 
         private double _mainDpiScaleY => MainScreen.DpiScaleY;
@@ -57,7 +57,7 @@ namespace RitsukageGif
             DpiScaleX = dpiX / 96.0;
             DpiScaleY = dpiY / 96.0;
         }
-        
+
         public RectangleF GetConvertedIntersectionRegion(Rectangle rect, bool needConvert = true)
         {
             var rectF = needConvert ? ConvertToScaleRectangle(rect) : rect;
@@ -140,6 +140,7 @@ namespace RitsukageGif
                 info = new ScreenInfo(screen);
                 _screenInfoRecord.Add(info);
             }
+
             return info;
         }
 
@@ -162,7 +163,8 @@ namespace RitsukageGif
         private static extern IntPtr MonitorFromPoint([In] Point pt, [In] uint dwFlags);
 
         [DllImport("Shcore.dll")]
-        private static extern IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX, [Out] out uint dpiY);
+        private static extern IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX,
+            [Out] out uint dpiY);
     }
 
     internal enum DpiType

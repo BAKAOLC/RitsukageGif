@@ -12,17 +12,17 @@
         Closing="Window_Closing">
     <Grid>
         <Grid Margin="5,5,5,5">
-            <Border BorderBrush="Black" BorderThickness="1" >
+            <Border BorderBrush="Black" BorderThickness="1">
                 <Grid>
                     <TextBox x:Name="AboutTextBox"
                              Margin="0,0,0,40"
                              FontSize="16"
                              TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Visible" FontFamily="SimSun"/>
+                             VerticalScrollBarVisibility="Visible" FontFamily="SimSun" />
                     <Button VerticalAlignment="Bottom"
                             Height="40"
                             Content="确定"
-                            Click="ButtonBase_OnClick" FontSize="16"/>
+                            Click="ButtonBase_OnClick" FontSize="16" />
                 </Grid>
             </Border>
         </Grid>

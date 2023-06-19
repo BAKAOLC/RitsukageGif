@@ -29,6 +29,7 @@ namespace RitsukageGif
 
                 graphicsBitmap.DrawImage(source, 0, 0, width, height);
             }
+
             return bitmap;
         }
     }

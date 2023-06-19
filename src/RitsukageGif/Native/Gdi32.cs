@@ -11,10 +11,12 @@ namespace RitsukageGif.Native
         public static extern bool DeleteObject(IntPtr hObject);
 
         [DllImport(DllName)]
-        public static extern bool BitBlt(IntPtr hObject, int XDest, int YDest, int Width, int Height, IntPtr ObjectSource, int XSrc, int YSrc, int Op);
+        public static extern bool BitBlt(IntPtr hObject, int XDest, int YDest, int Width, int Height,
+            IntPtr ObjectSource, int XSrc, int YSrc, int Op);
 
         [DllImport(DllName)]
-        public static extern bool StretchBlt(IntPtr hObject, int XDest, int YDest, int WDest, int HDest, IntPtr ObjectSource, int XSrc, int YSrc, int WSrc,
+        public static extern bool StretchBlt(IntPtr hObject, int XDest, int YDest, int WDest, int HDest,
+            IntPtr ObjectSource, int XSrc, int YSrc, int WSrc,
             int HSrc, int Op);
 
         [DllImport(DllName)]

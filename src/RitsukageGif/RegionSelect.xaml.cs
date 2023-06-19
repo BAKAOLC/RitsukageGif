@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO.Ports;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Timers;
@@ -28,21 +27,17 @@ namespace RitsukageGif
         public DRectangle PerceptionProgramArea { get; private set; }
 
         private PerceptionMode _perceptionMode = PerceptionMode.Both;
+
         public PerceptionMode PerceptionMode
         {
-            get
-            {
-                return _shiftKey ? PerceptionMode.None : _perceptionMode;
-            }
-            set
-            {
-                _perceptionMode = value;
-            }
+            get { return _shiftKeyHolding ? PerceptionMode.None : _perceptionMode; }
+            set { _perceptionMode = value; }
         }
 
         private bool _selected;
         private DPoint _selectedStartPoint;
         private DPoint _selectedEndPoint;
+
         private DRectangle SelectedRange
         {
             get
@@ -63,17 +58,20 @@ namespace RitsukageGif
         private bool _selectingMoved;
         private DPoint _selectingStartPoint;
         private DPoint _selectingEndPoint;
+
         private DRectangle SelectingRange
         {
             get
             {
-                return _selecting ? new DRectangle()
-                {
-                    X = Math.Min(_selectingStartPoint.X, _selectingEndPoint.X),
-                    Y = Math.Min(_selectingStartPoint.Y, _selectingEndPoint.Y),
-                    Width = Math.Abs(_selectingStartPoint.X - _selectingEndPoint.X),
-                    Height = Math.Abs(_selectingStartPoint.Y - _selectingEndPoint.Y)
-                } : default;
+                return _selecting
+                    ? new DRectangle()
+                    {
+                        X = Math.Min(_selectingStartPoint.X, _selectingEndPoint.X),
+                        Y = Math.Min(_selectingStartPoint.Y, _selectingEndPoint.Y),
+                        Width = Math.Abs(_selectingStartPoint.X - _selectingEndPoint.X),
+                        Height = Math.Abs(_selectingStartPoint.Y - _selectingEndPoint.Y)
+                    }
+                    : default;
             }
         }
 
@@ -89,7 +87,7 @@ namespace RitsukageGif
 
         private bool _shiftKey;
         private bool _shiftKeyHolding;
-        private readonly Timer _shiftKeyTimer = new Timer(500);
+        private readonly Timer _shiftKeyHoldingTimer = new Timer(150) { AutoReset = false };
 
         private const int EdgeCheckWidth = 60;
         private const int EdgeCheckHeight = 60;
@@ -103,10 +101,11 @@ namespace RitsukageGif
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
             Topmost = true;
-            _shiftKeyTimer.Elapsed += (s, e) =>
+            _shiftKeyHoldingTimer.Elapsed += (s, e) =>
             {
                 _shiftKeyHolding = true;
-                _shiftKeyTimer.Stop();
+                Dispatcher.Invoke(UpdateMousePosition);
+                Dispatcher.Invoke(UpdateSelectedRegion);
             };
         }
 
@@ -152,6 +151,7 @@ namespace RitsukageGif
                 PerceptionImagePoint = InvalidPerceptionPoint;
                 return;
             }
+
             var X = -1;
             var Y = -1;
             var empty = DPoint.Empty;
@@ -169,6 +169,7 @@ namespace RitsukageGif
             {
                 empty.X = MousePoint.X - EdgeCheckWidth / 2;
             }
+
             if (MousePoint.Y - EdgeCheckHeight / 2 < 0)
             {
                 empty.Y = 0;
@@ -181,6 +182,7 @@ namespace RitsukageGif
             {
                 empty.Y = MousePoint.Y - EdgeCheckHeight / 2;
             }
+
             var e = GetBitmapSobelEdge(new DRectangle(empty.X, empty.Y, EdgeCheckWidth, EdgeCheckHeight));
             int[] array = new int[e.Width];
             int[] array2 = new int[e.Height];
@@ -189,14 +191,17 @@ namespace RitsukageGif
                 array[i % (e.Width * 3) / 3] += e.Data[i];
                 array2[i / (e.Width * 3)] += e.Data[i];
             }
+
             for (int j = 0; j < array.Length; j++)
             {
                 array[j] /= EdgeCheckHeight;
             }
+
             for (int k = 0; k < array2.Length; k++)
             {
                 array2[k] /= EdgeCheckWidth;
             }
+
             for (int l = 0; l < EdgeCheckOffset; l++)
             {
                 if (array[EdgeCheckWidth / 2 + l] > EdgeCheckThreshold)
@@ -204,12 +209,14 @@ namespace RitsukageGif
                     X = empty.X + EdgeCheckWidth / 2 + l;
                     break;
                 }
+
                 if (array[EdgeCheckWidth / 2 - l] > EdgeCheckThreshold)
                 {
                     X = empty.X + EdgeCheckWidth / 2 - l;
                     break;
                 }
             }
+
             for (int m = 0; m < EdgeCheckOffset; m++)
             {
                 if (array2[EdgeCheckHeight / 2 + m] > EdgeCheckThreshold)
@@ -217,12 +224,14 @@ namespace RitsukageGif
                     Y = empty.Y + EdgeCheckHeight / 2 + m;
                     break;
                 }
+
                 if (array2[EdgeCheckHeight / 2 - m] > EdgeCheckThreshold)
                 {
                     Y = empty.Y + EdgeCheckHeight / 2 - m;
                     break;
                 }
             }
+
             if (MousePoint.X - EdgeCheckWidth / 2 < 0)
             {
                 X = -1;
@@ -231,6 +240,7 @@ namespace RitsukageGif
             {
                 X = -1;
             }
+
             if (MousePoint.Y - EdgeCheckHeight / 2 < 0)
             {
                 Y = -1;
@@ -239,6 +249,7 @@ namespace RitsukageGif
             {
                 Y = -1;
             }
+
             if (horizontal && vertical)
             {
                 PerceptionImagePoint = new DPoint(X, Y);
@@ -297,6 +308,7 @@ namespace RitsukageGif
                 {
                     exist.UpdateDpiScale();
                 }
+
                 return exist;
             })?.ToArray();
             _allScreenViewGrids = _allScreens.Select(x =>
@@ -310,6 +322,7 @@ namespace RitsukageGif
                 {
                     exist.UpdateView();
                 }
+
                 return exist;
             })?.ToArray();
         }
@@ -324,6 +337,7 @@ namespace RitsukageGif
                 width = Math.Max(width, screen.Bounds.Right);
                 height = Math.Max(height, screen.Bounds.Bottom);
             }
+
             return (width, height);
         }
 
@@ -347,6 +361,7 @@ namespace RitsukageGif
                     graphics.CopyFromScreen(screen.Bounds.Location, screen.Bounds.Location, screen.Bounds.Size);
                 }
             }
+
             _screenBitmapForSobelEdge = _screenBitmap.Clone() as Bitmap;
             _screenBitmapSource = _screenBitmap.ToBitmapSource();
             foreach (var view in _allScreenViewGrids)
@@ -387,6 +402,7 @@ namespace RitsukageGif
                 rect = PerceptionProgramArea;
                 opacity = 0.8;
             }
+
             foreach (var view in _allScreenViewGrids)
             {
                 view.UpdateSelectedRegion(rect, needConvert, opacity);
@@ -407,17 +423,19 @@ namespace RitsukageGif
         {
             if (_shiftKey) return;
             _shiftKey = true;
-            _shiftKeyTimer.Start();
+            _shiftKeyHolding = false;
+            _shiftKeyHoldingTimer.Start();
         }
 
         private void PopShiftKeyPress()
         {
             if (!_shiftKey) return;
-            _shiftKeyTimer.Stop();
+            _shiftKeyHoldingTimer.Stop();
             if (!_shiftKeyHolding)
             {
                 NextPerceptionMode();
             }
+
             _shiftKey = false;
             _shiftKeyHolding = false;
         }
@@ -425,12 +443,14 @@ namespace RitsukageGif
         private void NextPerceptionMode()
         {
             _perceptionMode = (PerceptionMode)(((int)_perceptionMode + 1) % 4);
-            UpdateMousePosition();
+            Dispatcher.Invoke(UpdateMousePosition);
+            Dispatcher.Invoke(UpdateSelectedRegion);
         }
 
         private DPoint GetPointWithPerception(DPoint point)
         {
-            return new DPoint(_perceptionPoint.X == -1 ? point.X : _perceptionPoint.X, _perceptionPoint.Y == -1 ? point.Y : _perceptionPoint.Y);
+            return new DPoint(_perceptionPoint.X == -1 ? point.X : _perceptionPoint.X,
+                _perceptionPoint.Y == -1 ? point.Y : _perceptionPoint.Y);
         }
 
         private bool _closing;
@@ -460,6 +480,7 @@ namespace RitsukageGif
                 _selectingStartPoint = point;
                 _selectingEndPoint = point;
             }
+
             if (e.RightButton == MouseButtonState.Pressed)
             {
                 _closing = true;
@@ -479,6 +500,7 @@ namespace RitsukageGif
                 _selectingMoved = true;
                 _selectingEndPoint = _mousePositionForScreen;
             }
+
             UpdateMousePosition();
             UpdateSelectedRegion();
         }
@@ -506,8 +528,11 @@ namespace RitsukageGif
                     {
                         var view = ScreenInfo.MainScreen;
                         if (view == null) return;
-                        _selectedStartPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
-                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right, PerceptionProgramArea.Bottom));
+                        _selectedStartPoint =
+                            view.ConvertFromScalePoint(
+                                new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
+                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right,
+                            PerceptionProgramArea.Bottom));
                         UpdateSelectedRegion();
                     }
                 }
@@ -535,6 +560,7 @@ namespace RitsukageGif
                         _closing = true;
                         Close();
                     }
+
                     break;
                 case Key.LeftShift:
                 case Key.RightShift:

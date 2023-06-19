@@ -15,7 +15,7 @@ namespace RitsukageGif.Native
 
         [DllImport(DllName)]
         public static extern bool SetCursorPos(int x, int y);
-        
+
 
         [DllImport(DllName)]
         public static extern bool DrawIconEx(
@@ -27,7 +27,7 @@ namespace RitsukageGif.Native
             int Height,
             int StepIfAniCur,
             IntPtr BrushForFlickerFreeDraw,
-        DrawIconExFlags Flags);
+            DrawIconExFlags Flags);
 
         [DllImport(DllName)]
         public static extern WindowStyles GetWindowLong(IntPtr hWnd, GetWindowLongValue nIndex);
@@ -102,14 +102,15 @@ namespace RitsukageGif.Native
         public static extern bool FillRect(IntPtr hDC, ref Rect Rect, IntPtr Brush);
 
         [DllImport(DllName)]
-        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, SetWindowPositionFlags wFlags);
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy,
+            SetWindowPositionFlags wFlags);
 
         [DllImport(DllName)]
         public static extern int ShowWindow(IntPtr hWnd, int nCmdShow);
 
         [DllImport(DllName, SetLastError = true)]
         public static extern bool RegisterHotKey(IntPtr hWnd, int id, KeyModifiers fsModifiers, Keys vk);
-        
+
         [DllImport(DllName, SetLastError = true)]
         public static extern bool RemoveRegisterHotKey(IntPtr hWnd, int id);
     }

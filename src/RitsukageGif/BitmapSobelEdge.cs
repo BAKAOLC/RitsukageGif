@@ -14,7 +14,7 @@ namespace RitsukageGif
         public Bitmap Bitmap { get; }
 
         public int Stride { get; }
-        
+
         public Rectangle Rect { get; }
 
         public byte[] Data { get; }
@@ -25,7 +25,7 @@ namespace RitsukageGif
             Width = Bitmap.Width;
             Height = Bitmap.Height;
             Rect = new Rectangle(0, 0, Width, Height);
-            var  data = Bitmap.LockBits(Rect, ImageLockMode.ReadWrite, Bitmap.PixelFormat);
+            var data = Bitmap.LockBits(Rect, ImageLockMode.ReadWrite, Bitmap.PixelFormat);
             Stride = data.Stride;
             Data = new byte[Stride * Height];
             Bitmap.UnlockBits(data);
@@ -91,6 +91,7 @@ namespace RitsukageGif
                 Data[num] = B;
                 return;
             }
+
             if (Stride / Width == 1)
             {
                 Data[Stride * y + Stride / Width * x] = B;
@@ -104,6 +105,7 @@ namespace RitsukageGif
             {
                 Data[i] = Data[i + 2] = Data[i + 1] = (byte)(Data[i] + Data[i + 1] + Data[i + 2] / 3);
             }
+
             ProcessToBitmap();
         }
 
@@ -115,13 +117,24 @@ namespace RitsukageGif
             {
                 for (int j = 1; j < Height - 1; j++)
                 {
-                    int num = -SobelEdgeFilterGetValue(_tmpData, i - 1, j - 1) - SobelEdgeFilterGetValue(_tmpData, i - 1, j) * 2 - SobelEdgeFilterGetValue(_tmpData, i - 1, j + 1) + SobelEdgeFilterGetValue(_tmpData, i + 1, j - 1) + SobelEdgeFilterGetValue(_tmpData, i + 1, j) * 2 + SobelEdgeFilterGetValue(_tmpData, i + 1, j + 1);
-                    int num2 = -SobelEdgeFilterGetValue(_tmpData, i - 1, j - 1) - SobelEdgeFilterGetValue(_tmpData, i, j - 1) * 2 - SobelEdgeFilterGetValue(_tmpData, i + 1, j - 1) + SobelEdgeFilterGetValue(_tmpData, i - 1, j + 1) + SobelEdgeFilterGetValue(_tmpData, i, j + 1) * 2 + SobelEdgeFilterGetValue(_tmpData, i + 1, j + 1);
+                    int num = -SobelEdgeFilterGetValue(_tmpData, i - 1, j - 1) -
+                              SobelEdgeFilterGetValue(_tmpData, i - 1, j) * 2 -
+                              SobelEdgeFilterGetValue(_tmpData, i - 1, j + 1) +
+                              SobelEdgeFilterGetValue(_tmpData, i + 1, j - 1) +
+                              SobelEdgeFilterGetValue(_tmpData, i + 1, j) * 2 +
+                              SobelEdgeFilterGetValue(_tmpData, i + 1, j + 1);
+                    int num2 = -SobelEdgeFilterGetValue(_tmpData, i - 1, j - 1) -
+                               SobelEdgeFilterGetValue(_tmpData, i, j - 1) * 2 -
+                               SobelEdgeFilterGetValue(_tmpData, i + 1, j - 1) +
+                               SobelEdgeFilterGetValue(_tmpData, i - 1, j + 1) +
+                               SobelEdgeFilterGetValue(_tmpData, i, j + 1) * 2 +
+                               SobelEdgeFilterGetValue(_tmpData, i + 1, j + 1);
                     int num3 = (int)Math.Sqrt(num * num + num2 * num2);
                     num3 = (num3 > 255) ? 255 : num3;
                     SetPixel(i, j, (byte)num3, (byte)num3, (byte)num3);
                 }
             }
+
             ProcessToBitmap();
         }
 
@@ -132,6 +145,7 @@ namespace RitsukageGif
             {
                 Data[i] = Data[i + 1] = Data[i + 2] = Data[i] < threshold ? byte.MinValue : byte.MaxValue;
             }
+
             ProcessToBitmap();
         }
 

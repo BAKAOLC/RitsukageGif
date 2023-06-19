@@ -18,5 +18,5 @@
         MouseMove="Window_MouseMove"
         MouseUp="Window_MouseUp"
         SizeToContent="WidthAndHeight">
-    <Grid x:Name="MainGrid"/>
+    <Grid x:Name="MainGrid" />
 </Window>

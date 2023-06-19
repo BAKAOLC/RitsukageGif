@@ -41,7 +41,8 @@ namespace RitsukageGif
         {
             HorizontalAlignment = HorizontalAlignment.Left;
             VerticalAlignment = VerticalAlignment.Top;
-            Margin = new Thickness(Screen.Bounds.Left * Screen.ConvertScaleX, Screen.Bounds.Top * Screen.ConvertScaleY, 0, 0);
+            Margin = new Thickness(Screen.Bounds.Left * Screen.ConvertScaleX, Screen.Bounds.Top * Screen.ConvertScaleY,
+                0, 0);
             Width = Screen.Bounds.Width;
             Height = Screen.Bounds.Height;
             RenderTransform = new ScaleTransform(Screen.ConvertScaleX, Screen.ConvertScaleY);
@@ -64,9 +65,14 @@ namespace RitsukageGif
             {
                 UpdatePerceptionMode();
                 TipGrid.Visibility = Visibility.Visible;
-                if (pointF.X >= Screen.Bounds.Left + TipGrid.Margin.Left && pointF.Y >= Screen.Bounds.Top + TipGrid.Margin.Top
-                    && pointF.X <= Screen.Bounds.Left + TipGrid.Margin.Left + TipGrid.ActualWidth + _forbidMarginTipGrid
-                    && pointF.Y <= Screen.Bounds.Top + TipGrid.Margin.Top + TipGrid.ActualHeight + _forbidMarginTipGrid)
+                if (pointF.X >= Screen.Bounds.Left + TipGrid.Margin.Left && pointF.Y >=
+                                                                         Screen.Bounds.Top + TipGrid.Margin.Top
+                                                                         && pointF.X <= Screen.Bounds.Left +
+                                                                         TipGrid.Margin.Left + TipGrid.ActualWidth +
+                                                                         _forbidMarginTipGrid
+                                                                         && pointF.Y <= Screen.Bounds.Top +
+                                                                         TipGrid.Margin.Top + TipGrid.ActualHeight +
+                                                                         _forbidMarginTipGrid)
                 {
                     TipGrid.VerticalAlignment = VerticalAlignment.Bottom;
                 }
@@ -116,6 +122,7 @@ namespace RitsukageGif
                     {
                         LineVertical.Visibility = Visibility.Hidden;
                     }
+
                     if (py != -1 && py >= Screen.Bounds.Top && py <= Screen.Bounds.Bottom)
                     {
                         LineHorizontal.X1 = 0;
@@ -129,8 +136,10 @@ namespace RitsukageGif
                     {
                         LineHorizontal.Visibility = Visibility.Hidden;
                     }
+
                     if (fx || fy)
-                        return new DPoint(fx ? Screen.ConvertFromScaleX(px) : -1, fy ? Screen.ConvertFromScaleY(py) : -1);
+                        return new DPoint(fx ? Screen.ConvertFromScaleX(px) : -1,
+                            fy ? Screen.ConvertFromScaleY(py) : -1);
                 }
                 else
                 {
@@ -138,6 +147,7 @@ namespace RitsukageGif
                     LineHorizontal.Visibility = Visibility.Hidden;
                 }
             }
+
             return Main.InvalidPerceptionPoint;
         }
 
@@ -147,11 +157,11 @@ namespace RitsukageGif
             if (rectF == default)
             {
                 RegionImageGrid.Visibility
-                = LineRegionLeft.Visibility
-                = LineRegionRight.Visibility
-                = LineRegionBottom.Visibility
-                = LineRegionTop.Visibility
-                = Visibility.Hidden;
+                    = LineRegionLeft.Visibility
+                        = LineRegionRight.Visibility
+                            = LineRegionBottom.Visibility
+                                = LineRegionTop.Visibility
+                                    = Visibility.Hidden;
             }
             else
             {

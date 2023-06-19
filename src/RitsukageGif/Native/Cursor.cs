@@ -33,7 +33,8 @@ namespace RitsukageGif.Native
                 return;
             try
             {
-                User32.DrawIconEx(deviceContext, location.X, location.Y, hIcon, 0, 0, 0, IntPtr.Zero, DrawIconExFlags.Normal);
+                User32.DrawIconEx(deviceContext, location.X, location.Y, hIcon, 0, 0, 0, IntPtr.Zero,
+                    DrawIconExFlags.Normal);
             }
             finally
             {

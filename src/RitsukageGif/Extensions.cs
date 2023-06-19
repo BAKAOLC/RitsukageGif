@@ -5,7 +5,6 @@ using System.Windows.Media.Imaging;
 
 namespace RitsukageGif
 {
-
     internal static class Extensions
     {
         public static BitmapSource ToBitmapSource(this Bitmap bitmap)
@@ -20,6 +19,7 @@ namespace RitsukageGif
             {
                 return y < rect.Y + rect.Height;
             }
+
             return false;
         }
 
