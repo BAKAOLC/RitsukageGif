@@ -64,6 +64,32 @@ namespace RitsukageGif
             Title += $" ver {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
         }
 
+        private static bool CheckOSVersion()
+        {
+            //最低支持Windows 10
+            var osVersion = Environment.OSVersion;
+            switch (osVersion.Platform)
+            {
+                case PlatformID.Win32NT:
+                    if (osVersion.Version.Major >= 10)
+                    {
+                        return true;
+                    }
+
+                    break;
+                case PlatformID.Win32S:
+                case PlatformID.Win32Windows:
+                case PlatformID.WinCE:
+                case PlatformID.Unix:
+                case PlatformID.Xbox:
+                case PlatformID.MacOSX:
+                default:
+                    break;
+            }
+
+            return false;
+        }
+
         private void SetDefaultConfig()
         {
             GifFrameInteger.Value = FPS = 20;
@@ -136,10 +162,23 @@ namespace RitsukageGif
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            SetDefaultConfig();
-            RegisterHotKeys();
-            _canBeginRecord = false;
-            _canChangeRegion = true;
+            if (CheckOSVersion())
+            {
+                SetDefaultConfig();
+                RegisterHotKeys();
+                _canBeginRecord = false;
+                _canChangeRegion = true;
+                Task.Run(Updater.CheckUpdate).ConfigureAwait(false);
+            }
+            else
+            {
+                var result = MessageBox.Show("本程序目前必须在 Windows 10 及以上版本才能运行", "错误", MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                if (result == MessageBoxResult.OK)
+                {
+                    Close();
+                }
+            }
         }
 
         private void Window_Closing(object sender, CancelEventArgs e)
