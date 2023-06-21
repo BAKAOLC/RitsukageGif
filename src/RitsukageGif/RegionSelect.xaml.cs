@@ -85,6 +85,8 @@ namespace RitsukageGif
 
         private WinWindow[] _windows;
 
+        private bool _leftMouse;
+
         private bool _shiftKey;
         private bool _shiftKeyHolding;
         private readonly Timer _shiftKeyHoldingTimer = new Timer(150) { AutoReset = false };
@@ -470,8 +472,9 @@ namespace RitsukageGif
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (_closing) return;
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (e.LeftButton == MouseButtonState.Pressed && !_leftMouse)
             {
+                _leftMouse = true;
                 _selecting = true;
                 _selectingMoved = false;
                 var position = e.GetPosition(this);
@@ -483,6 +486,31 @@ namespace RitsukageGif
 
             if (e.RightButton == MouseButtonState.Pressed)
             {
+                if (_selecting)
+                {
+                    _selecting = false;
+                    _selected = true;
+                    if (_selectingMoved)
+                    {
+                        var position = e.GetPosition(this);
+                        var point = new DPoint((int)position.X, (int)position.Y);
+                        point = GetPointWithPerception(point);
+                        _selectingEndPoint = point;
+                        _selectedStartPoint = _selectingStartPoint;
+                        _selectedEndPoint = _selectingEndPoint;
+                    }
+                    else
+                    {
+                        var view = ScreenInfo.MainScreen;
+                        if (view == null) return;
+                        _selectedStartPoint =
+                            view.ConvertFromScalePoint(
+                                new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
+                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right,
+                            PerceptionProgramArea.Bottom));
+                    }
+                }
+
                 _closing = true;
                 _confirm = true;
                 Close();
@@ -508,9 +536,10 @@ namespace RitsukageGif
         private void Window_MouseUp(object sender, MouseButtonEventArgs e)
         {
             if (_closing) return;
-            if (_selecting)
+            if (_leftMouse && e.LeftButton == MouseButtonState.Released)
             {
-                if (e.LeftButton == MouseButtonState.Released)
+                _leftMouse = false;
+                if (_selecting)
                 {
                     _selecting = false;
                     _selected = true;

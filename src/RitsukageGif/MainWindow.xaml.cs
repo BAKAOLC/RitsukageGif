@@ -168,7 +168,9 @@ namespace RitsukageGif
                 RegisterHotKeys();
                 _canBeginRecord = false;
                 _canChangeRegion = true;
+#if !DEBUG
                 Task.Run(Updater.CheckUpdate).ConfigureAwait(false);
+#endif
             }
             else
             {

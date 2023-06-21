@@ -84,7 +84,7 @@
                       HorizontalAlignment="Left" VerticalAlignment="Top"
                       Margin="125,86,0,0" FontSize="14"
                       Content="使用内存录制"
-                      ToolTip="帧率稳定，但会增加内存使用，请谨慎使用！&#x0a;警告：编码效率不足时会导致停止录制时需要等待编码才能显示"
+                      ToolTip="帧率会更加稳定，略微增加内存使用&#x0a;编码效率不足时会导致停止录制时需要等待编码才能显示&#x0a;警告：选区过大且不使用缩小倍率的情形请谨慎使用"
                       Checked="MemoryRecordCheckBox_Checked"
                       Unchecked="MemoryRecordCheckBox_Unchecked" />
         </Grid>
