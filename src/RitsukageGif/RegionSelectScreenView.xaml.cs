@@ -9,23 +9,20 @@ using DRectangle = System.Drawing.Rectangle;
 namespace RitsukageGif
 {
     /// <summary>
-    /// RegionSelectScreenView.xaml 的交互逻辑
+    ///     RegionSelectScreenView.xaml 的交互逻辑
     /// </summary>
     public partial class RegionSelectScreenView : UserControl
     {
-        public RegionSelect Main { get; }
 
-        public Grid MainGrid { get; }
+        private const int TipGridWidth = 300;
+        private const int TipGridHeight = 120;
+        private const int TipGridExpandMargin = 50;
+        private const int TipGridLabelFontSize = 12;
+        private const int TipGridLabelMargin = 5;
+        private const int TipGridLabelMargin2 = 20;
+        private const string TipGridModeString = "当前感知模式  {0}";
 
-        public ScreenInfo Screen { get; }
-
-        public bool IsCurrent { get; private set; }
-
-        private PerceptionMode PerceptionMode => Main.PerceptionMode;
-
-        private const int _forbidMarginTipGrid = 50;
-
-        private static readonly string _tipModeString = "当前感知模式  {0}";
+        private double _tipGridScale = 1;
 
         public RegionSelectScreenView(RegionSelect main, Grid mainGrid, ScreenInfo screen)
         {
@@ -37,6 +34,16 @@ namespace RitsukageGif
             UpdateView();
         }
 
+        public RegionSelect Main { get; }
+
+        public Grid MainGrid { get; }
+
+        public ScreenInfo Screen { get; }
+
+        public bool IsCurrent { get; private set; }
+
+        private PerceptionMode PerceptionMode => Main.PerceptionMode;
+
         public void UpdateView()
         {
             HorizontalAlignment = HorizontalAlignment.Left;
@@ -46,6 +53,7 @@ namespace RitsukageGif
             Width = Screen.Bounds.Width;
             Height = Screen.Bounds.Height;
             RenderTransform = new ScaleTransform(Screen.ConvertScaleX, Screen.ConvertScaleY);
+            UpdateTipGrid();
         }
 
         public void UpdateScreenBitmap(BitmapSource source)
@@ -57,6 +65,32 @@ namespace RitsukageGif
             RegionImage.Source = source;
         }
 
+        public void UpdateTipGrid()
+        {
+            var scaleX = Width / 1280;
+            var scaleY = Height / 720;
+            var scale = scaleX < scaleY ? scaleX : scaleY;
+            scale = (scale - 1) / 2 + 1;
+            var y = TipGridLabelMargin * scale;
+            _tipGridScale = scale;
+            TipGrid.Width = TipGridWidth * scale;
+            TipGrid.Height = TipGridHeight * scale;
+            TipGridLabel1.FontSize = TipGridLabelFontSize * scale;
+            TipGridLabel1.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            y += TipGridLabelMargin2 * scale;
+            TipGridLabel2.FontSize = TipGridLabelFontSize * scale;
+            TipGridLabel2.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            y += TipGridLabelMargin2 * scale;
+            TipGridLabel3.FontSize = TipGridLabelFontSize * scale;
+            TipGridLabel3.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            y += TipGridLabelMargin2 * scale;
+            TipGridLabel4.FontSize = TipGridLabelFontSize * scale;
+            TipGridLabel4.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            y += TipGridLabelMargin2 * scale;
+            PerceptionTipLabel.FontSize = TipGridLabelFontSize * scale;
+            PerceptionTipLabel.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+        }
+
         public void UpdateMousePosition(DPoint point)
         {
             var pointF = Screen.ConvertToScalePoint(point);
@@ -65,21 +99,14 @@ namespace RitsukageGif
             {
                 UpdatePerceptionMode();
                 TipGrid.Visibility = Visibility.Visible;
-                if (pointF.X >= Screen.Bounds.Left + TipGrid.Margin.Left && pointF.Y >=
-                                                                         Screen.Bounds.Top + TipGrid.Margin.Top
-                                                                         && pointF.X <= Screen.Bounds.Left +
-                                                                         TipGrid.Margin.Left + TipGrid.ActualWidth +
-                                                                         _forbidMarginTipGrid
-                                                                         && pointF.Y <= Screen.Bounds.Top +
-                                                                         TipGrid.Margin.Top + TipGrid.ActualHeight +
-                                                                         _forbidMarginTipGrid)
-                {
+                if (pointF.X >= Screen.Bounds.Left && pointF.X <= Screen.Bounds.Left + TipGrid.Margin.Left +
+                                                   TipGrid.ActualWidth + TipGridExpandMargin * _tipGridScale
+                                                   && pointF.Y >= Screen.Bounds.Top && pointF.Y <= Screen.Bounds.Top +
+                                                   TipGrid.Margin.Top
+                                                   + TipGrid.ActualHeight + TipGridExpandMargin * _tipGridScale)
                     TipGrid.VerticalAlignment = VerticalAlignment.Bottom;
-                }
                 else
-                {
                     TipGrid.VerticalAlignment = VerticalAlignment.Top;
-                }
             }
             else
             {
@@ -227,16 +254,16 @@ namespace RitsukageGif
             switch (PerceptionMode)
             {
                 case PerceptionMode.None:
-                    PerceptionTipLabel.Content = string.Format(_tipModeString, "无");
+                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "无");
                     break;
                 case PerceptionMode.Horizontal:
-                    PerceptionTipLabel.Content = string.Format(_tipModeString, "水平");
+                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "水平");
                     break;
                 case PerceptionMode.Vertical:
-                    PerceptionTipLabel.Content = string.Format(_tipModeString, "垂直");
+                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "垂直");
                     break;
                 case PerceptionMode.Both:
-                    PerceptionTipLabel.Content = string.Format(_tipModeString, "水平+竖直");
+                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "水平+竖直");
                     break;
             }
         }

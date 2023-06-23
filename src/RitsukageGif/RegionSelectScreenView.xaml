@@ -40,46 +40,47 @@
               Stroke="Red" StrokeThickness="1" />
         <Grid x:Name="TipGrid"
               HorizontalAlignment="Left" VerticalAlignment="Top"
-              Width="300" Height="110"
+              Width="300" Height="120"
               Margin="20,20,20,20">
             <Border BorderBrush="Aqua" BorderThickness="1">
                 <Grid>
-                    <Label Content="按住左键并拖动选择区域，单击右键确认选择区域"
-                           HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
-                           Foreground="White">
+                    <Label x:Name="TipGridLabel1" Content="按住左键并拖动选择区域，单击右键确认选择区域"
+                               HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                               Foreground="White"
+                               Margin="5,5,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
-                    <Label Content="无选择时右键会自动应用当前感知区域"
+                    <Label x:Name="TipGridLabel2" Content="无选择时右键会自动应用当前感知区域"
                            HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
                            Foreground="White"
-                           Margin="0,20,0,0">
+                           Margin="5,25,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
-                    <Label Content="单击 ESC键 取消操作，单击 SHIFT键 切换感知模式"
+                    <Label x:Name="TipGridLabel3" Content="单击 ESC键 取消操作，单击 SHIFT键 切换感知模式"
                            HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
                            Foreground="White"
-                           Margin="0,40,0,0">
+                           Margin="5,45,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
-                    <Label Content="保持按住 SHIFT键 时，将自动禁用感知吸附功能"
+                    <Label x:Name="TipGridLabel4" Content="保持按住 SHIFT键 时，将自动禁用感知吸附功能"
                            HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
                            Foreground="White"
-                           Margin="0,60,0,0">
+                           Margin="5,65,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
                     </Label>
                     <Label x:Name="PerceptionTipLabel"
-                           Content="当前感知模式  无"
-                           HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
-                           Foreground="White"
-                           Margin="0,80,0,0">
+                               Content="当前感知模式  无"
+                               HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                               Foreground="White"
+                               Margin="5,85,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
