@@ -61,7 +61,7 @@ namespace RitsukageGif
         public MainWindow()
         {
             InitializeComponent();
-            Title += $" ver {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
+            VersionLabel.Content = $"ver {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
         }
 
         private static bool CheckOSVersion()

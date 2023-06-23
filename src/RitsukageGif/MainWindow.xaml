@@ -8,7 +8,7 @@
         xmlns:local="clr-namespace:RitsukageGif"
         mc:Ignorable="d"
         WindowStartupLocation="CenterScreen"
-        ResizeMode="NoResize"
+        ResizeMode="CanMinimize"
         Title="RitsukageGif"
         Width="287" Height="450"
         Loaded="Window_Loaded"
@@ -17,6 +17,9 @@
     <Grid>
         <Image
             Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
+        <Label x:Name="VersionLabel"
+               HorizontalAlignment="Left" VerticalAlignment="Bottom"
+               Content="ver 1.0.0.0"/>
         <Grid>
             <Button x:Name="RecordButton"
                     HorizontalAlignment="Left" VerticalAlignment="Top"
@@ -89,7 +92,7 @@
                       Unchecked="MemoryRecordCheckBox_Unchecked" />
         </Grid>
         <Grid HorizontalAlignment="Left" VerticalAlignment="Bottom"
-              Width="150" Height="180" Margin="5,5,5,5">
+              Width="150" Height="180" Margin="5,5,5,25">
             <Image x:Name="GifView" Visibility="Hidden"
                    gif:ImageBehavior.RepeatBehavior="Forever"
                    PreviewMouseLeftButtonDown="GifView_OnPreviewMouseLeftButtonDownPreviewMouseLeftButtonDown"
