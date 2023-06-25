@@ -285,12 +285,11 @@ namespace RitsukageGif
                             GifSizeLabel.FontWeight = FontWeights.Normal;
                         }
 
-                        if (file.Length > 1024 * 1024)
-                            GifSizeLabel.Content = $"{(double)file.Length / 1024 / 1024:F2}MB";
-                        else if (file.Length > 1024)
-                            GifSizeLabel.Content = $"{(double)file.Length / 1024:F2}KB";
-                        else
-                            GifSizeLabel.Content = $"{(double)file.Length:F2}B";
+                        GifSizeLabel.Content = file.Length > 1024 * 1024
+                            ? $"{(double)file.Length / 1024 / 1024:F2}MB"
+                            : file.Length > 1024
+                                ? $"{(double)file.Length / 1024:F2}KB"
+                                : (object)$"{(double)file.Length:F2}B";
                     });
                     var sb = new StringBuilder();
                     sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
@@ -330,14 +329,7 @@ namespace RitsukageGif
             _canChangeRegion = true;
             if (confirm)
             {
-                if (region != default)
-                {
-                    Region = region;
-                }
-                else
-                {
-                    Region = null;
-                }
+                Region = region != default ? region : null;
             }
 
             Dispatcher.Invoke(() =>

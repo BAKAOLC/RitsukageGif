@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Native
 {
-    internal class Cursor
+    internal static class Cursor
     {
-        const int CursorShowing = 1;
+        private const int CursorShowing = 1;
 
         public static void Draw(Graphics g, Func<Point, Point> transform = null)
         {
@@ -26,23 +26,7 @@ namespace RitsukageGif.Native
             }
         }
 
-        public static void Draw(IntPtr deviceContext, Func<Point, Point> transform = null)
-        {
-            var hIcon = GetIcon(transform, out var location);
-            if (hIcon == IntPtr.Zero)
-                return;
-            try
-            {
-                User32.DrawIconEx(deviceContext, location.X, location.Y, hIcon, 0, 0, 0, IntPtr.Zero,
-                    DrawIconExFlags.Normal);
-            }
-            finally
-            {
-                User32.DestroyIcon(hIcon);
-            }
-        }
-
-        static IntPtr GetIcon(Func<Point, Point> transform, out Point location)
+        private static IntPtr GetIcon(Func<Point, Point> transform, out Point location)
         {
             location = Point.Empty;
             var cursorInfo = new CursorInfo { cbSize = Marshal.SizeOf<CursorInfo>() };

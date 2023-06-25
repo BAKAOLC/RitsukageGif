@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows;
 using Rect = RitsukageGif.Native.Rect;
 
 namespace RitsukageGif
@@ -76,15 +75,30 @@ namespace RitsukageGif
             return list;
         }
 
-        public override string ToString() => Title;
+        public override string ToString()
+        {
+            return Title;
+        }
 
-        public override bool Equals(object obj) => obj is WinWindow w && w.Handle == Handle;
+        public override bool Equals(object obj)
+        {
+            return obj is WinWindow w && w.Handle == Handle;
+        }
 
-        public override int GetHashCode() => Handle.GetHashCode();
+        public override int GetHashCode()
+        {
+            return Handle.GetHashCode();
+        }
 
-        public static bool operator ==(WinWindow w1, WinWindow w2) => w1?.Handle == w2?.Handle;
+        public static bool operator ==(WinWindow w1, WinWindow w2)
+        {
+            return w1?.Handle == w2?.Handle;
+        }
 
-        public static bool operator !=(WinWindow w1, WinWindow w2) => !(w1 == w2);
+        public static bool operator !=(WinWindow w1, WinWindow w2)
+        {
+            return !(w1 == w2);
+        }
 
         public static IEnumerable<WinWindow> Enumerate()
         {

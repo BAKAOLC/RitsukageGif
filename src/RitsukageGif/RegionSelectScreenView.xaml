@@ -45,9 +45,9 @@
             <Border BorderBrush="Aqua" BorderThickness="1">
                 <Grid>
                     <Label x:Name="TipGridLabel1" Content="按住左键并拖动选择区域，单击右键确认选择区域"
-                               HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
-                               Foreground="White"
-                               Margin="5,5,0,0">
+                           HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                           Foreground="White"
+                           Margin="5,5,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>
@@ -77,10 +77,10 @@
                         </Label.Effect>
                     </Label>
                     <Label x:Name="PerceptionTipLabel"
-                               Content="当前感知模式  无"
-                               HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
-                               Foreground="White"
-                               Margin="5,85,0,0">
+                           Content="当前感知模式  无"
+                           HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+                           Foreground="White"
+                           Margin="5,85,0,0">
                         <Label.Effect>
                             <DropShadowEffect Color="Aqua" ShadowDepth="0" BlurRadius="2" />
                         </Label.Effect>

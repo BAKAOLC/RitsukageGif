@@ -13,7 +13,6 @@ namespace RitsukageGif
     /// </summary>
     public partial class RegionSelectScreenView : UserControl
     {
-
         private const int TipGridWidth = 300;
         private const int TipGridHeight = 120;
         private const int TipGridExpandMargin = 50;
@@ -99,14 +98,17 @@ namespace RitsukageGif
             {
                 UpdatePerceptionMode();
                 TipGrid.Visibility = Visibility.Visible;
-                if (pointF.X >= Screen.Bounds.Left && pointF.X <= Screen.Bounds.Left + TipGrid.Margin.Left +
-                                                   TipGrid.ActualWidth + TipGridExpandMargin * _tipGridScale
-                                                   && pointF.Y >= Screen.Bounds.Top && pointF.Y <= Screen.Bounds.Top +
-                                                   TipGrid.Margin.Top
-                                                   + TipGrid.ActualHeight + TipGridExpandMargin * _tipGridScale)
-                    TipGrid.VerticalAlignment = VerticalAlignment.Bottom;
-                else
-                    TipGrid.VerticalAlignment = VerticalAlignment.Top;
+                TipGrid.VerticalAlignment = pointF.X >= Screen.Bounds.Left && pointF.X <= Screen.Bounds.Left +
+                                                                           TipGrid.Margin.Left +
+                                                                           TipGrid.ActualWidth +
+                                                                           TipGridExpandMargin * _tipGridScale
+                                                                           && pointF.Y >= Screen.Bounds.Top &&
+                                                                           pointF.Y <= Screen.Bounds.Top +
+                                                                           TipGrid.Margin.Top
+                                                                           + TipGrid.ActualHeight +
+                                                                           TipGridExpandMargin * _tipGridScale
+                    ? VerticalAlignment.Bottom
+                    : VerticalAlignment.Top;
             }
             else
             {

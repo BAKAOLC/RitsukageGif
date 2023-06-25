@@ -106,7 +106,7 @@ namespace AnimatedGif
 
         private char ByteToChar(byte b)
         {
-            return (char) b;
+            return (char)b;
         }
 
         private void AnalyzeScreenDescriptor(List<byte> gifData)
@@ -123,19 +123,19 @@ namespace AnimatedGif
             {
                 int pixel = ScreenDescriptor[4] & 0x07;
 
-                int lengthOfColorTableInByte = 3 * (int) Math.Pow(2, pixel + 1);
+                int lengthOfColorTableInByte = 3 * (int)Math.Pow(2, pixel + 1);
 
                 for (int i = 0; i < lengthOfColorTableInByte; i++) ColorTable.Add(gifData[i]);
 
                 gifData.RemoveRange(0, lengthOfColorTableInByte);
             }
 
-            ScreenDescriptor[4] = (byte) (ScreenDescriptor[4] & 0x7F);
+            ScreenDescriptor[4] = (byte)(ScreenDescriptor[4] & 0x7F);
         }
 
         private GifBlockType GetTypeOfNextBlock(List<byte> gifData)
         {
-            var blockType = (GifBlockType) gifData[0];
+            var blockType = (GifBlockType)gifData[0];
 
             return blockType;
         }
@@ -154,7 +154,7 @@ namespace AnimatedGif
             {
                 int pixel = ImageDescriptor[9] & 0x07;
 
-                int lengthOfColorTableInByte = 3 * (int) Math.Pow(2, pixel + 1);
+                int lengthOfColorTableInByte = 3 * (int)Math.Pow(2, pixel + 1);
 
                 ColorTable.Clear();
 
@@ -166,12 +166,12 @@ namespace AnimatedGif
             {
                 int lastThreeBitsOfGlobalTableDescription = ScreenDescriptor[4] & 0x07;
 
-                ImageDescriptor[9] = (byte) (ImageDescriptor[9] & 0xF8);
+                ImageDescriptor[9] = (byte)(ImageDescriptor[9] & 0xF8);
 
-                ImageDescriptor[9] = (byte) (ImageDescriptor[9] | lastThreeBitsOfGlobalTableDescription);
+                ImageDescriptor[9] = (byte)(ImageDescriptor[9] | lastThreeBitsOfGlobalTableDescription);
             }
 
-            ImageDescriptor[9] = (byte) (ImageDescriptor[9] | 0x80);
+            ImageDescriptor[9] = (byte)(ImageDescriptor[9] | 0x80);
 
             GetImageData(gifData);
         }

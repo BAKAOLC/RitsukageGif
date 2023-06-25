@@ -30,50 +30,38 @@ namespace RitsukageGif
 
         public PerceptionMode PerceptionMode
         {
-            get { return _shiftKeyHolding ? PerceptionMode.None : _perceptionMode; }
-            set { _perceptionMode = value; }
+            get => _shiftKeyHolding ? PerceptionMode.None : _perceptionMode;
+            set => _perceptionMode = value;
         }
 
         private bool _selected;
         private DPoint _selectedStartPoint;
         private DPoint _selectedEndPoint;
 
-        private DRectangle SelectedRange
-        {
-            get
+        private DRectangle SelectedRange => _selected
+            ? new DRectangle()
             {
-                return _selected
-                    ? new DRectangle()
-                    {
-                        X = Math.Min(_selectedStartPoint.X, _selectedEndPoint.X),
-                        Y = Math.Min(_selectedStartPoint.Y, _selectedEndPoint.Y),
-                        Width = Math.Abs(_selectedStartPoint.X - _selectedEndPoint.X),
-                        Height = Math.Abs(_selectedStartPoint.Y - _selectedEndPoint.Y)
-                    }
-                    : default;
+                X = Math.Min(_selectedStartPoint.X, _selectedEndPoint.X),
+                Y = Math.Min(_selectedStartPoint.Y, _selectedEndPoint.Y),
+                Width = Math.Abs(_selectedStartPoint.X - _selectedEndPoint.X),
+                Height = Math.Abs(_selectedStartPoint.Y - _selectedEndPoint.Y)
             }
-        }
+            : default;
 
         private bool _selecting;
         private bool _selectingMoved;
         private DPoint _selectingStartPoint;
         private DPoint _selectingEndPoint;
 
-        private DRectangle SelectingRange
-        {
-            get
+        private DRectangle SelectingRange => _selecting
+            ? new DRectangle()
             {
-                return _selecting
-                    ? new DRectangle()
-                    {
-                        X = Math.Min(_selectingStartPoint.X, _selectingEndPoint.X),
-                        Y = Math.Min(_selectingStartPoint.Y, _selectingEndPoint.Y),
-                        Width = Math.Abs(_selectingStartPoint.X - _selectingEndPoint.X),
-                        Height = Math.Abs(_selectingStartPoint.Y - _selectingEndPoint.Y)
-                    }
-                    : default;
+                X = Math.Min(_selectingStartPoint.X, _selectingEndPoint.X),
+                Y = Math.Min(_selectingStartPoint.Y, _selectingEndPoint.Y),
+                Width = Math.Abs(_selectingStartPoint.X - _selectingEndPoint.X),
+                Height = Math.Abs(_selectingStartPoint.Y - _selectingEndPoint.Y)
             }
-        }
+            : default;
 
         private ScreenInfo[] _allScreens;
         private RegionSelectScreenView[] _allScreenViewGrids;
@@ -159,31 +147,17 @@ namespace RitsukageGif
             var empty = DPoint.Empty;
             var totalWidth = _screenBitmap.Width;
             var totalHeight = _screenBitmap.Height;
-            if (MousePoint.X - EdgeCheckWidth / 2 < 0)
-            {
-                empty.X = 0;
-            }
-            else if (MousePoint.X + EdgeCheckWidth / 2 > totalWidth - 1)
-            {
-                empty.X = totalWidth - EdgeCheckWidth;
-            }
-            else
-            {
-                empty.X = MousePoint.X - EdgeCheckWidth / 2;
-            }
+            empty.X = MousePoint.X - EdgeCheckWidth / 2 < 0
+                ? 0
+                : MousePoint.X + EdgeCheckWidth / 2 > totalWidth - 1
+                    ? totalWidth - EdgeCheckWidth
+                    : MousePoint.X - EdgeCheckWidth / 2;
 
-            if (MousePoint.Y - EdgeCheckHeight / 2 < 0)
-            {
-                empty.Y = 0;
-            }
-            else if (MousePoint.Y + EdgeCheckHeight / 2 > totalHeight - 1)
-            {
-                empty.Y = totalHeight - EdgeCheckHeight;
-            }
-            else
-            {
-                empty.Y = MousePoint.Y - EdgeCheckHeight / 2;
-            }
+            empty.Y = MousePoint.Y - EdgeCheckHeight / 2 < 0
+                ? 0
+                : MousePoint.Y + EdgeCheckHeight / 2 > totalHeight - 1
+                    ? totalHeight - EdgeCheckHeight
+                    : MousePoint.Y - EdgeCheckHeight / 2;
 
             var e = GetBitmapSobelEdge(new DRectangle(empty.X, empty.Y, EdgeCheckWidth, EdgeCheckHeight));
             int[] array = new int[e.Width];
@@ -252,22 +226,13 @@ namespace RitsukageGif
                 Y = -1;
             }
 
-            if (horizontal && vertical)
-            {
-                PerceptionImagePoint = new DPoint(X, Y);
-            }
-            else if (horizontal)
-            {
-                PerceptionImagePoint = new DPoint(-1, Y);
-            }
-            else if (vertical)
-            {
-                PerceptionImagePoint = new DPoint(X, -1);
-            }
-            else
-            {
-                PerceptionImagePoint = InvalidPerceptionPoint;
-            }
+            PerceptionImagePoint = horizontal && vertical
+                ? new DPoint(X, Y)
+                : horizontal
+                    ? new DPoint(-1, Y)
+                    : vertical
+                        ? new DPoint(X, -1)
+                        : InvalidPerceptionPoint;
         }
 
         public static RegionSelect Begin()

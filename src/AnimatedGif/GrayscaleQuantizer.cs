@@ -65,10 +65,10 @@ namespace AnimatedGif
                 // Otherwise, use your favorite color reduction algorithm
                 // and an optimum palette for that algorithm generated here.
                 // For example, a color histogram, or a median cut palette.
-                Colors[i] = Color.FromArgb((int) alpha,
-                    (int) intensity,
-                    (int) intensity,
-                    (int) intensity);
+                Colors[i] = Color.FromArgb((int)alpha,
+                    (int)intensity,
+                    (int)intensity,
+                    (int)intensity);
             }
         }
 
@@ -87,7 +87,7 @@ namespace AnimatedGif
             // Also, constrain the index choices by the number of
             // colors to do, and then set that pixel's index to the
             // byte value.
-            byte colorIndex = (byte) (luminance + 0.5);
+            byte colorIndex = (byte)(luminance + 0.5);
 
             return colorIndex;
         }

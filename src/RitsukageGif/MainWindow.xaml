@@ -19,7 +19,7 @@
             Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
         <Label x:Name="VersionLabel"
                HorizontalAlignment="Left" VerticalAlignment="Bottom"
-               Content="ver 1.0.0.0"/>
+               Content="ver 1.0.0.0" />
         <Grid>
             <Button x:Name="RecordButton"
                     HorizontalAlignment="Left" VerticalAlignment="Top"

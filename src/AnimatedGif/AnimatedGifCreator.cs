@@ -118,7 +118,7 @@ namespace AnimatedGif
         /// <param name="delay">The delay in milliseconds this GIF will be delayed (-1: Indicating class property delay)</param>
         /// <param name="quality">The GIFs quality</param>
         public async Task AddFrameAsync(Image image, int delay = -1, GifQuality quality = GifQuality.Default,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             var gif = new GifClass();
             gif.LoadGifPicture(image, quality);
@@ -131,7 +131,8 @@ namespace AnimatedGif
                 _createdHeader = true;
             }
 
-            await AppendToStreamAsync(CreateGraphicsControlExtensionBlock(delay > -1 ? delay : Delay), cancellationToken);
+            await AppendToStreamAsync(CreateGraphicsControlExtensionBlock(delay > -1 ? delay : Delay),
+                cancellationToken);
             await AppendToStreamAsync(gif.ImageDescriptor.ToArray(), cancellationToken);
             await AppendToStreamAsync(gif.ColorTable.ToArray(), cancellationToken);
             await AppendToStreamAsync(gif.ImageData.ToArray(), cancellationToken);
@@ -146,7 +147,7 @@ namespace AnimatedGif
         /// <param name="delay">The delay in milliseconds this GIF will be delayed (-1: Indicating class property delay)</param>
         /// <param name="quality">The GIFs quality</param>
         public async Task AddFrameAsync(string path, int delay = -1, GifQuality quality = GifQuality.Default,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default)
         {
             using (var img = Helper.LoadImage(path))
             {
@@ -154,7 +155,7 @@ namespace AnimatedGif
             }
         }
 
-        private Task AppendToStreamAsync(byte[] data, CancellationToken cancellationToken = default(CancellationToken))
+        private Task AppendToStreamAsync(byte[] data, CancellationToken cancellationToken = default)
         {
             return _stream.WriteAsync(data, 0, data.Length, cancellationToken);
         }
@@ -176,7 +177,7 @@ namespace AnimatedGif
         /// </summary>
         private static byte[] CreateHeaderBlock()
         {
-            return new[] {(byte) 'G', (byte) 'I', (byte) 'F', (byte) '8', (byte) '9', (byte) 'a'};
+            return new[] { (byte)'G', (byte)'I', (byte)'F', (byte)'8', (byte)'9', (byte)'a' };
         }
 
         private static byte[] CreateApplicationExtensionBlock(int repeat)
@@ -185,21 +186,21 @@ namespace AnimatedGif
             buffer[0] = 0x21; // Extension introducer
             buffer[1] = 0xFF; // Application extension
             buffer[2] = 0x0B; // Size of block
-            buffer[3] = (byte) 'N'; // NETSCAPE2.0
-            buffer[4] = (byte) 'E';
-            buffer[5] = (byte) 'T';
-            buffer[6] = (byte) 'S';
-            buffer[7] = (byte) 'C';
-            buffer[8] = (byte) 'A';
-            buffer[9] = (byte) 'P';
-            buffer[10] = (byte) 'E';
-            buffer[11] = (byte) '2';
-            buffer[12] = (byte) '.';
-            buffer[13] = (byte) '0';
+            buffer[3] = (byte)'N'; // NETSCAPE2.0
+            buffer[4] = (byte)'E';
+            buffer[5] = (byte)'T';
+            buffer[6] = (byte)'S';
+            buffer[7] = (byte)'C';
+            buffer[8] = (byte)'A';
+            buffer[9] = (byte)'P';
+            buffer[10] = (byte)'E';
+            buffer[11] = (byte)'2';
+            buffer[12] = (byte)'.';
+            buffer[13] = (byte)'0';
             buffer[14] = 0x03; // Size of block
             buffer[15] = 0x01; // Loop indicator
-            buffer[16] = (byte) (repeat % 0x100); // Number of repetitions
-            buffer[17] = (byte) (repeat / 0x100); // 0 for endless loop
+            buffer[16] = (byte)(repeat % 0x100); // Number of repetitions
+            buffer[17] = (byte)(repeat / 0x100); // 0 for endless loop
             buffer[18] = 0x00; // Block terminator
             return buffer;
         }
@@ -211,8 +212,8 @@ namespace AnimatedGif
             buffer[1] = 0xF9; // Graphic control extension
             buffer[2] = 0x04; // Size of block
             buffer[3] = 0x09; // Flags: reserved, disposal method, user input, transparent color
-            buffer[4] = (byte) (delay / 10 % 0x100); // Delay time low byte
-            buffer[5] = (byte) (delay / 10 / 0x100); // Delay time high byte
+            buffer[4] = (byte)(delay / 10 % 0x100); // Delay time low byte
+            buffer[5] = (byte)(delay / 10 / 0x100); // Delay time high byte
             buffer[6] = 0xFF; // Transparent color index
             buffer[7] = 0x00; // Block terminator
             return buffer;

@@ -142,11 +142,11 @@ namespace AnimatedGif
                 for (int col = 0; col < width; col++)
                 {
                     InitialQuantizePixel(new Color32(pSourcePixel));
-                    pSourcePixel = (IntPtr) ((long) pSourcePixel + _pixelSize);
+                    pSourcePixel = (IntPtr)((long)pSourcePixel + _pixelSize);
                 } // Now I have the pixel, call the FirstPassQuantize function...
 
                 // Add the stride to the source row
-                pSourceRow = (IntPtr) ((long) pSourceRow + sourceData.Stride);
+                pSourceRow = (IntPtr)((long)pSourceRow + sourceData.Stride);
             }
         }
 
@@ -211,15 +211,15 @@ namespace AnimatedGif
                         // And set the pixel in the output
                         Marshal.WriteByte(pDestinationPixel, pixelValue);
 
-                        pSourcePixel = (IntPtr) ((long) pSourcePixel + _pixelSize);
-                        pDestinationPixel = (IntPtr) ((long) pDestinationPixel + 1);
+                        pSourcePixel = (IntPtr)((long)pSourcePixel + _pixelSize);
+                        pDestinationPixel = (IntPtr)((long)pDestinationPixel + 1);
                     }
 
                     // Add the stride to the source row
-                    pSourceRow = (IntPtr) ((long) pSourceRow + sourceData.Stride);
+                    pSourceRow = (IntPtr)((long)pSourceRow + sourceData.Stride);
 
                     // And to the destination row
-                    pDestinationRow = (IntPtr) ((long) pDestinationRow + outputData.Stride);
+                    pDestinationRow = (IntPtr)((long)pDestinationRow + outputData.Stride);
                 }
             }
             finally
@@ -268,7 +268,7 @@ namespace AnimatedGif
         {
             public Color32(IntPtr pSourcePixel)
             {
-                this = (Color32) Marshal.PtrToStructure(pSourcePixel, typeof(Color32));
+                this = (Color32)Marshal.PtrToStructure(pSourcePixel, typeof(Color32));
             }
 
             /// <summary>

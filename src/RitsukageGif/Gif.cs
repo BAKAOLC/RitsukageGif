@@ -3,7 +3,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -162,7 +161,7 @@ namespace RitsukageGif
             }
         }
 
-        class Frame
+        private class Frame
         {
             public Bitmap Bitmap { get; set; }
             public int Delay { get; set; }

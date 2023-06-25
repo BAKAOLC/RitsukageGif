@@ -1,33 +1,12 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows;
-using System.Windows.Forms;
 
 namespace RitsukageGif.Native
 {
-    internal class User32
+    internal static class User32
     {
-        const string DllName = "user32.dll";
-
-        [DllImport(DllName)]
-        public static extern bool GetCursorPos(ref Point lpPoint);
-
-        [DllImport(DllName)]
-        public static extern bool SetCursorPos(int x, int y);
-
-
-        [DllImport(DllName)]
-        public static extern bool DrawIconEx(
-            IntPtr hDC,
-            int Left,
-            int Top,
-            IntPtr hIcon,
-            int Width,
-            int Height,
-            int StepIfAniCur,
-            IntPtr BrushForFlickerFreeDraw,
-            DrawIconExFlags Flags);
+        private const string DllName = "user32.dll";
 
         [DllImport(DllName)]
         public static extern WindowStyles GetWindowLong(IntPtr hWnd, GetWindowLongValue nIndex);
@@ -43,15 +22,6 @@ namespace RitsukageGif.Native
 
         [DllImport(DllName)]
         public static extern IntPtr GetForegroundWindow();
-
-        [DllImport(DllName)]
-        public static extern IntPtr ChildWindowFromPointEx(IntPtr pHwnd, Point point, uint uFlgs);
-
-        [DllImport(DllName)]
-        public static extern int SendMessage(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport(DllName)]
-        public static extern bool ScreenToClient(IntPtr hWnd, out Point lpPoint);
 
         [DllImport(DllName)]
         public static extern bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
@@ -72,9 +42,6 @@ namespace RitsukageGif.Native
         public static extern bool IsWindowVisible(IntPtr hWnd);
 
         [DllImport(DllName)]
-        public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport(DllName)]
         public static extern bool IsIconic(IntPtr hWnd);
 
         [DllImport(DllName)]
@@ -91,27 +58,5 @@ namespace RitsukageGif.Native
 
         [DllImport(DllName)]
         public static extern bool GetIconInfo(IntPtr hIcon, out IconInfo piconinfo);
-
-        [DllImport(DllName)]
-        public static extern IntPtr GetDC(IntPtr hWnd);
-
-        [DllImport(DllName)]
-        public static extern bool ReleaseDC(IntPtr hWnd, IntPtr hDC);
-
-        [DllImport(DllName)]
-        public static extern bool FillRect(IntPtr hDC, ref Rect Rect, IntPtr Brush);
-
-        [DllImport(DllName)]
-        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy,
-            SetWindowPositionFlags wFlags);
-
-        [DllImport(DllName)]
-        public static extern int ShowWindow(IntPtr hWnd, int nCmdShow);
-
-        [DllImport(DllName, SetLastError = true)]
-        public static extern bool RegisterHotKey(IntPtr hWnd, int id, KeyModifiers fsModifiers, Keys vk);
-
-        [DllImport(DllName, SetLastError = true)]
-        public static extern bool RemoveRegisterHotKey(IntPtr hWnd, int id);
     }
 }
