@@ -52,7 +52,7 @@ namespace RitsukageGif
             Width = Screen.Bounds.Width;
             Height = Screen.Bounds.Height;
             RenderTransform = new ScaleTransform(Screen.ConvertScaleX, Screen.ConvertScaleY);
-            UpdateTipGrid();
+            UpdateTipGridScale();
         }
 
         public void UpdateScreenBitmap(BitmapSource source)
@@ -64,12 +64,14 @@ namespace RitsukageGif
             RegionImage.Source = source;
         }
 
-        public void UpdateTipGrid()
+        public void UpdateTipGridScale()
         {
             var scaleX = Width / 1280;
             var scaleY = Height / 720;
             var scale = scaleX < scaleY ? scaleX : scaleY;
             scale = (scale - 1) / 2 + 1;
+            scale = (int)(scale * 4 + 0.5) / 4.0;
+
             var y = TipGridLabelMargin * scale;
             _tipGridScale = scale;
             TipGrid.Width = TipGridWidth * scale;

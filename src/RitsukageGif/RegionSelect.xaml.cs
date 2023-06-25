@@ -79,10 +79,11 @@ namespace RitsukageGif
         private bool _shiftKeyHolding;
         private readonly Timer _shiftKeyHoldingTimer = new Timer(150) { AutoReset = false };
 
-        private const int EdgeCheckWidth = 60;
-        private const int EdgeCheckHeight = 60;
-        private const int EdgeCheckOffset = 25;
-        private const int EdgeCheckThreshold = 100;
+        private readonly byte SobelThresholdFilter = Settings.Default.SobelThresholdFilter;
+        private readonly int EdgeCheckWidth = Settings.Default.EdgeCheckWidth;
+        private readonly int EdgeCheckHeight = Settings.Default.EdgeCheckHeight;
+        private readonly int EdgeCheckOffset = Settings.Default.EdgeCheckOffset;
+        private readonly int EdgeCheckThreshold = Settings.Default.EdgeCheckThreshold;
 
         private RegionSelect()
         {
@@ -142,96 +143,106 @@ namespace RitsukageGif
                 return;
             }
 
-            var X = -1;
-            var Y = -1;
-            var empty = DPoint.Empty;
+            var resultX = -1;
+            var resultY = -1;
             var totalWidth = _screenBitmap.Width;
             var totalHeight = _screenBitmap.Height;
-            empty.X = MousePoint.X - EdgeCheckWidth / 2 < 0
-                ? 0
-                : MousePoint.X + EdgeCheckWidth / 2 > totalWidth - 1
-                    ? totalWidth - EdgeCheckWidth
-                    : MousePoint.X - EdgeCheckWidth / 2;
-
-            empty.Y = MousePoint.Y - EdgeCheckHeight / 2 < 0
-                ? 0
-                : MousePoint.Y + EdgeCheckHeight / 2 > totalHeight - 1
-                    ? totalHeight - EdgeCheckHeight
-                    : MousePoint.Y - EdgeCheckHeight / 2;
-
-            var e = GetBitmapSobelEdge(new DRectangle(empty.X, empty.Y, EdgeCheckWidth, EdgeCheckHeight));
-            int[] array = new int[e.Width];
-            int[] array2 = new int[e.Height];
-            for (int i = 0; i < e.Data.Length; i += 3)
+            var halfCheckWidth = EdgeCheckWidth / 2;
+            var halfCheckHeight = EdgeCheckHeight / 2;
+            var beginX = 0;
+            if (MousePoint.X - halfCheckWidth < 0)
             {
-                array[i % (e.Width * 3) / 3] += e.Data[i];
-                array2[i / (e.Width * 3)] += e.Data[i];
+                vertical = false;
             }
-
-            for (int j = 0; j < array.Length; j++)
+            else if (MousePoint.X + halfCheckWidth > totalWidth - 1)
             {
-                array[j] /= EdgeCheckHeight;
+                vertical = false;
+                beginX = totalWidth - EdgeCheckWidth;
             }
-
-            for (int k = 0; k < array2.Length; k++)
+            else
             {
-                array2[k] /= EdgeCheckWidth;
+                beginX = MousePoint.X - halfCheckWidth;
             }
-
-            for (int l = 0; l < EdgeCheckOffset; l++)
+            var beginY = 0;
+            if (MousePoint.Y - halfCheckHeight < 0)
             {
-                if (array[EdgeCheckWidth / 2 + l] > EdgeCheckThreshold)
+                horizontal = false;
+            }
+            else if (MousePoint.Y + halfCheckHeight > totalHeight - 1)
+            {
+                horizontal = false;
+                beginY = totalHeight - EdgeCheckHeight;
+            }
+            else
+            {
+                beginY = MousePoint.Y - halfCheckHeight;
+            }
+            var bitX = new int[EdgeCheckWidth];
+            var bitY = new int[EdgeCheckHeight];
+            var e = GetBitmapSobelEdge(new DRectangle(beginX, beginY, EdgeCheckWidth, EdgeCheckHeight));
+            for (var y = 0; y < e.Height; y++)
+            {
+                for (var x = 0; x < e.Width; x++)
                 {
-                    X = empty.X + EdgeCheckWidth / 2 + l;
-                    break;
-                }
-
-                if (array[EdgeCheckWidth / 2 - l] > EdgeCheckThreshold)
-                {
-                    X = empty.X + EdgeCheckWidth / 2 - l;
-                    break;
+                    var index = y * e.Width + x;
+                    var color = e.Data[index * 3];
+                    bitX[x] += color;
+                    bitY[y] += color;
                 }
             }
-
-            for (int m = 0; m < EdgeCheckOffset; m++)
+            
+            if (vertical)
             {
-                if (array2[EdgeCheckHeight / 2 + m] > EdgeCheckThreshold)
+                for (var x = 0; x < bitX.Length; x++)
                 {
-                    Y = empty.Y + EdgeCheckHeight / 2 + m;
-                    break;
+                    bitX[x] /= EdgeCheckHeight;
                 }
 
-                if (array2[EdgeCheckHeight / 2 - m] > EdgeCheckThreshold)
+                for (var x = 0; x < halfCheckWidth; x++)
                 {
-                    Y = empty.Y + EdgeCheckHeight / 2 - m;
-                    break;
+                    if (bitX[halfCheckWidth + x] > EdgeCheckThreshold)
+                    {
+                        resultX = beginX + halfCheckWidth + x;
+                        break;
+                    }
+
+                    if (bitX[halfCheckWidth - x] > EdgeCheckThreshold)
+                    {
+                        resultX = beginX + halfCheckWidth - x;
+                        break;
+                    }
                 }
             }
+            
+            if (horizontal)
+            {
+                for (var y = 0; y < bitY.Length; y++)
+                {
+                    bitY[y] /= EdgeCheckWidth;
+                }
 
-            if (MousePoint.X - EdgeCheckWidth / 2 < 0)
-            {
-                X = -1;
-            }
-            else if (MousePoint.X + EdgeCheckWidth / 2 > totalWidth - 1)
-            {
-                X = -1;
-            }
+                for (var y = 0; y < halfCheckHeight; y++)
+                {
+                    if (bitY[halfCheckHeight + y] > EdgeCheckThreshold)
+                    {
+                        resultY = beginY + halfCheckHeight + y;
+                        break;
+                    }
 
-            if (MousePoint.Y - EdgeCheckHeight / 2 < 0)
-            {
-                Y = -1;
-            }
-            else if (MousePoint.Y + EdgeCheckHeight / 2 > totalHeight - 1)
-            {
-                Y = -1;
+                    if (bitY[halfCheckHeight - y] > EdgeCheckThreshold)
+                    {
+                        resultY = beginY + halfCheckHeight - y;
+                        break;
+                    }
+                }
             }
 
             PerceptionImagePoint = horizontal && vertical
-                ? new DPoint(X, Y)
+                ? new DPoint(resultX, resultY)
                 : horizontal
-                    ? new DPoint(-1, Y)
+                    ? new DPoint(-1, resultY)
                     : vertical
-                        ? new DPoint(X, -1)
+                        ? new DPoint(resultX, -1)
                         : InvalidPerceptionPoint;
         }
 
@@ -382,7 +393,7 @@ namespace RitsukageGif
             var e = BitmapSobelEdge.FromBitmap(_screenBitmapForSobelEdge.Clone(rect, PixelFormat.Format24bppRgb));
             e.ProcessToGrey();
             e.ProcessSobelEdgeFilter();
-            e.ProcessThresholdFilter(100);
+            e.ProcessThresholdFilter(SobelThresholdFilter);
             return e;
         }
 
