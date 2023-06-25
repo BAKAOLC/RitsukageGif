@@ -94,7 +94,7 @@ namespace RitsukageGif
             .OfType<AssemblyMetadataAttribute>()
             .FirstOrDefault(x => x.Key == "RepositoryUrl")?.Value;
 
-        private static string CurrentVersion => "v" + Assembly.GetExecutingAssembly().GetName().Version;
+        private static Version CurrentVersion => Assembly.GetExecutingAssembly().GetName().Version;
 
         public static void CheckUpdate()
         {
@@ -119,11 +119,15 @@ namespace RitsukageGif
                     }
 
                     var json = args.Result;
-                    var version = Regex.Match(json, @"""tag_name"":\s*""(?<version>[^""]+)""").Groups["version"].Value;
-                    if (version == CurrentVersion) return;
+                    var versionMatch = Regex.Match(json, @"""tag_name"":\s*""v(?<version>[^""]+)""", RegexOptions.IgnoreCase).Groups["version"];
+                    if (!versionMatch.Success) return;
+                    var version = versionMatch.Value;
+                    if (!Version.TryParse(version, out var gitVersion)) return;
+                    if (CurrentVersion >= gitVersion) return;
                     var downloadUrl = Regex.Match(json, @"""browser_download_url"":\s*""(?<url>[^""]+)""")
                         .Groups["url"].Value;
-                    if (MessageBox.Show($"检测到新版本{version}，是否下载？", "更新", MessageBoxButton.YesNo) == MessageBoxResult.Yes)
+                    if (MessageBox.Show($"检测到新版本{version}，是否下载？", "更新", MessageBoxButton.YesNo) ==
+                        MessageBoxResult.Yes)
                     {
                         Process.Start(downloadUrl);
                     }
