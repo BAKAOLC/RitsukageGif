@@ -36,16 +36,23 @@ namespace RitsukageGif
                     {
                         Bitmap = img,
                         Delay = (int)dt
-                    });
-                    Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
-                    if (dt > delay)
+                    }, processingToken);
+                    if (!processingToken.IsCancellationRequested)
                     {
-                        var d = (int)(delay - (dt - delay));
-                        Thread.Sleep(d > 0 ? d : 1);
+                        Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
+                        if (dt > delay)
+                        {
+                            var d = (int)(delay - (dt - delay));
+                            Thread.Sleep(d > 0 ? d : 1);
+                        }
+                        else
+                        {
+                            Thread.Sleep(delay);
+                        }
                     }
                     else
                     {
-                        Thread.Sleep(delay);
+                        break;
                     }
                 }
 
@@ -53,7 +60,7 @@ namespace RitsukageGif
                 sw.Stop();
             }, recordingToken);
             sw.Start();
-            Task.Run(() =>
+            Task.Run(async () =>
             {
                 using (var gifCreator = AnimatedGif.AnimatedGif.Create(path, delay))
                 {
@@ -69,7 +76,9 @@ namespace RitsukageGif
                         }
 
                         if (frame == null) continue;
-                        gifCreator.AddFrame(frame.Bitmap, delay: frame.Delay, quality: GifQuality.Bit8);
+                        await gifCreator.AddFrameAsync(frame.Bitmap, delay: frame.Delay, quality: GifQuality.Bit8,
+                                cancellationToken: processingToken)
+                            .ConfigureAwait(false);
                         frame.Bitmap.Dispose();
                         Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
                     }
@@ -104,17 +113,24 @@ namespace RitsukageGif
                         lastMilliseconds = t;
                         var img = provider.Capture(cursor, scale);
                         Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
-                        gifCreator.AddFrame(img, delay: (int)dt, quality: GifQuality.Bit8);
-                        img.Dispose();
-                        Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
-                        if (dt > delay)
+                        if (!processingToken.IsCancellationRequested)
                         {
-                            var d = (int)(delay - (dt - delay));
-                            Thread.Sleep(d > 0 ? d : 1);
+                            gifCreator.AddFrame(img, delay: (int)dt, quality: GifQuality.Bit8);
+                            img.Dispose();
+                            Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
+                            if (dt > delay)
+                            {
+                                var d = (int)(delay - (dt - delay));
+                                Thread.Sleep(d > 0 ? d : 1);
+                            }
+                            else
+                            {
+                                Thread.Sleep(delay);
+                            }
                         }
                         else
                         {
-                            Thread.Sleep(delay);
+                            break;
                         }
                     }
                 }

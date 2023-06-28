@@ -53,7 +53,6 @@ namespace RitsukageGif
         private byte[] _lastRecordGifClipboardBytes;
         private CancellationTokenSource _recordingCancellationTokenSource;
         private CancellationTokenSource _processingCancellationTokenSource;
-        private Gif.RecordInfo _recordInfo;
         private string _currentGifPath;
 
         private readonly List<string> _tempFileList = new List<string>();
@@ -103,6 +102,145 @@ namespace RitsukageGif
             Settings.Default.RecordCursor = RecordCursor;
             Settings.Default.MemoryRecord = RecordInMemory;
             Settings.Default.Save();
+        }
+
+        private void StartRecording()
+        {
+            _canChangeRegion = false;
+            Recording = true;
+            RecordButton.Content = "停止录制";
+            RecordButton.Background = Brushes.Red;
+            RegionSelectButton.IsEnabled = false;
+            GifScaleInteger.IsEnabled = false;
+            GifFrameInteger.IsEnabled = false;
+            RecordCursorCheckBox.IsEnabled = false;
+            MemoryRecordCheckBox.IsEnabled = false;
+            _recordingCancellationTokenSource?.Cancel();
+            _processingCancellationTokenSource?.Cancel();
+            StartRecordingTaskAsync();
+        }
+
+        private Task StartRecordingTaskAsync()
+        {
+            var tokenRecording = new CancellationTokenSource();
+            var tokenProcessing = new CancellationTokenSource();
+            _recordingCancellationTokenSource = tokenRecording;
+            _processingCancellationTokenSource = tokenProcessing;
+            var path = GenerateTempFileName(".gif");
+            _tempFileList.Add(path);
+            var info = RecordInMemory
+                ? Gif.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                    tokenRecording.Token, tokenProcessing.Token)
+                : Gif.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                    tokenRecording.Token, tokenProcessing.Token);
+            return Task.Run(async () =>
+            {
+                Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Visible; });
+                do
+                {
+                    await Task.Delay(30, tokenProcessing.Token).ConfigureAwait(false);
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (tokenProcessing.IsCancellationRequested)
+                        {
+                            GifEncodingLabelGrid.Visibility = Visibility.Hidden;
+                        }
+                        else
+                        {
+                            GifFramesLabel.Content = $"{info.ProcessedFrames} / {info.Frames}";
+                        }
+                    });
+                } while (!(info.Completed || tokenProcessing.IsCancellationRequested));
+
+                Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Hidden; });
+                if (tokenProcessing.IsCancellationRequested) return;
+                SetShowInfo(path);
+            }, tokenProcessing.Token);
+        }
+
+        private void SetShowInfo(string path)
+        {
+                var file = new FileInfo(path);
+                var sb = new StringBuilder();
+                sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
+                sb.AppendFormat(
+                    "<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>",
+                    path);
+                _lastRecordGifClipboardBytes = Encoding.Default.GetBytes(sb.ToString());
+                Dispatcher.Invoke(() =>
+                {
+                    using (var data = new MemoryStream(_lastRecordGifClipboardBytes))
+                    {
+                        Clipboard.SetData("Html Format", data);
+                    }
+                    if (file.Length > 6 * 1024 * 1024)
+                    {
+                        GifSizeLabel.Foreground = Brushes.DarkRed;
+                        GifSizeLabel.FontWeight = FontWeights.Bold;
+                    }
+                    else if (file.Length > 3 * 1024 * 1024)
+                    {
+                        GifSizeLabel.Foreground = Brushes.Red;
+                        GifSizeLabel.FontWeight = FontWeights.Normal;
+                    }
+                    else
+                    {
+                        GifSizeLabel.Foreground = Brushes.Black;
+                        GifSizeLabel.FontWeight = FontWeights.Normal;
+                    }
+                    GifSizeLabel.Content = file.Length > 1024 * 1024
+                        ? $"{(double)file.Length / 1024 / 1024:F2}MB"
+                        : file.Length > 1024
+                            ? $"{(double)file.Length / 1024:F2}KB"
+                            : (object)$"{(double)file.Length:F2}B";
+
+                    GifView.Visibility = Visibility.Visible;
+                    var image = new BitmapImage();
+                    image.BeginInit();
+                    var ms = new MemoryStream(File.ReadAllBytes(path));
+                    image.StreamSource = ms;
+                    image.EndInit();
+                    _currentGifPath = path;
+                    ImageBehavior.SetAnimatedSource(GifView, image);
+                });
+        }
+
+        private void StopRecording()
+        {
+            _canChangeRegion = true;
+            Recording = false;
+            RecordButton.Content = "开始录制";
+            RecordButton.Background = Brushes.White;
+            RegionSelectButton.IsEnabled = true;
+            GifScaleInteger.IsEnabled = true;
+            GifFrameInteger.IsEnabled = true;
+            RecordCursorCheckBox.IsEnabled = true;
+            MemoryRecordCheckBox.IsEnabled = true;
+            _recordingCancellationTokenSource?.Cancel();
+        }
+
+        private async Task OpenRegionSelectWindowAsync()
+        {
+            var regionSelect = RegionSelect.Begin();
+            var (confirm, region) = await regionSelect.WaitForResultAsync().ConfigureAwait(false);
+            _canChangeRegion = true;
+            if (confirm)
+            {
+                Region = region;
+            }
+
+            Dispatcher.Invoke(() =>
+            {
+                if (Region != default)
+                {
+                    _canBeginRecord = true;
+                    RecordButton.IsEnabled = true;
+                }
+                else
+                {
+                    RecordButton.IsEnabled = false;
+                }
+            });
         }
 
         private void RegisterHotKeys()
@@ -200,150 +338,30 @@ namespace RitsukageGif
                 }
                 catch
                 {
+                    // ignored
                 }
             }
         }
 
-        private async void RecordButton_Click(object sender, RoutedEventArgs e)
+        private void RecordButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_canBeginRecord) return;
             if (Recording)
             {
-                _canChangeRegion = true;
-                Recording = false;
-                RecordButton.Content = "开始录制";
-                RecordButton.Background = Brushes.White;
-                RegionSelectButton.IsEnabled = true;
-                GifScaleInteger.IsEnabled = true;
-                GifFrameInteger.IsEnabled = true;
-                RecordCursorCheckBox.IsEnabled = true;
-                MemoryRecordCheckBox.IsEnabled = true;
-                _recordingCancellationTokenSource?.Cancel();
+                StopRecording();
             }
             else
             {
-                _canChangeRegion = false;
-                Recording = true;
-                RecordButton.Content = "停止录制";
-                RecordButton.Background = Brushes.Red;
-                RegionSelectButton.IsEnabled = false;
-                GifScaleInteger.IsEnabled = false;
-                GifFrameInteger.IsEnabled = false;
-                RecordCursorCheckBox.IsEnabled = false;
-                MemoryRecordCheckBox.IsEnabled = false;
-                _recordingCancellationTokenSource?.Cancel();
-                _processingCancellationTokenSource?.Cancel();
-                var tokenRecording = new CancellationTokenSource();
-                var tokenProcessing = new CancellationTokenSource();
-                _recordingCancellationTokenSource = tokenRecording;
-                _processingCancellationTokenSource = tokenProcessing;
-                var path = GenerateTempFileName(".gif");
-                _tempFileList.Add(path);
-                var info = RecordInMemory
-                    ? Gif.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
-                        tokenRecording.Token, tokenProcessing.Token)
-                    : Gif.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
-                        tokenRecording.Token, tokenProcessing.Token);
-                _recordInfo = info;
-                await Task.Run(() =>
-                {
-                    Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Visible; });
-                    do
-                    {
-                        Thread.Sleep(30);
-                        Dispatcher.Invoke(() =>
-                        {
-                            if (tokenProcessing.IsCancellationRequested)
-                            {
-                                GifEncodingLabelGrid.Visibility = Visibility.Hidden;
-                            }
-                            else
-                            {
-                                GifFramesLabel.Content = $"{info.ProcessedFrames} / {info.Frames}";
-                            }
-                        });
-                    } while (!(info.Completed || tokenProcessing.IsCancellationRequested));
-
-                    Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Hidden; });
-                    if (tokenProcessing.IsCancellationRequested) return;
-                    var file = new FileInfo(path);
-                    Dispatcher.Invoke(() =>
-                    {
-                        if (file.Length > 6 * 1024 * 1024)
-                        {
-                            GifSizeLabel.Foreground = Brushes.DarkRed;
-                            GifSizeLabel.FontWeight = FontWeights.Bold;
-                        }
-                        else if (file.Length > 3 * 1024 * 1024)
-                        {
-                            GifSizeLabel.Foreground = Brushes.Red;
-                            GifSizeLabel.FontWeight = FontWeights.Normal;
-                        }
-                        else
-                        {
-                            GifSizeLabel.Foreground = Brushes.Black;
-                            GifSizeLabel.FontWeight = FontWeights.Normal;
-                        }
-
-                        GifSizeLabel.Content = file.Length > 1024 * 1024
-                            ? $"{(double)file.Length / 1024 / 1024:F2}MB"
-                            : file.Length > 1024
-                                ? $"{(double)file.Length / 1024:F2}KB"
-                                : (object)$"{(double)file.Length:F2}B";
-                    });
-                    var sb = new StringBuilder();
-                    sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
-                    sb.AppendFormat(
-                        "<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>",
-                        path);
-                    _lastRecordGifClipboardBytes = Encoding.Default.GetBytes(sb.ToString());
-                    Dispatcher.Invoke(() =>
-                    {
-                        using (var data = new MemoryStream(_lastRecordGifClipboardBytes))
-                        {
-                            Clipboard.SetData("Html Format", data);
-                        }
-                    });
-                    Dispatcher.Invoke(() =>
-                    {
-                        GifView.Visibility = Visibility.Visible;
-                        var image = new BitmapImage();
-                        image.BeginInit();
-                        var ms = new MemoryStream(File.ReadAllBytes(path));
-                        image.StreamSource = ms;
-                        image.EndInit();
-                        _currentGifPath = path;
-                        ImageBehavior.SetAnimatedSource(GifView, image);
-                    });
-                }, tokenProcessing.Token).ConfigureAwait(false);
+                StartRecording();
             }
         }
 
-        private async void RegionSelectButton_Click(object sender, RoutedEventArgs e)
+        private void RegionSelectButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_canChangeRegion) return;
             _canBeginRecord = false;
             _canChangeRegion = false;
-            var regionSelect = RegionSelect.Begin();
-            (var confirm, var region) = await regionSelect.WaitForResultAsync().ConfigureAwait(false);
-            _canChangeRegion = true;
-            if (confirm)
-            {
-                Region = region != default ? region : null;
-            }
-
-            Dispatcher.Invoke(() =>
-            {
-                if (Region != default)
-                {
-                    _canBeginRecord = true;
-                    RecordButton.IsEnabled = true;
-                }
-                else
-                {
-                    RecordButton.IsEnabled = false;
-                }
-            });
+            OpenRegionSelectWindowAsync().ConfigureAwait(false);
         }
 
         private void AboutButton_Click(object sender, RoutedEventArgs e)
@@ -393,7 +411,7 @@ namespace RitsukageGif
             if (string.IsNullOrEmpty(_currentGifPath)) return;
             if (!(sender is Image gif)) return;
             var dataObject = new DataObject(DataFormats.FileDrop, new[] { _currentGifPath });
-            var dde = DragDrop.DoDragDrop(gif, dataObject, DragDropEffects.Copy);
+            DragDrop.DoDragDrop(gif, dataObject, DragDropEffects.Copy);
         }
 
         private void Window_DpiChanged(object sender, DpiChangedEventArgs e)
