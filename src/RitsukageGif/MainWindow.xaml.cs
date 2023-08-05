@@ -65,6 +65,8 @@ namespace RitsukageGif
 
         public bool RecordInMemory { get; private set; }
 
+        public bool DXGIRecord { get; private set; }
+
         public bool Recording { get; private set; }
 
         private static bool CheckOsVersion()
@@ -96,12 +98,14 @@ namespace RitsukageGif
             GifScaleInteger.Value = Scale = 2;
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
             MemoryRecordCheckBox.IsChecked = RecordInMemory = Settings.Default.MemoryRecord;
+            DXGIRecordCheckBox.IsChecked = DXGIRecord = Settings.Default.ScreenFrameProvider == 1;
         }
 
         private void SaveConfig()
         {
             Settings.Default.RecordCursor = RecordCursor;
             Settings.Default.MemoryRecord = RecordInMemory;
+            Settings.Default.ScreenFrameProvider = DXGIRecord ? 1 : 0;
             Settings.Default.Save();
         }
 
@@ -116,6 +120,7 @@ namespace RitsukageGif
             GifFrameInteger.IsEnabled = false;
             RecordCursorCheckBox.IsEnabled = false;
             MemoryRecordCheckBox.IsEnabled = false;
+            DXGIRecordCheckBox.IsEnabled = false;
             _recordingCancellationTokenSource?.Cancel();
             _processingCancellationTokenSource?.Cancel();
             StartRecordingTaskAsync();
@@ -216,6 +221,7 @@ namespace RitsukageGif
             GifFrameInteger.IsEnabled = true;
             RecordCursorCheckBox.IsEnabled = true;
             MemoryRecordCheckBox.IsEnabled = true;
+            DXGIRecordCheckBox.IsEnabled = true;
             _recordingCancellationTokenSource?.Cancel();
         }
 
@@ -385,6 +391,16 @@ namespace RitsukageGif
         private void MemoryRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             RecordInMemory = false;
+        }
+
+        private void DXGIRecordCheckBox_Checked(object sender, RoutedEventArgs e)
+        {
+            DXGIRecord = true;
+        }
+
+        private void DXGIRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
+        {
+            DXGIRecord = false;
         }
 
         private void GifView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
