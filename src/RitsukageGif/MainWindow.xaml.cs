@@ -109,6 +109,12 @@ namespace RitsukageGif
             Settings.Default.Save();
         }
 
+        private void ApplyBackground()
+        {
+            var image = Settings.Default.BackgroundImage;
+            BackgroundImage.Source = string.IsNullOrWhiteSpace(image) ? null : new BitmapImage(new Uri(image));
+        }
+
         private void StartRecording()
         {
             _canChangeRegion = false;
@@ -309,6 +315,7 @@ namespace RitsukageGif
                 RegisterHotKeys();
                 _canBeginRecord = false;
                 _canChangeRegion = true;
+                ApplyBackground();
 #if !DEBUG
                 Task.Run(Updater.CheckUpdate).ConfigureAwait(false);
 #endif

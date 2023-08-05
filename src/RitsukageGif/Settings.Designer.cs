@@ -118,5 +118,17 @@ namespace RitsukageGif {
                 this["ScreenFrameProvider"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("pack://application:,,,/Background.png")]
+        public string BackgroundImage {
+            get {
+                return ((string)(this["BackgroundImage"]));
+            }
+            set {
+                this["BackgroundImage"] = value;
+            }
+        }
     }
 }

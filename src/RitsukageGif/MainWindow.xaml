@@ -14,7 +14,7 @@
         Closing="Window_Closing"
         DpiChanged="Window_DpiChanged">
     <Grid>
-        <Image
+        <Image x:Name="BackgroundImage"
             Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
         <Label x:Name="VersionLabel"
                HorizontalAlignment="Left" VerticalAlignment="Bottom"
