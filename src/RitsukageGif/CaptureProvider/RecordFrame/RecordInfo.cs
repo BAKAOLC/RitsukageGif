@@ -1,6 +1,6 @@
 ﻿using RitsukageGif.Class;
 
-namespace RitsukageGif.Capture.RecordFrameProvider
+namespace RitsukageGif.CaptureProvider.RecordFrame
 {
     public class RecordInfo : NotifyPropertyChanged
     {

@@ -106,5 +106,17 @@ namespace RitsukageGif {
                 this["EdgeCheckHeight"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1")]
+        public int ScreenFrameProvider {
+            get {
+                return ((int)(this["ScreenFrameProvider"]));
+            }
+            set {
+                this["ScreenFrameProvider"] = value;
+            }
+        }
     }
 }

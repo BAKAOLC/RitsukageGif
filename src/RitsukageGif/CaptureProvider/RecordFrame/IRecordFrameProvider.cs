@@ -1,7 +1,7 @@
 ﻿using System.Drawing;
 using System.Threading;
 
-namespace RitsukageGif.Capture.RecordFrameProvider
+namespace RitsukageGif.CaptureProvider.RecordFrame
 {
     public interface IRecordFrameProvider
     {

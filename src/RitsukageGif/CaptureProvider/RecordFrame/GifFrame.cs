@@ -1,6 +1,6 @@
 ﻿using System.Drawing;
 
-namespace RitsukageGif.Capture.RecordFrameProvider
+namespace RitsukageGif.CaptureProvider.RecordFrame
 {
     internal class GifFrame
     {

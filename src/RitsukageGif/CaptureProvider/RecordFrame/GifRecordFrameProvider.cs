@@ -5,9 +5,9 @@ using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
 using AnimatedGif;
-using RitsukageGif.Capture.ScreenFrameProvider;
+using RitsukageGif.CaptureProvider.ScreenFrame;
 
-namespace RitsukageGif.Capture.RecordFrameProvider
+namespace RitsukageGif.CaptureProvider.RecordFrame
 {
     public sealed class GifRecordFrameProvider : IRecordFrameProvider
     {
@@ -24,7 +24,8 @@ namespace RitsukageGif.Capture.RecordFrameProvider
                 Path = path
             };
             var bitmaps = new BlockingCollection<GifFrame>(1000);
-            var provider = new BitbltScreenFrameProvider(rectangle);
+            var provider = ScreenFrameProvider.CreateProvider(Settings.Default.ScreenFrameProvider);
+            provider.ApplyCaptureRegion(rectangle);
             var lastMilliseconds = 0L;
             var recordFrames = 0;
             var processedFrames = 0;
@@ -61,6 +62,7 @@ namespace RitsukageGif.Capture.RecordFrameProvider
                     }
                 }
 
+                provider.Dispose();
                 bitmaps.CompleteAdding();
                 sw.Stop();
             }, recordingToken);
@@ -102,7 +104,8 @@ namespace RitsukageGif.Capture.RecordFrameProvider
             {
                 Path = path
             };
-            var provider = new BitbltScreenFrameProvider(rectangle);
+            var provider = ScreenFrameProvider.CreateProvider(Settings.Default.ScreenFrameProvider);
+            provider.ApplyCaptureRegion(rectangle);
             var lastMilliseconds = 0L;
             var recordFrames = 0;
             var processedFrames = 0;
@@ -141,8 +144,9 @@ namespace RitsukageGif.Capture.RecordFrameProvider
                 }
 
                 sw.Stop();
+                provider.Dispose();
                 info.Completed = true;
-            }, recordingToken);
+            });
             sw.Start();
             return info;
         }

@@ -14,7 +14,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NHotkey;
 using NHotkey.Wpf;
-using RitsukageGif.Capture.RecordFrameProvider;
+using RitsukageGif.CaptureProvider.RecordFrame;
 using RitsukageGif.Class;
 using RitsukageGif.Windows;
 using WpfAnimatedGif;
