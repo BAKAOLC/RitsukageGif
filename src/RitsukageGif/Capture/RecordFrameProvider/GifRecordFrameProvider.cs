@@ -1,25 +1,30 @@
-﻿using AnimatedGif;
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
+using AnimatedGif;
+using RitsukageGif.Capture.ScreenFrameProvider;
 
-namespace RitsukageGif
+namespace RitsukageGif.Capture.RecordFrameProvider
 {
-    public static class Gif
+    public sealed class GifRecordFrameProvider : IRecordFrameProvider
     {
-        public static RecordInfo BeginWithMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
+        public string GetFileExtension()
+        {
+            return ".gif";
+        }
+
+        public RecordInfo BeginWithMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
             CancellationToken recordingToken, CancellationToken processingToken)
         {
             var info = new RecordInfo
             {
                 Path = path
             };
-            var bitmaps = new BlockingCollection<Frame>(1000);
-            var provider = new ScreenFrameProvider(rectangle);
+            var bitmaps = new BlockingCollection<GifFrame>(1000);
+            var provider = new BitbltScreenFrameProvider(rectangle);
             var lastMilliseconds = 0L;
             var recordFrames = 0;
             var processedFrames = 0;
@@ -32,14 +37,14 @@ namespace RitsukageGif
                     var dt = t - lastMilliseconds;
                     lastMilliseconds = t;
                     var img = provider.Capture(cursor, scale);
-                    bitmaps.Add(new Frame()
+                    bitmaps.Add(new GifFrame
                     {
                         Bitmap = img,
                         Delay = (int)dt
                     }, processingToken);
                     if (!processingToken.IsCancellationRequested)
                     {
-                        Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
+                        info.Frames = ++recordFrames;
                         if (dt > delay)
                         {
                             var d = (int)(delay - (dt - delay));
@@ -66,7 +71,7 @@ namespace RitsukageGif
                 {
                     while (!bitmaps.IsCompleted)
                     {
-                        Frame frame = null;
+                        GifFrame frame = null;
                         try
                         {
                             frame = bitmaps.Take();
@@ -76,20 +81,20 @@ namespace RitsukageGif
                         }
 
                         if (frame == null) continue;
-                        await gifCreator.AddFrameAsync(frame.Bitmap, delay: frame.Delay, quality: GifQuality.Bit8,
-                                cancellationToken: processingToken)
+                        await gifCreator.AddFrameAsync(frame.Bitmap, frame.Delay, GifQuality.Bit8,
+                                processingToken)
                             .ConfigureAwait(false);
                         frame.Bitmap.Dispose();
-                        Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
+                        info.ProcessedFrames = ++processedFrames;
                     }
-
-                    Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
                 }
+
+                info.Completed = true;
             }, processingToken);
             return info;
         }
 
-        public static RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale,
+        public RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale,
             bool cursor,
             CancellationToken recordingToken, CancellationToken processingToken)
         {
@@ -97,7 +102,7 @@ namespace RitsukageGif
             {
                 Path = path
             };
-            var provider = new ScreenFrameProvider(rectangle);
+            var provider = new BitbltScreenFrameProvider(rectangle);
             var lastMilliseconds = 0L;
             var recordFrames = 0;
             var processedFrames = 0;
@@ -112,12 +117,12 @@ namespace RitsukageGif
                         var dt = t - lastMilliseconds;
                         lastMilliseconds = t;
                         var img = provider.Capture(cursor, scale);
-                        Application.Current.Dispatcher.Invoke(() => { info.Frames = ++recordFrames; });
+                        info.Frames = ++recordFrames;
                         if (!processingToken.IsCancellationRequested)
                         {
-                            gifCreator.AddFrame(img, delay: (int)dt, quality: GifQuality.Bit8);
+                            gifCreator.AddFrame(img, (int)dt, GifQuality.Bit8);
                             img.Dispose();
-                            Application.Current.Dispatcher.Invoke(() => { info.ProcessedFrames = ++processedFrames; });
+                            info.ProcessedFrames = ++processedFrames;
                             if (dt > delay)
                             {
                                 var d = (int)(delay - (dt - delay));
@@ -136,51 +141,10 @@ namespace RitsukageGif
                 }
 
                 sw.Stop();
-                Application.Current.Dispatcher.Invoke(() => { info.Completed = true; });
+                info.Completed = true;
             }, recordingToken);
             sw.Start();
             return info;
-        }
-
-        public class RecordInfo : NotifyPropertyChanged
-        {
-            private string _path;
-
-            public string Path
-            {
-                get => _path;
-                set => Set(ref _path, value);
-            }
-
-            private int _frames;
-
-            public int Frames
-            {
-                get => _frames;
-                set => Set(ref _frames, value);
-            }
-
-            private int _processedFrames;
-
-            public int ProcessedFrames
-            {
-                get => _processedFrames;
-                set => Set(ref _processedFrames, value);
-            }
-
-            private bool _completed;
-
-            public bool Completed
-            {
-                get => _completed;
-                set => Set(ref _completed, value);
-            }
-        }
-
-        private class Frame
-        {
-            public Bitmap Bitmap { get; set; }
-            public int Delay { get; set; }
         }
     }
 }

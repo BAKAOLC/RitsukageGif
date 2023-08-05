@@ -1,10 +1,9 @@
-﻿using NHotkey;
-using NHotkey.Wpf;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,24 +12,44 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using NHotkey;
+using NHotkey.Wpf;
+using RitsukageGif.Capture.RecordFrameProvider;
+using RitsukageGif.Class;
+using RitsukageGif.Windows;
 using WpfAnimatedGif;
-using Clipboard = System.Windows.Clipboard;
-using DpiChangedEventArgs = System.Windows.DpiChangedEventArgs;
 
 namespace RitsukageGif
 {
     /// <summary>
-    /// Interaction logic for MainWindow.xaml
+    ///     Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
     {
-        public SelectedRegionResult Region { get; private set; }
+        private readonly IRecordFrameProvider _recordFrameProvider = new GifRecordFrameProvider();
+
+        private readonly List<string> _tempFileList = new List<string>();
+
+        private bool _canBeginRecord;
+        private bool _canChangeRegion;
+        private string _currentGifPath;
 
         private int _delay;
 
         private int _fps;
+        private byte[] _lastRecordGifClipboardBytes;
+        private CancellationTokenSource _processingCancellationTokenSource;
+        private CancellationTokenSource _recordingCancellationTokenSource;
 
-        public int FPS
+        public MainWindow()
+        {
+            InitializeComponent();
+            VersionLabel.Content = $"ver {Assembly.GetExecutingAssembly().GetName().Version}";
+        }
+
+        public SelectedRegionResult Region { get; private set; }
+
+        public int Fps
         {
             get => _fps;
             private set
@@ -48,32 +67,14 @@ namespace RitsukageGif
 
         public bool Recording { get; private set; }
 
-        private bool _canBeginRecord;
-        private bool _canChangeRegion;
-        private byte[] _lastRecordGifClipboardBytes;
-        private CancellationTokenSource _recordingCancellationTokenSource;
-        private CancellationTokenSource _processingCancellationTokenSource;
-        private string _currentGifPath;
-
-        private readonly List<string> _tempFileList = new List<string>();
-
-        public MainWindow()
-        {
-            InitializeComponent();
-            VersionLabel.Content = $"ver {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
-        }
-
-        private static bool CheckOSVersion()
+        private static bool CheckOsVersion()
         {
             //最低支持Windows 10
             var osVersion = Environment.OSVersion;
             switch (osVersion.Platform)
             {
                 case PlatformID.Win32NT:
-                    if (osVersion.Version.Major >= 10)
-                    {
-                        return true;
-                    }
+                    if (osVersion.Version.Major >= 10) return true;
 
                     break;
                 case PlatformID.Win32S:
@@ -91,7 +92,7 @@ namespace RitsukageGif
 
         private void SetDefaultConfig()
         {
-            GifFrameInteger.Value = FPS = 20;
+            GifFrameInteger.Value = Fps = 20;
             GifScaleInteger.Value = Scale = 2;
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
             MemoryRecordCheckBox.IsChecked = RecordInMemory = Settings.Default.MemoryRecord;
@@ -126,12 +127,13 @@ namespace RitsukageGif
             var tokenProcessing = new CancellationTokenSource();
             _recordingCancellationTokenSource = tokenRecording;
             _processingCancellationTokenSource = tokenProcessing;
-            var path = GenerateTempFileName(".gif");
+            var path = GenerateTempFileName(_recordFrameProvider.GetFileExtension());
             _tempFileList.Add(path);
             var info = RecordInMemory
-                ? Gif.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                ? _recordFrameProvider.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
                     tokenRecording.Token, tokenProcessing.Token)
-                : Gif.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                : _recordFrameProvider.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale,
+                    RecordCursor,
                     tokenRecording.Token, tokenProcessing.Token);
             return Task.Run(async () =>
             {
@@ -142,13 +144,9 @@ namespace RitsukageGif
                     Dispatcher.Invoke(() =>
                     {
                         if (tokenProcessing.IsCancellationRequested)
-                        {
                             GifEncodingLabelGrid.Visibility = Visibility.Hidden;
-                        }
                         else
-                        {
                             GifFramesLabel.Content = $"{info.ProcessedFrames} / {info.Frames}";
-                        }
                     });
                 } while (!(info.Completed || tokenProcessing.IsCancellationRequested));
 
@@ -160,49 +158,51 @@ namespace RitsukageGif
 
         private void SetShowInfo(string path)
         {
-                var file = new FileInfo(path);
-                var sb = new StringBuilder();
-                sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
-                sb.AppendFormat(
-                    "<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>",
-                    path);
-                _lastRecordGifClipboardBytes = Encoding.Default.GetBytes(sb.ToString());
-                Dispatcher.Invoke(() =>
+            var file = new FileInfo(path);
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
+            sb.AppendFormat(
+                "<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>",
+                path);
+            _lastRecordGifClipboardBytes = Encoding.Default.GetBytes(sb.ToString());
+            Dispatcher.Invoke(() =>
+            {
+                using (var data = new MemoryStream(_lastRecordGifClipboardBytes))
                 {
-                    using (var data = new MemoryStream(_lastRecordGifClipboardBytes))
-                    {
-                        Clipboard.SetData("Html Format", data);
-                    }
-                    if (file.Length > 6 * 1024 * 1024)
-                    {
-                        GifSizeLabel.Foreground = Brushes.DarkRed;
-                        GifSizeLabel.FontWeight = FontWeights.Bold;
-                    }
-                    else if (file.Length > 3 * 1024 * 1024)
-                    {
-                        GifSizeLabel.Foreground = Brushes.Red;
-                        GifSizeLabel.FontWeight = FontWeights.Normal;
-                    }
-                    else
-                    {
-                        GifSizeLabel.Foreground = Brushes.Black;
-                        GifSizeLabel.FontWeight = FontWeights.Normal;
-                    }
-                    GifSizeLabel.Content = file.Length > 1024 * 1024
-                        ? $"{(double)file.Length / 1024 / 1024:F2}MB"
-                        : file.Length > 1024
-                            ? $"{(double)file.Length / 1024:F2}KB"
-                            : (object)$"{(double)file.Length:F2}B";
+                    Clipboard.SetData("Html Format", data);
+                }
 
-                    GifView.Visibility = Visibility.Visible;
-                    var image = new BitmapImage();
-                    image.BeginInit();
-                    var ms = new MemoryStream(File.ReadAllBytes(path));
-                    image.StreamSource = ms;
-                    image.EndInit();
-                    _currentGifPath = path;
-                    ImageBehavior.SetAnimatedSource(GifView, image);
-                });
+                if (file.Length > 6 * 1024 * 1024)
+                {
+                    GifSizeLabel.Foreground = Brushes.DarkRed;
+                    GifSizeLabel.FontWeight = FontWeights.Bold;
+                }
+                else if (file.Length > 3 * 1024 * 1024)
+                {
+                    GifSizeLabel.Foreground = Brushes.Red;
+                    GifSizeLabel.FontWeight = FontWeights.Normal;
+                }
+                else
+                {
+                    GifSizeLabel.Foreground = Brushes.Black;
+                    GifSizeLabel.FontWeight = FontWeights.Normal;
+                }
+
+                GifSizeLabel.Content = file.Length > 1024 * 1024
+                    ? $"{(double)file.Length / 1024 / 1024:F2}MB"
+                    : file.Length > 1024
+                        ? $"{(double)file.Length / 1024:F2}KB"
+                        : (object)$"{(double)file.Length:F2}B";
+
+                GifView.Visibility = Visibility.Visible;
+                var image = new BitmapImage();
+                image.BeginInit();
+                var ms = new MemoryStream(File.ReadAllBytes(path));
+                image.StreamSource = ms;
+                image.EndInit();
+                _currentGifPath = path;
+                ImageBehavior.SetAnimatedSource(GifView, image);
+            });
         }
 
         private void StopRecording()
@@ -224,10 +224,7 @@ namespace RitsukageGif
             var regionSelect = RegionSelect.Begin();
             var (confirm, region) = await regionSelect.WaitForResultAsync().ConfigureAwait(false);
             _canChangeRegion = true;
-            if (confirm)
-            {
-                Region = region;
-            }
+            if (confirm) Region = region;
 
             Dispatcher.Invoke(() =>
             {
@@ -300,7 +297,7 @@ namespace RitsukageGif
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            if (CheckOSVersion())
+            if (CheckOsVersion())
             {
                 SetDefaultConfig();
                 RegisterHotKeys();
@@ -314,10 +311,7 @@ namespace RitsukageGif
             {
                 var result = MessageBox.Show("本程序目前必须在 Windows 10 及以上版本才能运行", "错误", MessageBoxButton.OK,
                     MessageBoxImage.Error);
-                if (result == MessageBoxResult.OK)
-                {
-                    Close();
-                }
+                if (result == MessageBoxResult.OK) Close();
             }
         }
 
@@ -331,7 +325,6 @@ namespace RitsukageGif
             _canBeginRecord = false;
             _canChangeRegion = false;
             foreach (var file in _tempFileList.Where(File.Exists).ToArray())
-            {
                 try
                 {
                     File.Delete(file);
@@ -340,20 +333,15 @@ namespace RitsukageGif
                 {
                     // ignored
                 }
-            }
         }
 
         private void RecordButton_Click(object sender, RoutedEventArgs e)
         {
             if (!_canBeginRecord) return;
             if (Recording)
-            {
                 StopRecording();
-            }
             else
-            {
                 StartRecording();
-            }
         }
 
         private void RegionSelectButton_Click(object sender, RoutedEventArgs e)
@@ -376,7 +364,7 @@ namespace RitsukageGif
 
         private void GifFrameInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            FPS = (int)e.NewValue;
+            Fps = (int)e.NewValue;
         }
 
         private void RecordCursorCheckBox_Checked(object sender, RoutedEventArgs e)

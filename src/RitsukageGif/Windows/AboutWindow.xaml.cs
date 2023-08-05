@@ -1,22 +1,30 @@
-﻿using System.IO;
+﻿using System.ComponentModel;
+using System.IO;
 using System.Reflection;
 using System.Windows;
 
-namespace RitsukageGif
+namespace RitsukageGif.Windows
 {
     /// <summary>
-    /// AboutWindow.xaml 的交互逻辑
+    ///     AboutWindow.xaml 的交互逻辑
     /// </summary>
     public partial class AboutWindow : Window
     {
-        private static AboutWindow _instance = null;
-        private bool _closeFlag = false;
+        private static AboutWindow _instance;
 
         private static readonly string AboutHeaderText =
             $@"RitsukageGif ver {Assembly.GetExecutingAssembly().GetName().Version}
 构建日期: {File.GetLastWriteTime(typeof(AboutWindow).Assembly.Location)}
 
 {AboutText}";
+
+        private bool _closeFlag;
+
+        public AboutWindow()
+        {
+            _instance = this;
+            InitializeComponent();
+        }
 
         private static string AboutText
         {
@@ -30,18 +38,12 @@ namespace RitsukageGif
             }
         }
 
-        public AboutWindow()
-        {
-            _instance = this;
-            InitializeComponent();
-        }
-
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             AboutTextBox.Text = AboutHeaderText;
         }
 
-        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        private void Window_Closing(object sender, CancelEventArgs e)
         {
             if (_closeFlag) return;
             e.Cancel = true;

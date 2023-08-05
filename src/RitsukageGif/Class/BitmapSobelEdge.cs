@@ -1,13 +1,25 @@
 ﻿using System;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
-namespace RitsukageGif
+namespace RitsukageGif.Class
 {
     public class BitmapSobelEdge
     {
+        private BitmapSobelEdge(Bitmap bitmap)
+        {
+            Bitmap = bitmap;
+            Width = Bitmap.Width;
+            Height = Bitmap.Height;
+            Rect = new Rectangle(0, 0, Width, Height);
+            var data = Bitmap.LockBits(Rect, ImageLockMode.ReadWrite, Bitmap.PixelFormat);
+            Stride = data.Stride;
+            Data = new byte[Stride * Height];
+            DataBackup = new byte[Stride * Height];
+            Bitmap.UnlockBits(data);
+        }
+
         public int Width { get; }
 
         public int Height { get; }
@@ -22,27 +34,11 @@ namespace RitsukageGif
 
         public byte[] DataBackup { get; }
 
-        private BitmapSobelEdge(Bitmap bitmap)
-        {
-            Bitmap = bitmap;
-            Width = Bitmap.Width;
-            Height = Bitmap.Height;
-            Rect = new Rectangle(0, 0, Width, Height);
-            var data = Bitmap.LockBits(Rect, ImageLockMode.ReadWrite, Bitmap.PixelFormat);
-            Stride = data.Stride;
-            Data = new byte[Stride * Height];
-            DataBackup = new byte[Stride * Height];
-            Bitmap.UnlockBits(data);
-        }
-
         public void ProcessToData(bool needBackup = false)
         {
             var data = Bitmap.LockBits(Rect, ImageLockMode.ReadWrite, Bitmap.PixelFormat);
             Marshal.Copy(data.Scan0, Data, 0, Data.Length);
-            if (needBackup)
-            {
-                Marshal.Copy(data.Scan0, DataBackup, 0, DataBackup.Length);
-            }
+            if (needBackup) Marshal.Copy(data.Scan0, DataBackup, 0, DataBackup.Length);
 
             Bitmap.UnlockBits(data);
         }
@@ -111,10 +107,7 @@ namespace RitsukageGif
         public void ProcessToSingleRedChannel()
         {
             ProcessToData();
-            for (int i = 0; i < Data.Length; i += 3)
-            {
-                Data[i] = Data[i + 1] = Data[i + 2];
-            }
+            for (var i = 0; i < Data.Length; i += 3) Data[i] = Data[i + 1] = Data[i + 2];
 
             ProcessToBitmap();
         }
@@ -122,10 +115,7 @@ namespace RitsukageGif
         public void ProcessToSingleGreenChannel()
         {
             ProcessToData();
-            for (int i = 0; i < Data.Length; i += 3)
-            {
-                Data[i] = Data[i + 2] = Data[i + 1];
-            }
+            for (var i = 0; i < Data.Length; i += 3) Data[i] = Data[i + 2] = Data[i + 1];
 
             ProcessToBitmap();
         }
@@ -133,10 +123,7 @@ namespace RitsukageGif
         public void ProcessToSingleBlueChannel()
         {
             ProcessToData();
-            for (int i = 0; i < Data.Length; i += 3)
-            {
-                Data[i + 1] = Data[i + 2] = Data[i];
-            }
+            for (var i = 0; i < Data.Length; i += 3) Data[i + 1] = Data[i + 2] = Data[i];
 
             ProcessToBitmap();
         }
@@ -145,10 +132,10 @@ namespace RitsukageGif
         public void ProcessToGrey()
         {
             ProcessToData();
-            for (int i = 0; i < Data.Length; i += 3)
-            {
-                Data[i] = Data[i + 2] = Data[i + 1] = (byte)(Data[i] + Data[i + 1] + Data[i + 2] / 3);
-            }
+            for (var i = 0; i < Data.Length; i += 3)
+                //bgr2gray
+                Data[i] = Data[i + 1] =
+                    Data[i + 2] = (byte)(0.2989 * Data[i + 2] + 0.5870 * Data[i + 1] + 0.1140 * Data[i]);
 
             ProcessToBitmap();
         }
@@ -156,26 +143,24 @@ namespace RitsukageGif
         public void ProcessSobelEdgeFilter()
         {
             ProcessToData(true);
-            for (int i = 1; i < Width - 1; i++)
+            for (var i = 1; i < Width - 1; i++)
+            for (var j = 1; j < Height - 1; j++)
             {
-                for (int j = 1; j < Height - 1; j++)
-                {
-                    int num = -SobelEdgeFilterGetValue(DataBackup, i - 1, j - 1) -
-                              SobelEdgeFilterGetValue(DataBackup, i - 1, j) * 2 -
-                              SobelEdgeFilterGetValue(DataBackup, i - 1, j + 1) +
-                              SobelEdgeFilterGetValue(DataBackup, i + 1, j - 1) +
-                              SobelEdgeFilterGetValue(DataBackup, i + 1, j) * 2 +
-                              SobelEdgeFilterGetValue(DataBackup, i + 1, j + 1);
-                    int num2 = -SobelEdgeFilterGetValue(DataBackup, i - 1, j - 1) -
-                               SobelEdgeFilterGetValue(DataBackup, i, j - 1) * 2 -
-                               SobelEdgeFilterGetValue(DataBackup, i + 1, j - 1) +
-                               SobelEdgeFilterGetValue(DataBackup, i - 1, j + 1) +
-                               SobelEdgeFilterGetValue(DataBackup, i, j + 1) * 2 +
-                               SobelEdgeFilterGetValue(DataBackup, i + 1, j + 1);
-                    int num3 = (int)Math.Sqrt(num * num + num2 * num2);
-                    num3 = num3 > 255 ? 255 : num3;
-                    SetPixel(i, j, (byte)num3, (byte)num3, (byte)num3);
-                }
+                var num = -SobelEdgeFilterGetValue(DataBackup, i - 1, j - 1) -
+                          SobelEdgeFilterGetValue(DataBackup, i - 1, j) * 2 -
+                          SobelEdgeFilterGetValue(DataBackup, i - 1, j + 1) +
+                          SobelEdgeFilterGetValue(DataBackup, i + 1, j - 1) +
+                          SobelEdgeFilterGetValue(DataBackup, i + 1, j) * 2 +
+                          SobelEdgeFilterGetValue(DataBackup, i + 1, j + 1);
+                var num2 = -SobelEdgeFilterGetValue(DataBackup, i - 1, j - 1) -
+                           SobelEdgeFilterGetValue(DataBackup, i, j - 1) * 2 -
+                           SobelEdgeFilterGetValue(DataBackup, i + 1, j - 1) +
+                           SobelEdgeFilterGetValue(DataBackup, i - 1, j + 1) +
+                           SobelEdgeFilterGetValue(DataBackup, i, j + 1) * 2 +
+                           SobelEdgeFilterGetValue(DataBackup, i + 1, j + 1);
+                var num3 = (int)Math.Sqrt(num * num + num2 * num2);
+                num3 = num3 > 255 ? 255 : num3;
+                SetPixel(i, j, (byte)num3, (byte)num3, (byte)num3);
             }
 
             ProcessToBitmap();
@@ -184,10 +169,8 @@ namespace RitsukageGif
         public void ProcessThresholdFilter(byte threshold)
         {
             ProcessToData();
-            for (int i = 0; i < Data.Length; i += 3)
-            {
+            for (var i = 0; i < Data.Length; i += 3)
                 Data[i] = Data[i + 1] = Data[i + 2] = Data[i] < threshold ? byte.MinValue : byte.MaxValue;
-            }
 
             ProcessToBitmap();
         }

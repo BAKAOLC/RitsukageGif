@@ -5,11 +5,17 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace RitsukageGif
+namespace RitsukageGif.Class
 {
     public class ScreenInfo
     {
         private static readonly List<ScreenInfo> _screenInfoRecord = new List<ScreenInfo>();
+
+        private ScreenInfo(Screen screen)
+        {
+            Screen = screen;
+            UpdateDpiScale();
+        }
 
         public static ScreenInfo MainScreen => GetScreenInfo(Screen.FromPoint(default));
 
@@ -29,31 +35,25 @@ namespace RitsukageGif
 
         public double DpiScaleY { get; private set; }
 
-        public double ConvertScaleX => _dpiScaleToBasicX * _dpiScaleToMainX;
+        public double ConvertScaleX => DpiScaleToBasicX * DpiScaleToMainX;
 
-        public double ConvertScaleY => _dpiScaleToBasicY * _dpiScaleToMainY;
+        public double ConvertScaleY => DpiScaleToBasicY * DpiScaleToMainY;
 
-        private double _mainDpiScaleX => MainScreen.DpiScaleX;
+        private double MainDpiScaleX => MainScreen.DpiScaleX;
 
-        private double _mainDpiScaleY => MainScreen.DpiScaleY;
+        private double MainDpiScaleY => MainScreen.DpiScaleY;
 
-        private double _dpiScaleToMainX => DpiScaleX / _mainDpiScaleX;
+        private double DpiScaleToMainX => DpiScaleX / MainDpiScaleX;
 
-        private double _dpiScaleToMainY => DpiScaleY / _mainDpiScaleY;
+        private double DpiScaleToMainY => DpiScaleY / MainDpiScaleY;
 
-        private double _dpiScaleToBasicX => 1 / DpiScaleX;
+        private double DpiScaleToBasicX => 1 / DpiScaleX;
 
-        private double _dpiScaleToBasicY => 1 / DpiScaleY;
-
-        private ScreenInfo(Screen screen)
-        {
-            Screen = screen;
-            UpdateDpiScale();
-        }
+        private double DpiScaleToBasicY => 1 / DpiScaleY;
 
         public void UpdateDpiScale()
         {
-            Screen.GetDpi(DpiType.Effective, out uint dpiX, out uint dpiY);
+            Screen.GetDpi(DpiType.Effective, out var dpiX, out var dpiY);
             DpiScaleX = dpiX / 96.0;
             DpiScaleY = dpiY / 96.0;
         }
@@ -171,6 +171,6 @@ namespace RitsukageGif
     {
         Effective = 0,
         Angular = 1,
-        Raw = 2,
+        Raw = 2
     }
 }

@@ -3,7 +3,8 @@ using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Native
 {
-    [Serializable, StructLayout(LayoutKind.Sequential)]
+    [Serializable]
+    [StructLayout(LayoutKind.Sequential)]
     internal struct Rect
     {
         public int Left;

@@ -1,16 +1,16 @@
-﻿using RitsukageGif.Native;
-using System.Drawing;
+﻿using System.Drawing;
+using RitsukageGif.Native;
 
-namespace RitsukageGif
+namespace RitsukageGif.Capture.ScreenFrameProvider
 {
-    public class ScreenFrameProvider
+    public class BitbltScreenFrameProvider : IScreenFrameProvider
     {
-        public Rectangle Rectangle { get; }
-
-        public ScreenFrameProvider(Rectangle rectangle)
+        public BitbltScreenFrameProvider(Rectangle rectangle)
         {
             Rectangle = rectangle;
         }
+
+        private Rectangle Rectangle { get; }
 
         public Bitmap Capture(bool cursor = false, double scale = 1)
         {
@@ -22,10 +22,7 @@ namespace RitsukageGif
             using (var graphicsSource = Graphics.FromImage(source))
             {
                 graphicsSource.CopyFromScreen(Rectangle.X, Rectangle.Y, 0, 0, Rectangle.Size);
-                if (cursor)
-                {
-                    Cursor.Draw(graphicsSource, p => new Point(p.X - Rectangle.X, p.Y - Rectangle.Y));
-                }
+                if (cursor) Cursor.Draw(graphicsSource, p => new Point(p.X - Rectangle.X, p.Y - Rectangle.Y));
 
                 graphicsBitmap.DrawImage(source, 0, 0, width, height);
             }

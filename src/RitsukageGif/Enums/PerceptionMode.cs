@@ -1,4 +1,4 @@
-﻿namespace RitsukageGif
+﻿namespace RitsukageGif.Enums
 {
     public enum PerceptionMode
     {

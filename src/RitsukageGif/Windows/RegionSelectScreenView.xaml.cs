@@ -2,11 +2,13 @@
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using RitsukageGif.Class;
+using RitsukageGif.Enums;
+using RitsukageGif.Extensions;
 using DPoint = System.Drawing.Point;
 using DRectangle = System.Drawing.Rectangle;
 
-
-namespace RitsukageGif
+namespace RitsukageGif.Windows
 {
     /// <summary>
     ///     RegionSelectScreenView.xaml 的交互逻辑
@@ -33,6 +35,8 @@ namespace RitsukageGif
             UpdateView();
         }
 
+        public static DPoint InvalidPoint => RegionSelect.InvalidPoint;
+
         public RegionSelect Main { get; }
 
         public Grid MainGrid { get; }
@@ -47,8 +51,9 @@ namespace RitsukageGif
         {
             HorizontalAlignment = HorizontalAlignment.Left;
             VerticalAlignment = VerticalAlignment.Top;
-            Margin = new Thickness(Screen.Bounds.Left * Screen.ConvertScaleX, Screen.Bounds.Top * Screen.ConvertScaleY,
-                0, 0);
+            var x = Screen.Bounds.Left * Screen.ConvertScaleX - Main.ScreenRectangle.Left;
+            var y = Screen.Bounds.Top * Screen.ConvertScaleY - Main.ScreenRectangle.Top;
+            Margin = new Thickness(x, y, 0, 0);
             Width = Screen.Bounds.Width;
             Height = Screen.Bounds.Height;
             RenderTransform = new ScaleTransform(Screen.ConvertScaleX, Screen.ConvertScaleY);
@@ -60,7 +65,9 @@ namespace RitsukageGif
             BackgroundImage.Source = source;
             BackgroundImageGrid.Width = Screen.Bounds.Width;
             BackgroundImageGrid.Height = Screen.Bounds.Height;
-            BackgroundImage.Margin = new Thickness(-Screen.Bounds.Left, -Screen.Bounds.Top, 0, 0);
+            var x = -Screen.Bounds.Left + Main.ScreenRectangle.Left;
+            var y = -Screen.Bounds.Top + Main.ScreenRectangle.Top;
+            BackgroundImage.Margin = new Thickness(x, y, 0, 0);
             RegionImage.Source = source;
         }
 
@@ -134,13 +141,13 @@ namespace RitsukageGif
                 var horizontal = PerceptionMode == PerceptionMode.Horizontal || PerceptionMode == PerceptionMode.Both;
                 var vertical = PerceptionMode == PerceptionMode.Vertical || PerceptionMode == PerceptionMode.Both;
                 Main.ProcessPerceptionNearPoint(sp, horizontal, vertical);
-                if (Main.PerceptionImagePoint != Main.InvalidPerceptionPoint)
+                if (Main.PerceptionImagePoint != InvalidPoint)
                 {
                     var px = Main.PerceptionImagePoint.X;
                     var py = Main.PerceptionImagePoint.Y;
                     var fx = false;
                     var fy = false;
-                    if (px != -1 && px >= Screen.Bounds.Left && px <= Screen.Bounds.Right)
+                    if (px != InvalidPoint.X && px >= Screen.Bounds.Left && px <= Screen.Bounds.Right)
                     {
                         LineVertical.X1 = px - Screen.Bounds.Left;
                         LineVertical.X2 = px - Screen.Bounds.Left;
@@ -154,7 +161,7 @@ namespace RitsukageGif
                         LineVertical.Visibility = Visibility.Hidden;
                     }
 
-                    if (py != -1 && py >= Screen.Bounds.Top && py <= Screen.Bounds.Bottom)
+                    if (py != InvalidPoint.Y && py >= Screen.Bounds.Top && py <= Screen.Bounds.Bottom)
                     {
                         LineHorizontal.X1 = 0;
                         LineHorizontal.X2 = Screen.Bounds.Width;
@@ -169,8 +176,8 @@ namespace RitsukageGif
                     }
 
                     if (fx || fy)
-                        return new DPoint(fx ? Screen.ConvertFromScaleX(px) : -1,
-                            fy ? Screen.ConvertFromScaleY(py) : -1);
+                        return new DPoint(fx ? Screen.ConvertFromScaleX(px) : InvalidPoint.X,
+                            fy ? Screen.ConvertFromScaleY(py) : InvalidPoint.Y);
                 }
                 else
                 {
@@ -179,7 +186,7 @@ namespace RitsukageGif
                 }
             }
 
-            return Main.InvalidPerceptionPoint;
+            return InvalidPoint;
         }
 
         public void UpdateSelectedRegion(DRectangle rect, bool needConvert = true, double opacity = 1)
@@ -198,16 +205,18 @@ namespace RitsukageGif
             {
                 RegionImageGrid.Visibility = Visibility.Visible;
                 RegionImageGrid.Opacity = opacity;
-                RegionImageGrid.Margin =
-                    new Thickness(rectF.X - Screen.Bounds.Left, rectF.Y - Screen.Bounds.Top, 0, 0);
+                var x = rectF.X - Screen.Bounds.Left;
+                var y = rectF.Y - Screen.Bounds.Top;
+                RegionImageGrid.Margin = new Thickness(x, y, 0, 0);
                 RegionImageGrid.Width = rectF.Width;
                 RegionImageGrid.Height = rectF.Height;
-                RegionImage.Margin = new Thickness(-rectF.X, -rectF.Y, 0, 0);
+                RegionImage.Margin = new Thickness(-rectF.X + Main.ScreenRectangle.Left, -rectF.Y +
+                    Main.ScreenRectangle.Top, 0, 0);
                 if (rectF.X > Screen.Bounds.Left)
                 {
-                    LineRegionLeft.X1 = LineRegionLeft.X2 = rectF.X - Screen.Bounds.Left;
-                    LineRegionLeft.Y1 = rectF.Y - Screen.Bounds.Top;
-                    LineRegionLeft.Y2 = rectF.Y - Screen.Bounds.Top + rectF.Height;
+                    LineRegionLeft.X1 = LineRegionLeft.X2 = x;
+                    LineRegionLeft.Y1 = y;
+                    LineRegionLeft.Y2 = y + rectF.Height;
                     LineRegionLeft.Visibility = Visibility.Visible;
                 }
                 else
@@ -217,9 +226,9 @@ namespace RitsukageGif
 
                 if (rectF.X + rectF.Width < Screen.Bounds.Right)
                 {
-                    LineRegionRight.X1 = LineRegionRight.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
-                    LineRegionRight.Y1 = rectF.Y - Screen.Bounds.Top;
-                    LineRegionRight.Y2 = rectF.Y - Screen.Bounds.Top + rectF.Height;
+                    LineRegionRight.X1 = LineRegionRight.X2 = x + rectF.Width;
+                    LineRegionRight.Y1 = y;
+                    LineRegionRight.Y2 = y + rectF.Height;
                     LineRegionRight.Visibility = Visibility.Visible;
                 }
                 else
@@ -229,9 +238,9 @@ namespace RitsukageGif
 
                 if (rectF.Y + rectF.Height < Screen.Bounds.Bottom)
                 {
-                    LineRegionBottom.X1 = rectF.X - Screen.Bounds.Left;
-                    LineRegionBottom.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
-                    LineRegionBottom.Y1 = LineRegionBottom.Y2 = rectF.Y - Screen.Bounds.Top + rectF.Height;
+                    LineRegionBottom.X1 = x;
+                    LineRegionBottom.X2 = x + rectF.Width;
+                    LineRegionBottom.Y1 = LineRegionBottom.Y2 = y + rectF.Height;
                     LineRegionBottom.Visibility = Visibility.Visible;
                 }
                 else
@@ -241,9 +250,9 @@ namespace RitsukageGif
 
                 if (rectF.Y > Screen.Bounds.Top)
                 {
-                    LineRegionTop.X1 = rectF.X - Screen.Bounds.Left;
-                    LineRegionTop.X2 = rectF.X - Screen.Bounds.Left + rectF.Width;
-                    LineRegionTop.Y1 = LineRegionTop.Y2 = rectF.Y - Screen.Bounds.Top;
+                    LineRegionTop.X1 = x;
+                    LineRegionTop.X2 = x + rectF.Width;
+                    LineRegionTop.Y1 = LineRegionTop.Y2 = y;
                     LineRegionTop.Visibility = Visibility.Visible;
                 }
                 else

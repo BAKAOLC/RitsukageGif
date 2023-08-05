@@ -1,18 +1,18 @@
 ﻿using System.Drawing;
 
-namespace RitsukageGif
+namespace RitsukageGif.Class
 {
     public class ScreenRegion
     {
-        public ScreenInfo Screen { get; }
-
-        public RectangleF Rectangle { get; }
-
         public ScreenRegion(ScreenInfo screen, RectangleF rectangle)
         {
             Screen = screen;
             Rectangle = rectangle;
         }
+
+        public ScreenInfo Screen { get; }
+
+        public RectangleF Rectangle { get; }
 
         public override string ToString()
         {

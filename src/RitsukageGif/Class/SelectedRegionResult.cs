@@ -2,26 +2,20 @@
 using System.Drawing;
 using System.Linq;
 
-namespace RitsukageGif
+namespace RitsukageGif.Class
 {
     public class SelectedRegionResult
     {
-        public Rectangle Original { get; }
-
-        public Rectangle Converted { get; }
-
-        public ScreenRegion[] Regions { get; }
-
         public SelectedRegionResult(Rectangle originalRectangle, ScreenRegion[] regions)
         {
             Original = originalRectangle;
             Regions = regions;
             if (regions != null && regions.Any())
             {
-                int x = (int)regions.Min(r => r.Rectangle.X);
-                int y = (int)regions.Min(r => r.Rectangle.Y);
-                int right = (int)regions.Max(r => r.Rectangle.Right);
-                int bottom = (int)regions.Max(r => r.Rectangle.Bottom);
+                var x = (int)regions.Min(r => r.Rectangle.X);
+                var y = (int)regions.Min(r => r.Rectangle.Y);
+                var right = (int)regions.Max(r => r.Rectangle.Right);
+                var bottom = (int)regions.Max(r => r.Rectangle.Bottom);
                 Converted = new Rectangle(x, y, right - x, bottom - y);
             }
             else
@@ -29,6 +23,12 @@ namespace RitsukageGif
                 Converted = originalRectangle;
             }
         }
+
+        public Rectangle Original { get; }
+
+        public Rectangle Converted { get; }
+
+        public ScreenRegion[] Regions { get; }
 
         public override string ToString()
         {
