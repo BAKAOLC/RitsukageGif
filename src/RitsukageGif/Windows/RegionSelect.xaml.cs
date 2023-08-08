@@ -445,39 +445,6 @@ namespace RitsukageGif.Windows
                 _selectingStartPoint = point;
                 _selectingEndPoint = point;
             }
-
-            if (e.RightButton == MouseButtonState.Pressed)
-            {
-                if (_selecting)
-                {
-                    _selecting = false;
-                    _selected = true;
-                    if (_selectingMoved)
-                    {
-                        var position = e.GetPosition(this);
-                        var point = new DPoint((int)position.X + ScreenRectangle.X,
-                            (int)position.Y + ScreenRectangle.Y);
-                        point = GetPointWithPerception(point);
-                        _selectingEndPoint = point;
-                        _selectedStartPoint = _selectingStartPoint;
-                        _selectedEndPoint = _selectingEndPoint;
-                    }
-                    else
-                    {
-                        var view = ScreenInfo.MainScreen;
-                        if (view == null) return;
-                        _selectedStartPoint =
-                            view.ConvertFromScalePoint(
-                                new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
-                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right,
-                            PerceptionProgramArea.Bottom));
-                    }
-                }
-
-                _closing = true;
-                _confirm = true;
-                Close();
-            }
         }
 
         private void Window_MouseMove(object sender, MouseEventArgs e)
@@ -529,6 +496,40 @@ namespace RitsukageGif.Windows
                         UpdateSelectedRegion();
                     }
                 }
+                return;
+            }
+            if (e.RightButton == MouseButtonState.Released)
+            {
+                if (_selecting)
+                {
+                    _selecting = false;
+                    _selected = true;
+                    e.Handled = true;
+                    if (_selectingMoved)
+                    {
+                        var position = e.GetPosition(this);
+                        var point = new DPoint((int)position.X + ScreenRectangle.X,
+                            (int)position.Y + ScreenRectangle.Y);
+                        point = GetPointWithPerception(point);
+                        _selectingEndPoint = point;
+                        _selectedStartPoint = _selectingStartPoint;
+                        _selectedEndPoint = _selectingEndPoint;
+                    }
+                    else
+                    {
+                        var view = ScreenInfo.MainScreen;
+                        if (view == null) return;
+                        _selectedStartPoint =
+                            view.ConvertFromScalePoint(
+                                new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
+                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right,
+                            PerceptionProgramArea.Bottom));
+                    }
+                }
+
+                _closing = true;
+                _confirm = true;
+                Close();
             }
         }
 
