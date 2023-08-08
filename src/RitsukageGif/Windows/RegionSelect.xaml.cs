@@ -151,10 +151,10 @@ namespace RitsukageGif.Windows
             var mousePointY = mousePoint.Y;
             var screenBeginPosX = ScreenRectangle.Left;
             var screenBeginPosY = ScreenRectangle.Top;
+            var screenEndPosX = ScreenRectangle.Right;
+            var screenEndPosY = ScreenRectangle.Bottom;
             var resultX = InvalidPoint.X;
             var resultY = InvalidPoint.Y;
-            var totalWidth = _screenBitmap.Width;
-            var totalHeight = _screenBitmap.Height;
             var halfCheckWidth = _edgeCheckWidth / 2;
             var halfCheckHeight = _edgeCheckHeight / 2;
             var beginX = 0;
@@ -163,10 +163,10 @@ namespace RitsukageGif.Windows
             {
                 vertical = false;
             }
-            else if (mousePointX + halfCheckWidth > totalWidth - 1)
+            else if (mousePointX + halfCheckWidth > screenEndPosX - 1)
             {
                 vertical = false;
-                beginX = totalWidth - _edgeCheckWidth;
+                beginX = screenEndPosX - _edgeCheckWidth;
             }
             else
             {
@@ -177,10 +177,10 @@ namespace RitsukageGif.Windows
             {
                 horizontal = false;
             }
-            else if (mousePointY + halfCheckHeight > totalHeight - 1)
+            else if (mousePointY + halfCheckHeight > screenEndPosY - 1)
             {
                 horizontal = false;
-                beginY = totalHeight - _edgeCheckHeight;
+                beginY = screenEndPosY - _edgeCheckHeight;
             }
             else
             {
