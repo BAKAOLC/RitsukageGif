@@ -372,12 +372,18 @@ namespace RitsukageGif
 
         private void GifScaleInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            Scale = (int)e.NewValue;
+            if (e.NewValue == null) return;
+            var value = (int)e.NewValue;
+            value = Math.Max(1, Math.Min(100, value));
+            Scale = value;
         }
 
         private void GifFrameInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
-            Fps = (int)e.NewValue;
+            if (e.NewValue == null) return;
+            var value = (int)e.NewValue;
+            value = Math.Max(1, Math.Min(30, value));
+            Fps = value;
         }
 
         private void RecordCursorCheckBox_Checked(object sender, RoutedEventArgs e)

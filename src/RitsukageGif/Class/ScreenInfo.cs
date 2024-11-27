@@ -17,7 +17,7 @@ namespace RitsukageGif.Class
             UpdateDpiScale();
         }
 
-        public static ScreenInfo MainScreen => GetScreenInfo(Screen.FromPoint(default));
+        public static ScreenInfo MainScreen => GetScreenInfo(Screen.PrimaryScreen);
 
         public Screen Screen { get; }
 
@@ -97,14 +97,14 @@ namespace RitsukageGif.Class
 
         public RectangleF ConvertToScaleRectangle(double x, double y, double width, double height)
         {
-            return new RectangleF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY), (float)(width /
-                ConvertScaleX), (float)(height / ConvertScaleY));
+            return new RectangleF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY),
+                (float)(width / ConvertScaleX), (float)(height / ConvertScaleY));
         }
 
         public Rectangle ConvertFromScaleRectangle(double x, double y, double width, double height)
         {
-            return new Rectangle((int)(x * ConvertScaleX), (int)(y * ConvertScaleY), (int)(width *
-                ConvertScaleX), (int)(height * ConvertScaleY));
+            return new Rectangle((int)(x * ConvertScaleX), (int)(y * ConvertScaleY),
+                (int)(width * ConvertScaleX), (int)(height * ConvertScaleY));
         }
 
         public float ConvertToScaleX(double x)
