@@ -53,7 +53,7 @@ namespace RitsukageGif.Windows
             VerticalAlignment = VerticalAlignment.Top;
             var x = Screen.Bounds.Left * Screen.ConvertScaleX - Main.ScreenRectangle.Left;
             var y = Screen.Bounds.Top * Screen.ConvertScaleY - Main.ScreenRectangle.Top;
-            Margin = new Thickness(x, y, 0, 0);
+            Margin = new(x, y, 0, 0);
             Width = Screen.Bounds.Width;
             Height = Screen.Bounds.Height;
             RenderTransform = new ScaleTransform(Screen.ConvertScaleX, Screen.ConvertScaleY);
@@ -67,7 +67,7 @@ namespace RitsukageGif.Windows
             BackgroundImageGrid.Height = Screen.Bounds.Height;
             var x = -Screen.Bounds.Left + Main.ScreenRectangle.Left;
             var y = -Screen.Bounds.Top + Main.ScreenRectangle.Top;
-            BackgroundImage.Margin = new Thickness(x, y, 0, 0);
+            BackgroundImage.Margin = new(x, y, 0, 0);
             RegionImage.Source = source;
         }
 
@@ -84,19 +84,19 @@ namespace RitsukageGif.Windows
             TipGrid.Width = TipGridWidth * scale;
             TipGrid.Height = TipGridHeight * scale;
             TipGridLabel1.FontSize = TipGridLabelFontSize * scale;
-            TipGridLabel1.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            TipGridLabel1.Margin = new(TipGridLabelMargin * scale, y, 0, 0);
             y += TipGridLabelMargin2 * scale;
             TipGridLabel2.FontSize = TipGridLabelFontSize * scale;
-            TipGridLabel2.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            TipGridLabel2.Margin = new(TipGridLabelMargin * scale, y, 0, 0);
             y += TipGridLabelMargin2 * scale;
             TipGridLabel3.FontSize = TipGridLabelFontSize * scale;
-            TipGridLabel3.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            TipGridLabel3.Margin = new(TipGridLabelMargin * scale, y, 0, 0);
             y += TipGridLabelMargin2 * scale;
             TipGridLabel4.FontSize = TipGridLabelFontSize * scale;
-            TipGridLabel4.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            TipGridLabel4.Margin = new(TipGridLabelMargin * scale, y, 0, 0);
             y += TipGridLabelMargin2 * scale;
             PerceptionTipLabel.FontSize = TipGridLabelFontSize * scale;
-            PerceptionTipLabel.Margin = new Thickness(TipGridLabelMargin * scale, y, 0, 0);
+            PerceptionTipLabel.Margin = new(TipGridLabelMargin * scale, y, 0, 0);
         }
 
         public void UpdateMousePosition(DPoint point)
@@ -176,7 +176,7 @@ namespace RitsukageGif.Windows
                     }
 
                     if (fx || fy)
-                        return new DPoint(fx ? Screen.ConvertFromScaleX(px) : InvalidPoint.X,
+                        return new(fx ? Screen.ConvertFromScaleX(px) : InvalidPoint.X,
                             fy ? Screen.ConvertFromScaleY(py) : InvalidPoint.Y);
                 }
                 else
@@ -207,11 +207,11 @@ namespace RitsukageGif.Windows
                 RegionImageGrid.Opacity = opacity;
                 var x = rectF.X - Screen.Bounds.Left;
                 var y = rectF.Y - Screen.Bounds.Top;
-                RegionImageGrid.Margin = new Thickness(x, y, 0, 0);
+                RegionImageGrid.Margin = new(x, y, 0, 0);
                 RegionImageGrid.Width = rectF.Width;
                 RegionImageGrid.Height = rectF.Height;
-                RegionImage.Margin = new Thickness(-rectF.X + Main.ScreenRectangle.Left, -rectF.Y +
-                    Main.ScreenRectangle.Top, 0, 0);
+                RegionImage.Margin = new(-rectF.X + Main.ScreenRectangle.Left, -rectF.Y +
+                                                                               Main.ScreenRectangle.Top, 0, 0);
                 if (rectF.X > Screen.Bounds.Left)
                 {
                     LineRegionLeft.X1 = LineRegionLeft.X2 = x;
@@ -264,21 +264,14 @@ namespace RitsukageGif.Windows
 
         public void UpdatePerceptionMode()
         {
-            switch (PerceptionMode)
+            PerceptionTipLabel.Content = PerceptionMode switch
             {
-                case PerceptionMode.None:
-                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "无");
-                    break;
-                case PerceptionMode.Horizontal:
-                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "水平");
-                    break;
-                case PerceptionMode.Vertical:
-                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "垂直");
-                    break;
-                case PerceptionMode.Both:
-                    PerceptionTipLabel.Content = string.Format(TipGridModeString, "水平+竖直");
-                    break;
-            }
+                PerceptionMode.None => string.Format(TipGridModeString, "无"),
+                PerceptionMode.Horizontal => string.Format(TipGridModeString, "水平"),
+                PerceptionMode.Vertical => string.Format(TipGridModeString, "垂直"),
+                PerceptionMode.Both => string.Format(TipGridModeString, "水平+竖直"),
+                _ => PerceptionTipLabel.Content,
+            };
         }
     }
 }

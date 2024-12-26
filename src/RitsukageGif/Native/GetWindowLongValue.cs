@@ -3,6 +3,6 @@
     internal enum GetWindowLongValue
     {
         Style = -16,
-        ExStyle = -20
+        ExStyle = -20,
     }
 }

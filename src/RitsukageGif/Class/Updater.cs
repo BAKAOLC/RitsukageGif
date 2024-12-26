@@ -27,53 +27,48 @@ namespace RitsukageGif.Class
             var user = match.Groups["user"].Value;
             var repo = match.Groups["repo"].Value;
             var url = $"https://api.github.com/repos/{user}/{repo}/releases/latest";
-            using (var wc = new WebClient())
+            using var wc = new WebClient();
+            wc.Headers.Add("User-Agent", UserAgent.Default);
+            wc.DownloadStringCompleted += (sender, args) =>
             {
-                wc.Headers.Add("User-Agent", UserAgent.Default);
-                wc.DownloadStringCompleted += (sender, args) =>
-                {
-                    if (args.Error != null) return;
+                if (args.Error != null) return;
 
-                    var json = args.Result;
-                    var versionMatch = Regex
-                        .Match(json, @"""tag_name"":\s*""v(?<version>[^""]+)""", RegexOptions.IgnoreCase)
-                        .Groups["version"];
-                    if (!versionMatch.Success) return;
-                    var version = versionMatch.Value;
-                    if (!Version.TryParse(version, out var gitVersion)) return;
-                    if (CurrentVersion >= gitVersion) return;
-                    var downloadUrl = Regex.Match(json, @"""browser_download_url"":\s*""(?<url>[^""]+)""")
-                        .Groups["url"].Value;
-                    if (MessageBox.Show($"检测到新版本{version}，是否下载？", "更新", MessageBoxButton.YesNo) ==
-                        MessageBoxResult.Yes)
-                        Process.Start(downloadUrl);
-                };
-                wc.DownloadStringAsync(new Uri(url));
-            }
+                var json = args.Result;
+                var versionMatch = Regex
+                    .Match(json, @"""tag_name"":\s*""v(?<version>[^""]+)""", RegexOptions.IgnoreCase)
+                    .Groups["version"];
+                if (!versionMatch.Success) return;
+                var version = versionMatch.Value;
+                if (!Version.TryParse(version, out var gitVersion)) return;
+                if (CurrentVersion >= gitVersion) return;
+                var downloadUrl = Regex.Match(json, @"""browser_download_url"":\s*""(?<url>[^""]+)""")
+                    .Groups["url"].Value;
+                if (MessageBox.Show($"检测到新版本{version}，是否下载？", "更新", MessageBoxButton.YesNo) ==
+                    MessageBoxResult.Yes)
+                    Process.Start(downloadUrl);
+            };
+            wc.DownloadStringAsync(new(url));
         }
 
         internal class UserAgent
         {
-            private static readonly string Unknown = "unknown";
-            private static readonly string TagMozilla = "Mozilla/5.0";
+            private const string Unknown = "unknown";
+            private const string TagMozilla = "Mozilla/5.0";
+            private const string TagChrome = "Chrome/114.0.0.0";
+            private const string TagSafari = "Safari/537.36";
+            private const string TagEdge = "Edg/114.0.1823.43";
 
-            public static readonly string TagMozillaWindows = $"{TagMozilla} (Windows NT 10.0; Win64; x64)";
+            public const string TagMozillaWindows = $"{TagMozilla} (Windows NT 10.0; Win64; x64)";
 
-            public static readonly string TagMozillaAndroid = $"{TagMozilla} (Linux; Android 12)";
+            public const string TagMozillaAndroid = $"{TagMozilla} (Linux; Android 12)";
 
-            public static readonly string TagMozillaLinux = $"{TagMozilla} (X11; Linux x86_64)";
+            public const string TagMozillaLinux = $"{TagMozilla} (X11; Linux x86_64)";
 
-            public static readonly string TagMozillaMac = $"{TagMozilla} (Macintosh; Intel Mac OS X 10_15_7)";
+            public const string TagMozillaMac = $"{TagMozilla} (Macintosh; Intel Mac OS X 10_15_7)";
 
-            public static readonly string TagMozillaIOS = $"{TagMozilla} (iPhone; CPU iPhone OS 15_0 like Mac OS X)";
+            public const string TagMozillaIOS = $"{TagMozilla} (iPhone; CPU iPhone OS 15_0 like Mac OS X)";
 
-            public static readonly string TagAppleWebKit = "AppleWebKit/537.36 (KHTML, like Gecko)";
-
-            public static readonly string TagChrome = "Chrome/114.0.0.0";
-
-            public static readonly string TagSafari = "Safari/537.36";
-
-            public static readonly string TagEdge = "Edg/114.0.1823.43";
+            public const string TagAppleWebKit = "AppleWebKit/537.36 (KHTML, like Gecko)";
 
             private static readonly string AssemblyAuthor = typeof(UserAgent).Assembly
                 .GetCustomAttributes(false)

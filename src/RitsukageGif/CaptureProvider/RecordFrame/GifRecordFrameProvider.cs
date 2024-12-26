@@ -21,7 +21,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
         {
             var info = new RecordInfo
             {
-                Path = path
+                Path = path,
             };
             var bitmaps = new BlockingCollection<GifFrame>(1000);
             var provider = ScreenFrameProvider.CreateProvider(Settings.Default.ScreenFrameProvider);
@@ -38,10 +38,10 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                     var dt = t - lastMilliseconds;
                     lastMilliseconds = t;
                     var img = provider.Capture(cursor, scale);
-                    bitmaps.Add(new GifFrame
+                    bitmaps.Add(new()
                     {
                         Bitmap = img,
-                        Delay = (int)dt
+                        Delay = (int)dt,
                     }, processingToken);
                     if (!processingToken.IsCancellationRequested)
                     {
@@ -102,7 +102,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
         {
             var info = new RecordInfo
             {
-                Path = path
+                Path = path,
             };
             var provider = ScreenFrameProvider.CreateProvider(Settings.Default.ScreenFrameProvider);
             provider.ApplyCaptureRegion(rectangle);
@@ -146,7 +146,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                 sw.Stop();
                 provider.Dispose();
                 info.Completed = true;
-            });
+            }, processingToken);
             sw.Start();
             return info;
         }

@@ -5,6 +5,6 @@
         None,
         Horizontal,
         Vertical,
-        Both
+        Both,
     }
 }

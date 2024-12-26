@@ -12,7 +12,7 @@ namespace RitsukageGif.Class
             Bitmap = bitmap;
             Width = Bitmap.Width;
             Height = Bitmap.Height;
-            Rect = new Rectangle(0, 0, Width, Height);
+            Rect = new(0, 0, Width, Height);
             var data = Bitmap.LockBits(Rect, ImageLockMode.ReadWrite, Bitmap.PixelFormat);
             Stride = data.Stride;
             Data = new byte[Stride * Height];

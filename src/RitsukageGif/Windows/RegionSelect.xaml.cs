@@ -24,12 +24,12 @@ namespace RitsukageGif.Windows
     /// </summary>
     public partial class RegionSelect : Window
     {
-        public static readonly DPoint InvalidPoint = new DPoint(int.MinValue, int.MinValue);
+        public static readonly DPoint InvalidPoint = new(int.MinValue, int.MinValue);
         private readonly int _edgeCheckHeight = Settings.Default.EdgeCheckHeight;
         private readonly int _edgeCheckOffset = Settings.Default.EdgeCheckOffset;
         private readonly int _edgeCheckThreshold = Settings.Default.EdgeCheckThreshold;
         private readonly int _edgeCheckWidth = Settings.Default.EdgeCheckWidth;
-        private readonly Timer _shiftKeyHoldingTimer = new Timer(150) { AutoReset = false };
+        private readonly Timer _shiftKeyHoldingTimer = new(150) { AutoReset = false };
 
         private readonly byte _sobelThresholdFilter = Settings.Default.SobelThresholdFilter;
 
@@ -94,7 +94,7 @@ namespace RitsukageGif.Windows
                 X = Math.Min(_selectedStartPoint.X, _selectedEndPoint.X),
                 Y = Math.Min(_selectedStartPoint.Y, _selectedEndPoint.Y),
                 Width = Math.Abs(_selectedStartPoint.X - _selectedEndPoint.X),
-                Height = Math.Abs(_selectedStartPoint.Y - _selectedEndPoint.Y)
+                Height = Math.Abs(_selectedStartPoint.Y - _selectedEndPoint.Y),
             }
             : default;
 
@@ -104,7 +104,7 @@ namespace RitsukageGif.Windows
                 X = Math.Min(_selectingStartPoint.X, _selectingEndPoint.X),
                 Y = Math.Min(_selectingStartPoint.Y, _selectingEndPoint.Y),
                 Width = Math.Abs(_selectingStartPoint.X - _selectingEndPoint.X),
-                Height = Math.Abs(_selectingStartPoint.Y - _selectingEndPoint.Y)
+                Height = Math.Abs(_selectingStartPoint.Y - _selectingEndPoint.Y),
             }
             : default;
 
@@ -189,7 +189,7 @@ namespace RitsukageGif.Windows
 
             var bitX = new int[_edgeCheckWidth];
             var bitY = new int[_edgeCheckHeight];
-            var e = GetBitmapSobelEdge(new DRectangle(beginX - screenBeginPosX, beginY - screenBeginPosY,
+            var e = GetBitmapSobelEdge(new(beginX - screenBeginPosX, beginY - screenBeginPosY,
                 _edgeCheckWidth,
                 _edgeCheckHeight));
 
@@ -214,11 +214,9 @@ namespace RitsukageGif.Windows
                         break;
                     }
 
-                    if (bitX[halfCheckWidth - x] > _edgeCheckThreshold)
-                    {
-                        resultX = beginX + halfCheckWidth - x;
-                        break;
-                    }
+                    if (bitX[halfCheckWidth - x] <= _edgeCheckThreshold) continue;
+                    resultX = beginX + halfCheckWidth - x;
+                    break;
                 }
             }
 
@@ -234,20 +232,18 @@ namespace RitsukageGif.Windows
                         break;
                     }
 
-                    if (bitY[halfCheckHeight - y] > _edgeCheckThreshold)
-                    {
-                        resultY = beginY + halfCheckHeight - y;
-                        break;
-                    }
+                    if (bitY[halfCheckHeight - y] <= _edgeCheckThreshold) continue;
+                    resultY = beginY + halfCheckHeight - y;
+                    break;
                 }
             }
 
             PerceptionImagePoint = horizontal && vertical
-                ? new DPoint(resultX, resultY)
+                ? new(resultX, resultY)
                 : horizontal
-                    ? new DPoint(InvalidPoint.X, resultY)
+                    ? new(InvalidPoint.X, resultY)
                     : vertical
-                        ? new DPoint(resultX, InvalidPoint.Y)
+                        ? new(resultX, InvalidPoint.Y)
                         : InvalidPoint;
         }
 
@@ -264,7 +260,7 @@ namespace RitsukageGif.Windows
             UpdateScreenBitmap();
             UpdateWindowEnums();
             var point = Mouse.GetPosition(this);
-            _mousePositionForScreen = new DPoint((int)point.X + ScreenRectangle.X, (int)point.Y + ScreenRectangle.Y);
+            _mousePositionForScreen = new((int)point.X + ScreenRectangle.X, (int)point.Y + ScreenRectangle.Y);
             UpdateMousePosition();
             UpdateSelectedRegion();
         }
@@ -298,7 +294,7 @@ namespace RitsukageGif.Windows
             {
                 var exist = _allScreenViewGrids?.FirstOrDefault(y => y.Screen == x);
                 if (exist == null)
-                    exist = new RegionSelectScreenView(this, MainGrid, x);
+                    exist = new(this, MainGrid, x);
                 else
                     exist.UpdateView();
 
@@ -313,7 +309,7 @@ namespace RitsukageGif.Windows
             var minY = _allScreens.Min(x => x.Bounds.Top);
             var maxX = _allScreens.Max(x => x.Bounds.Right);
             var maxY = _allScreens.Max(x => x.Bounds.Bottom);
-            return new Rectangle(minX, minY, maxX - minX, maxY - minY);
+            return new(minX, minY, maxX - minX, maxY - minY);
         }
 
         private void UpdateSizeToScreenSize()
@@ -328,7 +324,7 @@ namespace RitsukageGif.Windows
 
         private void UpdateScreenBitmap()
         {
-            _screenBitmap = new Bitmap(ScreenRectangle.Width, ScreenRectangle.Height);
+            _screenBitmap = new(ScreenRectangle.Width, ScreenRectangle.Height);
             using (var graphics = Graphics.FromImage(_screenBitmap))
             {
                 foreach (var screen in _allScreens)
@@ -417,7 +413,7 @@ namespace RitsukageGif.Windows
 
         private DPoint GetPointWithPerception(DPoint point)
         {
-            return new DPoint(_perceptionPoint.X == InvalidPoint.X ? point.X : _perceptionPoint.X,
+            return new(_perceptionPoint.X == InvalidPoint.X ? point.X : _perceptionPoint.X,
                 _perceptionPoint.Y == InvalidPoint.Y ? point.Y : _perceptionPoint.Y);
         }
 
@@ -434,17 +430,15 @@ namespace RitsukageGif.Windows
         private void Window_MouseDown(object sender, MouseButtonEventArgs e)
         {
             if (_closing) return;
-            if (e.LeftButton == MouseButtonState.Pressed && !_leftMouse)
-            {
-                _leftMouse = true;
-                _selecting = true;
-                _selectingMoved = false;
-                var position = e.GetPosition(this);
-                var point = new DPoint((int)position.X + ScreenRectangle.X, (int)position.Y + ScreenRectangle.Y);
-                point = GetPointWithPerception(point);
-                _selectingStartPoint = point;
-                _selectingEndPoint = point;
-            }
+            if (e.LeftButton != MouseButtonState.Pressed || _leftMouse) return;
+            _leftMouse = true;
+            _selecting = true;
+            _selectingMoved = false;
+            var position = e.GetPosition(this);
+            var point = new DPoint((int)position.X + ScreenRectangle.X, (int)position.Y + ScreenRectangle.Y);
+            point = GetPointWithPerception(point);
+            _selectingStartPoint = point;
+            _selectingEndPoint = point;
         }
 
         private void Window_MouseMove(object sender, MouseEventArgs e)
@@ -469,36 +463,36 @@ namespace RitsukageGif.Windows
             if (_leftMouse && e.LeftButton == MouseButtonState.Released)
             {
                 _leftMouse = false;
-                if (_selecting)
+                if (!_selecting) return;
+                _selecting = false;
+                _selected = true;
+                if (_selectingMoved)
                 {
-                    _selecting = false;
-                    _selected = true;
-                    if (_selectingMoved)
-                    {
-                        var position = e.GetPosition(this);
-                        var point = new DPoint((int)position.X + ScreenRectangle.X,
-                            (int)position.Y + ScreenRectangle.Y);
-                        point = GetPointWithPerception(point);
-                        _selectingEndPoint = point;
-                        _selectedStartPoint = _selectingStartPoint;
-                        _selectedEndPoint = _selectingEndPoint;
-                        UpdateSelectedRegion();
-                    }
-                    else
-                    {
-                        var view = ScreenInfo.MainScreen;
-                        if (view == null) return;
-                        _selectedStartPoint =
-                            view.ConvertFromScalePoint(
-                                new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
-                        _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right,
-                            PerceptionProgramArea.Bottom));
-                        UpdateSelectedRegion();
-                    }
+                    var position = e.GetPosition(this);
+                    var point = new DPoint((int)position.X + ScreenRectangle.X,
+                        (int)position.Y + ScreenRectangle.Y);
+                    point = GetPointWithPerception(point);
+                    _selectingEndPoint = point;
+                    _selectedStartPoint = _selectingStartPoint;
+                    _selectedEndPoint = _selectingEndPoint;
                 }
+                else
+                {
+                    var view = ScreenInfo.MainScreen;
+                    if (view == null) return;
+                    _selectedStartPoint =
+                        view.ConvertFromScalePoint(
+                            new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
+                    _selectedEndPoint = view.ConvertFromScalePoint(new DPoint(PerceptionProgramArea.Right,
+                        PerceptionProgramArea.Bottom));
+                }
+
+                UpdateSelectedRegion();
+
                 return;
             }
-            if (e.RightButton == MouseButtonState.Released)
+
+            if (e.RightButton != MouseButtonState.Released) return;
             {
                 if (_selecting)
                 {

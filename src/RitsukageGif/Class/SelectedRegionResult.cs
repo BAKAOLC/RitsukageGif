@@ -16,7 +16,7 @@ namespace RitsukageGif.Class
                 var y = (int)regions.Min(r => r.Rectangle.Y);
                 var right = (int)regions.Max(r => r.Rectangle.Right);
                 var bottom = (int)regions.Max(r => r.Rectangle.Bottom);
-                Converted = new Rectangle(x, y, right - x, bottom - y);
+                Converted = new(x, y, right - x, bottom - y);
             }
             else
             {

@@ -13,16 +13,14 @@ namespace RitsukageGif.Native
             var hIcon = GetIcon(transform, out var location);
             if (hIcon == IntPtr.Zero)
                 return;
-            using (var bmp = Icon.FromHandle(hIcon).ToBitmap())
+            using var bmp = Icon.FromHandle(hIcon).ToBitmap();
+            User32.DestroyIcon(hIcon);
+            try
             {
-                User32.DestroyIcon(hIcon);
-                try
-                {
-                    g.DrawImage(bmp, new Rectangle(location, bmp.Size));
-                }
-                catch (ArgumentException)
-                {
-                }
+                g.DrawImage(bmp, new Rectangle(location, bmp.Size));
+            }
+            catch (ArgumentException)
+            {
             }
         }
 
@@ -40,7 +38,7 @@ namespace RitsukageGif.Native
             if (!User32.GetIconInfo(hIcon, out var icInfo))
                 return IntPtr.Zero;
             var hotspot = new Point(icInfo.xHotspot, icInfo.yHotspot);
-            location = new Point(cursorInfo.ptScreenPos.X - hotspot.X, cursorInfo.ptScreenPos.Y - hotspot.Y);
+            location = new(cursorInfo.ptScreenPos.X - hotspot.X, cursorInfo.ptScreenPos.Y - hotspot.Y);
             if (transform != null)
                 location = transform(location);
             Gdi32.DeleteObject(icInfo.hbmColor);

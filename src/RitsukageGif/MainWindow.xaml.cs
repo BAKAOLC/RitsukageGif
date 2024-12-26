@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -8,9 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using NHotkey;
 using NHotkey.Wpf;
@@ -18,6 +15,8 @@ using RitsukageGif.CaptureProvider.RecordFrame;
 using RitsukageGif.Class;
 using RitsukageGif.Windows;
 using WpfAnimatedGif;
+using Brushes = System.Windows.Media.Brushes;
+using Image = System.Windows.Controls.Image;
 
 namespace RitsukageGif
 {
@@ -26,9 +25,8 @@ namespace RitsukageGif
     /// </summary>
     public partial class MainWindow : Window
     {
+        private static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
         private readonly IRecordFrameProvider _recordFrameProvider = new GifRecordFrameProvider();
-
-        private readonly List<string> _tempFileList = new List<string>();
 
         private bool _canBeginRecord;
         private bool _canChangeRegion;
@@ -37,7 +35,7 @@ namespace RitsukageGif
         private int _delay;
 
         private int _fps;
-        private byte[] _lastRecordGifClipboardBytes;
+        private DataObject _lastRecordGifClipboardData;
         private CancellationTokenSource _processingCancellationTokenSource;
         private CancellationTokenSource _recordingCancellationTokenSource;
 
@@ -112,7 +110,7 @@ namespace RitsukageGif
         private void ApplyBackground()
         {
             var image = Settings.Default.BackgroundImage;
-            BackgroundImage.Source = string.IsNullOrWhiteSpace(image) ? null : new BitmapImage(new Uri(image));
+            BackgroundImage.Source = string.IsNullOrWhiteSpace(image) ? null : new BitmapImage(new(image));
         }
 
         private void StartRecording()
@@ -139,7 +137,6 @@ namespace RitsukageGif
             _recordingCancellationTokenSource = tokenRecording;
             _processingCancellationTokenSource = tokenProcessing;
             var path = GenerateTempFileName(_recordFrameProvider.GetFileExtension());
-            _tempFileList.Add(path);
             var info = RecordInMemory
                 ? _recordFrameProvider.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
                     tokenRecording.Token, tokenProcessing.Token)
@@ -170,33 +167,37 @@ namespace RitsukageGif
         private void SetShowInfo(string path)
         {
             var file = new FileInfo(path);
-            var sb = new StringBuilder();
-            sb.Append("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0 Transitional//EN\">");
-            sb.AppendFormat(
-                "<html><body><!--StartFragment--><p><img src=\"file:///{0}\"></p><!--EndFragment--></body></html>",
-                path);
-            _lastRecordGifClipboardBytes = Encoding.Default.GetBytes(sb.ToString());
+            var dataObject = new DataObject();
+            var byteDataQ =
+                Encoding.UTF8.GetBytes(
+                    $"<QQRichEditFormat><Info version=\"1001\"></Info><EditElement type=\"1\" filepath=\"{path}\" shortcut=\"\"></EditElement><EditElement type=\"0\"><![CDATA[]]></EditElement></QQRichEditFormat>");
+            var byteDataH =
+                Encoding.UTF8.GetBytes(
+                    $"<!DOCTYPE HTML PUBLIC \\\"-//W3C//DTD HTML 4.0 Transitional//EN\\\"><html><body><!--StartFragment--><p><img src=\\\"file:///{path}\\\"></p><!--EndFragment--></body></html>");
+            var dataMemoryStreamQ = new MemoryStream(byteDataQ);
+            var dataMemoryStreamH = new MemoryStream(byteDataH);
+            dataObject.SetData("QQ_Unicode_RichEdit_Format", dataMemoryStreamQ);
+            dataObject.SetData("QQ_RichEdit_Format", dataMemoryStreamQ);
+            dataObject.SetData("HTML Format", dataMemoryStreamH);
+            dataObject.SetFileDropList([path]);
+            _lastRecordGifClipboardData = null;
             Dispatcher.Invoke(() =>
             {
-                using (var data = new MemoryStream(_lastRecordGifClipboardBytes))
+                Clipboard.SetDataObject(dataObject, true);
+                switch (file.Length)
                 {
-                    Clipboard.SetData("Html Format", data);
-                }
-
-                if (file.Length > 6 * 1024 * 1024)
-                {
-                    GifSizeLabel.Foreground = Brushes.DarkRed;
-                    GifSizeLabel.FontWeight = FontWeights.Bold;
-                }
-                else if (file.Length > 3 * 1024 * 1024)
-                {
-                    GifSizeLabel.Foreground = Brushes.Red;
-                    GifSizeLabel.FontWeight = FontWeights.Normal;
-                }
-                else
-                {
-                    GifSizeLabel.Foreground = Brushes.Black;
-                    GifSizeLabel.FontWeight = FontWeights.Normal;
+                    case > 6 * 1024 * 1024:
+                        GifSizeLabel.Foreground = Brushes.DarkRed;
+                        GifSizeLabel.FontWeight = FontWeights.Bold;
+                        break;
+                    case > 3 * 1024 * 1024:
+                        GifSizeLabel.Foreground = Brushes.Red;
+                        GifSizeLabel.FontWeight = FontWeights.Normal;
+                        break;
+                    default:
+                        GifSizeLabel.Foreground = Brushes.Black;
+                        GifSizeLabel.FontWeight = FontWeights.Normal;
+                        break;
                 }
 
                 GifSizeLabel.Content = file.Length > 1024 * 1024
@@ -240,7 +241,7 @@ namespace RitsukageGif
 
             Dispatcher.Invoke(() =>
             {
-                if (Region != default)
+                if (Region != null)
                 {
                     _canBeginRecord = true;
                     RecordButton.IsEnabled = true;
@@ -289,7 +290,7 @@ namespace RitsukageGif
             }).ConfigureAwait(false);
         }
 
-        private void RemoveHotKeys()
+        private static void RemoveHotKeys()
         {
             HotkeyManager.Current.Remove("PushRecordGif");
             HotkeyManager.Current.Remove("SelectRegion");
@@ -309,8 +310,18 @@ namespace RitsukageGif
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            _ = new Mutex(true, "RitsukageGif_SingleInstance", out var createdNew);
+            if (!createdNew)
+            {
+                Hide();
+                MessageBox.Show("程序已经在运行中", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Close();
+                return;
+            }
+
             if (CheckOsVersion())
             {
+                CleanUpRecentFiles();
                 SetDefaultConfig();
                 RegisterHotKeys();
                 _canBeginRecord = false;
@@ -337,15 +348,6 @@ namespace RitsukageGif
             _processingCancellationTokenSource?.Cancel();
             _canBeginRecord = false;
             _canChangeRegion = false;
-            foreach (var file in _tempFileList.Where(File.Exists).ToArray())
-                try
-                {
-                    File.Delete(file);
-                }
-                catch
-                {
-                    // ignored
-                }
         }
 
         private void RecordButton_Click(object sender, RoutedEventArgs e)
@@ -418,15 +420,15 @@ namespace RitsukageGif
 
         private void GifView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var data = new MemoryStream(_lastRecordGifClipboardBytes);
-            Clipboard.SetData("Html Format", data);
+            if (_lastRecordGifClipboardData == null) return;
+            Clipboard.SetDataObject(_lastRecordGifClipboardData, true);
         }
 
         private void GifView_OnPreviewMouseLeftButtonDownPreviewMouseLeftButtonDown(object sender,
             MouseButtonEventArgs e)
         {
             if (string.IsNullOrEmpty(_currentGifPath)) return;
-            if (!(sender is Image gif)) return;
+            if (sender is not Image gif) return;
             var dataObject = new DataObject(DataFormats.FileDrop, new[] { _currentGifPath });
             DragDrop.DoDragDrop(gif, dataObject, DragDropEffects.Copy);
         }
@@ -436,9 +438,25 @@ namespace RitsukageGif
             ScreenInfo.ClearCache();
         }
 
+        private static void CleanUpRecentFiles()
+        {
+            if (!Directory.Exists(TempPath)) return;
+            foreach (var file in Directory.GetFiles(TempPath))
+                try
+                {
+                    File.Delete(file);
+                }
+                catch
+                {
+                    // ignored
+                }
+        }
+
         private static string GenerateTempFileName(string ext)
         {
-            return Path.Combine(Path.GetTempPath(),
+            if (!Directory.Exists(TempPath))
+                Directory.CreateDirectory(TempPath);
+            return Path.Combine(TempPath,
                     string.Join(string.Empty, Guid.NewGuid().ToByteArray().Select(x => x.ToString("X2"))) + ext)
                 .Replace('\\', '/');
         }

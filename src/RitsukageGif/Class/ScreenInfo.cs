@@ -9,7 +9,7 @@ namespace RitsukageGif.Class
 {
     public class ScreenInfo
     {
-        private static readonly List<ScreenInfo> _screenInfoRecord = new List<ScreenInfo>();
+        private static readonly List<ScreenInfo> ScreenInfoRecord = [];
 
         private ScreenInfo(Screen screen)
         {
@@ -39,9 +39,9 @@ namespace RitsukageGif.Class
 
         public double ConvertScaleY => DpiScaleToBasicY * DpiScaleToMainY;
 
-        private double MainDpiScaleX => MainScreen.DpiScaleX;
+        private static double MainDpiScaleX => MainScreen.DpiScaleX;
 
-        private double MainDpiScaleY => MainScreen.DpiScaleY;
+        private static double MainDpiScaleY => MainScreen.DpiScaleY;
 
         private double DpiScaleToMainX => DpiScaleX / MainDpiScaleX;
 
@@ -77,12 +77,12 @@ namespace RitsukageGif.Class
 
         public PointF ConvertToScalePoint(double x, double y)
         {
-            return new PointF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY));
+            return new((float)(x / ConvertScaleX), (float)(y / ConvertScaleY));
         }
 
         public Point ConvertFromScalePoint(double x, double y)
         {
-            return new Point((int)(x * ConvertScaleX), (int)(y * ConvertScaleY));
+            return new((int)(x * ConvertScaleX), (int)(y * ConvertScaleY));
         }
 
         public RectangleF ConvertToScaleRectangle(Rectangle rect)
@@ -97,13 +97,13 @@ namespace RitsukageGif.Class
 
         public RectangleF ConvertToScaleRectangle(double x, double y, double width, double height)
         {
-            return new RectangleF((float)(x / ConvertScaleX), (float)(y / ConvertScaleY),
+            return new((float)(x / ConvertScaleX), (float)(y / ConvertScaleY),
                 (float)(width / ConvertScaleX), (float)(height / ConvertScaleY));
         }
 
         public Rectangle ConvertFromScaleRectangle(double x, double y, double width, double height)
         {
-            return new Rectangle((int)(x * ConvertScaleX), (int)(y * ConvertScaleY),
+            return new((int)(x * ConvertScaleX), (int)(y * ConvertScaleY),
                 (int)(width * ConvertScaleX), (int)(height * ConvertScaleY));
         }
 
@@ -134,19 +134,17 @@ namespace RitsukageGif.Class
 
         public static ScreenInfo GetScreenInfo(Screen screen)
         {
-            var info = _screenInfoRecord.FirstOrDefault(x => x.Screen.Equals(screen));
-            if (info == null)
-            {
-                info = new ScreenInfo(screen);
-                _screenInfoRecord.Add(info);
-            }
+            var info = ScreenInfoRecord.FirstOrDefault(x => x.Screen.Equals(screen));
+            if (info != null) return info;
+            info = new(screen);
+            ScreenInfoRecord.Add(info);
 
             return info;
         }
 
         public static void ClearCache()
         {
-            _screenInfoRecord.Clear();
+            ScreenInfoRecord.Clear();
         }
     }
 
@@ -171,6 +169,6 @@ namespace RitsukageGif.Class
     {
         Effective = 0,
         Angular = 1,
-        Raw = 2
+        Raw = 2,
     }
 }

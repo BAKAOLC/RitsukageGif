@@ -13,10 +13,12 @@ namespace RitsukageGif.Windows
         private static AboutWindow _instance;
 
         private static readonly string AboutHeaderText =
-            $@"RitsukageGif ver {Assembly.GetExecutingAssembly().GetName().Version}
-构建日期: {File.GetLastWriteTime(typeof(AboutWindow).Assembly.Location)}
+            $"""
+             RitsukageGif ver {Assembly.GetExecutingAssembly().GetName().Version}
+             构建日期: {BuildTimeText}
 
-{AboutText}";
+             {AboutText}
+             """;
 
         private bool _closeFlag;
 
@@ -30,11 +32,23 @@ namespace RitsukageGif.Windows
         {
             get
             {
-                using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("RitsukageGif.About.txt"))
-                using (var reader = new StreamReader(stream))
-                {
-                    return reader.ReadToEnd();
-                }
+                using var stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("RitsukageGif.About.txt");
+                if (stream == null) return string.Empty;
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
+            }
+        }
+
+        private static string BuildTimeText
+        {
+            get
+            {
+                using var stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream("RitsukageGif.BuildTime.txt");
+                if (stream == null) return string.Empty;
+                using var reader = new StreamReader(stream);
+                return reader.ReadToEnd();
             }
         }
 
@@ -53,7 +67,7 @@ namespace RitsukageGif.Windows
 
         private static AboutWindow GetInstance()
         {
-            return _instance ?? (_instance = new AboutWindow());
+            return _instance ??= new();
         }
 
         public static AboutWindow Begin()

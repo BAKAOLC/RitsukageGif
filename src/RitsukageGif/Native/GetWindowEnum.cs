@@ -2,6 +2,6 @@
 {
     internal enum GetWindowEnum
     {
-        Owner = 4
+        Owner = 4,
     }
 }

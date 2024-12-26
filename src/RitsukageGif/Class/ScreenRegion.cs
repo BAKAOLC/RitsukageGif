@@ -2,17 +2,11 @@
 
 namespace RitsukageGif.Class
 {
-    public class ScreenRegion
+    public class ScreenRegion(ScreenInfo screen, RectangleF rectangle)
     {
-        public ScreenRegion(ScreenInfo screen, RectangleF rectangle)
-        {
-            Screen = screen;
-            Rectangle = rectangle;
-        }
+        public ScreenInfo Screen { get; } = screen;
 
-        public ScreenInfo Screen { get; }
-
-        public RectangleF Rectangle { get; }
+        public RectangleF Rectangle { get; } = rectangle;
 
         public override string ToString()
         {

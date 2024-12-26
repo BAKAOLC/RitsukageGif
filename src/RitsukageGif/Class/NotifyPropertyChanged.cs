@@ -10,7 +10,7 @@ namespace RitsukageGif.Class
 
         private void RaisePropertyChanged(string propertyName)
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            PropertyChanged?.Invoke(this, new(propertyName));
         }
 
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)

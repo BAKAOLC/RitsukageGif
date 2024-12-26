@@ -15,7 +15,7 @@
         DpiChanged="Window_DpiChanged">
     <Grid>
         <Image x:Name="BackgroundImage"
-            Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
+               Source="/Background.png" Stretch="UniformToFill" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
         <Label x:Name="VersionLabel"
                HorizontalAlignment="Left" VerticalAlignment="Bottom"
                Content="ver 1.0.0.0" />
@@ -91,11 +91,11 @@
                       Unchecked="MemoryRecordCheckBox_Unchecked" />
             <CheckBox x:Name="DXGIRecordCheckBox"
                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                      Margin="125,111,0,0" FontSize="14" FontWeight="Bold" Foreground="Red" 
+                      Margin="125,111,0,0" FontSize="14" FontWeight="Bold" Foreground="Red"
                       Content="启用DXGI(实验性)"
                       ToolTip="使用DXGI方法进行屏幕捕获，效率比常规方法要好"
                       Checked="DXGIRecordCheckBox_Checked"
-                      Unchecked="DXGIRecordCheckBox_Unchecked"/>
+                      Unchecked="DXGIRecordCheckBox_Unchecked" />
         </Grid>
         <Grid HorizontalAlignment="Left" VerticalAlignment="Bottom"
               Width="150" Height="160" Margin="5,5,5,25">
