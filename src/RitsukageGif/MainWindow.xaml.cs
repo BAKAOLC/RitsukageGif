@@ -180,7 +180,7 @@ namespace RitsukageGif
             dataObject.SetData("QQ_RichEdit_Format", dataMemoryStreamQ);
             dataObject.SetData("HTML Format", dataMemoryStreamH);
             dataObject.SetFileDropList([path]);
-            _lastRecordGifClipboardData = null;
+            _lastRecordGifClipboardData = dataObject;
             Dispatcher.Invoke(() =>
             {
                 Clipboard.SetDataObject(dataObject, true);
