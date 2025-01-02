@@ -67,8 +67,8 @@ namespace AnimatedGif
         public Bitmap Quantize(Image source)
         {
             // Get the size of the source image
-            int height = source.Height;
-            int width = source.Width;
+            var height = source.Height;
+            var width = source.Width;
 
             // And construct a rectangle from these dimensions
             var bounds = new Rectangle(0, 0, width, height);
@@ -133,13 +133,13 @@ namespace AnimatedGif
             var pSourceRow = sourceData.Scan0;
 
             // Loop through each row
-            for (int row = 0; row < height; row++)
+            for (var row = 0; row < height; row++)
             {
                 // Set the source pixel to the first pixel in this row
                 var pSourcePixel = pSourceRow;
 
                 // And loop through each column
-                for (int col = 0; col < width; col++)
+                for (var col = 0; col < width; col++)
                 {
                     InitialQuantizePixel(new Color32(pSourcePixel));
                     pSourcePixel = (IntPtr)((long)pSourcePixel + _pixelSize);
@@ -180,13 +180,13 @@ namespace AnimatedGif
 
                 // And convert the first pixel, so that I have values going into the loop
 
-                byte pixelValue = QuantizePixel(new Color32(pSourcePixel));
+                var pixelValue = QuantizePixel(new Color32(pSourcePixel));
 
                 // Assign the value of the first pixel
                 Marshal.WriteByte(pDestinationPixel, pixelValue);
 
                 // Loop through each row
-                for (int row = 0; row < height; row++)
+                for (var row = 0; row < height; row++)
                 {
                     // Set the source pixel to the first pixel in this row
                     pSourcePixel = pSourceRow;
@@ -195,7 +195,7 @@ namespace AnimatedGif
                     pDestinationPixel = pDestinationRow;
 
                     // Loop through each pixel on this scan line
-                    for (int col = 0; col < width; col++)
+                    for (var col = 0; col < width; col++)
                     {
                         // Check if this is the same as the last pixel. If so use that value
                         // rather than calculating it again. This is an inexpensive optimisation.

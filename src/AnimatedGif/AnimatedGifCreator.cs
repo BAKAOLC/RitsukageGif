@@ -35,8 +35,8 @@ namespace AnimatedGif
 {
     public class AnimatedGifCreator : IDisposable
     {
-        private bool _createdHeader;
         private readonly Stream _stream;
+        private bool _createdHeader;
 
         public AnimatedGifCreator(Stream stream, int delay = 33, int repeat = 0)
         {
@@ -56,8 +56,11 @@ namespace AnimatedGif
         }
 
         public string FilePath { get; }
+
         public int Delay { get; }
+
         public int Repeat { get; }
+
         public int FrameCount { get; private set; }
 
         public void Dispose()
@@ -182,7 +185,7 @@ namespace AnimatedGif
 
         private static byte[] CreateApplicationExtensionBlock(int repeat)
         {
-            byte[] buffer = new byte[19];
+            var buffer = new byte[19];
             buffer[0] = 0x21; // Extension introducer
             buffer[1] = 0xFF; // Application extension
             buffer[2] = 0x0B; // Size of block
@@ -207,7 +210,7 @@ namespace AnimatedGif
 
         private static byte[] CreateGraphicsControlExtensionBlock(int delay)
         {
-            byte[] buffer = new byte[8];
+            var buffer = new byte[8];
             buffer[0] = 0x21; // Extension introducer
             buffer[1] = 0xF9; // Graphic control extension
             buffer[2] = 0x04; // Size of block

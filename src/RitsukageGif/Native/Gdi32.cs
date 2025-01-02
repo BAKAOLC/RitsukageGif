@@ -8,6 +8,6 @@ namespace RitsukageGif.Native
         private const string DllName = "gdi32.dll";
 
         [DllImport(DllName)]
-        public static extern bool DeleteObject(IntPtr hObject);
+        public extern static bool DeleteObject(IntPtr hObject);
     }
 }

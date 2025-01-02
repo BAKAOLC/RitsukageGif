@@ -38,13 +38,13 @@ namespace AnimatedGif
         {
             ImageDescriptor = 0x2C,
             Extension = 0x21,
-            Trailer = 0x3B
+            Trailer = 0x3B,
         }
 
         public enum GifVersion
         {
             GIF87a,
-            GIF89a
+            GIF89a,
         }
 
         public List<byte> ColorTable = new List<byte>();
@@ -89,13 +89,13 @@ namespace AnimatedGif
 
         private bool AnalyzeGifSignature(List<byte> gifData)
         {
-            for (int i = 0; i < 6; i++) GifSignature.Add(gifData[i]);
+            for (var i = 0; i < 6; i++) GifSignature.Add(gifData[i]);
 
             gifData.RemoveRange(0, 6);
 
-            List<char> chars = GifSignature.ConvertAll(ByteToChar);
+            var chars = GifSignature.ConvertAll(ByteToChar);
 
-            string s = new string(chars.ToArray());
+            var s = new string(chars.ToArray());
 
             if (s == GifVersion.GIF89a.ToString()) Version = GifVersion.GIF89a;
             else if (s == GifVersion.GIF87a.ToString()) Version = GifVersion.GIF87a;
@@ -111,21 +111,21 @@ namespace AnimatedGif
 
         private void AnalyzeScreenDescriptor(List<byte> gifData)
         {
-            for (int i = 0; i < 7; i++) ScreenDescriptor.Add(gifData[i]);
+            for (var i = 0; i < 7; i++) ScreenDescriptor.Add(gifData[i]);
 
             gifData.RemoveRange(0, 7);
 
             // if the first bit of the fifth byte is set the GlobelColorTable follows this block
 
-            bool globalColorTableFollows = (ScreenDescriptor[4] & 0x80) != 0;
+            var globalColorTableFollows = (ScreenDescriptor[4] & 0x80) != 0;
 
             if (globalColorTableFollows)
             {
-                int pixel = ScreenDescriptor[4] & 0x07;
+                var pixel = ScreenDescriptor[4] & 0x07;
 
-                int lengthOfColorTableInByte = 3 * (int)Math.Pow(2, pixel + 1);
+                var lengthOfColorTableInByte = 3 * (int)Math.Pow(2, pixel + 1);
 
-                for (int i = 0; i < lengthOfColorTableInByte; i++) ColorTable.Add(gifData[i]);
+                for (var i = 0; i < lengthOfColorTableInByte; i++) ColorTable.Add(gifData[i]);
 
                 gifData.RemoveRange(0, lengthOfColorTableInByte);
             }
@@ -142,29 +142,29 @@ namespace AnimatedGif
 
         private void AnalyzeImageDescriptor(List<byte> gifData)
         {
-            for (int i = 0; i < 10; i++) ImageDescriptor.Add(gifData[i]);
+            for (var i = 0; i < 10; i++) ImageDescriptor.Add(gifData[i]);
 
             gifData.RemoveRange(0, 10);
 
             // get ColorTable if exists
 
-            bool localColorMapFollows = (ImageDescriptor[9] & 0x80) != 0;
+            var localColorMapFollows = (ImageDescriptor[9] & 0x80) != 0;
 
             if (localColorMapFollows)
             {
-                int pixel = ImageDescriptor[9] & 0x07;
+                var pixel = ImageDescriptor[9] & 0x07;
 
-                int lengthOfColorTableInByte = 3 * (int)Math.Pow(2, pixel + 1);
+                var lengthOfColorTableInByte = 3 * (int)Math.Pow(2, pixel + 1);
 
                 ColorTable.Clear();
 
-                for (int i = 0; i < lengthOfColorTableInByte; i++) ColorTable.Add(gifData[i]);
+                for (var i = 0; i < lengthOfColorTableInByte; i++) ColorTable.Add(gifData[i]);
 
                 gifData.RemoveRange(0, lengthOfColorTableInByte);
             }
             else
             {
-                int lastThreeBitsOfGlobalTableDescription = ScreenDescriptor[4] & 0x07;
+                var lastThreeBitsOfGlobalTableDescription = ScreenDescriptor[4] & 0x07;
 
                 ImageDescriptor[9] = (byte)(ImageDescriptor[9] & 0xF8);
 
@@ -186,7 +186,7 @@ namespace AnimatedGif
             {
                 int countOfFollowingDataBytes = gifData[0];
 
-                for (int i = 0; i <= countOfFollowingDataBytes; i++) ImageData.Add(gifData[i]);
+                for (var i = 0; i <= countOfFollowingDataBytes; i++) ImageData.Add(gifData[i]);
 
                 gifData.RemoveRange(0, countOfFollowingDataBytes + 1);
             }

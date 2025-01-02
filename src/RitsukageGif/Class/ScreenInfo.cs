@@ -158,10 +158,10 @@ namespace RitsukageGif.Class
         }
 
         [DllImport("User32.dll")]
-        private static extern IntPtr MonitorFromPoint([In] Point pt, [In] uint dwFlags);
+        private extern static IntPtr MonitorFromPoint([In] Point pt, [In] uint dwFlags);
 
         [DllImport("Shcore.dll")]
-        private static extern IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX,
+        private extern static IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX,
             [Out] out uint dpiY);
     }
 

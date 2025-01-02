@@ -70,7 +70,7 @@ namespace AnimatedGif
         protected override byte QuantizePixel(Color32 pixel)
         {
             byte colorIndex = 0;
-            int colorHash = pixel.ARGB;
+            var colorHash = pixel.ARGB;
 
             // Check if the color is in the lookup table
             if (_colorMap.ContainsKey(colorHash))
@@ -84,7 +84,7 @@ namespace AnimatedGif
                 if (0 == pixel.Alpha)
                 {
                     // Transparent. Lookup the first color with an alpha value of 0
-                    for (int index = 0; index < Colors.Length; index++)
+                    for (var index = 0; index < Colors.Length; index++)
                         if (0 == Colors[index].A)
                         {
                             colorIndex = (byte)index;
@@ -94,21 +94,21 @@ namespace AnimatedGif
                 else
                 {
                     // Not transparent...
-                    int leastDistance = int.MaxValue;
+                    var leastDistance = int.MaxValue;
                     int red = pixel.Red;
                     int green = pixel.Green;
                     int blue = pixel.Blue;
 
                     // Loop through the entire palette, looking for the closest color match
-                    for (int index = 0; index < Colors.Length; index++)
+                    for (var index = 0; index < Colors.Length; index++)
                     {
                         var paletteColor = Colors[index];
 
-                        int redDistance = paletteColor.R - red;
-                        int greenDistance = paletteColor.G - green;
-                        int blueDistance = paletteColor.B - blue;
+                        var redDistance = paletteColor.R - red;
+                        var greenDistance = paletteColor.G - green;
+                        var blueDistance = paletteColor.B - blue;
 
-                        int distance = redDistance * redDistance +
+                        var distance = redDistance * redDistance +
                                        greenDistance * greenDistance +
                                        blueDistance * blueDistance;
 
@@ -138,7 +138,7 @@ namespace AnimatedGif
         /// <returns>The new color palette</returns>
         protected override ColorPalette GetPalette(ColorPalette palette)
         {
-            for (int index = 0; index < Colors.Length; index++)
+            for (var index = 0; index < Colors.Length; index++)
                 palette.Entries[index] = Colors[index];
 
             return palette;

@@ -63,7 +63,7 @@ namespace AnimatedGif
                 throw new ArgumentOutOfRangeException(nameof(maxColors), maxColors,
                     "The number of colors should be less than 256");
 
-            if ((maxColorBits < 1) | (maxColorBits > 8))
+            if (maxColorBits < 1 | maxColorBits > 8)
                 throw new ArgumentOutOfRangeException(nameof(maxColorBits), maxColorBits,
                     "This should be between 1 and 8");
 
@@ -93,7 +93,7 @@ namespace AnimatedGif
         /// <returns>The quantized value</returns>
         protected override byte QuantizePixel(Color32 pixel)
         {
-            byte paletteIndex = (byte)_maxColors; // The color at [_maxColors] is set to transparent
+            var paletteIndex = (byte)_maxColors; // The color at [_maxColors] is set to transparent
 
             // Get the palette index if this non-transparent
             if (pixel.Alpha > 0)
@@ -113,7 +113,7 @@ namespace AnimatedGif
             var palette = _octree.Palletize(_maxColors - 1);
 
             // Then convert the palette based on those colors
-            for (int index = 0; index < palette.Count; index++)
+            for (var index = 0; index < palette.Count; index++)
                 original.Entries[index] = (Color)palette[index];
 
             // Add the transparent color
@@ -244,7 +244,7 @@ namespace AnimatedGif
 
                 // Now palettize the nodes
                 var palette = new ArrayList(Leaves);
-                int paletteIndex = 0;
+                var paletteIndex = 0;
                 _root.ConstructPalette(palette, ref paletteIndex);
 
                 // And return the palette
@@ -355,10 +355,10 @@ namespace AnimatedGif
                     else
                     {
                         // Go to the next level down in the tree
-                        int shift = 7 - level;
-                        int index = ((pixel.Red & Mask[level]) >> (shift - 2)) |
-                                    ((pixel.Green & Mask[level]) >> (shift - 1)) |
-                                    ((pixel.Blue & Mask[level]) >> shift);
+                        var shift = 7 - level;
+                        var index = (pixel.Red & Mask[level]) >> shift - 2 |
+                                    (pixel.Green & Mask[level]) >> shift - 1 |
+                                    (pixel.Blue & Mask[level]) >> shift;
 
                         var child = Children[index];
 
@@ -381,10 +381,10 @@ namespace AnimatedGif
                 public int Reduce()
                 {
                     _red = _green = _blue = 0;
-                    int children = 0;
+                    var children = 0;
 
                     // Loop through all children and add their information to this node
-                    for (int index = 0; index < 8; index++)
+                    for (var index = 0; index < 8; index++)
                         if (null != Children[index])
                         {
                             _red += Children[index]._red;
@@ -420,7 +420,7 @@ namespace AnimatedGif
                     else
                     {
                         // Loop through children looking for leaves
-                        for (int index = 0; index < 8; index++)
+                        for (var index = 0; index < 8; index++)
                             Children[index]?.ConstructPalette(palette, ref paletteIndex);
                     }
                 }
@@ -430,14 +430,14 @@ namespace AnimatedGif
                 /// </summary>
                 public int GetPaletteIndex(Color32 pixel, int level)
                 {
-                    int paletteIndex = _paletteIndex;
+                    var paletteIndex = _paletteIndex;
 
                     if (!_leaf)
                     {
-                        int shift = 7 - level;
-                        int index = ((pixel.Red & Mask[level]) >> (shift - 2)) |
-                                    ((pixel.Green & Mask[level]) >> (shift - 1)) |
-                                    ((pixel.Blue & Mask[level]) >> shift);
+                        var shift = 7 - level;
+                        var index = (pixel.Red & Mask[level]) >> shift - 2 |
+                                    (pixel.Green & Mask[level]) >> shift - 1 |
+                                    (pixel.Blue & Mask[level]) >> shift;
 
                         paletteIndex = null != Children[index]
                             ? Children[index].GetPaletteIndex(pixel, level + 1)

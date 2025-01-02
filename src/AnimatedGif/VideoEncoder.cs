@@ -41,8 +41,11 @@ namespace AnimatedGif
         }
 
         public string Name { get; set; }
+
         public string Path { get; set; }
+
         public string Args { get; set; }
+
         public string OutputExtension { get; set; }
 
         /// <param name="sourceFilePath">AVI file path</param>
@@ -61,7 +64,7 @@ namespace AnimatedGif
                     {
                         Arguments = Args.Replace("%input", "\"" + sourceFilePath + "\"")
                             .Replace("%output", "\"" + targetFilePath + "\""),
-                        WindowStyle = ProcessWindowStyle.Hidden
+                        WindowStyle = ProcessWindowStyle.Hidden,
                     };
                     process.StartInfo = psi;
                     process.Start();

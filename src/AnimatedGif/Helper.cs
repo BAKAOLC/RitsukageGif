@@ -20,7 +20,7 @@ namespace AnimatedGif
         //Check if extension is one of parameter extensions
         public static bool CheckExtension(string filePath, IEnumerable<string> extensions)
         {
-            string ext = GetFilenameExtension(filePath);
+            var ext = GetFilenameExtension(filePath);
 
             return !string.IsNullOrEmpty(ext) &&
                    extensions.Any(x => ext.Equals(x, StringComparison.InvariantCultureIgnoreCase));
@@ -31,7 +31,7 @@ namespace AnimatedGif
         {
             if (!string.IsNullOrEmpty(filePath))
             {
-                int pos = filePath.LastIndexOf('.');
+                var pos = filePath.LastIndexOf('.');
 
                 if (pos >= 0) return filePath.Substring(pos + 1);
             }

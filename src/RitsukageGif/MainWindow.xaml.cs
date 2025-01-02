@@ -92,8 +92,8 @@ namespace RitsukageGif
 
         private void SetDefaultConfig()
         {
-            GifFrameInteger.Value = Fps = 20;
-            GifScaleInteger.Value = Scale = 2;
+            GifFrameInteger.Value = Fps = Math.Max(Math.Min(Settings.Default.RecordFrameFps, 30), 1);
+            GifScaleInteger.Value = Scale = Math.Max(Math.Min(Settings.Default.RecordFrameScale, 100), 1);
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
             MemoryRecordCheckBox.IsChecked = RecordInMemory = Settings.Default.MemoryRecord;
             DXGIRecordCheckBox.IsChecked = DXGIRecord = Settings.Default.ScreenFrameProvider == 1;

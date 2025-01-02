@@ -55,7 +55,7 @@ namespace AnimatedGif
             for (uint i = 0; i < nColors; i++)
             {
                 const uint alpha = 0xFF; // Colors are opaque.
-                uint intensity = Convert.ToUInt32(i * 0xFF / (nColors - 1)); // Even distribution.
+                var intensity = Convert.ToUInt32(i * 0xFF / (nColors - 1)); // Even distribution.
 
                 // The GIF encoder makes the first entry in the palette
                 // that has a ZERO alpha the transparent color in the GIF.
@@ -79,7 +79,7 @@ namespace AnimatedGif
         /// <returns>The quantized value</returns>
         protected override byte QuantizePixel(Color32 pixel)
         {
-            double luminance = pixel.Red * 0.299 + pixel.Green * 0.587 + pixel.Blue * 0.114;
+            var luminance = pixel.Red * 0.299 + pixel.Green * 0.587 + pixel.Blue * 0.114;
 
             // Gray scale is an intensity map from black to white.
             // Compute the index to the grayscale entry that
@@ -87,7 +87,7 @@ namespace AnimatedGif
             // Also, constrain the index choices by the number of
             // colors to do, and then set that pixel's index to the
             // byte value.
-            byte colorIndex = (byte)(luminance + 0.5);
+            var colorIndex = (byte)(luminance + 0.5);
 
             return colorIndex;
         }

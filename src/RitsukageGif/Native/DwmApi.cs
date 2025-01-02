@@ -8,9 +8,9 @@ namespace RitsukageGif.Native
         private const string DllName = "dwmapi.dll";
 
         [DllImport(DllName)]
-        public static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out bool value, int size);
+        public extern static int DwmGetWindowAttribute(IntPtr window, int attribute, out bool value, int size);
 
         [DllImport(DllName)]
-        public static extern int DwmGetWindowAttribute(IntPtr window, int attribute, ref Rect value, int size);
+        public extern static int DwmGetWindowAttribute(IntPtr window, int attribute, ref Rect value, int size);
     }
 }
