@@ -1,7 +1,9 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using RitsukageGif.Class;
 
 namespace RitsukageGif.Windows
 {
@@ -32,8 +34,7 @@ namespace RitsukageGif.Windows
         {
             get
             {
-                using var stream = Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream("RitsukageGif.About.txt");
+                using var stream = EmbeddedResourcesHelper.GetStream(new Uri("embedded:///About.txt"));
                 if (stream == null) return string.Empty;
                 using var reader = new StreamReader(stream);
                 return reader.ReadToEnd();
@@ -44,8 +45,7 @@ namespace RitsukageGif.Windows
         {
             get
             {
-                using var stream = Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream("RitsukageGif.BuildTime.txt");
+                using var stream = EmbeddedResourcesHelper.GetStream(new Uri("embedded:///BuildTime.txt"));
                 if (stream == null) return string.Empty;
                 using var reader = new StreamReader(stream);
                 return reader.ReadToEnd();

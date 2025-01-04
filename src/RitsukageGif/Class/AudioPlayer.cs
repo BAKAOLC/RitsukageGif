@@ -53,19 +53,29 @@ namespace RitsukageGif.Class
 
         private async Task<Stream> OpenStreamAsync(Uri uri)
         {
-            if (uri.Scheme == "file")
-                return File.OpenRead(uri.LocalPath);
-            var hash = CalcUriHash(uri);
-            var filePath = Path.Combine(Path.GetTempPath(), hash);
-            if (File.Exists(filePath))
-                return File.OpenRead(filePath);
+            switch (uri.Scheme)
+            {
+                case "file":
+                    return File.OpenRead(uri.LocalPath);
+                case "embedded":
+                    return EmbeddedResourcesHelper.GetStream(uri);
+                case "http":
+                case "https":
+                    var hash = CalcUriHash(uri);
+                    var filePath = Path.Combine(Path.GetTempPath(), hash);
+                    if (File.Exists(filePath))
+                        return File.OpenRead(filePath);
 
-            using var stream = await _httpClient.GetStreamAsync(uri).ConfigureAwait(false);
-            var fileStream = File.Create(filePath);
-            await stream.CopyToAsync(fileStream).ConfigureAwait(false);
-            fileStream.Dispose();
+                    var stream = await _httpClient.GetStreamAsync(uri).ConfigureAwait(false);
+                    var fileStream = File.Create(filePath);
+                    await stream.CopyToAsync(fileStream).ConfigureAwait(false);
+                    fileStream.Dispose();
+                    stream.Dispose();
 
-            return File.OpenRead(filePath);
+                    return File.OpenRead(filePath);
+                default:
+                    throw new NotSupportedException("Uri scheme not supported");
+            }
         }
 
         private async Task<AudioFormat> GetAudioFormatAsync(Uri uri)

@@ -27,6 +27,8 @@ namespace RitsukageGif
     public partial class MainWindow : Window
     {
         private static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
+
+        private static MainWindow _instance;
         private readonly IRecordFrameProvider _recordFrameProvider = new GifRecordFrameProvider();
 
         [CanBeNull] private AudioPlayer _audioPlayer;
@@ -44,9 +46,9 @@ namespace RitsukageGif
 
         public MainWindow()
         {
+            _instance = this;
             InitializeComponent();
             VersionLabel.Content = $"ver {Assembly.GetExecutingAssembly().GetName().Version}";
-            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledExceptionHandler;
         }
 
         public SelectedRegionResult Region { get; private set; }
@@ -70,6 +72,23 @@ namespace RitsukageGif
         public bool DXGIRecord { get; private set; }
 
         public bool Recording { get; private set; }
+
+        public static void ShutdownAllTasks()
+        {
+            if (_instance == null) return;
+            AboutWindow.CloseInstance();
+            RemoveHotKeys();
+            _instance._recordingCancellationTokenSource?.Cancel();
+            _instance._processingCancellationTokenSource?.Cancel();
+            _instance._canBeginRecord = false;
+            _instance._canChangeRegion = false;
+            _instance.IsEnabled = false;
+        }
+
+        public static void CloseInstance()
+        {
+            _instance?.Close();
+        }
 
         private static bool CheckOsVersion()
         {
@@ -470,21 +489,6 @@ namespace RitsukageGif
             return Path.Combine(TempPath,
                     string.Join(string.Empty, Guid.NewGuid().ToByteArray().Select(x => x.ToString("X2"))) + ext)
                 .Replace('\\', '/');
-        }
-
-        private static void CurrentDomain_UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
-        {
-            var sb = new StringBuilder();
-            var exceptionObject = e.ExceptionObject as Exception;
-            sb.AppendLine("程序发生了一个未处理的异常，请将以下信息反馈给开发者：");
-            sb.AppendLine();
-            sb.AppendLine($"异常类型：{exceptionObject?.GetType().FullName ?? "null"}");
-            sb.AppendLine($"异常消息：{exceptionObject?.Message ?? "null"}");
-            sb.AppendLine($"异常堆栈：{exceptionObject?.StackTrace ?? "null"}");
-            File.WriteAllText($"RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log", sb.ToString());
-            sb.Insert(0, $"错误日志已保存到程序目录下，文件名为：RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log");
-            sb.AppendLine();
-            MessageBox.Show(sb.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }

@@ -36,10 +36,10 @@
       <Value Profile="(Default)">2</Value>
     </Setting>
     <Setting Name="StartRecordingSoundFile" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
+      <Value Profile="(Default)">embedded:///se_alert.wav</Value>
     </Setting>
     <Setting Name="StopRecordingSoundFile" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
+      <Value Profile="(Default)">embedded:///se_big.wav</Value>
     </Setting>
   </Settings>
 </SettingsFile>

@@ -157,7 +157,7 @@ namespace RitsukageGif {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        [global::System.Configuration.DefaultSettingValueAttribute("embedded:///se_alert.wav")]
         public string StartRecordingSoundFile {
             get {
                 return ((string)(this["StartRecordingSoundFile"]));
@@ -169,7 +169,7 @@ namespace RitsukageGif {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        [global::System.Configuration.DefaultSettingValueAttribute("embedded:///se_big.wav")]
         public string StopRecordingSoundFile {
             get {
                 return ((string)(this["StopRecordingSoundFile"]));

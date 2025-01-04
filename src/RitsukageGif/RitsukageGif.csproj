@@ -18,6 +18,8 @@
     <ItemGroup>
         <None Remove="About.txt" />
         <None Remove="Background.png" />
+        <None Remove="se_alert.wav" />
+        <None Remove="se_big.wav" />
     </ItemGroup>
 
     <ItemGroup>
@@ -27,6 +29,8 @@
     <ItemGroup>
         <EmbeddedResource Include="About.txt" />
         <EmbeddedResource Include="BuildTime.txt" />
+        <EmbeddedResource Include="se_alert.wav" />
+        <EmbeddedResource Include="se_big.wav" />
         <Resource Include="Background.png" />
     </ItemGroup>
 
