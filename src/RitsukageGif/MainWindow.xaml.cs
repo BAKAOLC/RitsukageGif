@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
+using JetBrains.Annotations;
 using NHotkey;
 using NHotkey.Wpf;
 using RitsukageGif.CaptureProvider.RecordFrame;
@@ -27,6 +28,8 @@ namespace RitsukageGif
     {
         private static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
         private readonly IRecordFrameProvider _recordFrameProvider = new GifRecordFrameProvider();
+
+        [CanBeNull] private AudioPlayer _audioPlayer;
 
         private bool _canBeginRecord;
         private bool _canChangeRegion;
@@ -129,6 +132,9 @@ namespace RitsukageGif
             _recordingCancellationTokenSource?.Cancel();
             _processingCancellationTokenSource?.Cancel();
             StartRecordingTaskAsync();
+            if (string.IsNullOrWhiteSpace(Settings.Default.StartRecordingSoundFile)) return;
+            _audioPlayer?.StopAudio();
+            _audioPlayer?.PlayAudio(Settings.Default.StartRecordingSoundFile);
         }
 
         private Task StartRecordingTaskAsync()
@@ -231,6 +237,9 @@ namespace RitsukageGif
             MemoryRecordCheckBox.IsEnabled = true;
             DXGIRecordCheckBox.IsEnabled = true;
             _recordingCancellationTokenSource?.Cancel();
+            if (string.IsNullOrWhiteSpace(Settings.Default.StopRecordingSoundFile)) return;
+            _audioPlayer?.StopAudio();
+            _audioPlayer?.PlayAudio(Settings.Default.StopRecordingSoundFile);
         }
 
         private async Task OpenRegionSelectWindowAsync()
@@ -322,6 +331,7 @@ namespace RitsukageGif
 
             if (CheckOsVersion())
             {
+                _audioPlayer = new();
                 CleanUpRecentFiles();
                 SetDefaultConfig();
                 RegisterHotKeys();
@@ -471,6 +481,9 @@ namespace RitsukageGif
             sb.AppendLine($"异常类型：{exceptionObject?.GetType().FullName ?? "null"}");
             sb.AppendLine($"异常消息：{exceptionObject?.Message ?? "null"}");
             sb.AppendLine($"异常堆栈：{exceptionObject?.StackTrace ?? "null"}");
+            File.WriteAllText($"RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log", sb.ToString());
+            sb.Insert(0, $"错误日志已保存到程序目录下，文件名为：RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log");
+            sb.AppendLine();
             MessageBox.Show(sb.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

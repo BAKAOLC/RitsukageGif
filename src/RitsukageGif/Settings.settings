@@ -1,41 +1,45 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
-<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)"
-              GeneratedClassNamespace="RitsukageGif" GeneratedClassName="Settings">
-    <Profiles/>
-    <Settings>
-        <Setting Name="RecordCursor" Type="System.Boolean" Scope="User">
-            <Value Profile="(Default)">False</Value>
-        </Setting>
-        <Setting Name="MemoryRecord" Type="System.Boolean" Scope="User">
-            <Value Profile="(Default)">True</Value>
-        </Setting>
-        <Setting Name="SobelThresholdFilter" Type="System.Byte" Scope="User">
-            <Value Profile="(Default)">100</Value>
-        </Setting>
-        <Setting Name="EdgeCheckOffset" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">25</Value>
-        </Setting>
-        <Setting Name="EdgeCheckThreshold" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">100</Value>
-        </Setting>
-        <Setting Name="EdgeCheckWidth" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">60</Value>
-        </Setting>
-        <Setting Name="EdgeCheckHeight" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">60</Value>
-        </Setting>
-        <Setting Name="ScreenFrameProvider" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">1</Value>
-        </Setting>
-        <Setting Name="BackgroundImage" Type="System.String" Scope="User">
-            <Value Profile="(Default)">pack://application:,,,/Background.png</Value>
-        </Setting>
-        <Setting Name="RecordFrameFps" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">20</Value>
-        </Setting>
-        <Setting Name="RecordFrameScale" Type="System.Int32" Scope="User">
-            <Value Profile="(Default)">2</Value>
-        </Setting>
-    </Settings>
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="RitsukageGif" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="RecordCursor" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="MemoryRecord" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="SobelThresholdFilter" Type="System.Byte" Scope="User">
+      <Value Profile="(Default)">100</Value>
+    </Setting>
+    <Setting Name="EdgeCheckOffset" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">25</Value>
+    </Setting>
+    <Setting Name="EdgeCheckThreshold" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">100</Value>
+    </Setting>
+    <Setting Name="EdgeCheckWidth" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">60</Value>
+    </Setting>
+    <Setting Name="EdgeCheckHeight" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">60</Value>
+    </Setting>
+    <Setting Name="ScreenFrameProvider" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">1</Value>
+    </Setting>
+    <Setting Name="BackgroundImage" Type="System.String" Scope="User">
+      <Value Profile="(Default)">pack://application:,,,/Background.png</Value>
+    </Setting>
+    <Setting Name="RecordFrameFps" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">20</Value>
+    </Setting>
+    <Setting Name="RecordFrameScale" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">2</Value>
+    </Setting>
+    <Setting Name="StartRecordingSoundFile" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="StopRecordingSoundFile" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+  </Settings>
 </SettingsFile>
-
