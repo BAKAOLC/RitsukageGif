@@ -43,6 +43,7 @@ namespace RitsukageGif
         {
             InitializeComponent();
             VersionLabel.Content = $"ver {Assembly.GetExecutingAssembly().GetName().Version}";
+            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledExceptionHandler;
         }
 
         public SelectedRegionResult Region { get; private set; }
@@ -459,6 +460,18 @@ namespace RitsukageGif
             return Path.Combine(TempPath,
                     string.Join(string.Empty, Guid.NewGuid().ToByteArray().Select(x => x.ToString("X2"))) + ext)
                 .Replace('\\', '/');
+        }
+
+        private static void CurrentDomain_UnhandledExceptionHandler(object sender, UnhandledExceptionEventArgs e)
+        {
+            var sb = new StringBuilder();
+            var exceptionObject = e.ExceptionObject as Exception;
+            sb.AppendLine("程序发生了一个未处理的异常，请将以下信息反馈给开发者：");
+            sb.AppendLine();
+            sb.AppendLine($"异常类型：{exceptionObject?.GetType().FullName ?? "null"}");
+            sb.AppendLine($"异常消息：{exceptionObject?.Message ?? "null"}");
+            sb.AppendLine($"异常堆栈：{exceptionObject?.StackTrace ?? "null"}");
+            MessageBox.Show(sb.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 }
