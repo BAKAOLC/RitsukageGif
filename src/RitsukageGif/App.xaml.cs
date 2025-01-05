@@ -33,18 +33,29 @@ namespace RitsukageGif
 
         private static void ShowException(Exception ex)
         {
+            try
+            {
+                RitsukageGif.MainWindow.ShutdownAllTasks();
+            }
+            catch
+            {
+                // ignored
+            }
+
+            var filename = $"RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log";
             var sb = new StringBuilder();
             sb.AppendLine("程序发生了一个未处理的异常，请将以下信息反馈给开发者：");
             sb.AppendLine();
-            sb.AppendLine($"异常类型：{ex?.GetType().FullName ?? "null"}");
-            sb.AppendLine($"异常消息：{ex?.Message ?? "null"}");
-            sb.AppendLine($"异常堆栈：{ex?.StackTrace ?? "null"}");
-            File.WriteAllText($"RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log", sb.ToString());
-            sb.Insert(0, $"错误日志已保存到程序目录下，文件名为：RitsukageGif-Crash-{DateTime.Now:yyyy-MM-dd-HH-mm-ss}.log");
-            sb.AppendLine();
-
-            RitsukageGif.MainWindow.ShutdownAllTasks();
-            MessageBox.Show(sb.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            sb.AppendLine("程序集版本：").AppendLine(typeof(App).Assembly.GetName().Version.ToString());
+            sb.AppendLine("异常类型：").AppendLine(ex?.GetType().FullName ?? "null");
+            sb.AppendLine("异常消息：").AppendLine(ex?.Message ?? "null");
+            sb.AppendLine("异常堆栈：").Append(ex?.StackTrace ?? "null");
+            File.WriteAllText(filename, sb.ToString());
+            var sb2 = new StringBuilder();
+            sb2.AppendLine($"错误日志已保存到程序目录下，文件名为：{filename}");
+            sb2.AppendLine();
+            sb2.Append(sb);
+            MessageBox.Show(sb2.ToString(), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             Current.Shutdown();
         }
     }
