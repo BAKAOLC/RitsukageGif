@@ -6,7 +6,7 @@
         {
             return provider switch
             {
-                1 => new DXGIScreenFrameProvider(),
+                1 => new DxgiScreenFrameProvider(),
                 _ => new BitbltScreenFrameProvider(),
             };
         }

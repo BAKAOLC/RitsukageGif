@@ -10,7 +10,7 @@ using D3D11MapFlags = SharpDX.Direct3D11.MapFlags;
 
 namespace RitsukageGif.CaptureProvider.ScreenFrame
 {
-    public class DXGIScreenFrameProvider : IScreenFrameProvider
+    public class DxgiScreenFrameProvider : IScreenFrameProvider
     {
         public const string ProviderId = "71df2757-2b99-b209-f74d-bdb55d448938";
         private Adapter1 _adapter;
@@ -23,7 +23,7 @@ namespace RitsukageGif.CaptureProvider.ScreenFrame
 
         private Rectangle _rectangle;
 
-        public DXGIScreenFrameProvider()
+        public DxgiScreenFrameProvider()
         {
             Initialize();
         }
@@ -52,7 +52,6 @@ namespace RitsukageGif.CaptureProvider.ScreenFrame
             using var source = new Bitmap(_rectangle.Width, _rectangle.Height);
             using var graphicsBitmap = Graphics.FromImage(bitmap);
             using var graphicsSource = Graphics.FromImage(source);
-            //graphicsSource.CopyFromScreen(_rectangle.X, _rectangle.Y, 0, 0, _rectangle.Size);
             foreach (var duplicatedOutput in _duplicatedOutputs)
             {
                 var desc = duplicatedOutput.Output.Description;
@@ -62,10 +61,8 @@ namespace RitsukageGif.CaptureProvider.ScreenFrame
                 var rect = Rectangle.Intersect(_rectangle, screenRect);
                 if (rect == default)
                     continue;
-                var graphicRect = new Rectangle(rect.X - _rectangle.X, rect.Y - _rectangle.Y, rect.Width,
-                    rect.Height);
-                var desktopGraphicRect = new Rectangle(rect.X - screenRect.X, rect.Y - screenRect.Y, rect.Width,
-                    rect.Height);
+                var graphicRect = rect with { X = rect.X - _rectangle.X, Y = rect.Y - _rectangle.Y };
+                var desktopGraphicRect = rect with { X = rect.X - screenRect.X, Y = rect.Y - screenRect.Y };
                 using var screen = duplicatedOutput.Capture();
                 if (screen == null) continue;
                 graphicsSource.DrawImage(screen, graphicRect, desktopGraphicRect, GraphicsUnit.Pixel);
@@ -84,7 +81,7 @@ namespace RitsukageGif.CaptureProvider.ScreenFrame
             GC.SuppressFinalize(this);
         }
 
-        ~DXGIScreenFrameProvider()
+        ~DxgiScreenFrameProvider()
         {
             Dispose(false);
         }
