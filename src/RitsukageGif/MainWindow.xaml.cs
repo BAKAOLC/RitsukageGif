@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using JetBrains.Annotations;
 using NHotkey;
@@ -136,8 +137,33 @@ namespace RitsukageGif
             BackgroundImage.Source = string.IsNullOrWhiteSpace(image) ? null : new BitmapImage(new(image));
         }
 
+        private bool CheckRenderCapability()
+        {
+            switch (RenderCapability.Tier >> 16)
+            {
+                case < 2:
+                {
+                    if (!DXGIRecord) return true;
+                    var message = new StringBuilder()
+                        .AppendLine("当前设备不支持 DXGI 桌面录制，请确认是否使用独立显卡运行程序。")
+                        .Append("是否切换为兼容性录制方法？（注意：兼容性录制方法可能会导致录制性能不佳）")
+                        .ToString();
+                    var result = MessageBox.Show(message, "错误", MessageBoxButton.YesNo, MessageBoxImage.Error);
+                    if (result != MessageBoxResult.Yes) return false;
+                    DXGIRecordCheckBox.IsChecked = DXGIRecord = false;
+                    return true;
+                }
+                default:
+                {
+                    return true;
+                }
+            }
+        }
+
         private void StartRecording()
         {
+            if (!CheckRenderCapability()) return;
+
             _canChangeRegion = false;
             Recording = true;
             RecordButton.Content = "停止录制";
@@ -150,6 +176,7 @@ namespace RitsukageGif
             DXGIRecordCheckBox.IsEnabled = false;
             _recordingCancellationTokenSource?.Cancel();
             _processingCancellationTokenSource?.Cancel();
+            SaveConfig();
             StartRecordingTaskAsync();
             if (string.IsNullOrWhiteSpace(Settings.Default.StartRecordingSoundFile)) return;
             _audioPlayer?.StopAudio();
