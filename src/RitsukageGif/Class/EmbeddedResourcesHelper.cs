@@ -16,7 +16,7 @@ namespace RitsukageGif.Class
             var resourcePath = uri.Host + uri.AbsolutePath;
             if (!resourcePath.StartsWith('/'))
                 resourcePath = '/' + resourcePath;
-            resourcePath = $"{defaultNamespace}{resourcePath.Replace('\\', '.').Replace('/', '.')}";
+            resourcePath = $"{defaultNamespace}{resourcePath.Replace("\\", ".").Replace("/", ".")}";
             var stream = assembly.GetManifestResourceStream(resourcePath) ?? throw new InvalidOperationException($"Resource not found: {resourcePath}");
             var memoryStream = new MemoryStream();
             stream.CopyTo(memoryStream);
