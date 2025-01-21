@@ -11,7 +11,7 @@ namespace RitsukageGif.Class
             if (uri.Scheme != "embedded")
                 throw new NotSupportedException("Scheme not supported");
 
-            assembly ??= Assembly.GetExecutingAssembly();
+            var assembly = Assembly.GetExecutingAssembly();
             var defaultNamespace = assembly.GetName().Name;
             var resourcePath = uri.Host + uri.AbsolutePath;
             if (!resourcePath.StartsWith('/'))
