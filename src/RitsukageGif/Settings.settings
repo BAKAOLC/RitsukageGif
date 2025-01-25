@@ -41,5 +41,11 @@
     <Setting Name="StopRecordingSoundFile" Type="System.String" Scope="User">
       <Value Profile="(Default)">embedded:///se_big.wav</Value>
     </Setting>
+    <Setting Name="HotKeyRecordGif" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Control+Shift+A</Value>
+    </Setting>
+    <Setting Name="HotKeySelectRegion" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Control+Shift+S</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

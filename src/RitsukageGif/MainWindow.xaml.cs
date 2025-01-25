@@ -14,6 +14,7 @@ using NHotkey;
 using NHotkey.Wpf;
 using RitsukageGif.CaptureProvider.RecordFrame;
 using RitsukageGif.Class;
+using RitsukageGif.Structs;
 using RitsukageGif.Windows;
 using WpfAnimatedGif;
 using Brushes = System.Windows.Media.Brushes;
@@ -50,6 +51,9 @@ namespace RitsukageGif
             InitializeComponent();
             VersionLabel.Content = $"ver {Assembly.GetExecutingAssembly().GetName().Version}";
         }
+
+        public HotKey HotKeyPushRecordGif { get; private set; }
+        public HotKey HotKeySelectRegion { get; private set; }
 
         public SelectedRegionResult Region { get; private set; }
 
@@ -122,6 +126,14 @@ namespace RitsukageGif
 
         private void SetDefaultConfig()
         {
+            if (!string.IsNullOrEmpty(Settings.Default.HotKeyRecordGif))
+                if (HotKey.TryParse(Settings.Default.HotKeyRecordGif, out var hotKey))
+                    HotKeyPushRecordGif = hotKey;
+
+            if (!string.IsNullOrEmpty(Settings.Default.HotKeySelectRegion))
+                if (HotKey.TryParse(Settings.Default.HotKeySelectRegion, out var hotKey))
+                    HotKeySelectRegion = hotKey;
+
             GifFrameInteger.Value = Fps = Math.Max(Math.Min(Settings.Default.RecordFrameFps, 30), 1);
             GifScaleInteger.Value = Scale = Math.Max(Math.Min(Settings.Default.RecordFrameScale, 100), 1);
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
@@ -295,8 +307,11 @@ namespace RitsukageGif
             bool success1 = true, success2 = true;
             try
             {
-                HotkeyManager.Current.AddOrReplace("PushRecordGif", Key.A, ModifierKeys.Control | ModifierKeys.Shift,
-                    OnHotKey_PushRecordGif);
+                if (HotKeyPushRecordGif != default)
+                    HotkeyManager.Current.AddOrReplace("PushRecordGif",
+                        HotKeyPushRecordGif.Key,
+                        HotKeyPushRecordGif.ModifierKeys,
+                        OnHotKey_PushRecordGif);
             }
             catch
             {
@@ -305,8 +320,11 @@ namespace RitsukageGif
 
             try
             {
-                HotkeyManager.Current.AddOrReplace("SelectRegion", Key.S, ModifierKeys.Control | ModifierKeys.Shift,
-                    OnHotKey_SelectRegion);
+                if (HotKeySelectRegion != default)
+                    HotkeyManager.Current.AddOrReplace("SelectRegion",
+                        HotKeySelectRegion.Key,
+                        HotKeySelectRegion.ModifierKeys,
+                        OnHotKey_SelectRegion);
             }
             catch
             {
@@ -317,9 +335,9 @@ namespace RitsukageGif
             var sb = new StringBuilder();
             sb.AppendLine("以下快捷键注册失败，请检查是否有其他程序占用了快捷键。");
             if (!success1)
-                sb.AppendLine("Ctrl + Shift + A：开始/停止录制");
+                sb.AppendLine($"{HotKeyPushRecordGif}：开始/停止录制");
             if (!success2)
-                sb.AppendLine("Ctrl + Shift + S：选择录制区域");
+                sb.AppendLine($"{HotKeySelectRegion}：选择录制区域");
             Task.Run(() =>
             {
                 MessageBox.Show(sb.ToString(),

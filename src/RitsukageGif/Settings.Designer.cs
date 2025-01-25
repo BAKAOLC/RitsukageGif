@@ -178,5 +178,29 @@ namespace RitsukageGif {
                 this["StopRecordingSoundFile"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Control+Shift+A")]
+        public string HotKeyRecordGif {
+            get {
+                return ((string)(this["HotKeyRecordGif"]));
+            }
+            set {
+                this["HotKeyRecordGif"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Control+Shift+S")]
+        public string HotKeySelectRegion {
+            get {
+                return ((string)(this["HotKeySelectRegion"]));
+            }
+            set {
+                this["HotKeySelectRegion"] = value;
+            }
+        }
     }
 }

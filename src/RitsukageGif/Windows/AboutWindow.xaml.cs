@@ -1,7 +1,7 @@
-﻿using System;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Windows;
 using RitsukageGif.Class;
 
@@ -34,10 +34,10 @@ namespace RitsukageGif.Windows
         {
             get
             {
-                using var stream = EmbeddedResourcesHelper.GetStream(new Uri("embedded:///About.txt"));
+                using var stream = EmbeddedResourcesHelper.GetStream(new("embedded:///About.txt"));
                 if (stream == null) return string.Empty;
                 using var reader = new StreamReader(stream);
-                return reader.ReadToEnd();
+                return ReplaceHotKey(reader.ReadToEnd());
             }
         }
 
@@ -45,11 +45,31 @@ namespace RitsukageGif.Windows
         {
             get
             {
-                using var stream = EmbeddedResourcesHelper.GetStream(new Uri("embedded:///BuildTime.txt"));
+                using var stream = EmbeddedResourcesHelper.GetStream(new("embedded:///BuildTime.txt"));
                 if (stream == null) return string.Empty;
                 using var reader = new StreamReader(stream);
                 return reader.ReadToEnd();
             }
+        }
+
+        private static string ReplaceHotKey(string text)
+        {
+            var instance = MainWindow.GetInstance();
+            return instance == null
+                ? text
+                : Regex.Replace(text, @"\$[a-zA-Z0-9_]+\$", match =>
+                {
+                    return match.Value switch
+                    {
+                        "$$" => "$",
+                        "$HotKey_RecordGif$" when instance.HotKeyPushRecordGif != default => instance
+                            .HotKeyPushRecordGif.ToString(),
+                        "$HotKey_SelectRegion$" when instance.HotKeySelectRegion != default => instance
+                            .HotKeySelectRegion.ToString(),
+                        "$HotKey_RecordGif$" or "$HotKey_SelectRegion$" => "未注册",
+                        _ => match.Value,
+                    };
+                });
         }
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
