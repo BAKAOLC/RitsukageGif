@@ -10,8 +10,8 @@
         <RepositoryUrl>https://github.com/BAKAOLC/RitsukageGif</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageProjectUrl>https://github.com/BAKAOLC/RitsukageGif</PackageProjectUrl>
-        <AssemblyVersion>1.0.3.0</AssemblyVersion>
-        <FileVersion>1.0.3.0</FileVersion>
+        <AssemblyVersion>1.0.3.2</AssemblyVersion>
+        <FileVersion>1.0.3.2</FileVersion>
         <Deterministic>true</Deterministic>
     </PropertyGroup>
 
