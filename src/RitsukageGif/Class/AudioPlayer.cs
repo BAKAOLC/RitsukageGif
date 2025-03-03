@@ -86,9 +86,10 @@ namespace RitsukageGif.Class
             var offset = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
             if (offset < buffer.Length) return AudioFormat.Unknown;
             var streamHeader = string.Join("", buffer.Select(element => element.ToString("X2")));
+            if (streamHeader.StartsWith("494433"))
+                return AudioFormat.Mp3;
             return streamHeader switch
             {
-                "49443303" => AudioFormat.Mp3,
                 "52494646" => AudioFormat.Wav,
                 "4F676753" => AudioFormat.Ogg,
                 _ => AudioFormat.Unknown,
