@@ -24,7 +24,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                 Path = path,
             };
             var bitmaps = new BlockingCollection<GifFrame>(1000);
-            var provider = ScreenFrameProvider.CreateProvider(Settings.Default.ScreenFrameProvider);
+            var provider = ScreenFrameProvider.CreateProvider();
             provider.ApplyCaptureRegion(rectangle);
             var lastMilliseconds = 0L;
             var recordFrames = 0;
@@ -104,7 +104,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
             {
                 Path = path,
             };
-            var provider = ScreenFrameProvider.CreateProvider(Settings.Default.ScreenFrameProvider);
+            var provider = ScreenFrameProvider.CreateProvider();
             provider.ApplyCaptureRegion(rectangle);
             var lastMilliseconds = 0L;
             var recordFrames = 0;

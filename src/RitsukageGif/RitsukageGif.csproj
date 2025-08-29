@@ -10,9 +10,10 @@
         <RepositoryUrl>https://github.com/BAKAOLC/RitsukageGif</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageProjectUrl>https://github.com/BAKAOLC/RitsukageGif</PackageProjectUrl>
-        <AssemblyVersion>1.0.3.2</AssemblyVersion>
-        <FileVersion>1.0.3.2</FileVersion>
+        <AssemblyVersion>1.0.4.0</AssemblyVersion>
+        <FileVersion>1.0.4.0</FileVersion>
         <Deterministic>true</Deterministic>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -48,8 +49,6 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
-        <PackageReference Include="SharpDX.DXGI" Version="4.2.0" />
         <PackageReference Include="WpfAnimatedGif" Version="2.0.2">
             <TreatAsUsed>true</TreatAsUsed>
         </PackageReference>

@@ -23,9 +23,6 @@
     <Setting Name="EdgeCheckHeight" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">60</Value>
     </Setting>
-    <Setting Name="ScreenFrameProvider" Type="System.Int32" Scope="User">
-      <Value Profile="(Default)">1</Value>
-    </Setting>
     <Setting Name="BackgroundImage" Type="System.String" Scope="User">
       <Value Profile="(Default)">pack://application:,,,/Background.png</Value>
     </Setting>

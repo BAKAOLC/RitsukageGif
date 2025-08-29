@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using JetBrains.Annotations;
@@ -73,9 +74,17 @@ namespace RitsukageGif
 
         public bool RecordInMemory { get; private set; }
 
-        public bool DXGIRecord { get; private set; }
+
 
         public bool Recording { get; private set; }
+
+        private Control[] RecordingDisabledControls => [
+            RegionSelectButton,
+            GifScaleInteger,
+            GifFrameInteger,
+            RecordCursorCheckBox,
+            MemoryRecordCheckBox,
+        ];
 
         public static void ShutdownAllTasks()
         {
@@ -138,14 +147,12 @@ namespace RitsukageGif
             GifScaleInteger.Value = Scale = Math.Max(Math.Min(Settings.Default.RecordFrameScale, 100), 1);
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
             MemoryRecordCheckBox.IsChecked = RecordInMemory = Settings.Default.MemoryRecord;
-            DXGIRecordCheckBox.IsChecked = DXGIRecord = Settings.Default.ScreenFrameProvider == 1;
         }
 
         private void SaveConfig()
         {
             Settings.Default.RecordCursor = RecordCursor;
             Settings.Default.MemoryRecord = RecordInMemory;
-            Settings.Default.ScreenFrameProvider = DXGIRecord ? 1 : 0;
             Settings.Default.Save();
         }
 
@@ -161,12 +168,8 @@ namespace RitsukageGif
             Recording = true;
             RecordButton.Content = "停止录制";
             RecordButton.Background = Brushes.Red;
-            RegionSelectButton.IsEnabled = false;
-            GifScaleInteger.IsEnabled = false;
-            GifFrameInteger.IsEnabled = false;
-            RecordCursorCheckBox.IsEnabled = false;
-            MemoryRecordCheckBox.IsEnabled = false;
-            DXGIRecordCheckBox.IsEnabled = false;
+            foreach (var control in RecordingDisabledControls)
+                control.IsEnabled = false;
             _recordingCancellationTokenSource?.Cancel();
             _processingCancellationTokenSource?.Cancel();
             SaveConfig();
@@ -269,12 +272,8 @@ namespace RitsukageGif
             Recording = false;
             RecordButton.Content = "开始录制";
             RecordButton.Background = Brushes.White;
-            RegionSelectButton.IsEnabled = true;
-            GifScaleInteger.IsEnabled = true;
-            GifFrameInteger.IsEnabled = true;
-            RecordCursorCheckBox.IsEnabled = true;
-            MemoryRecordCheckBox.IsEnabled = true;
-            DXGIRecordCheckBox.IsEnabled = true;
+            foreach (var control in RecordingDisabledControls)
+                control.IsEnabled = true;
             _recordingCancellationTokenSource?.Cancel();
             if (string.IsNullOrWhiteSpace(Settings.Default.StopRecordingSoundFile)) return;
             _audioPlayer?.StopAudio();
@@ -447,38 +446,24 @@ namespace RitsukageGif
         private void RecordCursorCheckBox_Checked(object sender, RoutedEventArgs e)
         {
             RecordCursor = true;
-            SaveConfig();
         }
 
         private void RecordCursorCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             RecordCursor = false;
-            SaveConfig();
         }
 
         private void MemoryRecordCheckBox_Checked(object sender, RoutedEventArgs e)
         {
             RecordInMemory = true;
-            SaveConfig();
         }
 
         private void MemoryRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             RecordInMemory = false;
-            SaveConfig();
         }
 
-        private void DXGIRecordCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            DXGIRecord = true;
-            SaveConfig();
-        }
 
-        private void DXGIRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
-        {
-            DXGIRecord = false;
-            SaveConfig();
-        }
 
         private void GifView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
