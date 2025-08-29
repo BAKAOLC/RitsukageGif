@@ -447,31 +447,37 @@ namespace RitsukageGif
         private void RecordCursorCheckBox_Checked(object sender, RoutedEventArgs e)
         {
             RecordCursor = true;
+            SaveConfig();
         }
 
         private void RecordCursorCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             RecordCursor = false;
+            SaveConfig();
         }
 
         private void MemoryRecordCheckBox_Checked(object sender, RoutedEventArgs e)
         {
             RecordInMemory = true;
+            SaveConfig();
         }
 
         private void MemoryRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             RecordInMemory = false;
+            SaveConfig();
         }
 
         private void DXGIRecordCheckBox_Checked(object sender, RoutedEventArgs e)
         {
             DXGIRecord = true;
+            SaveConfig();
         }
 
         private void DXGIRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
             DXGIRecord = false;
+            SaveConfig();
         }
 
         private void GifView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
