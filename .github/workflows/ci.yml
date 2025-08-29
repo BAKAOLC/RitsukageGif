@@ -1,6 +1,15 @@
 name: CI Build
 
-on: { push, pull_request, workflow_dispatch }
+on: 
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to build"
+        required: true
+        default: "main"
 
 env:
   DOTNET_ROLL_FORWARD: "Major"
