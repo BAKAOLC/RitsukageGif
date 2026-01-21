@@ -1,9 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using RitsukageGif.Native;
 
 namespace RitsukageGif.Class
 {
@@ -152,23 +151,9 @@ namespace RitsukageGif.Class
     {
         public static void GetDpi(this Screen screen, DpiType dpiType, out uint dpiX, out uint dpiY)
         {
-            var pnt = new Point(screen.Bounds.Left + 1, screen.Bounds.Top + 1);
-            var mon = MonitorFromPoint(pnt, 2);
-            GetDpiForMonitor(mon, dpiType, out dpiX, out dpiY);
+            var pnt = new PointStruct(screen.Bounds.Left + 1, screen.Bounds.Top + 1);
+            var mon = User32.MonitorFromPoint(pnt, 2);
+            Shcore.GetDpiForMonitor(mon, dpiType, out dpiX, out dpiY);
         }
-
-        [DllImport("User32.dll")]
-        private extern static IntPtr MonitorFromPoint([In] Point pt, [In] uint dwFlags);
-
-        [DllImport("Shcore.dll")]
-        private extern static IntPtr GetDpiForMonitor([In] IntPtr hmonitor, [In] DpiType dpiType, [Out] out uint dpiX,
-            [Out] out uint dpiY);
-    }
-
-    internal enum DpiType
-    {
-        Effective = 0,
-        Angular = 1,
-        Raw = 2,
     }
 }

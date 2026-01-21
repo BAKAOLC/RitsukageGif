@@ -10,7 +10,7 @@ namespace RitsukageGif.Windows
     /// <summary>
     ///     AboutWindow.xaml 的交互逻辑
     /// </summary>
-    public partial class AboutWindow : Window
+    public partial class AboutWindow
     {
         private static AboutWindow _instance;
 
@@ -57,7 +57,7 @@ namespace RitsukageGif.Windows
             var instance = MainWindow.GetInstance();
             return instance == null
                 ? text
-                : Regex.Replace(text, @"\$[a-zA-Z0-9_]+\$", match =>
+                : MyRegex().Replace(text, match =>
                 {
                     return match.Value switch
                     {
@@ -109,5 +109,8 @@ namespace RitsukageGif.Windows
         {
             Close();
         }
+
+        [GeneratedRegex(@"\$[a-zA-Z0-9_]+\$")]
+        private static partial Regex MyRegex();
     }
 }

@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
-        xmlns:gif="http://wpfanimatedgif.codeplex.com"
+        xmlns:controls="clr-namespace:RitsukageGif.Controls"
         mc:Ignorable="d"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanMinimize"
@@ -62,6 +62,18 @@
                                 Value="20" Increment="1" Maximum="30" Minimum="1"
                                 ValueChanged="GifFrameInteger_ValueChanged" />
             <Label HorizontalAlignment="Left" VerticalAlignment="Top"
+                   Margin="5,225,0,0"
+                   Content="输出格式" />
+            <ComboBox x:Name="OutputFormatComboBox"
+                      HorizontalAlignment="Left" VerticalAlignment="Top"
+                      Width="80" Height="22" Margin="10,250,0,0"
+                      ToolTip="选择输出格式"
+                      SelectionChanged="OutputFormatComboBox_SelectionChanged">
+                <ComboBoxItem Content="GIF" IsSelected="True" />
+                <ComboBoxItem Content="WebP" />
+                <ComboBoxItem Content="APNG" />
+            </ComboBox>
+            <Label HorizontalAlignment="Left" VerticalAlignment="Top"
                    Margin="120,5,0,0" FontSize="14"
                    Content="录制帧数" />
             <Label x:Name="GifFramesLabel"
@@ -79,7 +91,7 @@
                       HorizontalAlignment="Left" VerticalAlignment="Top"
                       Margin="125,61,0,0" FontSize="14"
                       Content="录制鼠标指针"
-                      ToolTip="录制时将鼠标指针绘制进Gif中"
+                      ToolTip="录制时将鼠标指针绘制进文件中"
                       Checked="RecordCursorCheckBox_Checked"
                       Unchecked="RecordCursorCheckBox_Unchecked" />
             <CheckBox x:Name="MemoryRecordCheckBox"
@@ -90,19 +102,18 @@
                       Checked="MemoryRecordCheckBox_Checked"
                       Unchecked="MemoryRecordCheckBox_Unchecked" />
         </Grid>
-        <Grid HorizontalAlignment="Left" VerticalAlignment="Bottom"
-              Width="150" Height="160" Margin="5,5,5,25">
-            <Image x:Name="GifView" Visibility="Hidden"
-                   gif:ImageBehavior.RepeatBehavior="Forever"
-                   PreviewMouseLeftButtonDown="GifView_OnPreviewMouseLeftButtonDownPreviewMouseLeftButtonDown"
-                   MouseRightButtonDown="GifView_OnMouseRightButtonDown" />
+        <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
+              Width="180" Height="130" Margin="5,5,5,25">
+            <controls:AnimatedImageControl x:Name="AnimatedView" Visibility="Hidden"
+                                           PreviewMouseLeftButtonDown="AnimatedView_OnPreviewMouseLeftButtonDown"
+                                           MouseRightButtonDown="AnimatedView_OnMouseRightButtonDown" />
         </Grid>
         <Grid x:Name="GifEncodingLabelGrid" HorizontalAlignment="Left" VerticalAlignment="Bottom"
               Background="#B0000000" Visibility="Hidden"
               Margin="5,5,5,5">
             <Label HorizontalAlignment="Left" VerticalAlignment="Bottom"
                    FontSize="14" Foreground="Red" FontWeight="Bold"
-                   Content="●正在对录制的GIF进行编码..." />
+                   Content="●正在对录制的内容进行编码..." />
         </Grid>
     </Grid>
 </Window>

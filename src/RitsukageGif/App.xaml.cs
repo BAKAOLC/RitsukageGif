@@ -9,7 +9,7 @@ namespace RitsukageGif
     /// <summary>
     ///     Interaction logic for App.xaml
     /// </summary>
-    public partial class App : Application
+    public partial class App
     {
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -46,7 +46,9 @@ namespace RitsukageGif
             var sb = new StringBuilder();
             sb.AppendLine("程序发生了一个未处理的异常，请将以下信息反馈给开发者：");
             sb.AppendLine();
-            sb.AppendLine("程序集版本：").AppendLine(typeof(App).Assembly.GetName().Version.ToString());
+            var version = typeof(App).Assembly.GetName().Version;
+            if (version != null)
+                sb.AppendLine("程序集版本：").AppendLine(version.ToString());
             sb.AppendLine("异常类型：").AppendLine(ex?.GetType().FullName ?? "null");
             sb.AppendLine("异常消息：").AppendLine(ex?.Message ?? "null");
             sb.AppendLine("异常堆栈：").Append(ex?.StackTrace ?? "null");

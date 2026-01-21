@@ -1,62 +1,74 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace RitsukageGif.Native
 {
-    internal static class User32
+    internal static partial class User32
     {
         private const string DllName = "user32.dll";
 
-        [DllImport(DllName)]
-        public extern static WindowStyles GetWindowLong(IntPtr hWnd, GetWindowLongValue nIndex);
+        [LibraryImport(DllName)]
+        public static partial WindowStyles GetWindowLong(IntPtr hWnd, GetWindowLongValue nIndex);
 
-        [DllImport(DllName)]
-        public extern static bool GetWindowRect(IntPtr hWnd, out Rect rect);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool GetWindowRect(IntPtr hWnd, out RectStruct rect);
 
-        [DllImport(DllName)]
-        public extern static bool IsWindow(IntPtr hWnd);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool IsWindow(IntPtr hWnd);
 
-        [DllImport(DllName)]
-        public extern static IntPtr GetDesktopWindow();
+        [LibraryImport(DllName)]
+        public static partial IntPtr GetDesktopWindow();
 
-        [DllImport(DllName)]
-        public extern static IntPtr GetForegroundWindow();
+        [LibraryImport(DllName)]
+        public static partial IntPtr GetForegroundWindow();
 
-        [DllImport(DllName)]
-        public extern static bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool EnumWindows(EnumWindowsProc proc, IntPtr lParam);
 
-        [DllImport(DllName)]
-        public extern static bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc proc, IntPtr lParam);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc proc, IntPtr lParam);
 
-        [DllImport(DllName)]
-        public extern static int GetWindowText(IntPtr hWnd, [Out] StringBuilder lpString, int nMaxCount);
+        [LibraryImport(DllName, StringMarshalling = StringMarshalling.Utf16)]
+        public static partial int GetWindowText(IntPtr hWnd, out string lpString, int nMaxCount);
 
-        [DllImport(DllName)]
-        public extern static IntPtr GetWindow(IntPtr hWnd, GetWindowEnum uCmd);
+        [LibraryImport(DllName)]
+        public static partial IntPtr GetWindow(IntPtr hWnd, GetWindowEnum uCmd);
 
-        [DllImport(DllName)]
-        public extern static int GetWindowTextLength(IntPtr hWnd);
+        [LibraryImport(DllName)]
+        public static partial int GetWindowTextLength(IntPtr hWnd);
 
-        [DllImport(DllName)]
-        public extern static bool IsWindowVisible(IntPtr hWnd);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool IsWindowVisible(IntPtr hWnd);
 
-        [DllImport(DllName)]
-        public extern static bool IsIconic(IntPtr hWnd);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool IsIconic(IntPtr hWnd);
 
-        [DllImport(DllName)]
-        public extern static bool IsZoomed(IntPtr hWnd);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool IsZoomed(IntPtr hWnd);
 
-        [DllImport(DllName)]
-        public extern static bool DestroyIcon(IntPtr hIcon);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool DestroyIcon(IntPtr hIcon);
 
-        [DllImport(DllName)]
-        public extern static IntPtr CopyIcon(IntPtr hIcon);
+        [LibraryImport(DllName)]
+        public static partial IntPtr CopyIcon(IntPtr hIcon);
 
-        [DllImport(DllName)]
-        public extern static bool GetCursorInfo(ref CursorInfo pci);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool GetCursorInfo(ref CursorInfo pCursorInfo);
 
-        [DllImport(DllName)]
-        public extern static bool GetIconInfo(IntPtr hIcon, out IconInfo piconinfo);
+        [LibraryImport(DllName)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static partial bool GetIconInfo(IntPtr hIcon, out IconInfo pIconInfo);
+
+        [LibraryImport(DllName)]
+        public static partial IntPtr MonitorFromPoint(PointStruct pt, uint dwFlags);
     }
 }

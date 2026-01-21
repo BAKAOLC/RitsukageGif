@@ -10,7 +10,7 @@ namespace RitsukageGif.Class
         {
             Original = originalRectangle;
             Regions = regions;
-            if (regions != null && regions.Any())
+            if (regions != null && regions.Length != 0)
             {
                 var x = (int)regions.Min(r => r.Rectangle.X);
                 var y = (int)regions.Min(r => r.Rectangle.Y);

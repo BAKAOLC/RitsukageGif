@@ -36,6 +36,11 @@
 △设置录制区域   $HotKey_SelectRegion$
 
 ◆重置版说明
+[V1.0.5.0]
+△修改为 .NET 10 作为目标框架。由于 WPF 的限制，目前必须安装 .NET 10 框架才能运行此版本
+△改为使用 ImageSharp 作为图像处理库
+△增加了对 WEBP 和 APNG 格式的支持，现在可以选择录制为 GIF、WEBP 或 APNG 格式
+△配置文件现在为不再为 <name>.exe.config 文件，而是 <name>.dll.config 文件
 [V1.0.4.0]
 △移除了实验性 DXGI 支持，因为当前的实现方式不够稳定且不能带来足够的性能提升
 [V1.0.3.2]

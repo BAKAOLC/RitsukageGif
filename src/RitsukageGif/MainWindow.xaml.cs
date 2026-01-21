@@ -15,9 +15,9 @@ using NHotkey;
 using NHotkey.Wpf;
 using RitsukageGif.CaptureProvider.RecordFrame;
 using RitsukageGif.Class;
+using RitsukageGif.Enums;
 using RitsukageGif.Structs;
 using RitsukageGif.Windows;
-using WpfAnimatedGif;
 using Brushes = System.Windows.Media.Brushes;
 using Image = System.Windows.Controls.Image;
 
@@ -26,12 +26,14 @@ namespace RitsukageGif
     /// <summary>
     ///     Interaction logic for MainWindow.xaml
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow
     {
         private static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
 
         private static MainWindow _instance;
-        private readonly IRecordFrameProvider _recordFrameProvider = new GifRecordFrameProvider();
+#pragma warning disable CA1859
+        private readonly IRecordFrameProvider _recordFrameProvider = new AnimatedRecordFrameProvider();
+#pragma warning restore CA1859
 
         [CanBeNull] private AudioPlayer _audioPlayer;
 
@@ -43,6 +45,7 @@ namespace RitsukageGif
 
         private int _fps;
         private DataObject _lastRecordGifClipboardData;
+        private OutputFormat _outputFormat = OutputFormat.Gif;
         private CancellationTokenSource _processingCancellationTokenSource;
         private CancellationTokenSource _recordingCancellationTokenSource;
 
@@ -75,15 +78,16 @@ namespace RitsukageGif
         public bool RecordInMemory { get; private set; }
 
 
-
         public bool Recording { get; private set; }
 
-        private Control[] RecordingDisabledControls => [
+        private Control[] RecordingDisabledControls =>
+        [
             RegionSelectButton,
             GifScaleInteger,
             GifFrameInteger,
             RecordCursorCheckBox,
             MemoryRecordCheckBox,
+            OutputFormatComboBox,
         ];
 
         public static void ShutdownAllTasks()
@@ -147,12 +151,17 @@ namespace RitsukageGif
             GifScaleInteger.Value = Scale = Math.Max(Math.Min(Settings.Default.RecordFrameScale, 100), 1);
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
             MemoryRecordCheckBox.IsChecked = RecordInMemory = Settings.Default.MemoryRecord;
+
+            var formatIndex = Math.Max(0, Math.Min(2, Settings.Default.OutputFormat));
+            OutputFormatComboBox.SelectedIndex = formatIndex;
+            _outputFormat = (OutputFormat)formatIndex;
         }
 
         private void SaveConfig()
         {
             Settings.Default.RecordCursor = RecordCursor;
             Settings.Default.MemoryRecord = RecordInMemory;
+            Settings.Default.OutputFormat = (int)_outputFormat;
             Settings.Default.Save();
         }
 
@@ -188,10 +197,10 @@ namespace RitsukageGif
             var path = GenerateTempFileName(_recordFrameProvider.GetFileExtension());
             var info = RecordInMemory
                 ? _recordFrameProvider.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
-                    tokenRecording.Token, tokenProcessing.Token)
+                    tokenRecording.Token, tokenProcessing.Token, _outputFormat)
                 : _recordFrameProvider.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale,
                     RecordCursor,
-                    tokenRecording.Token, tokenProcessing.Token);
+                    tokenRecording.Token, tokenProcessing.Token, _outputFormat);
             return Task.Run(async () =>
             {
                 Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Visible; });
@@ -255,14 +264,9 @@ namespace RitsukageGif
                         ? $"{(double)file.Length / 1024:F2}KB"
                         : (object)$"{(double)file.Length:F2}B";
 
-                GifView.Visibility = Visibility.Visible;
-                var image = new BitmapImage();
-                image.BeginInit();
-                var ms = new MemoryStream(File.ReadAllBytes(path));
-                image.StreamSource = ms;
-                image.EndInit();
+                AnimatedView.Visibility = Visibility.Visible;
                 _currentGifPath = path;
-                ImageBehavior.SetAnimatedSource(GifView, image);
+                AnimatedView.SourcePath = path;
             });
         }
 
@@ -383,7 +387,7 @@ namespace RitsukageGif
                 _canChangeRegion = true;
                 ApplyBackground();
 #if !DEBUG
-                Task.Run(Updater.CheckUpdate).ConfigureAwait(false);
+                _ = Task.Run(Updater.CheckUpdateAsync);
 #endif
             }
             else
@@ -463,21 +467,32 @@ namespace RitsukageGif
             RecordInMemory = false;
         }
 
+        private void OutputFormatComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (OutputFormatComboBox.SelectedIndex < 0) return;
+            _outputFormat = OutputFormatComboBox.SelectedIndex switch
+            {
+                0 => OutputFormat.Gif,
+                1 => OutputFormat.WebP,
+                2 => OutputFormat.APng,
+                _ => OutputFormat.Gif,
+            };
+        }
 
 
-        private void GifView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        private void AnimatedView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (_lastRecordGifClipboardData == null) return;
             Clipboard.SetDataObject(_lastRecordGifClipboardData, true);
         }
 
-        private void GifView_OnPreviewMouseLeftButtonDownPreviewMouseLeftButtonDown(object sender,
+        private void AnimatedView_OnPreviewMouseLeftButtonDown(object sender,
             MouseButtonEventArgs e)
         {
             if (string.IsNullOrEmpty(_currentGifPath)) return;
-            if (sender is not Image gif) return;
+            if (sender is not Image image) return;
             var dataObject = new DataObject(DataFormats.FileDrop, new[] { _currentGifPath });
-            DragDrop.DoDragDrop(gif, dataObject, DragDropEffects.Copy);
+            DragDrop.DoDragDrop(image, dataObject, DragDropEffects.Copy);
         }
 
         private void Window_DpiChanged(object sender, DpiChangedEventArgs e)

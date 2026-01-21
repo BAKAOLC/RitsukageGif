@@ -13,7 +13,7 @@ namespace RitsukageGif.Windows
     /// <summary>
     ///     RegionSelectScreenView.xaml 的交互逻辑
     /// </summary>
-    public partial class RegionSelectScreenView : UserControl
+    public partial class RegionSelectScreenView
     {
         private const int TipGridWidth = 300;
         private const int TipGridHeight = 120;

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Drawing;
-using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Native
 {
@@ -27,15 +26,11 @@ namespace RitsukageGif.Native
         private static IntPtr GetIcon(Func<Point, Point> transform, out Point location)
         {
             location = Point.Empty;
-            var cursorInfo = new CursorInfo { cbSize = Marshal.SizeOf<CursorInfo>() };
-            if (!User32.GetCursorInfo(ref cursorInfo))
-                return IntPtr.Zero;
-            if (cursorInfo.flags != CursorShowing)
+            var cursorInfo = new CursorInfo();
+            if (!User32.GetCursorInfo(ref cursorInfo) || cursorInfo.flags != CursorShowing)
                 return IntPtr.Zero;
             var hIcon = User32.CopyIcon(cursorInfo.hCursor);
-            if (hIcon == IntPtr.Zero)
-                return IntPtr.Zero;
-            if (!User32.GetIconInfo(hIcon, out var icInfo))
+            if (hIcon == IntPtr.Zero || !User32.GetIconInfo(hIcon, out var icInfo))
                 return IntPtr.Zero;
             var hotspot = new Point(icInfo.xHotspot, icInfo.yHotspot);
             location = new(cursorInfo.ptScreenPos.X - hotspot.X, cursorInfo.ptScreenPos.Y - hotspot.Y);

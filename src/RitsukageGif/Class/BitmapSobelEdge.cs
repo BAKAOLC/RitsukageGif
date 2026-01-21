@@ -86,20 +86,20 @@ namespace RitsukageGif.Class
             Data[Stride * y + Stride / Width * x + 2] = color;
         }
 
-        public void SetPixel(int x, int y, byte R, byte G, byte B)
+        public void SetPixel(int x, int y, byte r, byte g, byte b)
         {
             switch (Stride / Width)
             {
                 case 3:
                 {
                     var num = Stride * y + 3 * x;
-                    Data[num + 2] = R;
-                    Data[num + 1] = G;
-                    Data[num] = B;
+                    Data[num + 2] = r;
+                    Data[num + 1] = g;
+                    Data[num] = b;
                     return;
                 }
                 case 1:
-                    Data[Stride * y + Stride / Width * x] = B;
+                    Data[Stride * y + Stride / Width * x] = b;
                     break;
             }
         }

@@ -13,7 +13,7 @@ namespace RitsukageGif.Class
 {
     internal class AudioPlayer
     {
-        private readonly IWavePlayer _audioPlaybackDevice = new WaveOutEvent
+        private readonly WaveOutEvent _audioPlaybackDevice = new()
         {
             DeviceNumber = -1, // use default audio device
         };
@@ -80,10 +80,10 @@ namespace RitsukageGif.Class
 
         private async Task<AudioFormat> GetAudioFormatAsync(Uri uri)
         {
-            using var stream = await OpenStreamAsync(uri).ConfigureAwait(false);
+            await using var stream = await OpenStreamAsync(uri).ConfigureAwait(false);
 
             var buffer = new byte[4];
-            var offset = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+            var offset = await stream.ReadAsync(buffer).ConfigureAwait(false);
             if (offset < buffer.Length) return AudioFormat.Unknown;
             var streamHeader = string.Join("", buffer.Select(element => element.ToString("X2")));
             if (streamHeader.StartsWith("494433"))
@@ -98,9 +98,8 @@ namespace RitsukageGif.Class
 
         private static string CalcUriHash(Uri uri)
         {
-            using var hmac = MD5.Create();
-            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(uri.ToString()));
-            return BitConverter.ToString(hash).Replace("-", "").ToLower();
+            var hash = MD5.HashData(Encoding.UTF8.GetBytes(uri.ToString()));
+            return Convert.ToHexStringLower(hash);
         }
     }
 }

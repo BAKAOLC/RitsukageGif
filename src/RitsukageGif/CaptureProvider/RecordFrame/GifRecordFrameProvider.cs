@@ -4,26 +4,30 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
-using AnimatedGif;
+using RitsukageGif.CaptureProvider.ImageEncoder;
 using RitsukageGif.CaptureProvider.ScreenFrame;
+using RitsukageGif.Enums;
 
 namespace RitsukageGif.CaptureProvider.RecordFrame
 {
-    public sealed class GifRecordFrameProvider : IRecordFrameProvider
+    public sealed class AnimatedRecordFrameProvider : IRecordFrameProvider
     {
+        private OutputFormat _currentFormat = OutputFormat.Gif;
+
         public string GetFileExtension()
         {
-            return ".gif";
+            return ImageEncoderFactory.GetFileExtension(_currentFormat);
         }
 
         public RecordInfo BeginWithMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
-            CancellationToken recordingToken, CancellationToken processingToken)
+            CancellationToken recordingToken, CancellationToken processingToken, OutputFormat format = OutputFormat.Gif)
         {
+            _currentFormat = format;
             var info = new RecordInfo
             {
                 Path = path,
             };
-            var bitmaps = new BlockingCollection<GifFrame>(1000);
+            var bitmaps = new BlockingCollection<AnimatedFrame>(1000);
             var provider = ScreenFrameProvider.CreateProvider();
             provider.ApplyCaptureRegion(rectangle);
             var lastMilliseconds = 0L;
@@ -38,11 +42,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                     var dt = t - lastMilliseconds;
                     lastMilliseconds = t;
                     var img = provider.Capture(cursor, scale);
-                    bitmaps.Add(new()
-                    {
-                        Bitmap = img,
-                        Delay = (int)dt,
-                    }, processingToken);
+                    bitmaps.Add(new(img, (int)dt), processingToken);
                     if (!processingToken.IsCancellationRequested)
                     {
                         info.Frames = ++recordFrames;
@@ -69,11 +69,11 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
             sw.Start();
             Task.Run(async () =>
             {
-                using (var gifCreator = AnimatedGif.AnimatedGif.Create(path, delay))
+                using (var encoder = ImageEncoderFactory.CreateEncoder(format, path))
                 {
                     while (!bitmaps.IsCompleted)
                     {
-                        GifFrame frame = null;
+                        AnimatedFrame frame = null;
                         try
                         {
                             frame = bitmaps.Take();
@@ -83,12 +83,13 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                         }
 
                         if (frame == null) continue;
-                        await gifCreator.AddFrameAsync(frame.Bitmap, frame.Delay, GifQuality.Bit8,
-                                processingToken)
+                        await encoder.AddFrameAsync(frame.Bitmap, frame.Delay, processingToken)
                             .ConfigureAwait(false);
                         frame.Bitmap.Dispose();
                         info.ProcessedFrames = ++processedFrames;
                     }
+
+                    encoder.Finish();
                 }
 
                 info.Completed = true;
@@ -98,8 +99,9 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
 
         public RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale,
             bool cursor,
-            CancellationToken recordingToken, CancellationToken processingToken)
+            CancellationToken recordingToken, CancellationToken processingToken, OutputFormat format = OutputFormat.Gif)
         {
+            _currentFormat = format;
             var info = new RecordInfo
             {
                 Path = path,
@@ -110,9 +112,9 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
             var recordFrames = 0;
             var processedFrames = 0;
             var sw = new Stopwatch();
-            Task.Run(() =>
+            Task.Run(async () =>
             {
-                using (var gifCreator = AnimatedGif.AnimatedGif.Create(path, delay))
+                using (var encoder = ImageEncoderFactory.CreateEncoder(format, path))
                 {
                     while (!recordingToken.IsCancellationRequested)
                     {
@@ -123,7 +125,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                         info.Frames = ++recordFrames;
                         if (!processingToken.IsCancellationRequested)
                         {
-                            gifCreator.AddFrame(img, (int)dt, GifQuality.Bit8);
+                            await encoder.AddFrameAsync(img, (int)dt, processingToken).ConfigureAwait(false);
                             img.Dispose();
                             info.ProcessedFrames = ++processedFrames;
                             if (dt > delay)
@@ -141,6 +143,8 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                             break;
                         }
                     }
+
+                    encoder.Finish();
                 }
 
                 sw.Stop();

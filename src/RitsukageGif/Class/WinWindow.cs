@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 using RitsukageGif.Native;
 
 namespace RitsukageGif.Class
@@ -31,9 +29,8 @@ namespace RitsukageGif.Class
         {
             get
             {
-                var title = new StringBuilder(User32.GetWindowTextLength(Handle) + 1);
-                User32.GetWindowText(Handle, title, title.Capacity);
-                return title.ToString();
+                User32.GetWindowText(Handle, out var title, User32.GetWindowTextLength(Handle) + 1);
+                return title;
             }
         }
 
@@ -41,9 +38,9 @@ namespace RitsukageGif.Class
         {
             get
             {
-                var r = new Rect();
+                var r = new RectStruct();
                 const int extendedFrameBounds = 9;
-                if (DwmApi.DwmGetWindowAttribute(Handle, extendedFrameBounds, ref r, Marshal.SizeOf<Rect>()) == 0)
+                if (DwmApi.DwmGetWindowAttribute(Handle, extendedFrameBounds, ref r) == 0)
                     return new(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
                 return !User32.GetWindowRect(Handle, out r)
                     ? Rectangle.Empty
@@ -122,7 +119,7 @@ namespace RitsukageGif.Class
                 }
 
                 const int dwmCloaked = 14;
-                DwmApi.DwmGetWindowAttribute(hWnd, dwmCloaked, out var cloaked, Marshal.SizeOf<bool>());
+                DwmApi.DwmGetWindowAttribute(hWnd, dwmCloaked, out var cloaked);
                 if (cloaked)
                     continue;
                 yield return window;

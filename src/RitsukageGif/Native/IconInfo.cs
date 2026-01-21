@@ -4,12 +4,12 @@ using System.Runtime.InteropServices;
 namespace RitsukageGif.Native
 {
     [StructLayout(LayoutKind.Sequential)]
-    internal struct IconInfo
+    internal readonly struct IconInfo
     {
-        public bool fIcon;
-        public int xHotspot;
-        public int yHotspot;
-        public IntPtr hbmMask;
-        public IntPtr hbmColor;
+        public readonly int fIcon;
+        public readonly int xHotspot;
+        public readonly int yHotspot;
+        public readonly IntPtr hbmMask;
+        public readonly IntPtr hbmColor;
     }
 }

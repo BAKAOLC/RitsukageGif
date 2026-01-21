@@ -5,14 +5,14 @@ namespace RitsukageGif.Native
 {
     [Serializable]
     [StructLayout(LayoutKind.Sequential)]
-    internal struct Rect
+    internal readonly struct RectStruct
     {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
+        public readonly int Left;
+        public readonly int Top;
+        public readonly int Right;
+        public readonly int Bottom;
 
-        public Rect(int dimension)
+        public RectStruct(int dimension)
         {
             Left = Top = Right = Bottom = dimension;
         }

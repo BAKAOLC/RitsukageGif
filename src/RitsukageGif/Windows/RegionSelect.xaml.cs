@@ -22,7 +22,7 @@ namespace RitsukageGif.Windows
     /// <summary>
     ///     RegionSelect.xaml 的交互逻辑
     /// </summary>
-    public partial class RegionSelect : Window
+    public partial class RegionSelect
     {
         public static readonly DPoint InvalidPoint = new(int.MinValue, int.MinValue);
         private readonly int _edgeCheckHeight = Settings.Default.EdgeCheckHeight;
@@ -278,28 +278,28 @@ namespace RitsukageGif.Windows
         {
             _allScreens = FScreen.AllScreens.Select(x =>
             {
-                var exist = _allScreens?.FirstOrDefault(y => y.Screen == x);
+                var exist = _allScreens?.FirstOrDefault(y => Equals(y.Screen, x));
                 if (exist == null)
                     exist = ScreenInfo.GetScreenInfo(x);
                 else
                     exist.UpdateDpiScale();
 
                 return exist;
-            })?.ToArray();
+            }).ToArray();
         }
 
         private void UpdateScreenViews()
         {
             _allScreenViewGrids = _allScreens.Select(x =>
             {
-                var exist = _allScreenViewGrids?.FirstOrDefault(y => y.Screen == x);
+                var exist = _allScreenViewGrids?.FirstOrDefault(y => Equals(y.Screen, x));
                 if (exist == null)
                     exist = new(this, MainGrid, x);
                 else
                     exist.UpdateView();
 
                 return exist;
-            })?.ToArray();
+            }).ToArray();
         }
 
         private DRectangle GetScreenFullSize()
@@ -573,11 +573,6 @@ namespace RitsukageGif.Windows
         {
             if (_closing) return;
             Close();
-        }
-
-        private void Window_DpiChanged(object sender, DpiChangedEventArgs e)
-        {
-            if (_closing) return;
         }
 
         private static IEnumerable<WinWindow> GetAllChildren(WinWindow window)
