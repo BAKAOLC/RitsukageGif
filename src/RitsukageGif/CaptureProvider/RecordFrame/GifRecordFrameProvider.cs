@@ -19,10 +19,15 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
             return ImageEncoderFactory.GetFileExtension(_currentFormat);
         }
 
-        public RecordInfo BeginWithMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
-            CancellationToken recordingToken, CancellationToken processingToken, OutputFormat format = OutputFormat.Gif)
+        public void SetOutputFormat(OutputFormat format)
         {
             _currentFormat = format;
+        }
+
+        public RecordInfo BeginWithMemory(string path, Rectangle rectangle, int delay, double scale, bool cursor,
+            CancellationToken recordingToken, CancellationToken processingToken)
+        {
+            var format = _currentFormat;
             var info = new RecordInfo
             {
                 Path = path,
@@ -98,10 +103,9 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
         }
 
         public RecordInfo BeginWithoutMemory(string path, Rectangle rectangle, int delay, double scale,
-            bool cursor,
-            CancellationToken recordingToken, CancellationToken processingToken, OutputFormat format = OutputFormat.Gif)
+            bool cursor, CancellationToken recordingToken, CancellationToken processingToken)
         {
-            _currentFormat = format;
+            var format = _currentFormat;
             var info = new RecordInfo
             {
                 Path = path,

@@ -4,7 +4,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using JetBrains.Annotations;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.PixelFormats;
 using Image = System.Windows.Controls.Image;
 
@@ -97,7 +102,7 @@ namespace RitsukageGif.Controls
                 for (var i = 0; i < frameCount; i++)
                 {
                     var frame = _image.Frames[i];
-                    _frameDelays[i] = GetFrameDelay(frame);
+                    _frameDelays[i] = GetFrameDelay(frame, _image.Metadata.DecodedImageFormat);
 
                     try
                     {
@@ -176,19 +181,29 @@ namespace RitsukageGif.Controls
                 }
         }
 
-        private static int GetFrameDelay(ImageFrame<Rgba32> frame)
+        private static int GetFrameDelay(ImageFrame<Rgba32> frame, [CanBeNull] IImageFormat format)
         {
-            var gifMetadata = frame.Metadata.GetGifMetadata();
-            if (gifMetadata.FrameDelay > 0) return gifMetadata.FrameDelay * 10;
-
-            var pngMetadata = frame.Metadata.GetPngMetadata();
+            switch (format)
             {
-                var frameDelay = pngMetadata.FrameDelay;
-                if (frameDelay.Denominator > 0) return (int)(frameDelay.Numerator * 1000.0 / frameDelay.Denominator);
+                case GifFormat:
+                {
+                    var gifMetadata = frame.Metadata.GetGifMetadata();
+                    return gifMetadata.FrameDelay * 10;
+                }
+                case PngFormat:
+                {
+                    var pngMetadata = frame.Metadata.GetPngMetadata();
+                    var frameDelay = pngMetadata.FrameDelay;
+                    if (frameDelay.Denominator > 0)
+                        return (int)(frameDelay.Numerator * 1000.0 / frameDelay.Denominator);
+                    break;
+                }
+                case WebpFormat:
+                {
+                    var webpMetadata = frame.Metadata.GetWebpMetadata();
+                    return (int)webpMetadata.FrameDelay;
+                }
             }
-
-            var webpMetadata = frame.Metadata.GetWebpMetadata();
-            if (webpMetadata.FrameDelay > 0) return (int)webpMetadata.FrameDelay;
 
             return 100;
         }

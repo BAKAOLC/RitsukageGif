@@ -31,9 +31,7 @@ namespace RitsukageGif
         private static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
 
         private static MainWindow _instance;
-#pragma warning disable CA1859
-        private readonly IRecordFrameProvider _recordFrameProvider = new AnimatedRecordFrameProvider();
-#pragma warning restore CA1859
+        private readonly AnimatedRecordFrameProvider _recordFrameProvider = new();
 
         [CanBeNull] private AudioPlayer _audioPlayer;
 
@@ -194,13 +192,13 @@ namespace RitsukageGif
             var tokenProcessing = new CancellationTokenSource();
             _recordingCancellationTokenSource = tokenRecording;
             _processingCancellationTokenSource = tokenProcessing;
+            _recordFrameProvider.SetOutputFormat(_outputFormat);
             var path = GenerateTempFileName(_recordFrameProvider.GetFileExtension());
             var info = RecordInMemory
                 ? _recordFrameProvider.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
-                    tokenRecording.Token, tokenProcessing.Token, _outputFormat)
+                    tokenRecording.Token, tokenProcessing.Token)
                 : _recordFrameProvider.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale,
-                    RecordCursor,
-                    tokenRecording.Token, tokenProcessing.Token, _outputFormat);
+                    RecordCursor, tokenRecording.Token, tokenProcessing.Token);
             return Task.Run(async () =>
             {
                 Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Visible; });
