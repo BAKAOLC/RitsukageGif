@@ -41,7 +41,7 @@ jobs:
           IS_PR: ${{ !!github.head_ref }}
         run: |
           if ($env:IS_PR -eq "true") { echo $env:PR_PROMPT }
-          dotnet publish --configuration Release --framework net10.0 --output publish --no-self-contained --runtime win-x64 /p:PublishSingleFile=true
+          dotnet publish src/RitsukageGif/RitsukageGif.csproj --configuration Release --framework net10.0-windows --output publish --no-self-contained --runtime win-x64 /p:PublishSingleFile=true
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         if: ${{ !github.head_ref }}
