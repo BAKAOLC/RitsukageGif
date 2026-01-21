@@ -16,7 +16,7 @@ namespace RitsukageGif.Class
             UpdateDpiScale();
         }
 
-        public static ScreenInfo MainScreen => GetScreenInfo(Screen.PrimaryScreen);
+        public static ScreenInfo MainScreen => GetScreenInfo(Screen.PrimaryScreen!);
 
         public Screen Screen { get; }
 

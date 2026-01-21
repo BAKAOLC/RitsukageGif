@@ -94,13 +94,13 @@
                       ToolTip="录制时将鼠标指针绘制进文件中"
                       Checked="RecordCursorCheckBox_Checked"
                       Unchecked="RecordCursorCheckBox_Unchecked" />
-            <CheckBox x:Name="MemoryRecordCheckBox"
+            <CheckBox x:Name="UseFfmpegEncodeCheckBox"
                       HorizontalAlignment="Left" VerticalAlignment="Top"
-                      Margin="125,86,0,0" FontSize="14"
-                      Content="使用内存录制"
-                      ToolTip="帧率会更加稳定，略微增加内存使用&#x0a;编码效率不足时会导致停止录制时需要等待编码才能显示&#x0a;警告：选区过大且不使用缩小倍率的情形请谨慎使用"
-                      Checked="MemoryRecordCheckBox_Checked"
-                      Unchecked="MemoryRecordCheckBox_Unchecked" />
+                      Margin="125,85,0,0" FontSize="14"
+                      Content="使用FFmpeg编码"
+                      ToolTip="如果系统中安装了FFmpeg，则使用FFmpeg进行编码，通常速度更快且质量更高"
+                      Checked="UseFfmpegCheckBox_Checked"
+                      Unchecked="UseFfmpegCheckBox_Unchecked" />
         </Grid>
         <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
               Width="180" Height="130" Margin="5,5,5,25">

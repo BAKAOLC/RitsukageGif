@@ -10,7 +10,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
-using JetBrains.Annotations;
 using NHotkey;
 using NHotkey.Wpf;
 using RitsukageGif.CaptureProvider.RecordFrame;
@@ -28,24 +27,23 @@ namespace RitsukageGif
     /// </summary>
     public partial class MainWindow
     {
-        private static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
+        public static readonly string TempPath = Path.Combine(Path.GetTempPath(), "RitsukageGif");
 
-        private static MainWindow _instance;
-        private readonly AnimatedRecordFrameProvider _recordFrameProvider = new();
+        private static MainWindow? _instance;
+        private readonly RecordFrameProvider _recordFrameProvider = new();
 
-        [CanBeNull] private AudioPlayer _audioPlayer;
+        private AudioPlayer? _audioPlayer;
 
         private bool _canBeginRecord;
         private bool _canChangeRegion;
-        private string _currentGifPath;
+        private string? _currentGifPath;
 
         private int _delay;
 
-        private int _fps;
-        private DataObject _lastRecordGifClipboardData;
+        private DataObject? _lastRecordGifClipboardData;
         private OutputFormat _outputFormat = OutputFormat.Gif;
-        private CancellationTokenSource _processingCancellationTokenSource;
-        private CancellationTokenSource _recordingCancellationTokenSource;
+        private CancellationTokenSource? _processingCancellationTokenSource;
+        private CancellationTokenSource? _recordingCancellationTokenSource;
 
         public MainWindow()
         {
@@ -57,24 +55,21 @@ namespace RitsukageGif
         public HotKey HotKeyPushRecordGif { get; private set; }
         public HotKey HotKeySelectRegion { get; private set; }
 
-        public SelectedRegionResult Region { get; private set; }
+        public SelectedRegionResult? Region { get; private set; }
 
         public int Fps
         {
-            get => _fps;
+            get;
             private set
             {
-                _fps = value;
-                _delay = 1000 / _fps;
+                field = value;
+                _delay = 1000 / field;
             }
         }
 
         public int Scale { get; private set; }
 
         public bool RecordCursor { get; private set; }
-
-        public bool RecordInMemory { get; private set; }
-
 
         public bool Recording { get; private set; }
 
@@ -84,7 +79,6 @@ namespace RitsukageGif
             GifScaleInteger,
             GifFrameInteger,
             RecordCursorCheckBox,
-            MemoryRecordCheckBox,
             OutputFormatComboBox,
         ];
 
@@ -100,8 +94,7 @@ namespace RitsukageGif
             _instance.IsEnabled = false;
         }
 
-        [CanBeNull]
-        public static MainWindow GetInstance()
+        public static MainWindow? GetInstance()
         {
             return _instance;
         }
@@ -128,6 +121,7 @@ namespace RitsukageGif
                 case PlatformID.Unix:
                 case PlatformID.Xbox:
                 case PlatformID.MacOSX:
+                case PlatformID.Other:
                 default:
                     break;
             }
@@ -148,7 +142,7 @@ namespace RitsukageGif
             GifFrameInteger.Value = Fps = Math.Max(Math.Min(Settings.Default.RecordFrameFps, 30), 1);
             GifScaleInteger.Value = Scale = Math.Max(Math.Min(Settings.Default.RecordFrameScale, 100), 1);
             RecordCursorCheckBox.IsChecked = RecordCursor = Settings.Default.RecordCursor;
-            MemoryRecordCheckBox.IsChecked = RecordInMemory = Settings.Default.MemoryRecord;
+            UseFfmpegEncodeCheckBox.IsChecked = Settings.Default.UseFfmpegEncoder;
 
             var formatIndex = Math.Max(0, Math.Min(2, Settings.Default.OutputFormat));
             OutputFormatComboBox.SelectedIndex = formatIndex;
@@ -158,7 +152,6 @@ namespace RitsukageGif
         private void SaveConfig()
         {
             Settings.Default.RecordCursor = RecordCursor;
-            Settings.Default.MemoryRecord = RecordInMemory;
             Settings.Default.OutputFormat = (int)_outputFormat;
             Settings.Default.Save();
         }
@@ -171,6 +164,7 @@ namespace RitsukageGif
 
         private void StartRecording()
         {
+            if (Region == null) return;
             _canChangeRegion = false;
             Recording = true;
             RecordButton.Content = "停止录制";
@@ -188,17 +182,16 @@ namespace RitsukageGif
 
         private Task StartRecordingTaskAsync()
         {
+            if (Region == null) return Task.CompletedTask;
+
             var tokenRecording = new CancellationTokenSource();
             var tokenProcessing = new CancellationTokenSource();
             _recordingCancellationTokenSource = tokenRecording;
             _processingCancellationTokenSource = tokenProcessing;
             _recordFrameProvider.SetOutputFormat(_outputFormat);
             var path = GenerateTempFileName(_recordFrameProvider.GetFileExtension());
-            var info = RecordInMemory
-                ? _recordFrameProvider.BeginWithMemory(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
-                    tokenRecording.Token, tokenProcessing.Token)
-                : _recordFrameProvider.BeginWithoutMemory(path, Region.Converted, _delay, (double)1 / Scale,
-                    RecordCursor, tokenRecording.Token, tokenProcessing.Token);
+            var info = _recordFrameProvider.BeginRecord(path, Region.Converted, _delay, (double)1 / Scale, RecordCursor,
+                tokenRecording.Token, tokenProcessing.Token);
             return Task.Run(async () =>
             {
                 Dispatcher.Invoke(() => { GifEncodingLabelGrid.Visibility = Visibility.Visible; });
@@ -352,19 +345,19 @@ namespace RitsukageGif
             HotkeyManager.Current.Remove("SelectRegion");
         }
 
-        private void OnHotKey_PushRecordGif(object sender, HotkeyEventArgs e)
+        private void OnHotKey_PushRecordGif(object? sender, HotkeyEventArgs e)
         {
             if (!_canBeginRecord) return;
-            RecordButton_Click(null, null);
+            RecordButton_Click(null, null!);
         }
 
-        private void OnHotKey_SelectRegion(object sender, HotkeyEventArgs e)
+        private void OnHotKey_SelectRegion(object? sender, HotkeyEventArgs e)
         {
             if (!_canChangeRegion) return;
-            RegionSelectButton_Click(null, null);
+            RegionSelectButton_Click(null, null!);
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        private void Window_Loaded(object? sender, RoutedEventArgs e)
         {
             _ = new Mutex(true, "RitsukageGif_SingleInstance", out var createdNew);
             if (!createdNew)
@@ -378,7 +371,7 @@ namespace RitsukageGif
             if (CheckOsVersion())
             {
                 _audioPlayer = new();
-                CleanUpRecentFiles();
+                CleanUpTempPath();
                 SetDefaultConfig();
                 RegisterHotKeys();
                 _canBeginRecord = false;
@@ -396,7 +389,7 @@ namespace RitsukageGif
             }
         }
 
-        private void Window_Closing(object sender, CancelEventArgs e)
+        private void Window_Closing(object? sender, CancelEventArgs e)
         {
             SaveConfig();
             AboutWindow.CloseInstance();
@@ -407,7 +400,7 @@ namespace RitsukageGif
             _canChangeRegion = false;
         }
 
-        private void RecordButton_Click(object sender, RoutedEventArgs e)
+        private void RecordButton_Click(object? sender, RoutedEventArgs e)
         {
             if (!_canBeginRecord) return;
             if (Recording)
@@ -416,7 +409,7 @@ namespace RitsukageGif
                 StartRecording();
         }
 
-        private void RegionSelectButton_Click(object sender, RoutedEventArgs e)
+        private void RegionSelectButton_Click(object? sender, RoutedEventArgs e)
         {
             if (!_canChangeRegion) return;
             _canBeginRecord = false;
@@ -424,12 +417,12 @@ namespace RitsukageGif
             OpenRegionSelectWindowAsync().ConfigureAwait(false);
         }
 
-        private void AboutButton_Click(object sender, RoutedEventArgs e)
+        private void AboutButton_Click(object? sender, RoutedEventArgs e)
         {
             AboutWindow.Begin();
         }
 
-        private void GifScaleInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void GifScaleInteger_ValueChanged(object? sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (e.NewValue == null) return;
             var value = (int)e.NewValue;
@@ -437,7 +430,7 @@ namespace RitsukageGif
             Scale = value;
         }
 
-        private void GifFrameInteger_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void GifFrameInteger_ValueChanged(object? sender, RoutedPropertyChangedEventArgs<object> e)
         {
             if (e.NewValue == null) return;
             var value = (int)e.NewValue;
@@ -445,27 +438,27 @@ namespace RitsukageGif
             Fps = value;
         }
 
-        private void RecordCursorCheckBox_Checked(object sender, RoutedEventArgs e)
+        private void RecordCursorCheckBox_Checked(object? sender, RoutedEventArgs e)
         {
             RecordCursor = true;
         }
 
-        private void RecordCursorCheckBox_Unchecked(object sender, RoutedEventArgs e)
+        private void RecordCursorCheckBox_Unchecked(object? sender, RoutedEventArgs e)
         {
             RecordCursor = false;
         }
 
-        private void MemoryRecordCheckBox_Checked(object sender, RoutedEventArgs e)
+        private void UseFfmpegCheckBox_Checked(object sender, RoutedEventArgs e)
         {
-            RecordInMemory = true;
+            Settings.Default.UseFfmpegEncoder = true;
         }
 
-        private void MemoryRecordCheckBox_Unchecked(object sender, RoutedEventArgs e)
+        private void UseFfmpegCheckBox_Unchecked(object sender, RoutedEventArgs e)
         {
-            RecordInMemory = false;
+            Settings.Default.UseFfmpegEncoder = false;
         }
 
-        private void OutputFormatComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void OutputFormatComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
         {
             if (OutputFormatComboBox.SelectedIndex < 0) return;
             _outputFormat = OutputFormatComboBox.SelectedIndex switch
@@ -477,14 +470,13 @@ namespace RitsukageGif
             };
         }
 
-
-        private void AnimatedView_OnMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        private void AnimatedView_OnMouseRightButtonDown(object? sender, MouseButtonEventArgs e)
         {
             if (_lastRecordGifClipboardData == null) return;
             Clipboard.SetDataObject(_lastRecordGifClipboardData, true);
         }
 
-        private void AnimatedView_OnPreviewMouseLeftButtonDown(object sender,
+        private void AnimatedView_OnPreviewMouseLeftButtonDown(object? sender,
             MouseButtonEventArgs e)
         {
             if (string.IsNullOrEmpty(_currentGifPath)) return;
@@ -493,23 +485,26 @@ namespace RitsukageGif
             DragDrop.DoDragDrop(image, dataObject, DragDropEffects.Copy);
         }
 
-        private void Window_DpiChanged(object sender, DpiChangedEventArgs e)
+        private void Window_DpiChanged(object? sender, DpiChangedEventArgs e)
         {
             ScreenInfo.ClearCache();
         }
 
-        private static void CleanUpRecentFiles()
+        private static void CleanUpTempPath()
         {
             if (!Directory.Exists(TempPath)) return;
-            foreach (var file in Directory.GetFiles(TempPath))
-                try
-                {
-                    File.Delete(file);
-                }
-                catch
-                {
-                    // ignored
-                }
+            try
+            {
+                var dirInfo = new DirectoryInfo(TempPath);
+                foreach (var file in dirInfo.GetFiles())
+                    file.Delete();
+                foreach (var dir in dirInfo.GetDirectories())
+                    dir.Delete(true);
+            }
+            catch
+            {
+                // Ignore errors during cleanup
+            }
         }
 
         private static string GenerateTempFileName(string ext)

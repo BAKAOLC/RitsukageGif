@@ -25,9 +25,10 @@ namespace RitsukageGif.Class
         private static string ProjectUrl => Assembly.GetExecutingAssembly()
             .GetCustomAttributes(false)
             .OfType<AssemblyMetadataAttribute>()
-            .FirstOrDefault(x => x.Key == "RepositoryUrl")?.Value;
+            .FirstOrDefault(x => x.Key == "RepositoryUrl")?.Value ?? string.Empty;
 
-        private static Version CurrentVersion => Assembly.GetExecutingAssembly().GetName().Version;
+        private static Version CurrentVersion =>
+            Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
 
         public static async Task CheckUpdateAsync()
         {
@@ -88,17 +89,17 @@ namespace RitsukageGif.Class
 
         private record GitHubRelease
         {
-            [JsonPropertyName("tag_name")] public string TagName { get; init; }
+            [JsonPropertyName("tag_name")] public string? TagName { get; init; }
 
-            [JsonPropertyName("html_url")] public string HtmlUrl { get; init; }
+            [JsonPropertyName("html_url")] public string? HtmlUrl { get; init; }
 
-            [JsonPropertyName("assets")] public GitHubAsset[] Assets { get; init; }
+            [JsonPropertyName("assets")] public GitHubAsset[]? Assets { get; init; }
         }
 
         private record GitHubAsset
         {
             [JsonPropertyName("browser_download_url")]
-            public string BrowserDownloadUrl { get; init; }
+            public string? BrowserDownloadUrl { get; init; }
         }
 
         internal class UserAgent

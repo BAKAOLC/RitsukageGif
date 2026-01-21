@@ -7,18 +7,7 @@ namespace RitsukageGif.CaptureProvider.ScreenFrame
 {
     public class BitbltScreenFrameProvider : IScreenFrameProvider
     {
-        public const string ProviderId = "86597fcc-9b42-ea23-e5d6-f6365537e674";
-
         private Rectangle _rectangle;
-
-        public BitbltScreenFrameProvider()
-        {
-            Initialize();
-        }
-
-        public void Initialize()
-        {
-        }
 
         public void ApplyCaptureRegion(Rectangle rect)
         {

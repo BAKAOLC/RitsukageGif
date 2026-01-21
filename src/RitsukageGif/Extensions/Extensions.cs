@@ -14,20 +14,23 @@ namespace RitsukageGif.Extensions
                 IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
         }
 
-        public static bool Contains(this Rectangle rect, double x, double y)
+        extension(Rectangle rect)
         {
-            return rect.X <= x && x < rect.X + rect.Width && rect.Y <= y && y < rect.Y + rect.Height;
-        }
+            public bool Contains(double x, double y)
+            {
+                return rect.X <= x && x < rect.X + rect.Width && rect.Y <= y && y < rect.Y + rect.Height;
+            }
 
-        public static bool Contains(this Rectangle rect, PointF pt)
-        {
-            return rect.Contains(pt.X, pt.Y);
-        }
+            public bool Contains(PointF pt)
+            {
+                return rect.Contains(pt.X, pt.Y);
+            }
 
-        public static bool Contains(this Rectangle rect, RectangleF rectF)
-        {
-            return rect.X <= rectF.X && rectF.X + rectF.Width <= rect.X + rect.Width && rect.Y <= rectF.Y
-                   && rectF.Y + rectF.Height <= rect.Y + rect.Height;
+            public bool Contains(RectangleF rectF)
+            {
+                return rect.X <= rectF.X && rectF.X + rectF.Width <= rect.X + rect.Width && rect.Y <= rectF.Y
+                       && rectF.Y + rectF.Height <= rect.Y + rect.Height;
+            }
         }
     }
 }

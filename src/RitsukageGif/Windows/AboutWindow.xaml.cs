@@ -12,7 +12,7 @@ namespace RitsukageGif.Windows
     /// </summary>
     public partial class AboutWindow
     {
-        private static AboutWindow _instance;
+        private static AboutWindow? _instance;
 
         private static readonly string AboutHeaderText =
             $"""
@@ -35,7 +35,6 @@ namespace RitsukageGif.Windows
             get
             {
                 using var stream = EmbeddedResourcesHelper.GetStream(new("embedded:///About.txt"));
-                if (stream == null) return string.Empty;
                 using var reader = new StreamReader(stream);
                 return ReplaceHotKey(reader.ReadToEnd());
             }
@@ -46,7 +45,6 @@ namespace RitsukageGif.Windows
             get
             {
                 using var stream = EmbeddedResourcesHelper.GetStream(new("embedded:///BuildTime.txt"));
-                if (stream == null) return string.Empty;
                 using var reader = new StreamReader(stream);
                 return reader.ReadToEnd();
             }

@@ -33,8 +33,8 @@ namespace RitsukageGif.Windows
 
         private readonly byte _sobelThresholdFilter = Settings.Default.SobelThresholdFilter;
 
-        private ScreenInfo[] _allScreens;
-        private RegionSelectScreenView[] _allScreenViewGrids;
+        private ScreenInfo[]? _allScreens;
+        private RegionSelectScreenView[]? _allScreenViewGrids;
 
         private bool _closing;
         private bool _confirm;
@@ -45,9 +45,9 @@ namespace RitsukageGif.Windows
 
         private PerceptionMode _perceptionMode = PerceptionMode.Both;
         private DPoint _perceptionPoint;
-        private Bitmap _screenBitmap;
-        private Bitmap _screenBitmapForSobelEdge;
-        private BitmapSource _screenBitmapSource;
+        private Bitmap? _screenBitmap;
+        private Bitmap? _screenBitmapForSobelEdge;
+        private BitmapSource? _screenBitmapSource;
 
         private bool _selected;
         private DPoint _selectedEndPoint;
@@ -61,7 +61,7 @@ namespace RitsukageGif.Windows
         private bool _shiftKey;
         private bool _shiftKeyHolding;
 
-        private WinWindow[] _windows;
+        private WinWindow[]? _windows;
 
         private RegionSelect()
         {
@@ -110,16 +110,18 @@ namespace RitsukageGif.Windows
 
         public DRectangle ScreenRectangle { get; private set; }
 
-        public Task<(bool, SelectedRegionResult)> WaitForResultAsync()
+        public Task<(bool, SelectedRegionResult?)> WaitForResultAsync()
         {
-            var tcs = new TaskCompletionSource<(bool, SelectedRegionResult)>();
+            var tcs = new TaskCompletionSource<(bool, SelectedRegionResult?)>();
             var timer = new Timer(100);
             timer.Elapsed += (s, e) =>
             {
                 if (!_closing || !_ok) return;
                 timer.Stop();
+                if (_allScreens == null)
+                    tcs.SetResult((_confirm, null));
                 var rect = SelectedRange;
-                var regions = _allScreens.Select(x => new ScreenRegion(x, x.GetConvertedIntersectionRegion(rect)))
+                var regions = _allScreens?.Select(x => new ScreenRegion(x, x.GetConvertedIntersectionRegion(rect)))
                     .Where(x => x.Rectangle != default)
                     .ToArray();
                 var result = new SelectedRegionResult(rect, regions);
@@ -134,7 +136,7 @@ namespace RitsukageGif.Windows
 
         public void ProcessPerceptionProgramArea(DPoint point)
         {
-            var windows = _windows.FirstOrDefault(x => x.IsAlive && x.Bounds.Contains(point));
+            var windows = _windows?.FirstOrDefault(x => x.IsAlive && x.Bounds.Contains(point));
             PerceptionProgramArea = windows?.Bounds ?? default;
             Activate();
         }
@@ -190,8 +192,12 @@ namespace RitsukageGif.Windows
             var bitX = new int[_edgeCheckWidth];
             var bitY = new int[_edgeCheckHeight];
             var e = GetBitmapSobelEdge(new(beginX - screenBeginPosX, beginY - screenBeginPosY,
-                _edgeCheckWidth,
-                _edgeCheckHeight));
+                _edgeCheckWidth, _edgeCheckHeight));
+            if (e == null)
+            {
+                PerceptionImagePoint = InvalidPoint;
+                return;
+            }
 
             for (var y = 0; y < e.Height; y++)
             for (var x = 0; x < e.Width; x++)
@@ -241,9 +247,9 @@ namespace RitsukageGif.Windows
             PerceptionImagePoint = horizontal && vertical
                 ? new(resultX, resultY)
                 : horizontal
-                    ? new(InvalidPoint.X, resultY)
+                    ? InvalidPoint with { Y = resultY }
                     : vertical
-                        ? new(resultX, InvalidPoint.Y)
+                        ? InvalidPoint with { X = resultX }
                         : InvalidPoint;
         }
 
@@ -290,7 +296,7 @@ namespace RitsukageGif.Windows
 
         private void UpdateScreenViews()
         {
-            _allScreenViewGrids = _allScreens.Select(x =>
+            _allScreenViewGrids = _allScreens?.Select(x =>
             {
                 var exist = _allScreenViewGrids?.FirstOrDefault(y => Equals(y.Screen, x));
                 if (exist == null)
@@ -305,6 +311,8 @@ namespace RitsukageGif.Windows
         private DRectangle GetScreenFullSize()
         {
             UpdateScreens();
+            if (_allScreens == null || _allScreens.Length == 0)
+                return default;
             var minX = _allScreens.Min(x => x.Bounds.Left);
             var minY = _allScreens.Min(x => x.Bounds.Top);
             var maxX = _allScreens.Max(x => x.Bounds.Right);
@@ -324,6 +332,9 @@ namespace RitsukageGif.Windows
 
         private void UpdateScreenBitmap()
         {
+            if (_allScreens == null) return;
+            if (_allScreenViewGrids == null) return;
+
             _screenBitmap = new(ScreenRectangle.Width, ScreenRectangle.Height);
             using (var graphics = Graphics.FromImage(_screenBitmap))
             {
@@ -343,6 +354,7 @@ namespace RitsukageGif.Windows
         private void UpdateMousePosition()
         {
             _perceptionPoint = InvalidPoint;
+            if (_allScreenViewGrids == null) return;
             foreach (var view in _allScreenViewGrids)
             {
                 view.UpdateMousePosition(_mousePositionForScreen);
@@ -354,6 +366,7 @@ namespace RitsukageGif.Windows
 
         private void UpdateSelectedRegion()
         {
+            if (_allScreenViewGrids == null) return;
             DRectangle rect;
             var needConvert = false;
             double opacity = 1;
@@ -376,7 +389,7 @@ namespace RitsukageGif.Windows
             foreach (var view in _allScreenViewGrids) view.UpdateSelectedRegion(rect, needConvert, opacity);
         }
 
-        private BitmapSobelEdge GetBitmapSobelEdge(DRectangle rect)
+        private BitmapSobelEdge? GetBitmapSobelEdge(DRectangle rect)
         {
             if (_screenBitmapForSobelEdge == null) return null;
             var e = BitmapSobelEdge.FromBitmap(_screenBitmapForSobelEdge.Clone(rect, PixelFormat.Format24bppRgb));
@@ -479,7 +492,6 @@ namespace RitsukageGif.Windows
                 else
                 {
                     var view = ScreenInfo.MainScreen;
-                    if (view == null) return;
                     _selectedStartPoint =
                         view.ConvertFromScalePoint(
                             new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));
@@ -512,7 +524,6 @@ namespace RitsukageGif.Windows
                     else
                     {
                         var view = ScreenInfo.MainScreen;
-                        if (view == null) return;
                         _selectedStartPoint =
                             view.ConvertFromScalePoint(
                                 new DPoint(PerceptionProgramArea.Left, PerceptionProgramArea.Top));

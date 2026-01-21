@@ -8,21 +8,12 @@ namespace RitsukageGif.Native
         private const string DllName = "user32.dll";
 
         [LibraryImport(DllName)]
-        public static partial WindowStyles GetWindowLong(IntPtr hWnd, GetWindowLongValue nIndex);
-
-        [LibraryImport(DllName)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool GetWindowRect(IntPtr hWnd, out RectStruct rect);
 
         [LibraryImport(DllName)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool IsWindow(IntPtr hWnd);
-
-        [LibraryImport(DllName)]
-        public static partial IntPtr GetDesktopWindow();
-
-        [LibraryImport(DllName)]
-        public static partial IntPtr GetForegroundWindow();
 
         [LibraryImport(DllName)]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -32,26 +23,9 @@ namespace RitsukageGif.Native
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool EnumChildWindows(IntPtr hWnd, EnumWindowsProc proc, IntPtr lParam);
 
-        [LibraryImport(DllName, StringMarshalling = StringMarshalling.Utf16)]
-        public static partial int GetWindowText(IntPtr hWnd, out string lpString, int nMaxCount);
-
-        [LibraryImport(DllName)]
-        public static partial IntPtr GetWindow(IntPtr hWnd, GetWindowEnum uCmd);
-
-        [LibraryImport(DllName)]
-        public static partial int GetWindowTextLength(IntPtr hWnd);
-
         [LibraryImport(DllName)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool IsWindowVisible(IntPtr hWnd);
-
-        [LibraryImport(DllName)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static partial bool IsIconic(IntPtr hWnd);
-
-        [LibraryImport(DllName)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        public static partial bool IsZoomed(IntPtr hWnd);
 
         [LibraryImport(DllName)]
         [return: MarshalAs(UnmanagedType.Bool)]

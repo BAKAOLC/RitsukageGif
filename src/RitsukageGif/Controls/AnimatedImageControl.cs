@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
-using JetBrains.Annotations;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Gif;
@@ -21,12 +20,12 @@ namespace RitsukageGif.Controls
             DependencyProperty.Register(nameof(SourcePath), typeof(string), typeof(AnimatedImageControl),
                 new(null, OnSourcePathChanged));
 
-        private BitmapImage[] _cachedFrames;
+        private BitmapImage?[]? _cachedFrames;
 
-        private CancellationTokenSource _cancellationTokenSource;
+        private CancellationTokenSource? _cancellationTokenSource;
         private int _currentFrame;
-        private int[] _frameDelays;
-        private Image<Rgba32> _image;
+        private int[]? _frameDelays;
+        private Image<Rgba32>? _image;
         private bool _isPlaying;
 
         public string SourcePath
@@ -153,7 +152,7 @@ namespace RitsukageGif.Controls
             Task.Run(() => AnimationLoop(_cancellationTokenSource.Token));
         }
 
-        private void UpdateSource(BitmapImage bitmap)
+        private void UpdateSource(BitmapImage? bitmap)
         {
             Application.Current.Dispatcher.Invoke(() => { Source = bitmap; });
         }
@@ -163,6 +162,8 @@ namespace RitsukageGif.Controls
             while (!cancellationToken.IsCancellationRequested && _cachedFrames != null)
                 try
                 {
+                    if (_frameDelays == null || _currentFrame >= _frameDelays.Length)
+                        break;
                     var delay = _frameDelays[_currentFrame];
 
                     ShowFrame(_currentFrame);
@@ -181,7 +182,7 @@ namespace RitsukageGif.Controls
                 }
         }
 
-        private static int GetFrameDelay(ImageFrame<Rgba32> frame, [CanBeNull] IImageFormat format)
+        private static int GetFrameDelay(ImageFrame<Rgba32> frame, IImageFormat? format)
         {
             switch (format)
             {
@@ -214,8 +215,7 @@ namespace RitsukageGif.Controls
                 return;
 
             var bitmap = _cachedFrames[frameIndex];
-            if (bitmap != null)
-                UpdateSource(bitmap);
+            UpdateSource(bitmap);
         }
 
         private void StopAnimation()

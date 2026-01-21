@@ -19,7 +19,7 @@ namespace RitsukageGif.Class
         };
 
         private readonly HttpClient _httpClient = new();
-        private Stream _stream;
+        private Stream? _stream;
 
         public void PlayAudio(string uri)
         {
@@ -62,15 +62,15 @@ namespace RitsukageGif.Class
                 case "http":
                 case "https":
                     var hash = CalcUriHash(uri);
-                    var filePath = Path.Combine(Path.GetTempPath(), hash);
+                    var filePath = Path.Combine(MainWindow.TempPath, "AudioStreams", hash);
                     if (File.Exists(filePath))
                         return File.OpenRead(filePath);
 
                     var stream = await _httpClient.GetStreamAsync(uri).ConfigureAwait(false);
                     var fileStream = File.Create(filePath);
                     await stream.CopyToAsync(fileStream).ConfigureAwait(false);
-                    fileStream.Dispose();
-                    stream.Dispose();
+                    await fileStream.DisposeAsync().ConfigureAwait(false);
+                    await stream.DisposeAsync().ConfigureAwait(false);
 
                     return File.OpenRead(filePath);
                 default:

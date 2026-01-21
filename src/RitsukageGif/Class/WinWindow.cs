@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Linq;
 using RitsukageGif.Native;
 
 namespace RitsukageGif.Class
@@ -21,19 +20,6 @@ namespace RitsukageGif.Class
 
         public bool IsVisible => User32.IsWindowVisible(Handle);
 
-        public bool IsMinimized => User32.IsIconic(Handle);
-
-        public bool IsMaximized => User32.IsZoomed(Handle);
-
-        public string Title
-        {
-            get
-            {
-                User32.GetWindowText(Handle, out var title, User32.GetWindowTextLength(Handle) + 1);
-                return title;
-            }
-        }
-
         public Rectangle Bounds
         {
             get
@@ -48,10 +34,6 @@ namespace RitsukageGif.Class
             }
         }
 
-        public static WinWindow DesktopWindow { get; } = new(User32.GetDesktopWindow());
-
-        public static WinWindow ForegroundWindow => new(User32.GetForegroundWindow());
-
         public IEnumerable<WinWindow> EnumerateChildren()
         {
             var list = new List<WinWindow>();
@@ -64,12 +46,7 @@ namespace RitsukageGif.Class
             return list;
         }
 
-        public override string ToString()
-        {
-            return Title;
-        }
-
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             return obj is WinWindow w && w.Handle == Handle;
         }
@@ -99,31 +76,6 @@ namespace RitsukageGif.Class
                 return true;
             }, IntPtr.Zero);
             return list;
-        }
-
-        public static IEnumerable<WinWindow> EnumerateVisible()
-        {
-            foreach (var window in Enumerate().Where(w => w.IsVisible && !string.IsNullOrWhiteSpace(w.Title)))
-            {
-                var hWnd = window.Handle;
-                if (!User32.GetWindowLong(hWnd, GetWindowLongValue.ExStyle).HasFlag(WindowStyles.AppWindow))
-                {
-                    if (User32.GetWindow(hWnd, GetWindowEnum.Owner) != IntPtr.Zero)
-                        continue;
-
-                    if (User32.GetWindowLong(hWnd, GetWindowLongValue.ExStyle).HasFlag(WindowStyles.ToolWindow))
-                        continue;
-
-                    if (User32.GetWindowLong(hWnd, GetWindowLongValue.Style).HasFlag(WindowStyles.Child))
-                        continue;
-                }
-
-                const int dwmCloaked = 14;
-                DwmApi.DwmGetWindowAttribute(hWnd, dwmCloaked, out var cloaked);
-                if (cloaked)
-                    continue;
-                yield return window;
-            }
         }
     }
 }

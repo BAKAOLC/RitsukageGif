@@ -4,7 +4,7 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
 {
     public class RecordInfo : NotifyPropertyChanged
     {
-        public string Path
+        public string? Path
         {
             get;
             set => Set(ref field, value);

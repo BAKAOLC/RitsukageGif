@@ -36,18 +36,6 @@ namespace RitsukageGif {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("True")]
-        public bool MemoryRecord {
-            get {
-                return ((bool)(this["MemoryRecord"]));
-            }
-            set {
-                this["MemoryRecord"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("100")]
         public byte SobelThresholdFilter {
             get {
@@ -211,6 +199,18 @@ namespace RitsukageGif {
             }
             set {
                 this["CheckForUpdates"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool UseFfmpegEncoder {
+            get {
+                return ((bool)(this["UseFfmpegEncoder"]));
+            }
+            set {
+                this["UseFfmpegEncoder"] = value;
             }
         }
     }

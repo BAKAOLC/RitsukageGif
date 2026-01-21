@@ -38,7 +38,9 @@
 ◆重置版说明
 [V1.0.5.0]
 △修改为 .NET 10 作为目标框架。由于 WPF 的限制，目前必须安装 .NET 10 框架才能运行此版本
-△改为使用 ImageSharp 作为图像处理库
+△移除了内存录制功能
+△去除了部分不必要的依赖
+△现在使用 ImageSharp 作为基准图像处理库，同时支持在安装有 ffmpeg 的环境使用 ffmpeg 进行编码
 △增加了对 WEBP 和 APNG 格式的支持，现在可以选择录制为 GIF、WEBP 或 APNG 格式
 △配置文件现在为不再为 <name>.exe.config 文件，而是 <name>.dll.config 文件
 [V1.0.4.0]

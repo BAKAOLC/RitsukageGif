@@ -31,7 +31,7 @@ namespace RitsukageGif
             e.Handled = true;
         }
 
-        private static void ShowException(Exception ex)
+        private static void ShowException(Exception? ex)
         {
             try
             {

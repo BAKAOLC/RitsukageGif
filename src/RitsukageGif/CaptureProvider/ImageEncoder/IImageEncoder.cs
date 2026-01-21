@@ -1,13 +1,12 @@
 using System;
-using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace RitsukageGif.CaptureProvider.ImageEncoder
 {
-    public interface IImageEncoder : IDisposable
+    public interface IImageEncoder
     {
-        Task AddFrameAsync(Bitmap bitmap, int delayMs, CancellationToken cancellationToken = default);
-        void Finish();
+        Task AddFrameAsync(string path, int delayMs, CancellationToken token);
+        Task FinalizeAsync(CancellationToken token);
     }
 }

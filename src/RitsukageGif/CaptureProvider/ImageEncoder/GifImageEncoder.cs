@@ -1,6 +1,3 @@
-using System;
-using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,17 +11,12 @@ namespace RitsukageGif.CaptureProvider.ImageEncoder
     public class GifImageEncoder(string filePath) : IImageEncoder
     {
         private readonly Stream _stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.Read);
-        private bool _disposed;
         private bool _hasFrames;
-        private Image<Rgba32> _image;
+        private Image<Rgba32>? _image;
 
-        public async Task AddFrameAsync(Bitmap bitmap, int delayMs, CancellationToken cancellationToken = default)
+        public async Task AddFrameAsync(string path, int delayMs, CancellationToken token)
         {
-            using var memoryStream = new MemoryStream();
-            bitmap.Save(memoryStream, ImageFormat.Png);
-            memoryStream.Position = 0;
-
-            using var frame = await Image.LoadAsync<Rgba32>(memoryStream, cancellationToken).ConfigureAwait(false);
+            using var frame = await Image.LoadAsync<Rgba32>(path, token).ConfigureAwait(false);
 
             if (!_hasFrames)
             {
@@ -41,7 +33,7 @@ namespace RitsukageGif.CaptureProvider.ImageEncoder
             }
             else
             {
-                var newFrame = _image.Frames.CreateFrame();
+                var newFrame = _image!.Frames.CreateFrame();
                 frame.Frames.RootFrame.ProcessPixelRows(newFrame, (source, target) =>
                 {
                     for (var i = 0; i < source.Height; i++) source.GetRowSpan(i).CopyTo(target.GetRowSpan(i));
@@ -53,11 +45,9 @@ namespace RitsukageGif.CaptureProvider.ImageEncoder
             frameMetadata.DisposalMethod = GifDisposalMethod.RestoreToBackground;
         }
 
-        public void Finish()
+        public Task FinalizeAsync(CancellationToken token)
         {
-            if (_disposed) return;
-
-            if (_hasFrames && _stream != null && _image != null)
+            if (_hasFrames && _image != null)
             {
                 var encoder = new GifEncoder
                 {
@@ -66,15 +56,10 @@ namespace RitsukageGif.CaptureProvider.ImageEncoder
                 _image.SaveAsGif(_stream, encoder);
             }
 
-            _stream?.Dispose();
+            _stream.Dispose();
             _image?.Dispose();
-            _disposed = true;
-        }
 
-        public void Dispose()
-        {
-            Finish();
-            GC.SuppressFinalize(this);
+            return Task.CompletedTask;
         }
     }
 }

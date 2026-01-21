@@ -7,7 +7,7 @@ namespace RitsukageGif.Native
     {
         private const int CursorShowing = 1;
 
-        public static void Draw(Graphics g, Func<Point, Point> transform = null)
+        public static void Draw(Graphics g, Func<Point, Point>? transform = null)
         {
             var hIcon = GetIcon(transform, out var location);
             if (hIcon == IntPtr.Zero)
@@ -23,7 +23,7 @@ namespace RitsukageGif.Native
             }
         }
 
-        private static IntPtr GetIcon(Func<Point, Point> transform, out Point location)
+        private static IntPtr GetIcon(Func<Point, Point>? transform, out Point location)
         {
             location = Point.Empty;
             var cursorInfo = new CursorInfo();

@@ -6,11 +6,11 @@ namespace RitsukageGif.Class
 {
     public class SelectedRegionResult
     {
-        public SelectedRegionResult(Rectangle originalRectangle, ScreenRegion[] regions)
+        public SelectedRegionResult(Rectangle originalRectangle, ScreenRegion[]? regions)
         {
             Original = originalRectangle;
             Regions = regions;
-            if (regions != null && regions.Length != 0)
+            if (regions is { Length: > 0 })
             {
                 var x = (int)regions.Min(r => r.Rectangle.X);
                 var y = (int)regions.Min(r => r.Rectangle.Y);
@@ -28,10 +28,13 @@ namespace RitsukageGif.Class
 
         public Rectangle Converted { get; }
 
-        public ScreenRegion[] Regions { get; }
+        public ScreenRegion[]? Regions { get; }
 
         public override string ToString()
         {
+            if (Regions == null)
+                return
+                    $"Original: {Original}{Environment.NewLine}Converted: {Converted}{Environment.NewLine}Regions: null";
             return
                 $"Original: {Original}{Environment.NewLine}Converted: {Converted}{Environment.NewLine}Regions: {Environment.NewLine}{string.Join(Environment.NewLine, Regions.Select(x => x.ToString()))}";
         }

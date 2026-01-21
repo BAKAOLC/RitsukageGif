@@ -1,4 +1,5 @@
 using System;
+using RitsukageGif.Class;
 using RitsukageGif.Enums;
 
 namespace RitsukageGif.CaptureProvider.ImageEncoder
@@ -7,11 +8,19 @@ namespace RitsukageGif.CaptureProvider.ImageEncoder
     {
         public static IImageEncoder CreateEncoder(OutputFormat format, string filePath)
         {
+            var useFfmpeg = Settings.Default.UseFfmpegEncoder && FfmpegHelper.IsAvailable;
+
             return format switch
             {
-                OutputFormat.Gif => new GifImageEncoder(filePath),
-                OutputFormat.WebP => new WebPImageEncoder(filePath),
-                OutputFormat.APng => new APngImageEncoder(filePath),
+                OutputFormat.Gif => useFfmpeg
+                    ? new FfmpegGifEncoder(filePath)
+                    : new GifImageEncoder(filePath),
+                OutputFormat.WebP => useFfmpeg
+                    ? new FfmpegWebPEncoder(filePath)
+                    : new WebPImageEncoder(filePath),
+                OutputFormat.APng => useFfmpeg
+                    ? new FfmpegAPngEncoder(filePath)
+                    : new APngImageEncoder(filePath),
                 _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
             };
         }

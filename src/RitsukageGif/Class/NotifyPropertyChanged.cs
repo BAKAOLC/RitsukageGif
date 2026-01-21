@@ -6,14 +6,14 @@ namespace RitsukageGif.Class
 {
     public class NotifyPropertyChanged : INotifyPropertyChanged
     {
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
-        private void RaisePropertyChanged(string propertyName)
+        private void RaisePropertyChanged(string? propertyName)
         {
             PropertyChanged?.Invoke(this, new(propertyName));
         }
 
-        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             RaisePropertyChanged(propertyName);
         }
@@ -23,7 +23,7 @@ namespace RitsukageGif.Class
             RaisePropertyChanged("");
         }
 
-        protected bool Set<T>(ref T field, T value, [CallerMemberName] string propertyName = null)
+        protected bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
         {
             if (EqualityComparer<T>.Default.Equals(field, value))
                 return false;
