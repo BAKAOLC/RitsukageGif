@@ -40,7 +40,9 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
 
             var provider = ScreenFrameProvider.CreateProvider();
             provider.ApplyCaptureRegion(rectangle);
-            var lastMilliseconds = 0L;
+            var targetDelay = Math.Max(1, delay);
+            var lastFrameStartMilliseconds = 0L;
+            var nextFrameAtMilliseconds = 0L;
             var recordFrames = 0;
             var sw = new Stopwatch();
             string? lastFrameDelayPath = null; // 保存上一帧的delay文件路径
@@ -50,16 +52,25 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
                 try
                 {
                     sw.Start();
+                    nextFrameAtMilliseconds = sw.ElapsedMilliseconds;
                     while (!recordingToken.IsCancellationRequested && !processingToken.IsCancellationRequested)
                     {
-                        var t = sw.ElapsedMilliseconds;
-                        var dt = t - lastMilliseconds;
+                        var now = sw.ElapsedMilliseconds;
+                        var sleepMilliseconds = nextFrameAtMilliseconds - now;
+                        if (sleepMilliseconds > 1)
+                        {
+                            Thread.Sleep((int)sleepMilliseconds);
+                            continue;
+                        }
 
-                        if (lastFrameDelayPath != null && dt > 0)
-                            await File.WriteAllTextAsync(lastFrameDelayPath, dt.ToString())
+                        var frameStartMilliseconds = sw.ElapsedMilliseconds;
+                        var frameInterval = frameStartMilliseconds - lastFrameStartMilliseconds;
+
+                        if (lastFrameDelayPath != null && frameInterval > 0)
+                            await File.WriteAllTextAsync(lastFrameDelayPath, frameInterval.ToString())
                                 .ConfigureAwait(false);
 
-                        lastMilliseconds = t;
+                        lastFrameStartMilliseconds = frameStartMilliseconds;
 
                         var img = provider.Capture(cursor, scale);
                         var frameIndex = recordFrames++;
@@ -73,15 +84,15 @@ namespace RitsukageGif.CaptureProvider.RecordFrame
 
                         lastFrameDelayPath = delayPath;
 
-                        if (dt < delay)
-                            Thread.Sleep(delay - (int)dt);
-                        else
-                            Thread.Sleep(1);
+                        nextFrameAtMilliseconds += targetDelay;
+
+                        if (sw.ElapsedMilliseconds - nextFrameAtMilliseconds > targetDelay)
+                            nextFrameAtMilliseconds = sw.ElapsedMilliseconds;
                     }
 
                     if (lastFrameDelayPath != null)
                     {
-                        var finalDelay = Math.Max(1, (int)(sw.ElapsedMilliseconds - lastMilliseconds));
+                        var finalDelay = Math.Max(1, (int)(sw.ElapsedMilliseconds - lastFrameStartMilliseconds));
                         await File.WriteAllTextAsync(lastFrameDelayPath, finalDelay.ToString())
                             .ConfigureAwait(false);
                     }

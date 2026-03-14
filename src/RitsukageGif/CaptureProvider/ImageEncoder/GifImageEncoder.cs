@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -41,7 +42,7 @@ namespace RitsukageGif.CaptureProvider.ImageEncoder
             }
 
             var frameMetadata = _image.Frames[^1].Metadata.GetGifMetadata();
-            frameMetadata.FrameDelay = delayMs / 10;
+            frameMetadata.FrameDelay = Math.Max(1, (delayMs + 5) / 10);
             frameMetadata.DisposalMethod = GifDisposalMethod.RestoreToBackground;
         }
 
