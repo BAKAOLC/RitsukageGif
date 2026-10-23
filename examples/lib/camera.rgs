@@ -1,0 +1,11 @@
+// 将 LuaSTG 逻辑坐标转换为当前窗口的物理像素坐标。
+export fn worldCrop(viewWidth: number, viewHeight: number, phase: number) {
+    let scale = math.min(viewWidth / 640, viewHeight / 480);
+    let travel = (math.sin(phase * math.pi * 2) + 1) / 2;
+    return {
+        x: (viewWidth - 640 * scale) / 2 + (32 + 128 * travel) * scale,
+        y: (viewHeight - 480 * scale) / 2 + (16 + 112 * travel) * scale,
+        width: 256 * scale,
+        height: 336 * scale
+    };
+}

@@ -1,0 +1,56 @@
+// 同一时钟下保存原始画面、另一种编码、屏幕上下文和动态局部镜头。
+preset "LuaSTG 多路录制" {
+    window process "LuaSTGSub" title "*";
+    source window;
+    follow true;
+    layout(640, 480) {
+        background "#18202b";
+        region "game" {
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(0, 0, 640, 480);
+            missing color "#18202b";
+        }
+    }
+    record {
+        fps 20; scale 2; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy false;
+    }
+    script {
+        // 每次选择新的目录；已有文件不会被覆盖。
+        const base = params.string('directory', '../captures/multi');
+        let directory = base;
+        for (let index = 1; files.exists(directory)?; index++) {
+            directory = base + '-' + str(index);
+        }
+        files.createDirectory(directory)?;
+        waitUntil(() => status().exists, 30);
+        record.startMany([
+            {name: 'original', path: directory + '/original.gif'},
+            {name: 'webp', path: directory + '/original.webp',
+                options: {format: OutputFormat.WebP, fps: 15}},
+            {name: 'screen', path: directory + '/screen.gif',
+                presetFile: './sources/luastg-screen.rgpreset'},
+            {name: 'camera', path: directory + '/camera.gif',
+                presetFile: './sources/luastg-camera.rgpreset'}
+        ]);
+        const duration = math.clamp(params.number('seconds', 6), 1, 60);
+        while (status().recording && status().elapsed < duration) {
+            const fraction = status().elapsed / duration;
+            // 只修改 camera 输出；另外三路保持自己的布局。
+            scene.moveFor('camera', 'detail', 16 + 112 * fraction, 16, 160, 120);
+            scene.opacityFor('camera', 'detail', 0.65 + 0.35 * fraction);
+            wait(0.05);
+        }
+        record.stop();
+        for (const output of record.outputs()) {
+            if (output.error != null) {
+                print(output.name, output.error);
+                continue;
+            }
+            const file = files.info(output.path)?;
+            print(output.name, file.path, file.size / 1000000, 'MB');
+        }
+        return result.ok(null);
+    }
+}

@@ -1,0 +1,70 @@
+preset "结果传播与错误处理" {
+    // 此范例只运行脚本，不启动录制。
+    area screen(0, 0, 1, 1);
+    script {
+        fn divide(a: number, b: number): Result<number,string> {
+            if (b == 0) return result.err('除数为零');
+            return result.ok(a / b);
+        }
+        fn calculate(text: string): Result<number,string> {
+            let value = result.attempt(() => number(text))?;
+            let half = divide(value, 2)?;
+            return result.ok(half + 1);
+        }
+        assert(calculate('12').value == 7 && calculate('invalid').isErr);
+        assert(divide(1, 0).error == '除数为零');
+        const resultValue = result.ok(3).map(x => x * 2).andThen(x => result.ok(x + 1));
+        assert(resultValue.isOk && resultValue.unwrapOr(0) == 7);
+        const recovered = result.err('bad').mapErr(error => error + '!').orElse(error => result.ok(error.length));
+        assert(recovered.value == 4);
+        assert(result.err('bad').unwrapOrElse(error => error.length) == 3);
+        assert(result.err('bad').unwrapOr(9) == 9);
+
+        fn optionalLength(value: Option<string>): Option<number> {
+            let text = value?;
+            return option.some(text.length);
+        }
+        assert(optionalLength(option.some('abc')).value == 3);
+        assert(optionalLength(option.none).isNone);
+        assert(option.fromNullable(null).isNone && option.fromNullable(false).isSome);
+        const optional = option.some(2).map(n => n + 1).andThen(n => option.some(n * 2));
+        assert(optional.unwrapOr(0) == 6);
+        assert(option.none.orElse(() => option.some(4)).value == 4);
+        assert(option.none.unwrapOrElse(() => 5) == 5);
+        assert(option.none.okOr('missing').error == 'missing');
+        fn requireName(value: Option<string>): Result<string,string> {
+            let name = value.okOr('missing')?;
+            return result.ok(name);
+        }
+        assert(requireName(option.some('main')).value == 'main');
+
+        let cleaned = false;
+        let code = 0;
+        try {
+            throw {code: 42};
+        } catch (error) {
+            code = error.code;
+        } finally {
+            cleaned = true;
+        }
+        assert(code == 42 && cleaned);
+        fn fail(): never { throw 'unavailable'; }
+        const attempted = result.attempt(() => fail());
+        assert(attempted.isErr && attempted.error == 'unavailable');
+        let caught = false;
+        let finalized = 0;
+        fn propagate(): Result<number,string> {
+            try {
+                divide(1, 0)?;
+                return result.ok(0);
+            } catch (error) {
+                caught = true;
+                return result.err(str(error));
+            } finally {
+                finalized++;
+            }
+        }
+        assert(propagate().isErr && !caught && finalized == 1);
+        print('结果传播与错误处理：全部通过');
+    }
+}

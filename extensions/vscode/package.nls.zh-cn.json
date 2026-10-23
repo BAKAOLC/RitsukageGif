@@ -1,0 +1,16 @@
+{
+  "description": "RitsukageGif 预设编辑与调试。",
+  "executable": "RitsukageGif.exe 的路径。",
+  "run": "Ritsukage：运行预设",
+  "debug": "Ritsukage：调试预设",
+  "program": "预设文件。",
+  "preset": "预设名称，留空选择第一个。",
+  "stopOnEntry": "在第一条语句前暂停。",
+  "chooseExecutable": "选择 RitsukageGif.exe",
+  "noDocument": "请先打开预设文件。",
+  "noExecutable": "请先设置 RitsukageGif 程序路径。",
+  "closed": "语言服务已停止。",
+  "variables": "变量",
+  "unknownVariable": "此暂停位置没有该变量。",
+  "untrusted": "运行预设前请先信任此工作区。"
+}

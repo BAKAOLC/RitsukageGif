@@ -1,0 +1,52 @@
+// 运行 6 秒后保存两份 APNG。未打开记事本时，小窗使用主画面作为备用源。
+// 主窗口丢失时显示 assets/source-offline.png；重新出现后恢复捕获。
+preset "窗口回退与状态流程" {
+    window process "LuaSTGSub" title "*";
+    follow true;
+    layout(640, 480) {
+        background "#18212F";
+        region "main" {
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(0, 0, 640, 480);
+            shape rounded(16);
+            missing image "./assets/source-offline.png";
+        }
+        region "secondary" {
+            window process "notepad" title "*";
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(440, 20, 180, 140);
+            shape polygon(16, 0, 180, 0, 180, 124, 164, 140, 0, 140, 0, 16);
+            missing source "main";
+        }
+    }
+    record {
+        fps 20;
+        scale 1;
+        format APng;
+        cursor false;
+        sound false;
+        copy true;
+        ffmpeg false;
+    }
+    save to "../captures" as "{preset}-{timestamp}.{ext}";
+    save to "../captures/archive" as "{date}-{sequence}-{preset}.{ext}";
+    initial ready;
+    state ready {
+        when exists -> capture;
+        after 30s { finish; }
+    }
+    state capture {
+        enter { select; start; }
+        after 6s { stop; goto saved; }
+        on error { cancel; goto done; }
+    }
+    state saved {
+        on saved -> done;
+        when idle -> done;
+    }
+    state done {
+        enter { finish; }
+    }
+}

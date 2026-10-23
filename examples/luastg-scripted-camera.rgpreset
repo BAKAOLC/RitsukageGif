@@ -1,0 +1,51 @@
+// 八秒平移镜头：动态修改输入裁剪，右上角保留总览。WebP 在停止后编码。
+preset "LuaSTG 脚本镜头" {
+    window process "LuaSTGSub" title "*";
+    area client(0, 0, 100%, 100%);
+    source window;
+    follow true;
+    layout(384, 504) {
+        background "#16202C";
+        region "camera" {
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(0, 0, 384, 504);
+            missing color "#16202C";
+        }
+        region "overview" {
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(244, 12, 128, 96);
+            shape rounded(12);
+            missing transparent;
+        }
+    }
+    record {
+        fps 30; scale 1; format WebP;
+        ffmpeg false; cursor false; sound false; copy true;
+    }
+    save to "../captures" as "{preset}-{timestamp}.{ext}";
+    script {
+        import {worldCrop} from './lib/camera.rgs';
+        waitUntil(() => status().exists, 30);
+        select();
+        events.on(CaptureEvent.Resized, () => print("窗口尺寸改变，重新计算镜头"));
+        try {
+            start();
+            while (status().recording && status().elapsed < 8) {
+                let current = status();
+                let phase = current.elapsed / 8;
+                if (current.exists) {
+                    let {x, y, width: cropWidth, height: cropHeight} =
+                        worldCrop(current.width, current.height, phase);
+                    scene.crop("camera", x, y, cropWidth, cropHeight);
+                }
+                scene.visible("overview", phase < 0.85);
+                wait(0.033);
+            }
+            if (status().recording) stop();
+        } finally {
+            events.off(CaptureEvent.Resized);
+        }
+    }
+}

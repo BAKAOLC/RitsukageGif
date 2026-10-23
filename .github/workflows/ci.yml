@@ -1,50 +1,140 @@
 name: CI Build
 
-on: 
+on:
   push:
-    branches:
-      - main
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       branch:
-        description: "Branch to build"
+        description: Branch to build
         required: true
-        default: "main"
+        default: main
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
 
 env:
-  DOTNET_ROLL_FORWARD: "Major"
-  DOTNET_CLI_TELEMETRY_OPTOUT: 1
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
-  DOTNET_NOLOGO: 1
-  PR_PROMPT: "::warning:: Build artifact will not be uploaded due to the workflow is triggered by pull request."
-  
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
 jobs:
-  build:
-    name: Build
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        os: [windows-latest]
-      fail-fast: true
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      application: ${{ steps.version.outputs.application }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
-          fetch-depth: 0
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-      - name: Install dependencies
-        run: dotnet restore
-      - name: Publish (Windows)
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref }}
+          persist-credentials: false
+      - name: Read and validate version
+        id: version
         env:
-          IS_PR: ${{ !!github.head_ref }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
-          if ($env:IS_PR -eq "true") { echo $env:PR_PROMPT }
-          dotnet publish src/RitsukageGif/RitsukageGif.csproj --configuration Release --framework net10.0-windows --output publish --no-self-contained --runtime win-x64 /p:PublishSingleFile=true
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        if: ${{ !github.head_ref }}
+          $versions = ./.github/scripts/get-package-version.ps1 -Tag $env:RELEASE_TAG
+          "application=$($versions.Application)" >> $env:GITHUB_OUTPUT
+
+  build:
+    needs: version
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-2025
+            rid: win-x64
+            vscode: win32-x64
+          - name: Linux x64
+            os: ubuntu-24.04
+            rid: linux-x64
+            vscode: linux-x64
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            rid: linux-arm64
+            vscode: linux-arm64
+          - name: macOS ARM64
+            os: macos-15
+            rid: osx-arm64
+            vscode: darwin-arm64
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
         with:
-          name: RitsukageGif
-          path: publish
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref }}
+          persist-credentials: false
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          if ([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq 'X64') {
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+            if ($LASTEXITCODE -ne 0) { throw 'Ubuntu mirror configuration failed.' }
+          }
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
+          if ($LASTEXITCODE -ne 0) { throw 'Package metadata update failed.' }
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends clang zlib1g-dev pkg-config libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pipewire gstreamer1.0-plugins-base libgtk-3-0t64 libxcomposite1 libxfixes3 libxrandr2
+          if ($LASTEXITCODE -ne 0) { throw 'Linux dependency installation failed.' }
+      - name: Restore
+        run: dotnet restore RitsukageGif.sln
+      - name: Build
+        run: dotnet build RitsukageGif.sln -c Release --no-restore
+      - name: Package application
+        env:
+          TARGET_RID: ${{ matrix.rid }}
+        run: ./.github/scripts/package-application.ps1 -RuntimeIdentifier $env:TARGET_RID
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check extension syntax
+        run: node --check extensions/vscode/extension.js
+      - name: Package VS Code extension
+        env:
+          TARGET_RID: ${{ matrix.rid }}
+        run: ./.github/scripts/package-extension.ps1 -RuntimeIdentifier $env:TARGET_RID
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7.0.2
+        if: github.event_name != 'pull_request'
+        with:
+          name: RitsukageGif-${{ needs.version.outputs.application }}-${{ matrix.rid }}
+          path: artifacts/packages/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: [version, build]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: RitsukageGif-${{ needs.version.outputs.application }}-*
+          path: artifacts/release
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./.github/scripts/publish-release.ps1 -Tag $env:RELEASE_TAG -Packages artifacts/release

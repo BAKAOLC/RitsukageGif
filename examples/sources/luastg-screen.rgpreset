@@ -1,0 +1,13 @@
+// 被多路入口引用时只读取画面和设置，不运行独立脚本。
+preset "LuaSTG 屏幕上下文源" {
+    window process "LuaSTGSub" title "*";
+    source screen;
+    follow true;
+    area client(0, 0, 100%, 100%);
+    missing color "#18202b";
+    record {
+        fps 20; scale 2; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy false;
+    }
+    script { return; }
+}

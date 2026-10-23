@@ -1,0 +1,65 @@
+preset "LuaSTG Dynamic Layout" {
+    window process "LuaSTGSub" title "*";
+    source window;
+    follow true;
+
+    const canvasWidth = 640;
+    const canvasHeight = 480;
+
+    layout(592, 448) {
+        background "#18202b";
+        // 世界区域：640×480 基准画面中的 (32,16,384,448)。
+        region "world" {
+            source window;
+            area client(
+                (width - canvasWidth * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 32 * min(width / canvasWidth, height / canvasHeight),
+                (height - canvasHeight * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 16 * min(width / canvasWidth, height / canvasHeight),
+                384 * min(width / canvasWidth, height / canvasHeight),
+                448 * min(width / canvasWidth, height / canvasHeight)
+            );
+            place(0, 0, 384, 448);
+            missing color "#10151c";
+        }
+        // 椭圆画中画放大世界下方中央，跟随窗口尺寸变化。
+        region "detail" {
+            source window;
+            area client(
+                (width - canvasWidth * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 160 * min(width / canvasWidth, height / canvasHeight),
+                (height - canvasHeight * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 304 * min(width / canvasWidth, height / canvasHeight),
+                128 * min(width / canvasWidth, height / canvasHeight),
+                128 * min(width / canvasWidth, height / canvasHeight)
+            );
+            place(400, 24, 168, 168);
+            shape ellipse;
+            missing color "#40546b";
+        }
+    }
+    record {
+        fps 30; scale 1; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy true;
+    }
+    save to "../captures" as "{preset}-{timestamp}.{ext}";
+
+    script {
+        waitUntil(() => status().exists, 30);
+        select();
+        start();
+        // 约八秒；也可随时手动停止。
+        for (let step = 0; step < 4 && status().recording; step++) {
+            let expanded = step % 2 == 0;
+            scene.animate("detail", expanded ? 248 : 400, expanded ? 216 : 24,
+                expanded ? 224 : 168, expanded ? 224 : 168, 2, Easing.EaseInOut);
+            let began = status().elapsed;
+            while (status().recording && status().elapsed - began < 2) {
+                let fraction = (status().elapsed - began) / 2;
+                scene.opacity("detail", expanded ? 1 - fraction * 0.3 : 0.7 + fraction * 0.3);
+                wait(0.05);
+            }
+        }
+        if (status().recording) stop();
+    }
+}

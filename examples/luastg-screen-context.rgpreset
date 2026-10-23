@@ -1,0 +1,60 @@
+preset "LuaSTG Screen Context" {
+    window process "LuaSTGSub" title "*";
+    source screen;
+    follow true;
+
+    const canvasWidth = 640;
+    const canvasHeight = 480;
+
+    layout(800, 480) {
+        background "#18202b";
+        // 左：直接捕获窗口内容，不包含其他窗口的遮挡。
+        region "window-content" {
+            source window;
+            follow true;
+            area client(
+                (width - canvasWidth * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 32 * min(width / canvasWidth, height / canvasHeight),
+                (height - canvasHeight * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 16 * min(width / canvasWidth, height / canvasHeight),
+                384 * min(width / canvasWidth, height / canvasHeight),
+                448 * min(width / canvasWidth, height / canvasHeight)
+            );
+            place(8, 16, 384, 448);
+            shape rounded(16);
+            missing color "#35465b";
+        }
+        // 右：跟随同一窗口区域，但采集屏幕上下文，能看到遮挡。
+        region "screen-context" {
+            source screen;
+            follow true;
+            area client(
+                (width - canvasWidth * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 32 * min(width / canvasWidth, height / canvasHeight),
+                (height - canvasHeight * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + 16 * min(width / canvasWidth, height / canvasHeight),
+                384 * min(width / canvasWidth, height / canvasHeight),
+                448 * min(width / canvasWidth, height / canvasHeight)
+            );
+            place(408, 16, 384, 448);
+            shape polygon(20,0,364,0,384,20,384,428,364,448,20,448,0,428,0,20);
+            missing color "#4b394f";
+        }
+    }
+    record {
+        fps 30; scale 1; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy true;
+    }
+    save to "../captures" as "{preset}-{timestamp}.{ext}";
+
+    script {
+        waitUntil(() => status().exists, 30);
+        select();
+        start();
+        let began = status().elapsed;
+        while (status().recording && status().elapsed - began < 8) {
+            wait(0.05);
+        }
+        if (status().recording) stop();
+    }
+}

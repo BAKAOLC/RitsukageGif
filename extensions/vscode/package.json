@@ -1,0 +1,21 @@
+{
+  "name": "rgscript", "displayName": "rgscript", "description": "%description%",
+  "version": "1.1.0", "publisher": "OLC", "author": "OLC", "license": "GPL-3.0-only", "engines": { "vscode": "^1.90.0" },
+  "categories": ["Programming Languages", "Debuggers"], "main": "./extension.js",
+  "activationEvents": ["onLanguage:rgscript", "onDebug:rgscript"],
+  "contributes": {
+    "languages": [{ "id": "rgscript", "aliases": ["rgscript"], "extensions": [".rgpreset", ".rgs"], "configuration": "./language-configuration.json" }],
+    "grammars": [{ "language": "rgscript", "scopeName": "source.rgscript", "path": "./syntax.json" }],
+    "configuration": { "title": "rgscript", "properties": {
+      "rgscript.executable": { "type": "string", "default": "", "description": "%executable%" }
+    }},
+    "commands": [{ "command": "rgscript.run", "title": "%run%" }, { "command": "rgscript.debug", "title": "%debug%" }],
+    "menus": { "editor/title": [{ "command": "rgscript.run", "when": "editorLangId == rgscript", "group": "navigation" }, { "command": "rgscript.debug", "when": "editorLangId == rgscript", "group": "navigation" }] },
+    "debuggers": [{ "type": "rgscript", "label": "rgscript", "languages": ["rgscript"],
+      "configurationAttributes": { "launch": { "required": ["program"], "properties": {
+        "program": { "type": "string", "description": "%program%" }, "preset": { "type": "string", "default": "", "description": "%preset%" },
+        "stopOnEntry": { "type": "boolean", "default": true, "description": "%stopOnEntry%" }
+      }}}, "initialConfigurations": [{ "type": "rgscript", "request": "launch", "name": "rgscript", "program": "${file}", "stopOnEntry": true }]
+    }]
+  }
+}

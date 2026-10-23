@@ -1,0 +1,613 @@
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>设置 — RitsukageGif</value>
+  </data>
+  <data name="EncodingHeading" xml:space="preserve">
+    <value>录制</value>
+  </data>
+  <data name="QualityFast" xml:space="preserve">
+    <value>快速</value>
+  </data>
+  <data name="QualityBalanced" xml:space="preserve">
+    <value>均衡</value>
+  </data>
+  <data name="QualityBest" xml:space="preserve">
+    <value>高质量</value>
+  </data>
+  <data name="GifQuality" xml:space="preserve">
+    <value>GIF 质量</value>
+  </data>
+  <data name="UseFfmpeg" xml:space="preserve">
+    <value>使用 FFmpeg</value>
+  </data>
+  <data name="FfmpegMissing" xml:space="preserve">
+    <value>未找到 FFmpeg</value>
+  </data>
+  <data name="FfmpegFound" xml:space="preserve">
+    <value>已找到 FFmpeg</value>
+  </data>
+  <data name="CaptureCursor" xml:space="preserve">
+    <value>录制鼠标指针</value>
+  </data>
+  <data name="AppearanceHeading" xml:space="preserve">
+    <value>外观</value>
+  </data>
+  <data name="OriginalBackground" xml:space="preserve">
+    <value>原版背景</value>
+  </data>
+  <data name="BackgroundImage" xml:space="preserve">
+    <value>背景图片</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>选择…</value>
+  </data>
+  <data name="ChooseBackground" xml:space="preserve">
+    <value>选择背景</value>
+  </data>
+  <data name="ImageFiles" xml:space="preserve">
+    <value>图片</value>
+  </data>
+  <data name="ResetBackground" xml:space="preserve">
+    <value>恢复原版背景</value>
+  </data>
+  <data name="SnapRadius" xml:space="preserve">
+    <value>边缘感知距离（像素）</value>
+  </data>
+  <data name="EdgeThreshold" xml:space="preserve">
+    <value>边缘对比阈值</value>
+  </data>
+  <data name="OutputDirectory" xml:space="preserve">
+    <value>输出目录</value>
+  </data>
+  <data name="ChooseOutput" xml:space="preserve">
+    <value>选择录制输出目录</value>
+  </data>
+  <data name="HotkeysHeading" xml:space="preserve">
+    <value>快捷键</value>
+  </data>
+  <data name="RecordHotkey" xml:space="preserve">
+    <value>开始 / 停止录制</value>
+  </data>
+  <data name="SelectHotkey" xml:space="preserve">
+    <value>选择录制区域</value>
+  </data>
+  <data name="HotkeyHint" xml:space="preserve">
+    <value>按键录入，退格清空。</value>
+  </data>
+  <data name="SoundHeading" xml:space="preserve">
+    <value>音效</value>
+  </data>
+  <data name="PlaySound" xml:space="preserve">
+    <value>播放提示音</value>
+  </data>
+  <data name="StartSound" xml:space="preserve">
+    <value>开始录制音效</value>
+  </data>
+  <data name="StopSound" xml:space="preserve">
+    <value>停止录制音效</value>
+  </data>
+  <data name="SaveSettings" xml:space="preserve">
+    <value>保存设置</value>
+  </data>
+  <data name="DuplicateHotkeys" xml:space="preserve">
+    <value>两项快捷键不能相同。</value>
+  </data>
+  <data name="OutputRequired" xml:space="preserve">
+    <value>请选择输出目录。</value>
+  </data>
+  <data name="BrowseWav" xml:space="preserve">
+    <value>选择…</value>
+  </data>
+  <data name="ChooseSound" xml:space="preserve">
+    <value>选择提示音</value>
+  </data>
+  <data name="WavFiles" xml:space="preserve">
+    <value>WAV 音频</value>
+  </data>
+  <data name="Clear" xml:space="preserve">
+    <value>清除</value>
+  </data>
+  <data name="EnterHotkey" xml:space="preserve">
+    <value>点击并按下快捷键</value>
+  </data>
+  <data name="NoFrames" xml:space="preserve">
+    <value>没有捕获到画面。</value>
+  </data>
+  <data name="StageLive" xml:space="preserve">
+    <value>录制 / GIF 编码中</value>
+  </data>
+  <data name="StageComplete" xml:space="preserve">
+    <value>完成</value>
+  </data>
+  <data name="MemoryLimit" xml:space="preserve">
+    <value>内置 WebP/APNG 编码需要过多内存。请启用 FFmpeg，或缩短录制时间、缩小输出尺寸。</value>
+  </data>
+  <data name="StageEncoding" xml:space="preserve">
+    <value>编码中</value>
+  </data>
+  <data name="InvalidRecording" xml:space="preserve">
+    <value>录制区域、帧率或缩放比例无效。</value>
+  </data>
+  <data name="RecordingTooLarge" xml:space="preserve">
+    <value>录制尺寸过大，请缩小区域或提高缩小倍数。</value>
+  </data>
+  <data name="StageRecording" xml:space="preserve">
+    <value>录制中</value>
+  </data>
+  <data name="DuplicateRecordHotkeys" xml:space="preserve">
+    <value>录制和选区快捷键不能相同。</value>
+  </data>
+  <data name="HotkeyOccupied" xml:space="preserve">
+    <value>快捷键被其他程序占用，请在设置中更换。</value>
+  </data>
+  <data name="HotkeySingleKey" xml:space="preserve">
+    <value>快捷键只能包含一个普通键。</value>
+  </data>
+  <data name="HotkeySupported" xml:space="preserve">
+    <value>快捷键支持 Ctrl / Shift / Alt / Win 和字母、数字、F1–F24。</value>
+  </data>
+  <data name="HotkeyModifier" xml:space="preserve">
+    <value>快捷键至少需要一个修饰键和一个普通键。</value>
+  </data>
+  <data name="NoMonitor" xml:space="preserve">
+    <value>选区不包含任何可用显示器。</value>
+  </data>
+  <data name="SelectionTooLarge" xml:space="preserve">
+    <value>选区过大，请选择更小的区域。</value>
+  </data>
+  <data name="CaptureBufferFailed" xml:space="preserve">
+    <value>无法创建屏幕捕获缓冲区。</value>
+  </data>
+  <data name="ScaleBufferFailed" xml:space="preserve">
+    <value>无法创建缩放缓冲区。</value>
+  </data>
+  <data name="CaptureFailed" xml:space="preserve">
+    <value>屏幕捕获失败，显示器可能已断开或桌面已锁定。</value>
+  </data>
+  <data name="ScaleFailed" xml:space="preserve">
+    <value>画面缩放失败。</value>
+  </data>
+  <data name="SelectionTitle" xml:space="preserve">
+    <value>RitsukageGif — 选择区域</value>
+  </data>
+  <data name="CursorFailed" xml:space="preserve">
+    <value>无法读取鼠标位置。</value>
+  </data>
+  <data name="CancelProcessing" xml:space="preserve">
+    <value>取消处理</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="StartRecording" xml:space="preserve">
+    <value>开始录制</value>
+  </data>
+  <data name="SelectAreaHint" xml:space="preserve">
+    <value>请选择录制区域</value>
+  </data>
+  <data name="SelectArea" xml:space="preserve">
+    <value>选择区域</value>
+  </data>
+  <data name="Ready" xml:space="preserve">
+    <value>就绪</value>
+  </data>
+  <data name="Cancelling" xml:space="preserve">
+    <value>正在取消…</value>
+  </data>
+  <data name="TopologyChanged" xml:space="preserve">
+    <value>显示器布局已改变，请重新选择区域。</value>
+  </data>
+  <data name="Processing" xml:space="preserve">
+    <value>处理中…</value>
+  </data>
+  <data name="StopRecording" xml:space="preserve">
+    <value>停止录制</value>
+  </data>
+  <data name="RecordingComplete" xml:space="preserve">
+    <value>录制完成</value>
+  </data>
+  <data name="ClipboardFailed" xml:space="preserve">
+    <value>文件已保存，剪贴板复制失败：</value>
+  </data>
+  <data name="PreviewFailed" xml:space="preserve">
+    <value>文件已保存，预览失败：</value>
+  </data>
+  <data name="Cancelled" xml:space="preserve">
+    <value>已取消。</value>
+  </data>
+  <data name="RecordingFailed" xml:space="preserve">
+    <value>录制失败：</value>
+  </data>
+  <data name="SnapNone" xml:space="preserve">
+    <value>无</value>
+  </data>
+  <data name="SnapHorizontal" xml:space="preserve">
+    <value>水平</value>
+  </data>
+  <data name="SnapVertical" xml:space="preserve">
+    <value>垂直</value>
+  </data>
+  <data name="SnapBoth" xml:space="preserve">
+    <value>水平 + 垂直</value>
+  </data>
+  <data name="BackgroundFailed" xml:space="preserve">
+    <value>背景加载失败：</value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>说明</value>
+  </data>
+  <data name="ScaleDivisor" xml:space="preserve">
+    <value>缩小倍率</value>
+  </data>
+  <data name="FrameRate" xml:space="preserve">
+    <value>帧率</value>
+  </data>
+  <data name="OutputFormat" xml:space="preserve">
+    <value>输出格式</value>
+  </data>
+  <data name="RecordedFrames" xml:space="preserve">
+    <value>录制帧数</value>
+  </data>
+  <data name="FileSize" xml:space="preserve">
+    <value>文件大小</value>
+  </data>
+  <data name="OpenFolder" xml:space="preserve">
+    <value>打开目录</value>
+  </data>
+  <data name="ScaleHint" xml:space="preserve">
+    <value>将图像缩小为原本的 1/x</value>
+  </data>
+  <data name="FrameRateHint" xml:space="preserve">
+    <value>每秒录制的帧数</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>语言</value>
+  </data>
+  <data name="SystemLanguage" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="ChineseLanguage" xml:space="preserve">
+    <value>简体中文</value>
+  </data>
+  <data name="EnglishLanguage" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="LanguageRestart" xml:space="preserve">
+    <value>重启后生效</value>
+  </data>
+  <data name="FfmpegFailed" xml:space="preserve">
+    <value>FFmpeg 编码失败 ({0}): {1}</value>
+  </data>
+  <data name="RegionInfo" xml:space="preserve">
+    <value>选区：{0}, {1} · {2} × {3} 像素</value>
+  </data>
+  <data name="PreviewHint" xml:space="preserve">
+    <value>{0} × {1}
+{2}
+左键拖出，右键复制</value>
+  </data>
+  <data name="SelectionHint" xml:space="preserve">
+    <value>拖动选区 · 单击选择窗口
+右键 / Enter 确认 · Delete 清空
+Esc 清空选区，再按退出
+Shift 切换感知，长按临时关闭：{0}
+{1} × {2} 像素</value>
+  </data>
+  <data name="NoInputFrames" xml:space="preserve">
+    <value>No frames.</value>
+  </data>
+  <data name="InvalidFrameBuffer" xml:space="preserve">
+    <value>Invalid frame buffer.</value>
+  </data>
+  <data name="InvalidWebp" xml:space="preserve">
+    <value>FFmpeg produced an invalid WebP container.</value>
+  </data>
+  <data name="TruncatedWebp" xml:space="preserve">
+    <value>Truncated WebP chunk.</value>
+  </data>
+  <data name="WebpTimingRange" xml:space="preserve">
+    <value>WebP frame timing is out of range.</value>
+  </data>
+  <data name="ProjectPage" xml:space="preserve">
+    <value>项目主页</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="ShortcutDisabled" xml:space="preserve">
+    <value>未设置</value>
+  </data>
+  <data name="PresetSyntaxError">
+    <value>预设语法错误（第 {0} 行）。请检查指令、参数和 end。</value>
+  </data>
+  <data name="CommandNotReady">
+    <value>当前状态不允许此操作，请先选择区域或等待处理完成。</value>
+  </data>
+  <data name="CommandHelp">
+    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window 进程 [标题] | windows | presets | preset activate 名称 | preset run 文件 [名称] [--arg 参数=值] | preset params 会话标识 参数=值 [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name</value>
+  </data>
+  <data name="PresetsTitle">
+    <value>预设</value>
+  </data>
+  <data name="StopPreset">
+    <value>停止预设</value>
+  </data>
+  <data name="WindowNotFound">
+    <value>没有找到匹配的可见窗口。</value>
+  </data>
+  <data name="PresetHotkeys" xml:space="preserve">
+    <value>预设快捷键</value>
+  </data>
+  <data name="AddPresetHotkey" xml:space="preserve">
+    <value>添加快捷键</value>
+  </data>
+  <data name="RemovePresetHotkey" xml:space="preserve">
+    <value>删除快捷键</value>
+  </data>
+  <data name="PresetHotkeyRequired" xml:space="preserve">
+    <value>请选择预设并录入快捷键。</value>
+  </data>
+  <data name="SourceWindow">
+    <value>窗口内容</value>
+  </data>
+  <data name="DslUnknownName">
+    <value>未知名称：{0}</value>
+  </data>
+  <data name="DslExitImmediate">
+    <value>exit 动作不能等待、结束流程或切换状态。</value>
+  </data>
+  <data name="DslExecutionLimit">
+    <value>连续执行的动作过多，请在循环中使用 wait。</value>
+  </data>
+  <data name="ChooseCaptureWindow">
+    <value>选择要捕获的窗口</value>
+  </data>
+  <data name="DslNumberRequired">
+    <value>需要有限数值。</value>
+  </data>
+  <data name="DslFallbackCycle">
+    <value>备用源存在循环引用。</value>
+  </data>
+  <data name="DslDiagnostic">
+    <value>第 {0} 行，第 {1} 列：{2}</value>
+  </data>
+  <data name="DslLayerRequired">
+    <value>布局中至少需要一个区域。</value>
+  </data>
+  <data name="DslFallbackImage">
+    <value>无法读取备用图片。</value>
+  </data>
+  <data name="DslUnexpected">
+    <value>不支持的语法：{0}</value>
+  </data>
+  <data name="DslDuration">
+    <value>时长必须大于零且不超过 24 小时。</value>
+  </data>
+  <data name="DslTooComplex">
+    <value>脚本超过长度、嵌套或图层数量限制。</value>
+  </data>
+  <data name="DslInvalidEscape">
+    <value>无效的转义字符；路径请使用 / 或双反斜杠。</value>
+  </data>
+  <data name="DslDuplicate">
+    <value>重复声明：{0}</value>
+  </data>
+  <data name="DslRange">
+    <value>需要 {0} 到 {1} 之间的整数。</value>
+  </data>
+  <data name="WindowCaptureUnsupported">
+    <value>窗口内容捕获需要 Windows 10 1903 或更新版本及兼容的图形设备。</value>
+  </data>
+  <data name="SourceScreen">
+    <value>屏幕画面</value>
+  </data>
+  <data name="WindowCaptureHint">
+    <value>请选择窗口</value>
+  </data>
+  <data name="DslInvalidExpression">
+    <value>表达式无效或操作数类型不匹配。</value>
+  </data>
+  <data name="DslColor">
+    <value>颜色应为 transparent、#RRGGBB 或 #AARRGGBB。</value>
+  </data>
+  <data name="DslStateRequired">
+    <value>请至少定义一个状态。</value>
+  </data>
+  <data name="DslDivisionByZero">
+    <value>不能除以零。</value>
+  </data>
+  <data name="DslBooleanRequired">
+    <value>需要布尔条件。</value>
+  </data>
+  <data name="DslAwaitTimeout">
+    <value>等待条件超时。</value>
+  </data>
+  <data name="DslExpected">
+    <value>应为 {0}，实际为 {1}。</value>
+  </data>
+  <data name="DslOutputInvalid">
+    <value>输出目录或文件名模板无效。</value>
+  </data>
+  <data name="DslPolygon">
+    <value>多边形需要 3–256 对 x,y 坐标，使用布局区域内的局部像素。</value>
+  </data>
+  <data name="RefreshWindows">
+    <value>刷新</value>
+  </data>
+  <data name="DslUnclosedString">
+    <value>字符串缺少结束引号。</value>
+  </data>
+  <data name="CaptureSource">
+    <value>采集来源</value>
+  </data>
+  <data name="DslWindowRequired">
+    <value>请指定非空的进程和标题匹配条件，不能同时为 *。</value>
+  </data>
+  <data name="DslFallbackReference">
+    <value>备用源引用仅能在布局区域中使用。</value>
+  </data>
+  <data name="PresetTemplate">
+    <value>预设模板</value>
+  </data>
+  <data name="ImportTemplate">
+    <value>导入模板</value>
+  </data>
+  <data name="RemoveTemplate">
+    <value>移除</value>
+  </data>
+  <data name="GeneralHeading" xml:space="preserve"><value>常规</value></data>
+  <data name="DslArguments" xml:space="preserve"><value>参数不正确：{0}</value></data>
+  <data name="DslAbsoluteScreen" xml:space="preserve"><value>绝对区域只能使用屏幕捕获。</value></data>
+  <data name="DslAssertion" xml:space="preserve"><value>断言失败。</value></data>
+  <data name="DslScriptState" xml:space="preserve"><value>同一预设只能使用 script 或 state 中的一种。</value></data>
+  <data name="ScriptReadOnly" xml:space="preserve"><value>不能修改常量：{0}</value></data>
+  <data name="ScriptTypeError" xml:space="preserve"><value>值的类型不适用于此操作。</value></data>
+  <data name="ScriptIndex" xml:space="preserve"><value>数组索引超出范围。</value></data>
+  <data name="ScriptImportCycle" xml:space="preserve"><value>模块循环引用或引用层级过深。</value></data>
+  <data name="EditorTitle" xml:space="preserve"><value>预设编辑器</value></data>
+  <data name="EditorUntitled" xml:space="preserve"><value>未命名</value></data>
+  <data name="EditorNew" xml:space="preserve"><value>新建</value></data>
+  <data name="EditorOpen" xml:space="preserve"><value>打开</value></data>
+  <data name="EditorSave" xml:space="preserve"><value>保存</value></data>
+  <data name="EditorSaveAs" xml:space="preserve"><value>另存为</value></data>
+  <data name="EditorEdit" xml:space="preserve"><value>编辑</value></data>
+  <data name="EditorRun" xml:space="preserve"><value>运行</value></data>
+  <data name="EditorDebug" xml:space="preserve"><value>调试</value></data>
+  <data name="EditorPause" xml:space="preserve"><value>暂停</value></data>
+  <data name="EditorContinue" xml:space="preserve"><value>继续</value></data>
+  <data name="EditorStep" xml:space="preserve"><value>单步</value></data>
+  <data name="EditorStop" xml:space="preserve"><value>停止</value></data>
+  <data name="EditorBreakpoint" xml:space="preserve"><value>断点</value></data>
+  <data name="EditorProblems" xml:space="preserve"><value>问题</value></data>
+  <data name="EditorVariables" xml:space="preserve"><value>变量</value></data>
+  <data name="EditorOutput" xml:space="preserve"><value>输出</value></data>
+  <data name="EditorPosition" xml:space="preserve"><value>第 {0} 行，第 {1} 列</value></data>
+  <data name="EditorFinished" xml:space="preserve"><value>已结束 — {0}</value></data>
+  <data name="EditorPaused" xml:space="preserve"><value>脚本暂停 — {0}:{1}；画面仍在采集</value></data>
+  <data name="EditorRunning" xml:space="preserve"><value>运行中 — {0}:{1}</value></data>
+  <data name="EditorFileChanged" xml:space="preserve"><value>文件已被外部修改，请重新打开或另存为。</value></data>
+  <data name="EditorUnsaved" xml:space="preserve"><value>是否保存当前修改？</value></data>
+  <data name="EditorDiscard" xml:space="preserve"><value>放弃修改</value></data>
+  <data name="EditorCancel" xml:space="preserve"><value>取消</value></data>
+  <data name="EditorNoRuntime" xml:space="preserve"><value>录制需要连接程序内的语言服务。</value></data>
+  <data name="PlatformUnsupported" xml:space="preserve">
+    <value>不支持当前系统。</value>
+  </data>
+  <data name="PlatformDisplayUnavailable" xml:space="preserve">
+    <value>无法连接显示服务。</value>
+  </data>
+  <data name="PlatformCaptureHelperMissing" xml:space="preserve">
+    <value>找不到录制组件。</value>
+  </data>
+  <data name="PlatformCapturePermission" xml:space="preserve">
+    <value>请在系统设置中允许屏幕录制。</value>
+  </data>
+  <data name="PlatformGlobalHotkeysUnavailable" xml:space="preserve">
+    <value>当前桌面不支持全局快捷键。</value>
+  </data>
+  <data name="PlatformWindowMatchingUnavailable" xml:space="preserve">
+    <value>Wayland 请使用系统选择器选择来源，不支持窗口匹配。</value>
+  </data>
+  <data name="CapturePermissionDenied" xml:space="preserve">
+    <value>屏幕录制权限未获授权。</value>
+  </data>
+  <data name="CaptureSourceCancelled" xml:space="preserve">
+    <value>已取消选择录制源。</value>
+  </data>
+  <data name="CaptureDependencyMissing" xml:space="preserve">
+    <value>缺少系统录制组件。</value>
+  </data>
+  <data name="CaptureSourceTimeout" xml:space="preserve">
+    <value>等待录制源超时。</value>
+  </data>
+  <data name="CaptureSourceLost" xml:space="preserve">
+    <value>录制源已断开。</value>
+  </data>
+  <data name="CapturePlatformUnsupported" xml:space="preserve">
+    <value>当前系统不支持此录制方式。</value>
+  </data>
+  <data name="CaptureHelperMissing" xml:space="preserve">
+    <value>找不到录制组件。</value>
+  </data>
+  <data name="ScriptResultError" xml:space="preserve">
+    <value>脚本错误：{0}</value>
+  </data>
+  <data name="ScriptPatternBindings" xml:space="preserve">
+    <value>模式绑定不一致或重复。</value>
+  </data>
+  <data name="ScriptPatternNoMatch" xml:space="preserve">
+    <value>没有匹配此值的模式。</value>
+  </data>
+  <data name="ScriptPatternUnreachable" xml:space="preserve">
+    <value>此模式无法匹配。</value>
+  </data>
+  <data name="ScriptPatternIncomplete" xml:space="preserve">
+    <value>模式未覆盖所有情况。</value>
+  </data>
+  <data name="EncodingProgress" xml:space="preserve">
+    <value>编码进度</value>
+  </data>
+  <data name="CaptureRate" xml:space="preserve">
+    <value>采集帧率</value>
+  </data>
+  <data name="CaptureRateValue" xml:space="preserve">
+    <value>{0:F1} fps</value>
+  </data>
+  <data name="RecordingProgressDetail" xml:space="preserve">
+    <value>采集 {0:F1} fps · 已编码 {1}/{2} · {3:F1} 秒</value>
+  </data>
+  <data name="EditorOpenWorkspace" xml:space="preserve"><value>打开文件夹</value></data>
+  <data name="EditorWorkspace" xml:space="preserve"><value>工作区</value></data>
+  <data name="EditorReload" xml:space="preserve"><value>从磁盘重新加载</value></data>
+  <data name="EditorKeepLocal" xml:space="preserve"><value>保留本地修改</value></data>
+  <data name="EditorCloseFile" xml:space="preserve"><value>关闭文件</value></data>
+  <data name="EditorFileMissing" xml:space="preserve"><value>文件已移动或删除，本地内容已保留。</value></data>
+  <data name="EditorFileAlreadyOpen" xml:space="preserve"><value>该文件已在另一标签页打开。</value></data>
+  <data name="EditorRefreshWorkspace" xml:space="preserve"><value>刷新工作区</value></data>
+  <data name="EditorExternalChangeNotice" xml:space="preserve"><value>文件已在外部修改。</value></data>
+  <data name="ServiceLimitExceeded" xml:space="preserve"><value>操作超出设定限制。</value></data>
+  <data name="ScriptParametersInvalid" xml:space="preserve"><value>参数无效：使用 name=value，最多 256 项；名称最长 128 字符，文本最长 4096 字符。</value></data>
+  <data name="FfprobeMissing" xml:space="preserve"><value>未找到 FFprobe。</value></data>
+  <data name="OutputPreview" xml:space="preserve"><value>预览输出</value></data>
+  <data name="PresetName" xml:space="preserve"><value>预设</value></data>
+  <data name="Shortcut" xml:space="preserve"><value>快捷键</value></data>
+  <data name="EditorSettingsMode" xml:space="preserve"><value>关闭设置后可运行或调试。</value></data>
+  <data name="SelectionControls" xml:space="preserve">
+    <value>感知：控件 · Tab</value>
+  </data>
+  <data name="SelectionWindows" xml:space="preserve">
+    <value>感知：窗口 · Tab</value>
+  </data>
+  <data name="SelectionWindowContent" xml:space="preserve">
+    <value>录制：窗口内容 · W</value>
+  </data>
+  <data name="SelectionScreenContent" xml:space="preserve">
+    <value>录制：屏幕 · W</value>
+  </data>
+  <data name="SelectScreenRegion" xml:space="preserve">
+    <value>选择屏幕区域</value>
+  </data>
+  <data name="SelectWindowContent" xml:space="preserve">
+    <value>选择窗口内容</value>
+  </data>
+  <data name="AutomaticUpdates" xml:space="preserve"><value>自动检查更新</value></data>
+  <data name="CheckingUpdate" xml:space="preserve"><value>正在检查…</value></data>
+  <data name="CheckUpdate" xml:space="preserve"><value>检查更新</value></data>
+  <data name="DownloadUpdate" xml:space="preserve"><value>下载更新</value></data>
+  <data name="UpdateAvailable" xml:space="preserve"><value>发现新版本 {0}。</value></data>
+  <data name="UpdateCurrent" xml:space="preserve"><value>已是最新版本。</value></data>
+  <data name="UpdateFailed" xml:space="preserve"><value>检查更新失败。</value></data>
+  <data name="UpdateOpenFailed" xml:space="preserve"><value>无法打开下载链接。</value></data>
+</root>

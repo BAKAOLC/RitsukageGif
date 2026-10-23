@@ -1,0 +1,17 @@
+preset "数据处理" {
+    area screen(0, 0, 1, 1);
+    script {
+        // 解析外部配置、处理表格、生成摘要；不启动录制。
+        let config = json.parse('{"crop":{"x":24,"y":16,"width":384,"height":448}}');
+        if (config.isErr) { log(config.error.message); return; }
+        log(config.value.crop);
+        let rows = csv.parse('name,width,height\r\nworld,384,448\r\ndetail,128,128\r\n');
+        if (rows.isErr) { log(rows.error.message); return; }
+        let encoded = json.stringify(rows.value, true);
+        if (encoded.isErr) { log(encoded.error.message); return; }
+        let buffer = bytes.fromText(encoded.value);
+        if (buffer.isErr) { log(buffer.error.message); return; }
+        log("UTF-8 bytes:", buffer.value.length, "SHA-256:", buffer.value.sha256());
+        log(buffer.value.toBase64());
+    }
+}

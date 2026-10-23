@@ -1,0 +1,51 @@
+// 外部参数控制世界区域内的镜头；x/y/w/h 使用 640×480 逻辑坐标。
+preset "LuaSTG 外部跟随" {
+    window process "LuaSTGSub" title "*";
+    area client(0, 0, 100%, 100%);
+    source window;
+    follow true;
+    layout(384, 448) {
+        background "#18202b";
+        region "camera" {
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(0, 0, 384, 448);
+            missing color "#18202b";
+        }
+    }
+    record {
+        fps 30; scale 1; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy true;
+    }
+    save to "../captures" as "{preset}-{timestamp}.{ext}";
+    script {
+        waitUntil(() => status().exists, 30);
+        select();
+        // 先应用初始参数，再录制第一帧。
+        function updateCamera(input: object) {
+            let current = status();
+            if (!current.exists) return;
+            let x = math.clamp(input.x is number ? input.x : 32, 32, 415);
+            let y = math.clamp(input.y is number ? input.y : 16, 16, 463);
+            let w = math.clamp(input.w is number ? input.w : 384, 1, 416 - x);
+            let h = math.clamp(input.h is number ? input.h : 448, 1, 464 - y);
+            let scale = math.min(current.width / 640, current.height / 480);
+            let outputX = input.outputX is number ? input.outputX : 0;
+            let outputY = input.outputY is number ? input.outputY : 0;
+            scene.set("camera", {
+                crop: {x: (current.width - 640 * scale) / 2 + x * scale,
+                    y: (current.height - 480 * scale) / 2 + y * scale, width: w * scale, height: h * scale},
+                placement: {x: outputX, y: outputY, width: 384, height: 448}
+            });
+        }
+        updateCamera(params.snapshot());
+        start();
+        while (status().recording) {
+            let state = params.state();
+            if (state.values.stop is true) break;
+            updateCamera(state.values);
+            params.waitChanged(state.revision);
+        }
+        if (status().recording) stop();
+    }
+}

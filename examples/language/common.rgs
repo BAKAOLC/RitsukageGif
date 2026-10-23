@@ -1,0 +1,16 @@
+// 模块内部状态只通过导出函数修改。
+const privateInitial = 7;
+export {privateInitial as initial};
+export let count: number = 0;
+export fn increment(): number {
+    count++;
+    return count;
+}
+export fn clamp(value: number, min: number, max: number): number {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
+export default fn double(value: number): number {
+    return value * 2;
+}

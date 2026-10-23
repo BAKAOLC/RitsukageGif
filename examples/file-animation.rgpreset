@@ -1,0 +1,36 @@
+// 仅使用文件源，不捕获桌面或窗口。每次输出约四秒。
+preset "文件动画与局部效果" {
+    layout(320, 120) {
+        background "#18202b";
+        region "original" {
+            source file "./assets/moving-dot.gif";
+            place(0, 0, 160, 120);
+        }
+        region "processed" {
+            source file "./assets/moving-dot.gif";
+            place(160, 0, 160, 120);
+        }
+    }
+    record {
+        fps 20; scale 1; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy false;
+    }
+    save to "../captures/media" as "file-animation-{timestamp}.{ext}";
+    script {
+        scene.effects('processed', [{kind: EffectKind.Mosaic, blockSize: 8}]);
+        start();
+        wait(2);
+        scene.effects('processed', [{kind: EffectKind.Invert}]);
+        scene.playback('processed', {position: 0, speed: 0.5});
+        wait(2);
+        stop();
+        const output = status().outputs[0];
+        print('录制结果：', output);
+        const overview = image.contactSheet(output, output + '.png', {
+            columns: 4, thumbnailWidth: 160, thumbnailHeight: 60,
+            frameStep: 10, maxFrames: 8
+        })?;
+        print('帧总览：', overview.path, overview.bytes);
+        return result.ok(null);
+    }
+}

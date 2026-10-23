@@ -1,0 +1,613 @@
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Settings — RitsukageGif</value>
+  </data>
+  <data name="EncodingHeading" xml:space="preserve">
+    <value>Recording</value>
+  </data>
+  <data name="QualityFast" xml:space="preserve">
+    <value>Fast</value>
+  </data>
+  <data name="QualityBalanced" xml:space="preserve">
+    <value>Balanced</value>
+  </data>
+  <data name="QualityBest" xml:space="preserve">
+    <value>High quality</value>
+  </data>
+  <data name="GifQuality" xml:space="preserve">
+    <value>GIF quality</value>
+  </data>
+  <data name="UseFfmpeg" xml:space="preserve">
+    <value>Use FFmpeg</value>
+  </data>
+  <data name="FfmpegMissing" xml:space="preserve">
+    <value>FFmpeg not found</value>
+  </data>
+  <data name="FfmpegFound" xml:space="preserve">
+    <value>FFmpeg found</value>
+  </data>
+  <data name="CaptureCursor" xml:space="preserve">
+    <value>Capture mouse pointer</value>
+  </data>
+  <data name="AppearanceHeading" xml:space="preserve">
+    <value>Appearance</value>
+  </data>
+  <data name="OriginalBackground" xml:space="preserve">
+    <value>Original background</value>
+  </data>
+  <data name="BackgroundImage" xml:space="preserve">
+    <value>Background image</value>
+  </data>
+  <data name="Browse" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="ChooseBackground" xml:space="preserve">
+    <value>Choose background</value>
+  </data>
+  <data name="ImageFiles" xml:space="preserve">
+    <value>Images</value>
+  </data>
+  <data name="ResetBackground" xml:space="preserve">
+    <value>Restore original background</value>
+  </data>
+  <data name="SnapRadius" xml:space="preserve">
+    <value>Edge snap distance (px)</value>
+  </data>
+  <data name="EdgeThreshold" xml:space="preserve">
+    <value>Edge contrast threshold</value>
+  </data>
+  <data name="OutputDirectory" xml:space="preserve">
+    <value>Output folder</value>
+  </data>
+  <data name="ChooseOutput" xml:space="preserve">
+    <value>Choose recording output folder</value>
+  </data>
+  <data name="HotkeysHeading" xml:space="preserve">
+    <value>Shortcuts</value>
+  </data>
+  <data name="RecordHotkey" xml:space="preserve">
+    <value>Start / stop recording</value>
+  </data>
+  <data name="SelectHotkey" xml:space="preserve">
+    <value>Select recording area</value>
+  </data>
+  <data name="HotkeyHint" xml:space="preserve">
+    <value>Press a shortcut. Backspace clears it.</value>
+  </data>
+  <data name="SoundHeading" xml:space="preserve">
+    <value>Sound</value>
+  </data>
+  <data name="PlaySound" xml:space="preserve">
+    <value>Play sound</value>
+  </data>
+  <data name="StartSound" xml:space="preserve">
+    <value>Recording start sound</value>
+  </data>
+  <data name="StopSound" xml:space="preserve">
+    <value>Recording stop sound</value>
+  </data>
+  <data name="SaveSettings" xml:space="preserve">
+    <value>Save settings</value>
+  </data>
+  <data name="DuplicateHotkeys" xml:space="preserve">
+    <value>The shortcuts must be different.</value>
+  </data>
+  <data name="OutputRequired" xml:space="preserve">
+    <value>Choose an output folder.</value>
+  </data>
+  <data name="BrowseWav" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="ChooseSound" xml:space="preserve">
+    <value>Choose sound</value>
+  </data>
+  <data name="WavFiles" xml:space="preserve">
+    <value>WAV audio</value>
+  </data>
+  <data name="Clear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="EnterHotkey" xml:space="preserve">
+    <value>Click and press a shortcut</value>
+  </data>
+  <data name="NoFrames" xml:space="preserve">
+    <value>No frames were captured.</value>
+  </data>
+  <data name="StageLive" xml:space="preserve">
+    <value>Recording / encoding GIF</value>
+  </data>
+  <data name="StageComplete" xml:space="preserve">
+    <value>Complete</value>
+  </data>
+  <data name="MemoryLimit" xml:space="preserve">
+    <value>Built-in WebP/APNG encoding needs too much memory. Enable FFmpeg, shorten the recording, or reduce its dimensions.</value>
+  </data>
+  <data name="StageEncoding" xml:space="preserve">
+    <value>Encoding</value>
+  </data>
+  <data name="InvalidRecording" xml:space="preserve">
+    <value>Invalid recording area, frame rate, or scale.</value>
+  </data>
+  <data name="RecordingTooLarge" xml:space="preserve">
+    <value>Recording dimensions are too large. Select a smaller area or increase the scale divisor.</value>
+  </data>
+  <data name="StageRecording" xml:space="preserve">
+    <value>Recording</value>
+  </data>
+  <data name="DuplicateRecordHotkeys" xml:space="preserve">
+    <value>Recording and selection shortcuts must be different.</value>
+  </data>
+  <data name="HotkeyOccupied" xml:space="preserve">
+    <value>A shortcut is in use by another application. Change it in Settings.</value>
+  </data>
+  <data name="HotkeySingleKey" xml:space="preserve">
+    <value>A shortcut may contain only one non-modifier key.</value>
+  </data>
+  <data name="HotkeySupported" xml:space="preserve">
+    <value>Shortcuts support Ctrl / Shift / Alt / Win plus letters, digits, or F1–F24.</value>
+  </data>
+  <data name="HotkeyModifier" xml:space="preserve">
+    <value>A shortcut needs a modifier and a non-modifier key.</value>
+  </data>
+  <data name="NoMonitor" xml:space="preserve">
+    <value>The selection does not include an available display.</value>
+  </data>
+  <data name="SelectionTooLarge" xml:space="preserve">
+    <value>The selection is too large. Select a smaller area.</value>
+  </data>
+  <data name="CaptureBufferFailed" xml:space="preserve">
+    <value>Could not create a capture buffer.</value>
+  </data>
+  <data name="ScaleBufferFailed" xml:space="preserve">
+    <value>Could not create a scaling buffer.</value>
+  </data>
+  <data name="CaptureFailed" xml:space="preserve">
+    <value>Screen capture failed. A display may have disconnected or the desktop may be locked.</value>
+  </data>
+  <data name="ScaleFailed" xml:space="preserve">
+    <value>Image scaling failed.</value>
+  </data>
+  <data name="SelectionTitle" xml:space="preserve">
+    <value>RitsukageGif — Select area</value>
+  </data>
+  <data name="CursorFailed" xml:space="preserve">
+    <value>Could not read the mouse position.</value>
+  </data>
+  <data name="CancelProcessing" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Settings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="StartRecording" xml:space="preserve">
+    <value>Record</value>
+  </data>
+  <data name="SelectAreaHint" xml:space="preserve">
+    <value>Select a recording area</value>
+  </data>
+  <data name="SelectArea" xml:space="preserve">
+    <value>Select area</value>
+  </data>
+  <data name="Ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="Cancelling" xml:space="preserve">
+    <value>Cancelling…</value>
+  </data>
+  <data name="TopologyChanged" xml:space="preserve">
+    <value>Display layout changed. Select an area again.</value>
+  </data>
+  <data name="Processing" xml:space="preserve">
+    <value>Processing…</value>
+  </data>
+  <data name="StopRecording" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="RecordingComplete" xml:space="preserve">
+    <value>Recording saved</value>
+  </data>
+  <data name="ClipboardFailed" xml:space="preserve">
+    <value>File saved; copying to clipboard failed: </value>
+  </data>
+  <data name="PreviewFailed" xml:space="preserve">
+    <value>File saved; preview failed: </value>
+  </data>
+  <data name="Cancelled" xml:space="preserve">
+    <value>Cancelled.</value>
+  </data>
+  <data name="RecordingFailed" xml:space="preserve">
+    <value>Recording failed: </value>
+  </data>
+  <data name="SnapNone" xml:space="preserve">
+    <value>Off</value>
+  </data>
+  <data name="SnapHorizontal" xml:space="preserve">
+    <value>Horizontal</value>
+  </data>
+  <data name="SnapVertical" xml:space="preserve">
+    <value>Vertical</value>
+  </data>
+  <data name="SnapBoth" xml:space="preserve">
+    <value>Horizontal + vertical</value>
+  </data>
+  <data name="BackgroundFailed" xml:space="preserve">
+    <value>Could not load background: </value>
+  </data>
+  <data name="About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="ScaleDivisor" xml:space="preserve">
+    <value>Scale divisor</value>
+  </data>
+  <data name="FrameRate" xml:space="preserve">
+    <value>Frame rate</value>
+  </data>
+  <data name="OutputFormat" xml:space="preserve">
+    <value>Format</value>
+  </data>
+  <data name="RecordedFrames" xml:space="preserve">
+    <value>Frames</value>
+  </data>
+  <data name="FileSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="OpenFolder" xml:space="preserve">
+    <value>Open folder</value>
+  </data>
+  <data name="ScaleHint" xml:space="preserve">
+    <value>Resize the image to 1/x of its original dimensions</value>
+  </data>
+  <data name="FrameRateHint" xml:space="preserve">
+    <value>Frames captured per second</value>
+  </data>
+  <data name="Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="SystemLanguage" xml:space="preserve">
+    <value>System default</value>
+  </data>
+  <data name="ChineseLanguage" xml:space="preserve">
+    <value>简体中文</value>
+  </data>
+  <data name="EnglishLanguage" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="LanguageRestart" xml:space="preserve">
+    <value>Applies after restart</value>
+  </data>
+  <data name="FfmpegFailed" xml:space="preserve">
+    <value>FFmpeg encoding failed ({0}): {1}</value>
+  </data>
+  <data name="RegionInfo" xml:space="preserve">
+    <value>Area: {0}, {1} · {2} × {3} pixels</value>
+  </data>
+  <data name="PreviewHint" xml:space="preserve">
+    <value>{0} × {1}
+{2}
+Drag to export; right-click to copy</value>
+  </data>
+  <data name="SelectionHint" xml:space="preserve">
+    <value>Drag to select · Click to select a window
+Right-click / Enter to confirm · Delete to clear
+Esc clears selection; press again to exit
+Shift cycles snapping; hold to disable: {0}
+{1} × {2} pixels</value>
+  </data>
+  <data name="NoInputFrames" xml:space="preserve">
+    <value>No frames.</value>
+  </data>
+  <data name="InvalidFrameBuffer" xml:space="preserve">
+    <value>Invalid frame buffer.</value>
+  </data>
+  <data name="InvalidWebp" xml:space="preserve">
+    <value>FFmpeg produced an invalid WebP container.</value>
+  </data>
+  <data name="TruncatedWebp" xml:space="preserve">
+    <value>Truncated WebP chunk.</value>
+  </data>
+  <data name="WebpTimingRange" xml:space="preserve">
+    <value>WebP frame timing is out of range.</value>
+  </data>
+  <data name="ProjectPage" xml:space="preserve">
+    <value>Project website</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="ShortcutDisabled" xml:space="preserve">
+    <value>Not assigned</value>
+  </data>
+  <data name="PresetSyntaxError">
+    <value>Invalid preset syntax on line {0}. Check the command, parameters and end marker.</value>
+  </data>
+  <data name="CommandNotReady">
+    <value>This action is unavailable. Select an area or wait for processing to finish.</value>
+  </data>
+  <data name="CommandHelp">
+    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window process [title] | windows | presets | preset activate name | preset run file [name] [--arg key=value] | preset params sessionId key=value [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name</value>
+  </data>
+  <data name="PresetsTitle">
+    <value>Presets</value>
+  </data>
+  <data name="StopPreset">
+    <value>Stop preset</value>
+  </data>
+  <data name="WindowNotFound">
+    <value>No matching visible window was found.</value>
+  </data>
+  <data name="PresetHotkeys" xml:space="preserve">
+    <value>Preset shortcuts</value>
+  </data>
+  <data name="AddPresetHotkey" xml:space="preserve">
+    <value>Add shortcut</value>
+  </data>
+  <data name="RemovePresetHotkey" xml:space="preserve">
+    <value>Remove shortcut</value>
+  </data>
+  <data name="PresetHotkeyRequired" xml:space="preserve">
+    <value>Select a preset and enter a shortcut.</value>
+  </data>
+  <data name="SourceWindow">
+    <value>Window content</value>
+  </data>
+  <data name="DslUnknownName">
+    <value>Unknown name: {0}</value>
+  </data>
+  <data name="DslExitImmediate">
+    <value>Exit actions cannot wait, await, finish or change states.</value>
+  </data>
+  <data name="DslExecutionLimit">
+    <value>Too many immediate actions; use wait to yield between repetitions.</value>
+  </data>
+  <data name="ChooseCaptureWindow">
+    <value>Choose a window to capture</value>
+  </data>
+  <data name="DslNumberRequired">
+    <value>A finite number is required.</value>
+  </data>
+  <data name="DslFallbackCycle">
+    <value>Fallback sources contain a cycle.</value>
+  </data>
+  <data name="DslDiagnostic">
+    <value>Line {0}, column {1}: {2}</value>
+  </data>
+  <data name="DslLayerRequired">
+    <value>Define at least one layout region.</value>
+  </data>
+  <data name="DslFallbackImage">
+    <value>The fallback image could not be decoded.</value>
+  </data>
+  <data name="DslUnexpected">
+    <value>Unexpected token: {0}</value>
+  </data>
+  <data name="DslDuration">
+    <value>Duration must be greater than zero and at most 24 hours.</value>
+  </data>
+  <data name="DslTooComplex">
+    <value>The script exceeds the size, nesting or layer limit.</value>
+  </data>
+  <data name="DslInvalidEscape">
+    <value>Invalid escape. Use / or \\ in paths.</value>
+  </data>
+  <data name="DslDuplicate">
+    <value>Duplicate declaration: {0}</value>
+  </data>
+  <data name="DslRange">
+    <value>An integer from {0} to {1} is required.</value>
+  </data>
+  <data name="WindowCaptureUnsupported">
+    <value>Window capture requires Windows 10 1903 or later and a compatible graphics device.</value>
+  </data>
+  <data name="SourceScreen">
+    <value>Screen</value>
+  </data>
+  <data name="WindowCaptureHint">
+    <value>Choose a window</value>
+  </data>
+  <data name="DslInvalidExpression">
+    <value>Invalid expression or incompatible operand types.</value>
+  </data>
+  <data name="DslColor">
+    <value>Use transparent, #RRGGBB or #AARRGGBB.</value>
+  </data>
+  <data name="DslStateRequired">
+    <value>Define at least one state.</value>
+  </data>
+  <data name="DslDivisionByZero">
+    <value>Division by zero.</value>
+  </data>
+  <data name="DslBooleanRequired">
+    <value>A boolean condition is required.</value>
+  </data>
+  <data name="DslAwaitTimeout">
+    <value>Waiting for the condition timed out.</value>
+  </data>
+  <data name="DslExpected">
+    <value>Expected {0}; found {1}.</value>
+  </data>
+  <data name="DslOutputInvalid">
+    <value>Invalid output directory or filename template.</value>
+  </data>
+  <data name="DslPolygon">
+    <value>A polygon needs 3–256 x,y pairs in placement-local pixels.</value>
+  </data>
+  <data name="RefreshWindows">
+    <value>Refresh</value>
+  </data>
+  <data name="DslUnclosedString">
+    <value>Unclosed string.</value>
+  </data>
+  <data name="CaptureSource">
+    <value>Capture source</value>
+  </data>
+  <data name="DslWindowRequired">
+    <value>Specify a non-empty process/title match; both cannot be *.</value>
+  </data>
+  <data name="DslFallbackReference">
+    <value>Source fallback references are available inside layout regions.</value>
+  </data>
+  <data name="PresetTemplate">
+    <value>Preset template</value>
+  </data>
+  <data name="ImportTemplate">
+    <value>Import template</value>
+  </data>
+  <data name="RemoveTemplate">
+    <value>Remove</value>
+  </data>
+  <data name="GeneralHeading" xml:space="preserve"><value>General</value></data>
+  <data name="DslArguments" xml:space="preserve"><value>Invalid arguments: {0}</value></data>
+  <data name="DslAbsoluteScreen" xml:space="preserve"><value>Absolute areas require screen capture.</value></data>
+  <data name="DslAssertion" xml:space="preserve"><value>Assertion failed.</value></data>
+  <data name="DslScriptState" xml:space="preserve"><value>Use either script or states in a preset.</value></data>
+  <data name="ScriptReadOnly" xml:space="preserve"><value>Cannot assign to constant: {0}</value></data>
+  <data name="ScriptTypeError" xml:space="preserve"><value>Value type does not match this operation.</value></data>
+  <data name="ScriptIndex" xml:space="preserve"><value>Array index is out of range.</value></data>
+  <data name="ScriptImportCycle" xml:space="preserve"><value>Circular import or too many nested imports.</value></data>
+  <data name="EditorTitle" xml:space="preserve"><value>Preset editor</value></data>
+  <data name="EditorUntitled" xml:space="preserve"><value>Untitled</value></data>
+  <data name="EditorNew" xml:space="preserve"><value>New</value></data>
+  <data name="EditorOpen" xml:space="preserve"><value>Open</value></data>
+  <data name="EditorSave" xml:space="preserve"><value>Save</value></data>
+  <data name="EditorSaveAs" xml:space="preserve"><value>Save as</value></data>
+  <data name="EditorEdit" xml:space="preserve"><value>Edit</value></data>
+  <data name="EditorRun" xml:space="preserve"><value>Run</value></data>
+  <data name="EditorDebug" xml:space="preserve"><value>Debug</value></data>
+  <data name="EditorPause" xml:space="preserve"><value>Pause</value></data>
+  <data name="EditorContinue" xml:space="preserve"><value>Continue</value></data>
+  <data name="EditorStep" xml:space="preserve"><value>Step</value></data>
+  <data name="EditorStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="EditorBreakpoint" xml:space="preserve"><value>Breakpoint</value></data>
+  <data name="EditorProblems" xml:space="preserve"><value>Problems</value></data>
+  <data name="EditorVariables" xml:space="preserve"><value>Variables</value></data>
+  <data name="EditorOutput" xml:space="preserve"><value>Output</value></data>
+  <data name="EditorPosition" xml:space="preserve"><value>Ln {0}, Col {1}</value></data>
+  <data name="EditorFinished" xml:space="preserve"><value>Finished — {0}</value></data>
+  <data name="EditorPaused" xml:space="preserve"><value>Script paused — {0}:{1}; capture continues</value></data>
+  <data name="EditorRunning" xml:space="preserve"><value>Running — {0}:{1}</value></data>
+  <data name="EditorFileChanged" xml:space="preserve"><value>The file changed on disk. Reopen it or save as another file.</value></data>
+  <data name="EditorUnsaved" xml:space="preserve"><value>Save changes before closing?</value></data>
+  <data name="EditorDiscard" xml:space="preserve"><value>Discard</value></data>
+  <data name="EditorCancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="EditorNoRuntime" xml:space="preserve"><value>Recording requires the application language service.</value></data>
+  <data name="PlatformUnsupported" xml:space="preserve">
+    <value>This platform is not supported.</value>
+  </data>
+  <data name="PlatformDisplayUnavailable" xml:space="preserve">
+    <value>Cannot connect to the display.</value>
+  </data>
+  <data name="PlatformCaptureHelperMissing" xml:space="preserve">
+    <value>The capture component was not found.</value>
+  </data>
+  <data name="PlatformCapturePermission" xml:space="preserve">
+    <value>Allow screen recording in System Settings.</value>
+  </data>
+  <data name="PlatformGlobalHotkeysUnavailable" xml:space="preserve">
+    <value>Global shortcuts are unavailable on this desktop.</value>
+  </data>
+  <data name="PlatformWindowMatchingUnavailable" xml:space="preserve">
+    <value>Use the system source picker on Wayland; window matching is unavailable.</value>
+  </data>
+  <data name="CapturePermissionDenied" xml:space="preserve">
+    <value>Screen recording permission was denied.</value>
+  </data>
+  <data name="CaptureSourceCancelled" xml:space="preserve">
+    <value>Source selection was cancelled.</value>
+  </data>
+  <data name="CaptureDependencyMissing" xml:space="preserve">
+    <value>A system capture component is missing.</value>
+  </data>
+  <data name="CaptureSourceTimeout" xml:space="preserve">
+    <value>Timed out waiting for the capture source.</value>
+  </data>
+  <data name="CaptureSourceLost" xml:space="preserve">
+    <value>The capture source was disconnected.</value>
+  </data>
+  <data name="CapturePlatformUnsupported" xml:space="preserve">
+    <value>This capture mode is unavailable on this system.</value>
+  </data>
+  <data name="CaptureHelperMissing" xml:space="preserve">
+    <value>The capture component was not found.</value>
+  </data>
+  <data name="ScriptResultError" xml:space="preserve">
+    <value>Script error: {0}</value>
+  </data>
+  <data name="ScriptPatternBindings" xml:space="preserve">
+    <value>Pattern bindings are inconsistent or duplicated.</value>
+  </data>
+  <data name="ScriptPatternNoMatch" xml:space="preserve">
+    <value>No pattern matched the value.</value>
+  </data>
+  <data name="ScriptPatternUnreachable" xml:space="preserve">
+    <value>This pattern is unreachable.</value>
+  </data>
+  <data name="ScriptPatternIncomplete" xml:space="preserve">
+    <value>Patterns do not cover every case.</value>
+  </data>
+  <data name="EncodingProgress" xml:space="preserve">
+    <value>Encoding</value>
+  </data>
+  <data name="CaptureRate" xml:space="preserve">
+    <value>Capture rate</value>
+  </data>
+  <data name="CaptureRateValue" xml:space="preserve">
+    <value>{0:F1} fps</value>
+  </data>
+  <data name="RecordingProgressDetail" xml:space="preserve">
+    <value>Capture {0:F1} fps · Encoded {1}/{2} · {3:F1}s</value>
+  </data>
+  <data name="EditorOpenWorkspace" xml:space="preserve"><value>Open folder</value></data>
+  <data name="EditorWorkspace" xml:space="preserve"><value>Workspace</value></data>
+  <data name="EditorReload" xml:space="preserve"><value>Reload from disk</value></data>
+  <data name="EditorKeepLocal" xml:space="preserve"><value>Keep local edits</value></data>
+  <data name="EditorCloseFile" xml:space="preserve"><value>Close file</value></data>
+  <data name="EditorFileMissing" xml:space="preserve"><value>File moved or deleted. Local content is preserved.</value></data>
+  <data name="EditorFileAlreadyOpen" xml:space="preserve"><value>This file is already open in another tab.</value></data>
+  <data name="EditorRefreshWorkspace" xml:space="preserve"><value>Refresh workspace</value></data>
+  <data name="EditorExternalChangeNotice" xml:space="preserve"><value>File changed on disk.</value></data>
+  <data name="ServiceLimitExceeded" xml:space="preserve"><value>The operation exceeds the configured limit.</value></data>
+  <data name="ScriptParametersInvalid" xml:space="preserve"><value>Invalid parameters: use name=value, at most 256 entries, 128 characters per name and 4096 per text value.</value></data>
+  <data name="FfprobeMissing" xml:space="preserve"><value>FFprobe not found.</value></data>
+  <data name="OutputPreview" xml:space="preserve"><value>Preview output</value></data>
+  <data name="PresetName" xml:space="preserve"><value>Preset</value></data>
+  <data name="Shortcut" xml:space="preserve"><value>Shortcut</value></data>
+  <data name="EditorSettingsMode" xml:space="preserve"><value>Close settings to run or debug.</value></data>
+  <data name="SelectionControls" xml:space="preserve">
+    <value>Detect: Controls · Tab</value>
+  </data>
+  <data name="SelectionWindows" xml:space="preserve">
+    <value>Detect: Windows · Tab</value>
+  </data>
+  <data name="SelectionWindowContent" xml:space="preserve">
+    <value>Capture: Window content · W</value>
+  </data>
+  <data name="SelectionScreenContent" xml:space="preserve">
+    <value>Capture: Screen · W</value>
+  </data>
+  <data name="SelectScreenRegion" xml:space="preserve">
+    <value>Select screen region</value>
+  </data>
+  <data name="SelectWindowContent" xml:space="preserve">
+    <value>Select window content</value>
+  </data>
+  <data name="AutomaticUpdates" xml:space="preserve"><value>Check for updates automatically</value></data>
+  <data name="CheckingUpdate" xml:space="preserve"><value>Checking…</value></data>
+  <data name="CheckUpdate" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="DownloadUpdate" xml:space="preserve"><value>Download update</value></data>
+  <data name="UpdateAvailable" xml:space="preserve"><value>Version {0} is available.</value></data>
+  <data name="UpdateCurrent" xml:space="preserve"><value>You are up to date.</value></data>
+  <data name="UpdateFailed" xml:space="preserve"><value>Could not check for updates.</value></data>
+  <data name="UpdateOpenFailed" xml:space="preserve"><value>Could not open the download link.</value></data>
+</root>

@@ -1,0 +1,56 @@
+preset "类型注解与模式" {
+    // 此范例只运行脚本，不启动录制。
+    area screen(0, 0, 1, 1);
+    script {
+        let count: number = 3;
+        let name: string? = null;
+        let enabled: boolean = true;
+        let mixed: (number|string)[] = [1, 'two'];
+        let either: number|string[] = ['a', 'b'];
+        let optionalList: number[]? = null;
+        let optionalItems: number?[] = [1, null];
+        let dynamic: any = 1;
+        dynamic = 'ready';
+        let unknown: unknown = {ready: true};
+        let array: array = [1, 'x'];
+        let object: object = {label: 'A'};
+        let callable: function = n => n + 1;
+        assert(count == 3 && name == null && enabled);
+        assert(mixed.length == 2 && (either is array) && optionalList == null);
+        assert(optionalItems[1] == null && dynamic == 'ready' && unknown.ready);
+        assert(array.length == 2 && object.label == 'A' && callable(2) == 3);
+
+        fn describe(value: any): string {
+            return value switch {
+                null => 'empty',
+                number n when n > 0 => 'positive: ' + str(n),
+                number => 'zero or negative',
+                string text => text,
+                _ => 'other'
+            };
+        }
+        assert(describe(3) == 'positive: 3' && describe(null) == 'empty');
+        assert(describe(-1) == 'zero or negative' && describe('hello') == 'hello');
+        const point = {x: 12, y: 0, label: 'A'};
+        let position = point switch { {x: number x, y: 0} => x, _ => -1 };
+        let middle = [1, 2, 3, 4] switch { [1, .. var rest, 4] => rest.length, _ => 0 };
+        assert(position == 12 && middle == 2);
+        assert(30 is >= 0 and <= 100);
+        assert(1 is 0 or 1);
+        assert('ready' is not null);
+        let size = 0;
+        if ('hello' is string text && text.length > 0) size = text.length;
+        assert(size == 5);
+        let doubled = count is number n ? n * 2 : 0;
+        assert(doubled == 6);
+        let captured = true switch { var item => item };
+        assert(captured);
+
+        let outcome: Result<number,string> = result.ok(12);
+        let label = outcome switch { Ok(var value) => 'value=' + str(value), Err(var error) => error };
+        let absent: Option<string> = option.none;
+        let fallback = absent switch { Some(var value) => value, None => 'default' };
+        assert(label == 'value=12' && fallback == 'default');
+        print('类型注解与模式：全部通过');
+    }
+}

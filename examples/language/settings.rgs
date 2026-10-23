@@ -1,0 +1,3 @@
+// 默认导出也可以是普通值。
+export const factor: number = 2;
+export default {label: '公共配置', factor};

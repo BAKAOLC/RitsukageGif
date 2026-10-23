@@ -1,0 +1,50 @@
+preset "LuaSTG World" {
+    window process "LuaSTGSub" title "*";
+    source window;
+    follow true;
+
+    const canvasWidth = 640;
+    const canvasHeight = 480;
+    const worldLeft = 32;
+    const worldRight = 416;
+    const worldBottom = 16;
+    const worldTop = 464;
+
+    layout(384, 448) {
+        region "world" {
+            source window;
+            area client(
+                (width - canvasWidth * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + worldLeft * min(width / canvasWidth, height / canvasHeight),
+                (height - canvasHeight * min(width / canvasWidth, height / canvasHeight)) / 2
+                    + (canvasHeight - worldTop) * min(width / canvasWidth, height / canvasHeight),
+                (worldRight - worldLeft) * min(width / canvasWidth, height / canvasHeight),
+                (worldTop - worldBottom) * min(width / canvasWidth, height / canvasHeight)
+            );
+            place(0, 0, 384, 448);
+            missing color "#000000";
+        }
+    }
+
+    record {
+        fps 50;
+        scale 1;
+        format Gif;
+        quality Best;
+        ffmpeg false;
+        cursor false;
+        sound false;
+        copy true;
+    }
+    save to "../captures" as "luastg-world-{timestamp}.{ext}";
+
+    script {
+        waitUntil(() => status().exists, 30);
+        select();
+        start();
+        while (status().recording) {
+            wait(0.1);
+        }
+        stop();
+    }
+}

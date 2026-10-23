@@ -1,0 +1,36 @@
+preset "按目标体积压缩 GIF" {
+    // 保留原文件；每一轮都从原文件重新处理，避免累积量化损失。
+    area screen(0, 0, 1, 1);
+    script {
+        fn run(): Result<void,ServiceError> {
+            const input = params.string('input', '../captures/LuaSTG Dynamic Layout-20261024-020349-043.gif');
+            const targetMB = params.number('targetMB', 30);
+            assert(targetMB > 0, 'targetMB 必须大于零');
+            const budget = targetMB * 1000000;
+            const original = media.inspect(input)?;
+            assert(original.format == 'gif', '此范例需要 GIF 输入');
+            const candidate = input + '.candidate.gif';
+            const finalPath = input + '.under-budget.gif';
+            if (original.bytes <= budget) {
+                files.copy(input, finalPath, true)?;
+                print('原文件已达到目标，已复制：', finalPath);
+                return result.ok(null);
+            }
+            for (const colors of [256, 224, 192, 176, 160, 128]) {
+                const output = media.process(input, candidate, {
+                    format: MediaFormat.Gif, colors: colors, dither: false, overwrite: true
+                })?;
+                const file = files.info(output.path)?;
+                print('颜色上限：', colors, '，大小：', file.size / 1000000, 'MB');
+                if (file.size <= budget) {
+                    files.copy(candidate, finalPath, true)?;
+                    print('达到目标：', finalPath, '。请检查颜色与渐变是否符合需要。');
+                    return result.ok(null);
+                }
+            }
+            print('未达到目标大小；原文件未修改，最后一次候选保留在：', candidate);
+            return result.ok(null);
+        }
+        return run();
+    }
+}

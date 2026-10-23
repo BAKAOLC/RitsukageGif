@@ -1,0 +1,21 @@
+preset "导入与公共模块" {
+    // 此范例只运行脚本，不启动录制。
+    area screen(0, 0, 1, 1);
+    script {
+        // 路径相对此文件。重复导入共享同一份模块状态。
+        import './common.rgs';
+        import double, {increment as next, count, initial} from './common.rgs';
+        import * as common from './common.rgs';
+        import settings from './settings.rgs';
+        assert(count == 0 && initial == 7);
+        assert(next() == 1 && count == 1 && common.count == 1);
+        const {increment} = common;
+        increment();
+        assert(count == 2 && double(count) == 4);
+        assert(common.clamp(12, 0, 10) == 10);
+        assert(settings.label == '公共配置' && settings.factor == 2);
+        import './common.rgs' as sameModule;
+        assert(sameModule.count == 2);
+        print('导入与公共模块：全部通过');
+    }
+}

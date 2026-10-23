@@ -1,0 +1,37 @@
+preset "文件转换与多个输出" {
+    // 只处理已有文件，不启动录制。
+    area screen(0, 0, 1, 1);
+    script {
+        fn run(): Result<void,ServiceError> {
+            const input = params.string('input', './assets/source-offline.png');
+            files.createDirectory('../captures/media')?;
+            const original = media.inspect(input)?;
+            print('原图：', original.width, '×', original.height, '，字节：', original.bytes);
+            const outputs = media.processMany(input, [
+                {path: '../captures/media/thumbnail.png', options: {
+                    format: MediaFormat.Png, frameIndex: 0, width: 160, overwrite: true
+                }},
+                {path: '../captures/media/palette.gif', options: {
+                    format: MediaFormat.Gif, width: 320, colors: 128, dither: true, overwrite: true
+                }},
+                {path: '../captures/media/preview.webp', options: {
+                    format: MediaFormat.WebP, width: 320, lossless: false, quality: 90, overwrite: true
+                }}
+            ]);
+            let failed = false;
+            for (const output of outputs) {
+                if (output.isErr) {
+                    failed = true;
+                    print('处理失败：', output.error.path, output.error.message);
+                    continue;
+                }
+                const file = files.info(output.value.path)?;
+                print(file.name, '：', file.size, '字节，', file.size / 1000000, 'MB');
+            }
+            if (failed) print('部分输出未完成，请查看上面的错误。');
+            else print('三个输出均已完成。');
+            return result.ok(null);
+        }
+        return run();
+    }
+}

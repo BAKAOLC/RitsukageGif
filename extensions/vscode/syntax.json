@@ -1,0 +1,541 @@
+{
+  "scopeName": "source.rgscript",
+  "patterns": [
+    {
+      "include": "#preset"
+    },
+    {
+      "include": "#script"
+    }
+  ],
+  "repository": {
+    "common": {
+      "patterns": [
+        {
+          "name": "comment.block.rgscript",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.double-slash.rgscript",
+          "match": "(?://|#).*$"
+        },
+        {
+          "name": "string.quoted.double.rgscript",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.rgscript",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.rgscript",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.rgscript",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "constant.language.rgscript",
+          "match": "(?<![\\w.])\\b(?:true|false|null)\\b"
+        },
+        {
+          "name": "constant.numeric.rgscript",
+          "match": "(?<![\\w.])(?:0[xX][0-9a-fA-F]+|0[bB][01]+|(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)(?!\\w)"
+        }
+      ]
+    },
+    "script": {
+      "patterns": [
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#variableDeclaration"
+        },
+        {
+          "include": "#functionSignature"
+        },
+        {
+          "include": "#arrowSignature"
+        },
+        {
+          "include": "#singleArrowParameter"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "include": "#member"
+        },
+        {
+          "include": "#codeBlock"
+        },
+        {
+          "name": "keyword.control.rgscript",
+          "match": "(?<![\\w.])\\b(?:let|const|fn|function|if|else|for|in|of|while|break|continue|return|import|export|from|default|as|try|catch|finally|throw|switch|is|var|when|and|or|not)\\b"
+        },
+        {
+          "name": "entity.name.function.rgscript",
+          "match": "\\b[A-Za-z_][\\w]*(?=\\s*\\()"
+        },
+        {
+          "include": "#parenthesizedExpression"
+        },
+        {
+          "include": "#bracketedExpression"
+        }
+      ]
+    },
+    "declaration": {
+      "patterns": [
+        {
+          "name": "constant.numeric.rgscript",
+          "match": "\\b\\d+(?:\\.\\d+)?(?:ms|s|m|%)"
+        },
+        {
+          "include": "#member"
+        },
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#scriptBlock"
+        },
+        {
+          "include": "#declarationBlock"
+        },
+        {
+          "name": "keyword.declaration.rgscript",
+          "match": "(?<![\\w.])\\b(?:window|process|title|source|screen|area|client|follow|missing|transparent|color|image|record|fps|scale|format|quality|cursor|sound|file|ffmpeg|channel|delay|loop|speed|position|live|holdLast|staleAfter|size|copy|save|to|layout|background|region|place|shape|rect|ellipse|rounded|polygon|initial|state|enter|exit|on|when|after|repeat|wait|await|timeout|goto|start|stop|cancel|select|show|hide|finish|emit|log|assert|breakpoint|move|visible|opacity)\\b(?!\\s*\\.)"
+        },
+        {
+          "name": "keyword.control.rgscript",
+          "match": "(?<![\\w.])\\b(?:let|const|fn|function|if|else|for|in|of|while|break|continue|return|import|export|from|default|as|try|catch|finally|throw|switch|is|var|when|and|or|not)\\b"
+        }
+      ]
+    },
+    "preset": {
+      "name": "meta.preset.rgscript",
+      "begin": "(?<![\\w.])(preset)\\b(?=\\s*(?:[\"\\x27]|$))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.rgscript"
+        }
+      },
+      "end": "(?<=\\})",
+      "patterns": [
+        {
+          "include": "#declarationHeader"
+        },
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#presetBody"
+        }
+      ]
+    },
+    "scriptBlock": {
+      "name": "meta.script.rgscript",
+      "begin": "(?<![\\w.])(script)\\b",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.declaration.rgscript"
+        }
+      },
+      "end": "(?<=\\})",
+      "patterns": [
+        {
+          "include": "#declarationHeader"
+        },
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#codeBlock"
+        }
+      ]
+    },
+    "codeBlock": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#script"
+        }
+      ]
+    },
+    "declarationBlock": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#declaration"
+        }
+      ]
+    },
+    "presetBody": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#declaration"
+        }
+      ]
+    },
+    "declarationHeader": {
+      "begin": "\\G(?=[^{])",
+      "end": "(?=\\{)",
+      "patterns": [
+        {
+          "include": "#common"
+        }
+      ]
+    },
+    "member": {
+      "patterns": [
+        {
+          "match": "(\\.)\\s*([A-Za-z_]\\w*)(?=\\s*\\()",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.rgscript"
+            },
+            "2": {
+              "name": "entity.name.function.rgscript"
+            }
+          }
+        },
+        {
+          "match": "(\\.)\\s*([A-Za-z_]\\w*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.rgscript"
+            },
+            "2": {
+              "name": "variable.other.property.rgscript"
+            }
+          }
+        },
+        {
+          "name": "variable.other.property.rgscript",
+          "match": "\\b[A-Za-z_]\\w*(?=\\s*:)"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.spread.rgscript",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.arrow.rgscript",
+          "match": "=>|->"
+        },
+        {
+          "name": "keyword.operator.assignment.rgscript",
+          "match": "(?:[+*/%-]=|=(?!=))"
+        },
+        {
+          "name": "keyword.operator.comparison.rgscript",
+          "match": "==|!=|<=|>=|[<>]"
+        },
+        {
+          "name": "keyword.operator.logical.rgscript",
+          "match": "\\?\\?|\\?\\.|&&|\\|\\||!(?!=)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.rgscript",
+          "match": "\\+\\+|--|[+*/%\\-]"
+        },
+        {
+          "name": "punctuation.separator.rgscript",
+          "match": "[:,;?]"
+        }
+      ]
+    },
+    "typeAnnotation": {
+      "name": "meta.type.annotation.rgscript",
+      "begin": ":",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.separator.type.rgscript"
+        }
+      },
+      "end": "(?=[=,;)}{]|\\bin\\b|\\bof\\b)",
+      "patterns": [
+        {
+          "include": "#groupedType"
+        },
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#genericTypeArguments"
+        },
+        {
+          "name": "entity.name.type.rgscript",
+          "match": "\\b[A-Za-z_]\\w*(?:\\.[A-Za-z_]\\w*)*\\b"
+        },
+        {
+          "name": "punctuation.definition.type.rgscript",
+          "match": "\\[\\]|[?|]"
+        }
+      ]
+    },
+    "bindingDefault": {
+      "name": "meta.binding.default.rgscript",
+      "begin": "=(?!=)",
+      "beginCaptures": {
+        "0": {
+          "name": "keyword.operator.assignment.rgscript"
+        }
+      },
+      "end": "(?=[,)}\\]])",
+      "patterns": [
+        {
+          "include": "#script"
+        }
+      ]
+    },
+    "bindingArray": {
+      "name": "meta.binding.array.rgscript",
+      "begin": "\\[",
+      "end": "\\]",
+      "patterns": [
+        {
+          "include": "#bindingContents"
+        }
+      ]
+    },
+    "bindingObject": {
+      "name": "meta.binding.object.rgscript",
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#bindingContents"
+        }
+      ]
+    },
+    "bindingContents": {
+      "patterns": [
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#bindingArray"
+        },
+        {
+          "include": "#bindingObject"
+        },
+        {
+          "include": "#bindingDefault"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "name": "variable.other.property.rgscript",
+          "match": "\\b[A-Za-z_]\\w*(?=\\s*:)"
+        },
+        {
+          "name": "variable.other.readwrite.rgscript",
+          "match": "\\b[A-Za-z_]\\w*\\b"
+        }
+      ]
+    },
+    "variableDeclaration": {
+      "name": "meta.variable.declaration.rgscript",
+      "begin": "(?<![\\w.])(let|const)\\b(?!\\s*:)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.rgscript"
+        }
+      },
+      "end": "(?==|;|\\bin\\b|\\bof\\b)",
+      "patterns": [
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#bindingArray"
+        },
+        {
+          "include": "#bindingObject"
+        },
+        {
+          "include": "#typeAnnotation"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "name": "variable.other.readwrite.rgscript",
+          "match": "\\b[A-Za-z_]\\w*\\b"
+        }
+      ]
+    },
+    "parameterList": {
+      "name": "meta.function.parameters.rgscript",
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#bindingArray"
+        },
+        {
+          "include": "#bindingObject"
+        },
+        {
+          "include": "#bindingDefault"
+        },
+        {
+          "include": "#typeAnnotation"
+        },
+        {
+          "include": "#operators"
+        },
+        {
+          "name": "variable.parameter.rgscript",
+          "match": "\\b[A-Za-z_]\\w*\\b"
+        }
+      ]
+    },
+    "functionSignature": {
+      "name": "meta.function.signature.rgscript",
+      "begin": "(?<![\\w.])(fn|function)\\b(?:\\s+([A-Za-z_]\\w*))?(?=\\s*\\()",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.rgscript"
+        },
+        "2": {
+          "name": "entity.name.function.rgscript"
+        }
+      },
+      "end": "(?=\\{|=>)",
+      "patterns": [
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#parameterList"
+        },
+        {
+          "include": "#typeAnnotation"
+        }
+      ]
+    },
+    "arrowSignature": {
+      "name": "meta.function.signature.rgscript",
+      "begin": "(?=\\((?:[^()]|\\([^()]*\\))*\\)\\s*(?::[^=;{}]+)?=>)",
+      "end": "(?==>)",
+      "patterns": [
+        {
+          "include": "#common"
+        },
+        {
+          "include": "#parameterList"
+        },
+        {
+          "include": "#typeAnnotation"
+        }
+      ]
+    },
+    "singleArrowParameter": {
+      "name": "variable.parameter.rgscript",
+      "match": "\\b[A-Za-z_]\\w*\\b(?=\\s*=>)"
+    },
+    "parenthesizedExpression": {
+      "begin": "\\(",
+      "end": "\\)",
+      "patterns": [
+        {
+          "include": "#script"
+        }
+      ]
+    },
+    "bracketedExpression": {
+      "begin": "\\[",
+      "end": "\\]",
+      "patterns": [
+        {
+          "include": "#script"
+        }
+      ]
+    },
+    "genericTypeArguments": {
+      "name": "meta.type.arguments.rgscript",
+      "begin": "<",
+      "end": ">",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.type.rgscript"
+        }
+      },
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.type.rgscript"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#groupedType"
+        },
+        {
+          "include": "#genericTypeArguments"
+        },
+        {
+          "name": "entity.name.type.rgscript",
+          "match": "\\b[A-Za-z_]\\w*\\b"
+        },
+        {
+          "name": "punctuation.definition.type.rgscript",
+          "match": "\\[\\]|[?,|]"
+        }
+      ]
+    },
+    "groupedType": {
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.type.rgscript"
+        }
+      },
+      "begin": "\\(",
+      "name": "meta.type.group.rgscript",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.type.rgscript"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#groupedType"
+        },
+        {
+          "include": "#genericTypeArguments"
+        },
+        {
+          "match": "\\b[A-Za-z_]\\w*\\b",
+          "name": "entity.name.type.rgscript"
+        },
+        {
+          "match": "\\[\\]|[?|]",
+          "name": "punctuation.definition.type.rgscript"
+        }
+      ],
+      "end": "\\)"
+    }
+  }
+}

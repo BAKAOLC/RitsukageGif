@@ -1,0 +1,23 @@
+preset "图像合成与帧总览" {
+    area screen(0, 0, 1, 1);
+    script {
+        files.createDirectory('../captures/images')?;
+        const composed = image.compose('../captures/images/composite.png', {
+            width: 384, height: 144, background: '#18202b', overwrite: true,
+            layers: [
+                {path: './assets/moving-dot.gif', frameIndex: 1,
+                    x: 0, y: 0, width: 192, height: 144},
+                {path: './assets/moving-dot.gif', frameIndex: 2,
+                    x: 192, y: 0, width: 192, height: 144, opacity: 0.8,
+                    effects: [{kind: EffectKind.Invert}]}
+            ]
+        })?;
+        const overview = image.contactSheet('./assets/moving-dot.gif',
+            '../captures/images/frames.png', {
+                columns: 4, thumbnailWidth: 96, thumbnailHeight: 72,
+                maxFrames: 4, overwrite: true
+            })?;
+        print(composed.path, composed.bytes, overview.path, overview.bytes);
+        return result.ok(null);
+    }
+}

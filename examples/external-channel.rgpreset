@@ -1,0 +1,44 @@
+// 先启动 camera 输入监听，再运行 input-publisher.py。
+preset "外部画面与跟随数据" {
+    layout(480, 180) {
+        background "#18202b";
+        region "original" {
+            source channel "camera" { delay 0.1; staleAfter 5; holdLast false; };
+            place(0, 0, 320, 180);
+            missing color "#303030";
+        }
+        region "detail" {
+            source channel "camera" { delay 0.1; staleAfter 5; holdLast false; };
+            place(320, 10, 160, 160);
+            missing color "#303030";
+        }
+    }
+    record {
+        fps 30; scale 1; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy false;
+    }
+    save to "../captures/input" as "external-{timestamp}.{ext}";
+    script {
+        // 默认发送器先发画面再发位置数据；留出与 delay 相同的预填时间。
+        waitUntil(() => {
+            const incoming = inputs.read('camera');
+            return incoming?.connected == true && incoming.value?.target != null;
+        }, 30);
+        wait(0.1);
+        start();
+        let previous = -1;
+        const duration = math.clamp(params.number('seconds', 10), 1, 300);
+        while (status().recording && status().elapsed < duration) {
+            const incoming = inputs.wait('camera', previous, 0.2);
+            if (incoming != null && incoming.connected && incoming.version != previous) {
+                previous = incoming.version;
+                const target = incoming.value?.target;
+                if (target != null && target.x is number && target.y is number
+                        && target.width is number && target.height is number) {
+                    scene.crop('detail', target.x, target.y, target.width, target.height);
+                }
+            }
+        }
+        stop();
+    }
+}

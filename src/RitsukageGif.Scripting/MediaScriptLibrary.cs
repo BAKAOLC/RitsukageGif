@@ -1,0 +1,144 @@
+namespace RitsukageGif.Scripting
+{
+    public static class MediaScriptLibrary
+    {
+        public static void Register(ScriptBindingRegistry bindings, IMediaProcessingService? service = null,
+            string? baseDirectory = null)
+        {
+            var root = Path.GetFullPath(baseDirectory ?? Environment.CurrentDirectory);
+            PixelEffectsBinding.Register(bindings);
+            bindings.RegisterEnum("MediaFormat", new Dictionary<string, string>
+            {
+                ["Gif"] = "gif", ["WebP"] = "webp", ["Png"] = "png", ["APng"] = "apng"
+            });
+            bindings.RegisterObjectSchema("MediaInfo",
+            [
+                new("path", "string"), new("bytes", "number"), new("width", "number"), new("height", "number"),
+                new("frames", "number"), new("duration", "number"), new("format", "string")
+            ]);
+            bindings.RegisterObjectSchema("MediaOptions",
+            [
+                new("format", "MediaFormat", true), new("colors", "number", true),
+                new("width", "number", true), new("height", "number", true), new("quality", "number", true),
+                new("lossless", "boolean", true), new("dither", "boolean", true), new("overwrite", "boolean", true),
+                new("cropX", "number", true), new("cropY", "number", true),
+                new("cropWidth", "number", true), new("cropHeight", "number", true),
+                new("flipHorizontal", "boolean", true), new("flipVertical", "boolean", true),
+                new("rotation", "number", true), new("frameIndex", "number", true),
+                new("effects", "PixelEffect[]", true)
+            ]);
+            bindings.RegisterObjectSchema("MediaOutput",
+                [new("path", "string"), new("options", "MediaOptions", true)]);
+            var media = bindings.RegisterTable("media");
+            media.Function("inspect", (args, token) => Inspect((string)args[0]!, token),
+                [new("path", "string")], "Result<MediaInfo,ServiceError>");
+            media.Function("process", (args, token) => Process((string)args[0]!, (string)args[1]!, args[2], token),
+                [new("input", "string"), new("output", "string"), new("options", "MediaOptions", true)],
+                "Result<MediaInfo,ServiceError>");
+            media.Function("processMany", async (args, token) =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    var input = (string)args[0]!;
+                    var outputs = (List<object?>)args[1]!;
+                    if (outputs.Count > 16) throw new ArgumentException(UiText.Get("ServiceLimitExceeded"));
+                    var seen = new HashSet<string>(OperatingSystem.IsWindows()
+                        ? StringComparer.OrdinalIgnoreCase
+                        : StringComparer.Ordinal);
+                    var destinations = outputs.Cast<Dictionary<string, object?>>().ToArray();
+                    // Reject aliases before starting workers so two encoders cannot race to publish the same file.
+                    foreach (var destination in destinations)
+                    {
+                        var path = Resolve((string)destination["path"]!);
+                        if (!seen.Add(path)) throw new ArgumentException(UiText.Get("ScriptTypeError"));
+                    }
+
+                    using var gate = new SemaphoreSlim(2);
+                    var tasks = destinations.Select(async destination =>
+                    {
+                        await gate.WaitAsync(token);
+                        try
+                        {
+                            return await Process(input, (string)destination["path"]!,
+                                destination.GetValueOrDefault("options"), token);
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }).ToArray();
+                    return (await Task.WhenAll(tasks)).ToList();
+                }, [new("input", "string"), new("outputs", "MediaOutput[]")],
+                "Result<MediaInfo,ServiceError>[]");
+            return;
+
+            string Resolve(string path) => Path.GetFullPath(path, root);
+
+            IMediaProcessingService Host() =>
+                service ?? throw new InvalidOperationException(UiText.Get("EditorNoRuntime"));
+
+            async ValueTask<object?> Inspect(string path, CancellationToken token)
+            {
+                try
+                {
+                    return new ScriptResult(true, Info(await Host().InspectAsync(Resolve(path), token)));
+                }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    token.ThrowIfCancellationRequested();
+                    return new ScriptResult(false, ScriptServiceErrors.FromException(error, path));
+                }
+            }
+
+            async ValueTask<object?> Process(string input, string output, object? options, CancellationToken token)
+            {
+                try
+                {
+                    return new ScriptResult(true,
+                        Info(await Host().ProcessAsync(Resolve(input), Resolve(output), ReadOptions(options), token)));
+                }
+                catch (Exception error) when (error is not OperationCanceledException)
+                {
+                    token.ThrowIfCancellationRequested();
+                    return new ScriptResult(false, ScriptServiceErrors.FromException(error, output));
+                }
+            }
+        }
+
+        private static Dictionary<string, object?> Info(MediaInfo info) => new()
+        {
+            ["path"] = info.Path, ["bytes"] = (double)info.Bytes, ["width"] = (double)info.Width,
+            ["height"] = (double)info.Height, ["frames"] = (double)info.Frames,
+            ["duration"] = info.DurationSeconds, ["format"] = info.Format
+        };
+
+        private static MediaProcessOptions ReadOptions(object? value)
+        {
+            var fields = value as Dictionary<string, object?> ?? [];
+
+            int? Integer(string name)
+            {
+                if (!fields.TryGetValue(name, out var field) || field is null) return null;
+                var number = ScriptEngine.Number(field);
+                if (!double.IsFinite(number) || !number.Equals(Math.Truncate(number)) || number < int.MinValue ||
+                    number > int.MaxValue)
+                    throw new ArgumentException(UiText.Get("ScriptTypeError"));
+                return (int)number;
+            }
+
+            bool Boolean(string name, bool fallback = false) =>
+                fields.GetValueOrDefault(name) is bool flag ? flag : fallback;
+
+            return new MediaProcessOptions
+            {
+                Format = fields.GetValueOrDefault("format") as string,
+                Colors = Integer("colors") ?? 256, Width = Integer("width"), Height = Integer("height"),
+                Quality = Integer("quality") ?? 90, Lossless = Boolean("lossless", true), Dither = Boolean("dither"),
+                Overwrite = Boolean("overwrite"), CropX = Integer("cropX"), CropY = Integer("cropY"),
+                CropWidth = Integer("cropWidth"), CropHeight = Integer("cropHeight"),
+                FlipHorizontal = Boolean("flipHorizontal"), FlipVertical = Boolean("flipVertical"),
+                Rotation = Integer("rotation") ?? 0, FrameIndex = Integer("frameIndex"),
+                Effects = fields.GetValueOrDefault("effects") is { } effects ? PixelEffectsBinding.Read(effects) : null
+            };
+        }
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "description": "Editing and debugging for RitsukageGif presets.",
+  "executable": "Path to RitsukageGif.exe.",
+  "run": "Ritsukage: Run preset",
+  "debug": "Ritsukage: Debug preset",
+  "program": "Preset file.",
+  "preset": "Preset name; empty selects the first preset.",
+  "stopOnEntry": "Pause before the first statement.",
+  "chooseExecutable": "Choose RitsukageGif.exe",
+  "noDocument": "Open a preset file first.",
+  "noExecutable": "Configure the RitsukageGif executable first.",
+  "closed": "Language service stopped.",
+  "variables": "Variables",
+  "unknownVariable": "Variable is not available at this pause point.",
+  "untrusted": "Trust this workspace before running a preset."
+}

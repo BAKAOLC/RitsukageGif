@@ -1,0 +1,56 @@
+preset "函数闭包与流程" {
+    // 此范例只运行脚本，不启动录制。
+    area screen(0, 0, 1, 1);
+    script {
+        // 函数声明提前可见，默认值只处理未提供的参数。
+        assert(add(2) == 3);
+        fn add(a: number, b: number = 1): number { return a + b; }
+        function identity(value = 9) { return value; }
+        assert(identity() == 9 && identity(null) == null);
+        const twice = value => value * 2;
+        const combine = (a, b) => { return a + b; };
+        const square = fn(value) { return value * value; };
+        assert(twice(combine(2, 3)) == 10 && square(4) == 16);
+
+        fn makeCounter(start: number) {
+            let current = start;
+            return () => { current++; return current; };
+        }
+        const counter = makeCounter(10);
+        assert(counter() == 11 && counter() == 12);
+        fn factorial(n: number): number {
+            if (n <= 1) return 1;
+            else return n * factorial(n - 1);
+        }
+        assert(factorial(5) == 120);
+        fn nothing(): void { return; }
+        assert(nothing() == null);
+
+        fn sum(...values: number[]): number {
+            let total = 0;
+            for (const item of values) total += item;
+            return total;
+        }
+        assert(sum(1, ...[2, 3]) == 6);
+        fn point({x, y = 0}, factor = 2) { return (x + y) * factor; }
+        assert(point({x: 3}) == 6);
+
+        let total = 0;
+        for (let i = 0; i < 8; i++) {
+            if (i == 2) continue;
+            if (i == 5) break;
+            total += i;
+        }
+        while (total < 10) total++;
+        assert(total == 10);
+        let traversed = 0;
+        for (const item in [1, 2, 3]) traversed += item;
+        assert(traversed == 6);
+
+        // 每次循环拥有独立的闭包变量。
+        const callbacks = [];
+        for (let i = 0; i < 3; i++) callbacks.push(() => i);
+        assert(callbacks[0]() == 0 && callbacks[2]() == 2);
+        print('函数闭包与流程：全部通过');
+    }
+}

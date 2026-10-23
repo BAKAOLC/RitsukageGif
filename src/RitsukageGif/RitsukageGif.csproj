@@ -1,71 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <PropertyGroup>
-        <OutputType>WinExe</OutputType>
-        <TargetFramework>net10.0-windows</TargetFramework>
-        <LangVersion>latest</LangVersion>
-        <Nullable>enable</Nullable>
-        <UseWPF>true</UseWPF>
-        <ApplicationManifest>app.manifest</ApplicationManifest>
-        <ApplicationIcon>Icon.ico</ApplicationIcon>
-        <RepositoryUrl>https://github.com/BAKAOLC/RitsukageGif</RepositoryUrl>
-        <RepositoryType>git</RepositoryType>
-        <PackageProjectUrl>https://github.com/BAKAOLC/RitsukageGif</PackageProjectUrl>
-        <AssemblyVersion>1.0.5.0</AssemblyVersion>
-        <FileVersion>1.0.5.0</FileVersion>
-        <Deterministic>true</Deterministic>
-        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-        <InvariantGlobalization>false</InvariantGlobalization>
-        <SelfContained>true</SelfContained>
-        <PublishSingleFile>true</PublishSingleFile>
-        <PublishTrimmed>false</PublishTrimmed>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <None Remove="About.txt"/>
-        <None Remove="Background.png"/>
-        <None Remove="se_alert.wav"/>
-        <None Remove="se_big.wav"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Include="Icon.ico"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <EmbeddedResource Include="About.txt"/>
-        <EmbeddedResource Include="BuildTime.txt"/>
-        <EmbeddedResource Include="se_alert.wav"/>
-        <EmbeddedResource Include="se_big.wav"/>
-        <Resource Include="Background.png"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Extended.Wpf.Toolkit" Version="5.0.0"/>
-        <PackageReference Include="JetBrains.Annotations" Version="2025.2.4"/>
-        <PackageReference Include="NAudio" Version="2.2.1"/>
-        <PackageReference Include="NAudio.Vorbis" Version="1.5.0"/>
-        <PackageReference Include="NHotkey.Wpf" Version="3.0.0"/>
-        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <Compile Update="Settings.Designer.cs">
-            <DesignTimeSharedInput>True</DesignTimeSharedInput>
-            <AutoGen>True</AutoGen>
-            <DependentUpon>Settings.settings</DependentUpon>
-        </Compile>
-    </ItemGroup>
-
-    <ItemGroup>
-        <None Update="Settings.settings">
-            <Generator>SettingsSingleFileGenerator</Generator>
-            <LastGenOutput>Settings.Designer.cs</LastGenOutput>
-        </None>
-    </ItemGroup>
-
-    <Target Name="PreBuild" BeforeTargets="PreBuildEvent">
-        <Exec Command="echo %25date:~0,4%25-%25date:~5,2%25-%25date:~8,2%25 %25time:~0,2%25:%25time:~3,2%25:%25time:~6,2%25.%25time:~9,2%25 &gt; BuildTime.txt"/>
-    </Target>
-
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
+    <ApplicationIcon>Icon.ico</ApplicationIcon>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <SelfContained>true</SelfContained>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Desktop/**/*.cs" />
+    <ProjectReference Include="../RitsukageGif.Scripting/RitsukageGif.Scripting.csproj" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
+    <ProjectReference Include="../RitsukageGif.Core/RitsukageGif.Core.csproj" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="Markdig" Version="1.4.2" />
+    <EmbeddedResource Include="About.md" LogicalName="RitsukageGif.About.md" />
+    <AvaloniaResource Include="Background.png" />
+  </ItemGroup>
 </Project>

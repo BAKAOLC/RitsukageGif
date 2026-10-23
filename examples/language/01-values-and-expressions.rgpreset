@@ -1,0 +1,55 @@
+preset "基础值与表达式" {
+    // 此范例只运行脚本，不启动录制。
+    area screen(0, 0, 1, 1);
+    script {
+        // 数字、字符串、布尔值与空值。
+        const numbers = [12, 1.5, 2e3, 0xff, 0b1010];
+        assert(numbers[2] == 2000 and numbers[4] == 10);
+        let message = "第一行\n第二行\t完成";
+        assert(message.includes('\n'));
+        let enabled = true;
+        let empty = null;
+        assert(enabled && !false && empty == null);
+
+        # 也支持这种单行注释。
+        /* 块内变量可以遮蔽外层变量。 */
+        let value = 10;
+        {
+            let value = 'inside';
+            assert(value == 'inside');
+        }
+        value += 2;
+        value -= 1;
+        value *= 3;
+        value /= 3;
+        value %= 4;
+        assert(value == 3);
+        let before = value++;
+        value--;
+        assert(before == 3 && value == 3);
+        assert(-value + +value == 0 && 7 % 4 == 3);
+        assert(value >= 3 && value <= 3 && value != 4);
+        assert(not false and (true or false));
+        assert('capture.gif' ~ '*.gif');
+        assert('value=' + str(value) == 'value=3');
+
+        let calls = 0;
+        fn touch() { calls++; return true; }
+        assert(!(false && touch()));
+        assert(true || touch());
+        assert(('ready' ?? touch()) == 'ready');
+        assert(calls == 0);
+        assert((value > 2 ? 'large' : 'small') == 'large');
+
+        // 空值访问链会跳过成员、参数和索引计算。
+        let missing = null;
+        assert((missing?.title ?? 'untitled') == 'untitled');
+        assert(missing?.[0] == null);
+        assert(missing?.(touch()) == null);
+        assert(missing?.[0:2] == null && calls == 0);
+        const items = [1];
+        items.push(2);
+        assert(items.length == 2);
+        print('基础值与表达式：全部通过');
+    }
+}

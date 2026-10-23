@@ -1,0 +1,26 @@
+preset "LuaSTG 局部镜头源" {
+    window process "LuaSTGSub" title "*";
+    source window;
+    follow true;
+    layout(320, 240) {
+        background "#18202b";
+        region "overview" {
+            source window;
+            area client(0, 0, 100%, 100%);
+            place(0, 0, 320, 240);
+            missing color "#18202b";
+        }
+        region "detail" {
+            source window;
+            area client(25%, 50%, 25%, 25%);
+            place(16, 16, 160, 120);
+            shape ellipse;
+            missing source "overview";
+        }
+    }
+    record {
+        fps 20; scale 1; format Gif; quality Balanced;
+        ffmpeg false; cursor false; sound false; copy false;
+    }
+    script { return; }
+}
