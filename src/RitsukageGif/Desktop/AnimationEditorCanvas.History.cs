@@ -28,15 +28,21 @@ namespace RitsukageGif.Desktop
         private void Remember()
         {
             if (_pixels is null) return;
+            Remember(_pixels.LongLength > HistoryBudget ? null : Snapshot());
+        }
+
+        private void Remember(AnimationEditorDraftState? before)
+        {
+            if (_pixels is null) return;
             _redo.Clear();
-            if (_pixels.LongLength > HistoryBudget)
+            if (before is null || before.Pixels.LongLength > HistoryBudget)
             {
                 _undo.Clear();
                 PruneImages();
                 return;
             }
 
-            _undo.Add(Snapshot());
+            _undo.Add(before);
             while (_undo.Count > 16 || _undo.Count * (long)_pixels.Length > HistoryBudget) _undo.RemoveAt(0);
             PruneImages();
         }

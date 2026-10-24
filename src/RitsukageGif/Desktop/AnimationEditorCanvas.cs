@@ -27,7 +27,22 @@ namespace RitsukageGif.Desktop
         private AnimationEditorLayer? _selected;
         private bool _changed;
 
-        public AnimationEditorTool Tool { get; set; }
+        private AnimationEditorTool _tool;
+
+        public AnimationEditorCanvas() => Focusable = true;
+
+        public AnimationEditorTool Tool
+        {
+            get => _tool;
+            set
+            {
+                if (_tool == value) return;
+                CancelGesture();
+                _tool = value;
+                InvalidateVisual();
+            }
+        }
+
         public Color BrushColor { get; set; } = Colors.Red;
         public double BrushSize { get; set; } = 4;
         public bool Filled { get; set; }
@@ -41,8 +56,11 @@ namespace RitsukageGif.Desktop
         public double SelectedTextSize => _selected?.FontSize ?? 24;
         public Size? SelectedImageSize => _selected?.Image is null ? null : _selected.Bounds.Size;
         public double SelectedOpacity => _selected?.Opacity ?? 1;
+        public Rect? SelectedBounds => _selected?.Bounds;
+        public bool HasSelectedLayer => _selected is not null;
         public event EventHandler? DraftChanged;
         public event EventHandler? SelectionChanged;
+        public event EventHandler? ViewChanged;
 
         public double Zoom
         {
@@ -50,9 +68,11 @@ namespace RitsukageGif.Desktop
             set
             {
                 if (!double.IsFinite(value)) return;
+                CancelGesture();
                 _zoom = Math.Clamp(value, .02, 32);
                 _fit = false;
                 InvalidateVisual();
+                ViewChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -60,6 +80,14 @@ namespace RitsukageGif.Desktop
             ? Math.Max(.001,
                 Math.Min(Math.Max(1, Bounds.Width - 24) / _width, Math.Max(1, Bounds.Height - 24) / _height))
             : _zoom;
+
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property != BoundsProperty || change.OldValue is not Rect previous ||
+                change.NewValue is not Rect current || previous.Size == current.Size) return;
+            if (_fit && _width > 0 && _height > 0) ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
 
         private Point Origin => new((Bounds.Width - _width * EffectiveZoom) / 2 + _pan.X,
             (Bounds.Height - _height * EffectiveZoom) / 2 + _pan.Y);
@@ -131,13 +159,17 @@ namespace RitsukageGif.Desktop
             Selection = null;
             Upload();
             DraftChanged?.Invoke(this, EventArgs.Empty);
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+            ViewChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void Fit()
         {
+            CancelGesture();
             _fit = true;
             _pan = default;
             InvalidateVisual();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void ResetDraft()
@@ -164,6 +196,7 @@ namespace RitsukageGif.Desktop
             _changed = true;
             InvalidateVisual();
             DraftChanged?.Invoke(this, EventArgs.Empty);
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public override void Render(DrawingContext context)
@@ -175,22 +208,25 @@ namespace RitsukageGif.Desktop
             var zoom = EffectiveZoom;
             using var transform = context.PushTransform(new Matrix(zoom, 0, 0, zoom, origin.X, origin.Y));
             var frame = new Rect(0, 0, _width, _height);
-            using var frameClip = context.PushClip(frame);
-            // Tile in screen space so very large images never create millions of checker cells.
-            var tile = 12 / zoom;
-            var visible = frame.Intersect(new Rect(ToImage(default), ToImage(new Point(Bounds.Width, Bounds.Height))));
-            for (var y = Math.Floor(visible.Y / tile); y < Math.Ceiling(visible.Bottom / tile); y++)
-            for (var x = Math.Floor(visible.X / tile); x < Math.Ceiling(visible.Right / tile); x++)
-                context.FillRectangle(((long)x + (long)y) % 2 == 0 ? Brushes.LightGray : Brushes.White,
-                    new Rect(x * tile, y * tile, tile, tile));
-            DrawContent(context);
-            if (Selection is { } selection)
-                context.DrawRectangle(null, new Pen(Brushes.DeepSkyBlue, 1 / zoom, DashStyle.Dash), selection);
-            if (_selected is { } selected)
-                context.DrawRectangle(null, new Pen(Brushes.Orange, 1 / zoom), selected.Bounds);
-            if (_dragging && Tool is AnimationEditorTool.Line or AnimationEditorTool.Rectangle
-                    or AnimationEditorTool.Ellipse)
-                DrawShape(context, _start, _last);
+            using (context.PushClip(frame))
+            {
+                // Tile in screen space so very large images never create millions of checker cells.
+                var tile = 12 / zoom;
+                var visible =
+                    frame.Intersect(new Rect(ToImage(default), ToImage(new Point(Bounds.Width, Bounds.Height))));
+                for (var y = Math.Floor(visible.Y / tile); y < Math.Ceiling(visible.Bottom / tile); y++)
+                for (var x = Math.Floor(visible.X / tile); x < Math.Ceiling(visible.Right / tile); x++)
+                    context.FillRectangle(((long)x + (long)y) % 2 == 0 ? Brushes.LightGray : Brushes.White,
+                        new Rect(x * tile, y * tile, tile, tile));
+                DrawContent(context);
+                if (Selection is { } selection)
+                    context.DrawRectangle(null, new Pen(Brushes.DeepSkyBlue, 1 / zoom, DashStyle.Dash), selection);
+                if (_dragging && Tool is AnimationEditorTool.Line or AnimationEditorTool.Rectangle
+                        or AnimationEditorTool.Ellipse)
+                    DrawShape(context, _start, _last);
+            }
+
+            DrawLayerSelection(context, zoom);
         }
 
         private void DrawContent(DrawingContext context)
