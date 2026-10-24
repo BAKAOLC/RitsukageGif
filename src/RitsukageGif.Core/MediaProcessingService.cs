@@ -152,7 +152,9 @@ namespace RitsukageGif.Core
                 File.Move(temporary, output, options.Overwrite);
                 return result with { Path = output };
             }
-            catch (MagickException) when (token.IsCancellationRequested)
+            // A cancelled native transform can invalidate its image instead of throwing MagickException.
+            catch (Exception exception) when (token.IsCancellationRequested &&
+                                              exception is MagickException or ObjectDisposedException)
             {
                 throw new OperationCanceledException(token);
             }

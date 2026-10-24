@@ -155,7 +155,7 @@ namespace RitsukageGif.Core
                 process.StartInfo.ArgumentList.Add(argument);
             token.ThrowIfCancellationRequested();
             process.Start();
-            var errors = process.StandardError.ReadToEndAsync();
+            var errors = process.StandardError.ReadToEndAsync(token);
             try
             {
                 await process.WaitForExitAsync(token);
@@ -171,7 +171,14 @@ namespace RitsukageGif.Core
                     await process.WaitForExitAsync(CancellationToken.None);
                 }
 
-                await errors;
+                try
+                {
+                    await errors;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    // Cancellation also interrupts a pipe retained by a descendant process.
+                }
             }
         }
     }

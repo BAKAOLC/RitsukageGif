@@ -106,7 +106,9 @@ namespace RitsukageGif.Core
             {
                 return await Task.Run(action, token);
             }
-            catch (MagickException) when (token.IsCancellationRequested)
+            // A cancelled native transform can invalidate its image instead of throwing MagickException.
+            catch (Exception exception) when (token.IsCancellationRequested &&
+                                              exception is MagickException or ObjectDisposedException)
             {
                 throw new OperationCanceledException(token);
             }

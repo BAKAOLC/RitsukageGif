@@ -41,16 +41,27 @@ namespace RitsukageGif.Core
                         using var image = new MagickImage(pixels,
                             new PixelReadSettings((uint)bounds.Width, (uint)bounds.Height, StorageType.Char,
                                 PixelMapping.BGRA));
+                        image.Progress += (_, value) => value.Cancel = token.IsCancellationRequested;
                         image.SetArtifact("dither:diffusion-amount",
                             options.Quality == GifQuality.Balanced ? "35%" : "100%");
-                        image.Quantize(new QuantizeSettings
+                        try
                         {
-                            Colors = 256,
-                            DitherMethod = options.Quality == GifQuality.Fast
-                                ? DitherMethod.No
-                                : DitherMethod.FloydSteinberg
-                        });
-                        lastEncoded = image.ToByteArray(MagickFormat.Gif);
+                            image.Quantize(new QuantizeSettings
+                            {
+                                Colors = 256,
+                                DitherMethod = options.Quality == GifQuality.Fast
+                                    ? DitherMethod.No
+                                    : DitherMethod.FloydSteinberg
+                            });
+                            token.ThrowIfCancellationRequested();
+                            lastEncoded = image.ToByteArray(MagickFormat.Gif);
+                        }
+                        catch (Exception error) when (token.IsCancellationRequested &&
+                                                      error is MagickException or ObjectDisposedException)
+                        {
+                            throw new OperationCanceledException(token);
+                        }
+
                         lastBounds = bounds;
                         token.ThrowIfCancellationRequested();
                         writer.Add(lastEncoded, bounds, delay);

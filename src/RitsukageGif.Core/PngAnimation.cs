@@ -10,15 +10,15 @@ namespace RitsukageGif.Core
 
         public static void Encode(IReadOnlyList<StoredFrame> frames, string output, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
             using var destination = File.Create(output);
             destination.Write(Signature);
             uint sequence = 0;
             for (var i = 0; i < frames.Count; i++)
             {
                 token.ThrowIfCancellationRequested();
-                using var image = new MagickImage(frames[i].Path);
-                image.ColorType = ColorType.TrueColorAlpha;
-                using var png = new MemoryStream(image.ToByteArray(MagickFormat.Png32));
+                using var image = new MagickImage();
+                using var png = new MemoryStream(EncodeFrame(image, frames[i].Path, token));
                 png.Position = 8;
                 var chunks = ReadChunks(png).ToArray();
                 if (i == 0)
@@ -40,6 +40,8 @@ namespace RitsukageGif.Core
                 BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(22), (ushort)divisor);
                 WriteChunk(destination, "fcTL", control);
                 foreach (var chunk in chunks.Where(c => c.Type == "IDAT"))
+                {
+                    token.ThrowIfCancellationRequested();
                     if (i == 0)
                     {
                         WriteChunk(destination, "IDAT", chunk.Data);
@@ -51,9 +53,32 @@ namespace RitsukageGif.Core
                         chunk.Data.CopyTo(data, 4);
                         WriteChunk(destination, "fdAT", data);
                     }
+                }
             }
 
+            token.ThrowIfCancellationRequested();
             WriteChunk(destination, "IEND", []);
+        }
+
+        private static byte[] EncodeFrame(MagickImage image, string path, CancellationToken token)
+        {
+            image.Progress += (_, value) => value.Cancel = token.IsCancellationRequested;
+            try
+            {
+                image.Read(path);
+                // Reading replaces the native image and its progress monitor.
+                image.Progress += (_, value) => value.Cancel = token.IsCancellationRequested;
+                token.ThrowIfCancellationRequested();
+                image.ColorType = ColorType.TrueColorAlpha;
+                var data = image.ToByteArray(MagickFormat.Png32);
+                token.ThrowIfCancellationRequested();
+                return data;
+            }
+            catch (Exception error) when (token.IsCancellationRequested &&
+                                          error is MagickException or ObjectDisposedException)
+            {
+                throw new OperationCanceledException(token);
+            }
         }
 
         public static MagickImageCollection Read(string path, uint limit = uint.MaxValue)
