@@ -65,7 +65,7 @@ namespace RitsukageGif.Desktop
                 if (_document is { } document && index < document.Frames.Count)
                 {
                     var frame = document.Frames[index];
-                    panel.Children.Add(new AnimationEditorThumbnail(frame.Path));
+                    panel.Children.Add(new AnimationEditorThumbnail(frame.Path, _thumbnailCache));
                     panel.Children.Add(new TextBlock
                     {
                         Text = $"{index + 1} · {frame.DelayMs} ms", Classes = { "editor-caption" },
@@ -113,6 +113,7 @@ namespace RitsukageGif.Desktop
                 UiText.LanguageChanged -= RefreshLanguage;
                 _playback.Stop();
                 _canvas.Dispose();
+                _thumbnailCache.Dispose();
                 _document?.Dispose();
             };
             Opened += async (_, _) =>
@@ -202,6 +203,7 @@ namespace RitsukageGif.Desktop
             _height.Value = _document.Height;
             _loops.Value = _document.Iterations;
             UpdateWindowTitle();
+            RequestThumbnailPrefetch();
             ShowFrame();
         }
 
@@ -255,6 +257,7 @@ namespace RitsukageGif.Desktop
             if (version != _frameLoadVersion || !ReferenceEquals(document, _document) || index != CurrentFrame) return;
             _displayedPath = frame.Path;
             _delay.Value = frame.DelayMs;
+            RequestThumbnailPrefetch();
             UpdateFrameSummary();
             SetStatus("AnimationFrameStatus", CurrentFrame + 1, _document.Frames.Count,
                 _document.Width, _document.Height);

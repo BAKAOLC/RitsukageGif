@@ -164,6 +164,7 @@ namespace RitsukageGif.Desktop
             }
 
             _displayedPath = loaded.Frames[0].Path;
+            _thumbnailCache.Clear();
             _document?.Dispose();
             _document = loaded;
             _path = path;
@@ -191,6 +192,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 _displayedPath = document.Frames[0].Path;
+                _thumbnailCache.Clear();
                 _document?.Dispose();
                 _document = document;
                 _path = null;
