@@ -712,4 +712,6 @@ Shift cycles snapping; hold to disable: {0}
   <data name="AnimationItalic" xml:space="preserve"><value>Italic</value></data>
   <data name="AnimationFontFamily" xml:space="preserve"><value>Font family</value></data>
   <data name="OpenRecordingDirectory" xml:space="preserve"><value>Open recording folder</value></data>
+  <data name="NumericIncrease" xml:space="preserve"><value>Increase</value></data>
+  <data name="NumericDecrease" xml:space="preserve"><value>Decrease</value></data>
 </root>

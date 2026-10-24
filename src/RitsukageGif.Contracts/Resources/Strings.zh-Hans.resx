@@ -712,4 +712,6 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="AnimationItalic" xml:space="preserve"><value>斜体</value></data>
   <data name="AnimationFontFamily" xml:space="preserve"><value>字体</value></data>
   <data name="OpenRecordingDirectory" xml:space="preserve"><value>打开录制文件夹</value></data>
+  <data name="NumericIncrease" xml:space="preserve"><value>增大</value></data>
+  <data name="NumericDecrease" xml:space="preserve"><value>减小</value></data>
 </root>

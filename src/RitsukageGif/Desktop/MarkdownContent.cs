@@ -45,7 +45,8 @@ namespace RitsukageGif.Desktop
                     case CodeBlock code:
                         panel.Children.Add(new Border
                         {
-                            Background = Brushes.White, CornerRadius = new CornerRadius(6), Padding = new Thickness(12),
+                            Background = AppTheme.SurfaceTint, CornerRadius = new CornerRadius(6),
+                            Padding = new Thickness(12),
                             Child = new SelectableTextBlock
                             {
                                 Text = code.Lines.ToString(), FontFamily = new FontFamily("Consolas"),
@@ -56,13 +57,13 @@ namespace RitsukageGif.Desktop
                     case QuoteBlock quote:
                         panel.Children.Add(new Border
                         {
-                            BorderBrush = Brushes.LightSlateGray, BorderThickness = new Thickness(3, 0, 0, 0),
+                            BorderBrush = AppTheme.Accent, BorderThickness = new Thickness(3, 0, 0, 0),
                             Padding = new Thickness(12, 4), Child = Blocks(quote)
                         });
                         break;
                     case ThematicBreakBlock:
                         panel.Children.Add(new Border
-                            { Height = 1, Background = Brushes.LightGray, Margin = new Thickness(0, 8) }); break;
+                            { Height = 1, Background = AppTheme.Outline, Margin = new Thickness(0, 8) }); break;
                 }
             }
 
@@ -85,7 +86,7 @@ namespace RitsukageGif.Desktop
                     case LiteralInline literal: target.Add(new Run(literal.Content.ToString())); break;
                     case CodeInline code:
                         target.Add(new Run(code.Content)
-                            { FontFamily = new FontFamily("Consolas"), Background = Brushes.White }); break;
+                            { FontFamily = new FontFamily("Consolas"), Background = AppTheme.SurfaceTint }); break;
                     case LineBreakInline line: target.Add(line.IsHard ? new LineBreak() : new Run(" ")); break;
                     case EmphasisInline emphasis:
                         var span = new Span();
@@ -110,7 +111,7 @@ namespace RitsukageGif.Desktop
                 Content = label, Padding = new Thickness(0), Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0), MinHeight = 0
             };
-            label.Foreground = Brushes.RoyalBlue;
+            label.Foreground = AppTheme.Accent;
             label.IsHitTestVisible = false;
             if (Uri.TryCreate(link.Url, UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http")
                 button.Click += (_, _) =>

@@ -1,4 +1,34 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:editing="using:AvaloniaEdit.Editing"
         x:Class="RitsukageGif.Desktop.EditorStyles">
-  <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+  <Styles.Resources>
+    <ResourceDictionary>
+      <x:Double x:Key="SearchPanelFontSize">13</x:Double>
+      <FontFamily x:Key="SearchPanelFontFamily">Default</FontFamily>
+      <StaticResource x:Key="CompletionToolTipBackground" ResourceKey="ToolTipBackground" />
+      <StaticResource x:Key="CompletionToolTipForeground" ResourceKey="ToolTipForeground" />
+      <StaticResource x:Key="CompletionToolTipBorderBrush" ResourceKey="ToolTipBorderBrush" />
+      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
+      <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+      <StaticResource x:Key="CompletionToolTipBorderThickness" ResourceKey="ToolTipBorderThickness" />
+      <StaticResource x:Key="OverloadViewerBackground" ResourceKey="ToolTipBackground" />
+      <StaticResource x:Key="OverloadViewerForeground" ResourceKey="ToolTipForeground" />
+      <StaticResource x:Key="OverloadViewerBorderBrush" ResourceKey="ToolTipBorderBrush" />
+      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
+      <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+      <StaticResource x:Key="SearchPanelBackgroundBrush" ResourceKey="SemiColorFill0" />
+      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
+      <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+      <StaticResource x:Key="SearchPanelBorderBrush" ResourceKey="SemiColorPrimary" />
+      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
+      <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+      <StaticResource x:Key="TextAreaSelectionBrush" ResourceKey="TextBoxSelectionBackground" />
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://AvaloniaEdit/Themes/Base.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Styles.Resources>
+  <Style Selector="editing|TextArea">
+    <Setter Property="SelectionForeground" Value="{DynamicResource TextBoxSelectionForeground}" />
+  </Style>
 </Styles>

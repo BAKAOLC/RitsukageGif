@@ -1,9 +1,10 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
-using Avalonia.Themes.Fluent;
+using Semi.Avalonia;
 using Avalonia.Threading;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace RitsukageGif.Desktop
 {
@@ -16,9 +17,15 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.UnhandledException += OnUnhandledException;
             RequestedThemeVariant = ThemeVariant.Light;
-            Styles.Add(new FluentTheme { DensityStyle = DensityStyle.Compact });
-            Styles.Add(new FlatStyles());
+            Styles.Add(new SemiTheme
+            {
+                Locale = CultureInfo.GetCultureInfo(CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh"
+                    ? "zh-CN"
+                    : "en-US")
+            });
+            Styles.Add(new AppTheme());
             Styles.Add(new EditorStyles());
+            LiveText.RefreshResources();
         }
 
         public override void OnFrameworkInitializationCompleted()
