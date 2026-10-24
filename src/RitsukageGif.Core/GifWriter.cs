@@ -9,7 +9,7 @@ namespace RitsukageGif.Core
         private long _delayOffset;
         private readonly bool _clearCanvas;
 
-        public GifWriter(Stream stream, int width, int height, bool clearCanvas = false)
+        public GifWriter(Stream stream, int width, int height, bool clearCanvas = false, uint iterations = 0)
         {
             _clearCanvas = clearCanvas;
             _stream = stream;
@@ -17,9 +17,14 @@ namespace RitsukageGif.Core
             WriteWord(width);
             WriteWord(height);
             _stream.Write([0x70, 0, 0]);
-            _stream.Write([0x21, 0xff, 11]);
-            _stream.Write("NETSCAPE2.0"u8);
-            _stream.Write([3, 1, 0, 0, 0]);
+            if (iterations != 1)
+            {
+                _stream.Write([0x21, 0xff, 11]);
+                _stream.Write("NETSCAPE2.0"u8);
+                _stream.Write([3, 1]);
+                WriteWord(checked((ushort)(iterations == 0 ? 0 : iterations - 1)));
+                _stream.WriteByte(0);
+            }
         }
 
         public void Dispose()

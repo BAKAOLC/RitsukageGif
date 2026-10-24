@@ -336,7 +336,7 @@ Shift 切换感知，长按临时关闭：{0}
     <value>当前状态不允许此操作，请先选择区域或等待处理完成。</value>
   </data>
   <data name="CommandHelp">
-    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window 进程 [标题] | windows | presets | preset activate 名称 | preset run 文件 [名称] [--arg 参数=值] | preset params 会话标识 参数=值 [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name</value>
+    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window 进程 [标题] | windows | presets | preset activate 名称 | preset run 文件 [名称] [--arg 参数=值] | preset params 会话标识 参数=值 [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name | editor [file] | animation-editor [file]</value>
   </data>
   <data name="PresetsTitle">
     <value>预设</value>
@@ -630,4 +630,86 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="MediaDownloadTimedOut" xml:space="preserve">
     <value>媒体下载超时。</value>
   </data>
+  <data name="AnimationEditorTitle" xml:space="preserve"><value>动图编辑器</value></data>
+  <data name="AnimationEditorOpen" xml:space="preserve"><value>编辑动图</value></data>
+  <data name="AnimationAllFrames" xml:space="preserve"><value>全部帧</value></data>
+  <data name="AnimationImport" xml:space="preserve"><value>导入帧</value></data>
+  <data name="AnimationExport" xml:space="preserve"><value>导出</value></data>
+  <data name="AnimationUndo" xml:space="preserve"><value>撤销</value></data>
+  <data name="AnimationRedo" xml:space="preserve"><value>重做</value></data>
+  <data name="AnimationPlay" xml:space="preserve"><value>播放 / 停止</value></data>
+  <data name="AnimationAddFrame" xml:space="preserve"><value>添加空白帧</value></data>
+  <data name="AnimationDuplicate" xml:space="preserve"><value>复制帧</value></data>
+  <data name="AnimationDelete" xml:space="preserve"><value>删除帧</value></data>
+  <data name="AnimationPrevious" xml:space="preserve"><value>前移</value></data>
+  <data name="AnimationNext" xml:space="preserve"><value>后移</value></data>
+  <data name="AnimationFrameStatus" xml:space="preserve"><value>帧 {0}/{1} · {2} × {3}</value></data>
+  <data name="AnimationWorking" xml:space="preserve"><value>正在处理…</value></data>
+  <data name="AnimationFiles" xml:space="preserve"><value>动图与图像</value></data>
+  <data name="AnimationApplyFirst" xml:space="preserve"><value>请先应用或放弃绘制草稿。</value></data>
+  <data name="AnimationExported" xml:space="preserve"><value>已导出：{0}</value></data>
+  <data name="AnimationUnsaved" xml:space="preserve"><value>放弃尚未导出的修改？</value></data>
+  <data name="AnimationText" xml:space="preserve"><value>文字 / 水印</value></data>
+  <data name="AnimationDelay" xml:space="preserve"><value>时长（毫秒）</value></data>
+  <data name="AnimationSetDelay" xml:space="preserve"><value>应用时长</value></data>
+  <data name="AnimationLoops" xml:space="preserve"><value>循环（0 为无限）</value></data>
+  <data name="AnimationSetLoops" xml:space="preserve"><value>应用循环次数</value></data>
+  <data name="AnimationWidth" xml:space="preserve"><value>宽度（像素）</value></data>
+  <data name="AnimationHeight" xml:space="preserve"><value>高度（像素）</value></data>
+  <data name="AnimationResize" xml:space="preserve"><value>缩放全部帧</value></data>
+  <data name="AnimationCrop" xml:space="preserve"><value>裁剪到选区</value></data>
+  <data name="AnimationRotate" xml:space="preserve"><value>旋转 90°</value></data>
+  <data name="AnimationFlipHorizontal" xml:space="preserve"><value>水平翻转</value></data>
+  <data name="AnimationFlipVertical" xml:space="preserve"><value>垂直翻转</value></data>
+  <data name="AnimationFormat" xml:space="preserve"><value>格式</value></data>
+  <data name="AnimationEffectSize" xml:space="preserve"><value>半径 / 块大小</value></data>
+  <data name="AnimationMosaic" xml:space="preserve"><value>马赛克</value></data>
+  <data name="AnimationBlur" xml:space="preserve"><value>模糊</value></data>
+  <data name="AnimationGrayscale" xml:space="preserve"><value>灰度</value></data>
+  <data name="AnimationInvert" xml:space="preserve"><value>反色</value></data>
+  <data name="AnimationBrightness" xml:space="preserve"><value>亮度（%）</value></data>
+  <data name="AnimationContrast" xml:space="preserve"><value>对比度（%）</value></data>
+  <data name="AnimationApplyEffect" xml:space="preserve"><value>应用调整</value></data>
+  <data name="AnimationEffectHint" xml:space="preserve"><value>效果应用到选中的帧。绘制选区可限制处理范围。</value></data>
+  <data name="AnimationFrames" xml:space="preserve"><value>帧</value></data>
+  <data name="AnimationDrawing" xml:space="preserve"><value>绘制</value></data>
+  <data name="AnimationEffects" xml:space="preserve"><value>效果</value></data>
+  <data name="AnimationSelect" xml:space="preserve"><value>选择图层</value></data>
+  <data name="AnimationPan" xml:space="preserve"><value>平移</value></data>
+  <data name="AnimationBrush" xml:space="preserve"><value>画笔</value></data>
+  <data name="AnimationEraser" xml:space="preserve"><value>橡皮</value></data>
+  <data name="AnimationLine" xml:space="preserve"><value>直线</value></data>
+  <data name="AnimationRectangle" xml:space="preserve"><value>矩形</value></data>
+  <data name="AnimationEllipse" xml:space="preserve"><value>椭圆</value></data>
+  <data name="AnimationSelection" xml:space="preserve"><value>区域选择</value></data>
+  <data name="AnimationTool" xml:space="preserve"><value>工具</value></data>
+  <data name="AnimationColor" xml:space="preserve"><value>颜色</value></data>
+  <data name="AnimationBrushSize" xml:space="preserve"><value>笔宽（像素）</value></data>
+  <data name="AnimationFilled" xml:space="preserve"><value>填充形状</value></data>
+  <data name="AnimationSetBrush" xml:space="preserve"><value>应用画笔样式</value></data>
+  <data name="AnimationFontSize" xml:space="preserve"><value>字号（像素）</value></data>
+  <data name="AnimationAddText" xml:space="preserve"><value>添加文字</value></data>
+  <data name="AnimationUpdateText" xml:space="preserve"><value>修改选中文字</value></data>
+  <data name="AnimationAddImage" xml:space="preserve"><value>添加图片水印</value></data>
+  <data name="AnimationOpacity" xml:space="preserve"><value>不透明度（%）</value></data>
+  <data name="AnimationUpdateImage" xml:space="preserve"><value>修改选中图片</value></data>
+  <data name="AnimationDeleteLayer" xml:space="preserve"><value>删除选中图层</value></data>
+  <data name="AnimationApplyDrawing" xml:space="preserve"><value>应用到当前帧</value></data>
+  <data name="AnimationApplyWatermark" xml:space="preserve"><value>水印应用到所选帧</value></data>
+  <data name="AnimationResetDraft" xml:space="preserve"><value>放弃绘制草稿</value></data>
+  <data name="AnimationFit" xml:space="preserve"><value>适合画布</value></data>
+  <data name="AnimationDrawingHint" xml:space="preserve"><value>拖动文字和图片可调整位置。绘制修改当前帧；水印可应用到多帧。</value></data>
+  <data name="AnimationSelectRegion" xml:space="preserve"><value>请先绘制区域选区。</value></data>
+  <data name="EditorKeepFrame" xml:space="preserve"><value>至少保留一帧。</value></data>
+  <data name="AnimationKeepRatio" xml:space="preserve"><value>锁定宽高比</value></data>
+  <data name="AnimationLossless" xml:space="preserve"><value>WebP 无损</value></data>
+  <data name="AnimationDither" xml:space="preserve"><value>GIF 抖动</value></data>
+  <data name="AnimationExportQuality" xml:space="preserve"><value>WebP 质量</value></data>
+  <data name="AnimationColors" xml:space="preserve"><value>GIF 颜色数</value></data>
+  <data name="AnimationExportHint" xml:space="preserve"><value>PNG 导出当前帧。GIF 使用颜色数与抖动；WebP 使用质量与无损设置。</value></data>
+  <data name="AnimationEditorImageTooLarge" xml:space="preserve"><value>图片尺寸过大。</value></data>
+  <data name="AnimationBold" xml:space="preserve"><value>粗体</value></data>
+  <data name="AnimationItalic" xml:space="preserve"><value>斜体</value></data>
+  <data name="AnimationFontFamily" xml:space="preserve"><value>字体</value></data>
+  <data name="OpenRecordingDirectory" xml:space="preserve"><value>打开录制文件夹</value></data>
 </root>

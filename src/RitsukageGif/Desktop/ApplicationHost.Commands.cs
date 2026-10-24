@@ -50,6 +50,8 @@ namespace RitsukageGif.Desktop
                         return await ExecuteInputCommandAsync(inputArguments);
                     case ["editor"]: await OpenEditorAsync(null); break;
                     case ["editor", var editorFile]: await OpenEditorAsync(editorFile); break;
+                    case ["animation-editor"]: await ShowAnimationEditorAsync(); break;
+                    case ["animation-editor", var animationFile]: await ShowAnimationEditorAsync(animationFile); break;
                     case ["stop"]:
                         if (_recording) await ToggleRecordingAsync();
                         break;

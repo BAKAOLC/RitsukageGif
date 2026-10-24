@@ -178,6 +178,8 @@ namespace RitsukageGif.Desktop
 
         private async Task ShutdownCoreAsync()
         {
+            if (!_closing && _animationEditor is { } animationEditor &&
+                !await animationEditor.RequestCloseAsync()) return;
             if (!_closing && _editor is { } editor && !await editor.RequestCloseAsync()) return;
             _closing = true;
             _cleanupTimer?.Stop();

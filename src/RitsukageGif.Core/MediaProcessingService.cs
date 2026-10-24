@@ -50,6 +50,7 @@ namespace RitsukageGif.Core
                 foreach (var image in images)
                     image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
                 if (info.Format == "apng") MediaPngCodec.Coalesce(images, token);
+                else if (info.Format == "webp") MediaWebpCodec.Coalesce(input, images, info.Width, info.Height, token);
                 else images.Coalesce();
                 token.ThrowIfCancellationRequested();
                 return images;

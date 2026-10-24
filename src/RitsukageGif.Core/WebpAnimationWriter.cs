@@ -9,7 +9,7 @@ namespace RitsukageGif.Core
         private long _delayOffset;
         private int _delay;
 
-        public WebpAnimationWriter(Stream stream, int width, int height)
+        public WebpAnimationWriter(Stream stream, int width, int height, uint iterations = 0)
         {
             _stream = stream;
             stream.Write("RIFF"u8);
@@ -21,7 +21,10 @@ namespace RitsukageGif.Core
             WriteUInt24(height - 1);
             stream.Write("ANIM"u8);
             WriteUInt32(6);
-            stream.Write([0, 0, 0, 0, 0, 0]);
+            stream.Write([0, 0, 0, 0]);
+            Span<byte> loop = stackalloc byte[2];
+            BinaryPrimitives.WriteUInt16LittleEndian(loop, checked((ushort)iterations));
+            stream.Write(loop);
         }
 
         public void Add(byte[] webp, PixelRect bounds, int delay, bool blend = false)
@@ -73,6 +76,8 @@ namespace RitsukageGif.Core
             if (webp.Length < 12 || !webp.AsSpan(0, 4).SequenceEqual("RIFF"u8) ||
                 !webp.AsSpan(8, 4).SequenceEqual("WEBP"u8)) throw new InvalidDataException();
             var offset = 12;
+            var alphaOffset = -1;
+            var alphaEnd = -1;
             while (offset <= webp.Length - 8)
             {
                 var length = BinaryPrimitives.ReadUInt32LittleEndian(webp.AsSpan(offset + 4, 4));
@@ -80,6 +85,19 @@ namespace RitsukageGif.Core
                 if (padded > webp.Length - offset - 8) throw new InvalidDataException();
                 if (webp.AsSpan(offset, 4).SequenceEqual("VP8L"u8))
                     return webp.AsSpan(offset, checked(8 + (int)padded));
+                if (webp.AsSpan(offset, 4).SequenceEqual("ALPH"u8))
+                {
+                    alphaOffset = offset;
+                    alphaEnd = checked(offset + 8 + (int)padded);
+                }
+
+                if (webp.AsSpan(offset, 4).SequenceEqual("VP8 "u8))
+                {
+                    if (alphaOffset < 0) return webp.AsSpan(offset, checked(8 + (int)padded));
+                    if (alphaEnd != offset) throw new InvalidDataException();
+                    return webp.AsSpan(alphaOffset, checked(offset - alphaOffset + 8 + (int)padded));
+                }
+
                 offset += checked(8 + (int)padded);
             }
 

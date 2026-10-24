@@ -336,7 +336,7 @@ Shift cycles snapping; hold to disable: {0}
     <value>This action is unavailable. Select an area or wait for processing to finish.</value>
   </data>
   <data name="CommandHelp">
-    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window process [title] | windows | presets | preset activate name | preset run file [name] [--arg key=value] | preset params sessionId key=value [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name</value>
+    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window process [title] | windows | presets | preset activate name | preset run file [name] [--arg key=value] | preset params sessionId key=value [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name | editor [file] | animation-editor [file]</value>
   </data>
   <data name="PresetsTitle">
     <value>Presets</value>
@@ -630,4 +630,86 @@ Shift cycles snapping; hold to disable: {0}
   <data name="MediaDownloadTimedOut" xml:space="preserve">
     <value>Media download timed out.</value>
   </data>
+  <data name="AnimationEditorTitle" xml:space="preserve"><value>Animation editor</value></data>
+  <data name="AnimationEditorOpen" xml:space="preserve"><value>Edit animation</value></data>
+  <data name="AnimationAllFrames" xml:space="preserve"><value>All frames</value></data>
+  <data name="AnimationImport" xml:space="preserve"><value>Import frames</value></data>
+  <data name="AnimationExport" xml:space="preserve"><value>Export</value></data>
+  <data name="AnimationUndo" xml:space="preserve"><value>Undo</value></data>
+  <data name="AnimationRedo" xml:space="preserve"><value>Redo</value></data>
+  <data name="AnimationPlay" xml:space="preserve"><value>Play / Stop</value></data>
+  <data name="AnimationAddFrame" xml:space="preserve"><value>Add blank</value></data>
+  <data name="AnimationDuplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="AnimationDelete" xml:space="preserve"><value>Delete</value></data>
+  <data name="AnimationPrevious" xml:space="preserve"><value>Move left</value></data>
+  <data name="AnimationNext" xml:space="preserve"><value>Move right</value></data>
+  <data name="AnimationFrameStatus" xml:space="preserve"><value>Frame {0}/{1} · {2} × {3}</value></data>
+  <data name="AnimationWorking" xml:space="preserve"><value>Processing…</value></data>
+  <data name="AnimationFiles" xml:space="preserve"><value>Animations and images</value></data>
+  <data name="AnimationApplyFirst" xml:space="preserve"><value>Apply or discard the drawing before continuing.</value></data>
+  <data name="AnimationExported" xml:space="preserve"><value>Exported: {0}</value></data>
+  <data name="AnimationUnsaved" xml:space="preserve"><value>Discard changes that have not been exported?</value></data>
+  <data name="AnimationText" xml:space="preserve"><value>Text / watermark</value></data>
+  <data name="AnimationDelay" xml:space="preserve"><value>Duration (ms)</value></data>
+  <data name="AnimationSetDelay" xml:space="preserve"><value>Set duration</value></data>
+  <data name="AnimationLoops" xml:space="preserve"><value>Loops (0 = infinite)</value></data>
+  <data name="AnimationSetLoops" xml:space="preserve"><value>Set loops</value></data>
+  <data name="AnimationWidth" xml:space="preserve"><value>Width (px)</value></data>
+  <data name="AnimationHeight" xml:space="preserve"><value>Height (px)</value></data>
+  <data name="AnimationResize" xml:space="preserve"><value>Resize all frames</value></data>
+  <data name="AnimationCrop" xml:space="preserve"><value>Crop to selection</value></data>
+  <data name="AnimationRotate" xml:space="preserve"><value>Rotate 90°</value></data>
+  <data name="AnimationFlipHorizontal" xml:space="preserve"><value>Flip horizontal</value></data>
+  <data name="AnimationFlipVertical" xml:space="preserve"><value>Flip vertical</value></data>
+  <data name="AnimationFormat" xml:space="preserve"><value>Format</value></data>
+  <data name="AnimationEffectSize" xml:space="preserve"><value>Radius / block (px)</value></data>
+  <data name="AnimationMosaic" xml:space="preserve"><value>Mosaic</value></data>
+  <data name="AnimationBlur" xml:space="preserve"><value>Blur</value></data>
+  <data name="AnimationGrayscale" xml:space="preserve"><value>Grayscale</value></data>
+  <data name="AnimationInvert" xml:space="preserve"><value>Invert</value></data>
+  <data name="AnimationBrightness" xml:space="preserve"><value>Brightness (%)</value></data>
+  <data name="AnimationContrast" xml:space="preserve"><value>Contrast (%)</value></data>
+  <data name="AnimationApplyEffect" xml:space="preserve"><value>Apply adjustment</value></data>
+  <data name="AnimationEffectHint" xml:space="preserve"><value>Effects apply to selected frames. Draw a selection to limit the affected area.</value></data>
+  <data name="AnimationFrames" xml:space="preserve"><value>Frames</value></data>
+  <data name="AnimationDrawing" xml:space="preserve"><value>Draw</value></data>
+  <data name="AnimationEffects" xml:space="preserve"><value>Effects</value></data>
+  <data name="AnimationSelect" xml:space="preserve"><value>Select layer</value></data>
+  <data name="AnimationPan" xml:space="preserve"><value>Pan</value></data>
+  <data name="AnimationBrush" xml:space="preserve"><value>Brush</value></data>
+  <data name="AnimationEraser" xml:space="preserve"><value>Eraser</value></data>
+  <data name="AnimationLine" xml:space="preserve"><value>Line</value></data>
+  <data name="AnimationRectangle" xml:space="preserve"><value>Rectangle</value></data>
+  <data name="AnimationEllipse" xml:space="preserve"><value>Ellipse</value></data>
+  <data name="AnimationSelection" xml:space="preserve"><value>Region selection</value></data>
+  <data name="AnimationTool" xml:space="preserve"><value>Tool</value></data>
+  <data name="AnimationColor" xml:space="preserve"><value>Color (#AARRGGBB)</value></data>
+  <data name="AnimationBrushSize" xml:space="preserve"><value>Brush size (px)</value></data>
+  <data name="AnimationFilled" xml:space="preserve"><value>Fill shapes</value></data>
+  <data name="AnimationSetBrush" xml:space="preserve"><value>Set brush</value></data>
+  <data name="AnimationFontSize" xml:space="preserve"><value>Font size (px)</value></data>
+  <data name="AnimationAddText" xml:space="preserve"><value>Add text</value></data>
+  <data name="AnimationUpdateText" xml:space="preserve"><value>Update selected text</value></data>
+  <data name="AnimationAddImage" xml:space="preserve"><value>Add image watermark</value></data>
+  <data name="AnimationOpacity" xml:space="preserve"><value>Opacity (%)</value></data>
+  <data name="AnimationUpdateImage" xml:space="preserve"><value>Update selected image</value></data>
+  <data name="AnimationDeleteLayer" xml:space="preserve"><value>Delete selected layer</value></data>
+  <data name="AnimationApplyDrawing" xml:space="preserve"><value>Apply to current frame</value></data>
+  <data name="AnimationApplyWatermark" xml:space="preserve"><value>Apply watermark to selection</value></data>
+  <data name="AnimationResetDraft" xml:space="preserve"><value>Discard drawing</value></data>
+  <data name="AnimationFit" xml:space="preserve"><value>Fit canvas</value></data>
+  <data name="AnimationDrawingHint" xml:space="preserve"><value>Drag text and images to position them. Drawing edits the current frame; watermarks can apply to multiple frames.</value></data>
+  <data name="AnimationSelectRegion" xml:space="preserve"><value>Draw a region selection first.</value></data>
+  <data name="EditorKeepFrame" xml:space="preserve"><value>Keep at least one frame.</value></data>
+  <data name="AnimationKeepRatio" xml:space="preserve"><value>Keep aspect ratio</value></data>
+  <data name="AnimationLossless" xml:space="preserve"><value>Lossless WebP</value></data>
+  <data name="AnimationDither" xml:space="preserve"><value>GIF dithering</value></data>
+  <data name="AnimationExportQuality" xml:space="preserve"><value>WebP quality</value></data>
+  <data name="AnimationColors" xml:space="preserve"><value>GIF colors</value></data>
+  <data name="AnimationExportHint" xml:space="preserve"><value>PNG exports the current frame. GIF uses colors and dithering; WebP uses quality and lossless mode.</value></data>
+  <data name="AnimationEditorImageTooLarge" xml:space="preserve"><value>Image dimensions are too large.</value></data>
+  <data name="AnimationBold" xml:space="preserve"><value>Bold</value></data>
+  <data name="AnimationItalic" xml:space="preserve"><value>Italic</value></data>
+  <data name="AnimationFontFamily" xml:space="preserve"><value>Font family</value></data>
+  <data name="OpenRecordingDirectory" xml:space="preserve"><value>Open recording folder</value></data>
 </root>

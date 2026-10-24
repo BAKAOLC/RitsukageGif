@@ -69,10 +69,21 @@ namespace RitsukageGif.Desktop
             stats.Children.Add(_size);
             StyleButton(_configure, 60);
             _configure.Height = 28;
-            Grid.SetRow(_configure, 3);
-            Grid.SetColumnSpan(_configure, 2);
             _configure.HorizontalAlignment = HorizontalAlignment.Right;
-            stats.Children.Add(_configure);
+            var editAnimation = new Button
+                { Content = UiText.Get("AnimationEditorOpen"), Name = "OpenAnimationEditor" };
+            StyleButton(editAnimation, 68);
+            editAnimation.Height = 28;
+            ToolTip.SetTip(editAnimation, UiText.Get("AnimationEditorTitle"));
+            editAnimation.Click += async (_, _) => await _host.ShowAnimationEditorAsync(LastPath);
+            var actions = new WrapPanel
+                { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            editAnimation.Margin = new(0, 0, 5, 0);
+            actions.Children.Add(editAnimation);
+            actions.Children.Add(_configure);
+            Grid.SetRow(actions, 3);
+            Grid.SetColumnSpan(actions, 2);
+            stats.Children.Add(actions);
             StyleButton(_cancel, 90);
             _cancel.Height = 28;
             _cancel.HorizontalAlignment = HorizontalAlignment.Right;
@@ -115,16 +126,28 @@ namespace RitsukageGif.Desktop
                 Background = Brushes.Transparent, BorderThickness = new(0),
                 VerticalAlignment = VerticalAlignment.Bottom,
             };
-            open.Click += (_, _) =>
+            open.Click += async (_, _) =>
             {
-                if (LastPath == null) return;
+                var path = LastPath;
+                var configuredDirectory = Settings.OutputDirectory;
+                open.IsEnabled = false;
                 try
                 {
-                    PlatformShell.RevealFile(LastPath);
+                    await Task.Run(() =>
+                    {
+                        var directory = string.IsNullOrWhiteSpace(path)
+                            ? configuredDirectory
+                            : Path.GetDirectoryName(Path.GetFullPath(path))!;
+                        PlatformShell.OpenDirectory(directory);
+                    });
                 }
                 catch (Exception ex)
                 {
                     _host.SetStatus(ex.Message);
+                }
+                finally
+                {
+                    open.IsEnabled = true;
                 }
             };
             Grid.SetColumn(_updateAvailable, 1);

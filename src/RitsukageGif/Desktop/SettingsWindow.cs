@@ -122,6 +122,31 @@ namespace RitsukageGif.Desktop
                         await StorageProvider.OpenFolderPickerAsync(new() { Title = UiText.Get("ChooseOutput") });
                     if (folders.Count > 0) output.Text = folders[0].TryGetLocalPath();
                 })));
+            var openOutput = new Button
+            {
+                Name = "OpenRecordingDirectory", Content = UiText.Get("OpenRecordingDirectory"),
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
+            openOutput.Click += async (_, _) =>
+            {
+                var path = output.Text;
+                openOutput.IsEnabled = false;
+                try
+                {
+                    if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException(UiText.Get("OutputRequired"));
+                    await Task.Run(() => PlatformShell.OpenDirectory(path));
+                    _error.Text = "";
+                }
+                catch (Exception exception)
+                {
+                    _error.Text = exception.Message;
+                }
+                finally
+                {
+                    openOutput.IsEnabled = true;
+                }
+            };
+            general.Children.Add(Labeled("", openOutput));
             general.Children.Add(Labeled("", presets));
             panel = hotkeys;
             var record = HotkeyBox(draft.RecordHotkey);

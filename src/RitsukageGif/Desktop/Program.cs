@@ -55,7 +55,8 @@ namespace RitsukageGif.Desktop
                 {
                     if (args.Length >= 3 && args[0] == "preset" && args[1] == "run")
                         args[2] = Path.GetFullPath(args[2]);
-                    if (args is ["editor", var editorFile]) args[1] = Path.GetFullPath(editorFile);
+                    if (args is ["editor" or "animation-editor", var editorFile])
+                        args[1] = Path.GetFullPath(editorFile);
                     CommandReply reply;
                     if (args is ["--help"] or ["help"])
                     {

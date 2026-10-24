@@ -6,6 +6,21 @@ namespace RitsukageGif.Desktop
     {
         private static readonly SoundPlayback Sound = new();
 
+        public static void OpenDirectory(string path)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            var directory = Path.GetFullPath(path);
+            Directory.CreateDirectory(directory);
+            var start = new ProcessStartInfo
+            {
+                FileName = OperatingSystem.IsWindows() ? "explorer.exe" :
+                    OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
+                UseShellExecute = false
+            };
+            start.ArgumentList.Add(directory);
+            Process.Start(start)?.Dispose();
+        }
+
         public static void RevealFile(string path)
         {
             var start = new ProcessStartInfo { UseShellExecute = false };

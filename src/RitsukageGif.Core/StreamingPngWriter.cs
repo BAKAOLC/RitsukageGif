@@ -14,15 +14,17 @@ namespace RitsukageGif.Core
         private readonly byte[] _row;
         private readonly byte[] _lastControl = new byte[26];
         private readonly long _animationPosition;
+        private readonly uint _iterations;
         private long _controlPosition;
         private uint _sequence, _frames;
         private int _lastDelay;
 
-        public StreamingPngWriter(Stream stream, int width, int height, CancellationToken token)
+        public StreamingPngWriter(Stream stream, int width, int height, CancellationToken token, uint iterations = 0)
         {
             _stream = stream;
             _width = width;
             _token = token;
+            _iterations = iterations;
             stream.Write([137, 80, 78, 71, 13, 10, 26, 10]);
             Span<byte> header = stackalloc byte[13];
             header.Clear();
@@ -151,6 +153,7 @@ namespace RitsukageGif.Core
             Span<byte> animation = stackalloc byte[8];
             animation.Clear();
             BinaryPrimitives.WriteUInt32BigEndian(animation, _frames);
+            BinaryPrimitives.WriteUInt32BigEndian(animation[4..], _iterations);
             WriteChunk("acTL"u8, animation);
             _stream.Position = end;
         }

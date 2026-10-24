@@ -17,6 +17,7 @@
 11. [文件画面源](media-sources.md)：静态图片和动画参与实时布局。
 12. [数据处理](data-services.md)：JSON、CSV、二进制与摘要。
 13. [外部输入通道](input-channels.md)：管道、TCP、外部画面、JSON 数据和视频推流。
+14. [动图编辑器](animation-editor.md)：帧管理、绘制、文字、水印及动画导出。
 
 ## 第一个录制预设
 

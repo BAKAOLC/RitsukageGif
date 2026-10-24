@@ -8,18 +8,19 @@ namespace RitsukageGif.Core
     {
         private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
 
-        internal static void Coalesce(MagickImageCollection images, CancellationToken token)
+        internal static void Coalesce(MagickImageCollection images, CancellationToken token,
+            MagickColor? background = null)
         {
             var width = images.Max(image => Math.Max(image.Width, image.Page.Width));
             var height = images.Max(image => Math.Max(image.Height, image.Page.Height));
-            using var canvas = new MagickImage(MagickColors.Transparent, width, height);
+            using var canvas = new MagickImage(background ?? MagickColors.Transparent, width, height);
             canvas.SetArtifact("compose:outside-overlay", "false");
             using var complete = new MagickImageCollection();
             foreach (var frame in images)
             {
                 token.ThrowIfCancellationRequested();
                 using var previous = frame.GifDisposeMethod == GifDisposeMethod.Previous ? canvas.Clone() : null;
-                // APNG SOURCE replaces transparent pixels too; GIF coalescing always blends them over.
+                // SOURCE replaces transparent pixels too; GIF coalescing always blends them over.
                 canvas.Composite(frame, frame.Page.X, frame.Page.Y, frame.Compose);
                 var image = canvas.Clone();
                 image.AnimationDelay = frame.AnimationDelay;
@@ -30,7 +31,8 @@ namespace RitsukageGif.Core
                 if (previous is not null) canvas.Composite(previous, CompositeOperator.Src);
                 else if (frame.GifDisposeMethod == GifDisposeMethod.Background)
                 {
-                    using var empty = new MagickImage(MagickColors.Transparent, frame.Width, frame.Height);
+                    using var empty =
+                        new MagickImage(background ?? MagickColors.Transparent, frame.Width, frame.Height);
                     canvas.Composite(empty, frame.Page.X, frame.Page.Y, CompositeOperator.Src);
                 }
             }
