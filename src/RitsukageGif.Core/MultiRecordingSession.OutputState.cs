@@ -39,8 +39,7 @@ namespace RitsukageGif.Core
                 _staging = Path.Combine(Path.GetDirectoryName(destination)!, "." + Guid.NewGuid().ToString("N") +
                                                                              "." + output.Options.Format.ToString()
                                                                                  .ToLowerInvariant());
-                _live = output.Options.Format == OutputFormat.Gif &&
-                        !(output.Options.UseFfmpeg && FfmpegEncoder.FindExecutable() is not null);
+                _live = !(output.Options.UseFfmpeg && FfmpegEncoder.FindExecutable() is not null);
                 Next = 1000.0 / output.Options.Fps;
             }
 
@@ -72,9 +71,9 @@ namespace RitsukageGif.Core
                     frame = new QueuedFrame(null, path, time);
                 }
 
-                if (!_queue.Writer.TryWrite(frame)) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
                 Volatile.Write(ref _last, time);
                 Interlocked.Increment(ref _captured);
+                if (!_queue.Writer.TryWrite(frame)) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
                 Report(new RecordingProgress(RecordingStage.Recording, 0, Volatile.Read(ref _encoded)));
             }
 
@@ -113,12 +112,14 @@ namespace RitsukageGif.Core
                 }
             }
 
-            public async Task EncodeAsync()
+            public Task EncodeAsync() => Task.Run(EncodeCoreAsync);
+
+            private async Task EncodeCoreAsync()
             {
                 try
                 {
                     if (_live)
-                        await StreamingGifEncoder.EncodeAsync(ReadFrames(), _staging, Output.Options, this,
+                        await StreamingAnimationEncoder.EncodeAsync(ReadFrames(), _staging, Output.Options, this,
                             _abort.Token);
                     else
                     {
@@ -151,6 +152,7 @@ namespace RitsukageGif.Core
                 try
                 {
                     File.Move(_staging, Output.Path, false);
+                    ReportComplete();
                 }
                 catch (Exception ex)
                 {
@@ -188,7 +190,20 @@ namespace RitsukageGif.Core
                 return data;
             }
 
+            private void ReportComplete() => ReportProgress(new RecordingProgress(RecordingStage.Complete, 0,
+                Volatile.Read(ref _encoded)));
+
             public void Report(RecordingProgress value)
+            {
+                if (value.Stage != RecordingStage.Recording)
+                    value = value with
+                    {
+                        Stage = Volatile.Read(ref _completed) == 0 ? RecordingStage.Live : RecordingStage.Encoding
+                    };
+                ReportProgress(value);
+            }
+
+            private void ReportProgress(RecordingProgress value)
             {
                 if (value.Stage != RecordingStage.Recording) Volatile.Write(ref _encoded, value.Encoded);
                 var count = Volatile.Read(ref _captured);

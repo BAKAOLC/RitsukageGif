@@ -11,10 +11,16 @@ namespace RitsukageGif.Core
             public void Record() => Interlocked.CompareExchange(ref _ticks, clock.ElapsedTicks, -1);
         }
 
-        public async Task<IReadOnlyList<MultiRecordingResult>> RunAsync(
+        public Task<IReadOnlyList<MultiRecordingResult>> RunAsync(
             IReadOnlyList<MultiRecordingOutput> outputs, Func<MultiRecordingOutput, IFrameSource> sourceFactory,
             IProgress<MultiRecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
-            Action<double>? beginTick = null)
+            Action<double>? beginTick = null) =>
+            Task.Run(() => RunCoreAsync(outputs, sourceFactory, progress, stop, cancel, beginTick));
+
+        private static async Task<IReadOnlyList<MultiRecordingResult>> RunCoreAsync(
+            IReadOnlyList<MultiRecordingOutput> outputs, Func<MultiRecordingOutput, IFrameSource> sourceFactory,
+            IProgress<MultiRecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
+            Action<double>? beginTick)
         {
             if (outputs.Count is < 1 or > 8) throw new ArgumentException(UiText.Get("InvalidRecording"));
             var paths = new HashSet<string>(OperatingSystem.IsWindows()
@@ -95,7 +101,7 @@ namespace RitsukageGif.Core
                         {
                             var pixels = state.Source!.Capture(captureStop.Token);
                             if (captureStop.IsCancellationRequested) break;
-                            await state.EnqueueAsync(pixels, now, cancel);
+                            await state.EnqueueAsync(pixels, clock.Elapsed.TotalMilliseconds, cancel);
                             var period = 1000.0 / state.Output.Options.Fps;
                             // Skip missed deadlines instead of generating catch-up frames or slowing playback.
                             state.Next = Math.Max(state.Next + period,

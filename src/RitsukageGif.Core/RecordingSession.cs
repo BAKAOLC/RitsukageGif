@@ -6,6 +6,8 @@ namespace RitsukageGif.Core
 {
     public sealed class RecordingSession(Func<RecordingOptions, IFrameSource> sourceFactory)
     {
+        private const long DiskLimit = 4L * 1024 * 1024 * 1024;
+
         private readonly record struct CapturedFrame(byte[]? Pixels, string? Path, double Time);
 
         private sealed class EncodingProgress(Action<RecordingProgress> report) : IProgress<RecordingProgress>
@@ -24,21 +26,26 @@ namespace RitsukageGif.Core
             var abortToken = abort.Token;
             using var captureStop = CancellationTokenSource.CreateLinkedTokenSource(stop, abortToken);
             var captureToken = captureStop.Token;
-            var liveGif = options.Format == OutputFormat.Gif &&
-                          !(options.UseFfmpeg && FfmpegEncoder.FindExecutable() is not null);
+            var live = !(options.UseFfmpeg && FfmpegEncoder.FindExecutable() is not null);
             var capacity = Math.Clamp((int)(64L * 1024 * 1024 / ((long)options.Width * options.Height * 4)), 1, 8);
             using var memorySlots = new SemaphoreSlim(capacity, capacity);
-            var channel = liveGif
-                ? Channel.CreateUnbounded<CapturedFrame>(new UnboundedChannelOptions
-                    { SingleReader = true, SingleWriter = true })
-                : Channel.CreateBounded<CapturedFrame>(new BoundedChannelOptions(capacity)
-                    { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
+            var channel = Channel.CreateBounded<CapturedFrame>(new BoundedChannelOptions(100000)
+                { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
             var frames = new List<StoredFrame>();
             var capturedCount = 0;
             var encodedCount = 0;
             var capturedFps = 0.0;
             var elapsedSeconds = 0.0;
+            var captureCompleted = 0;
+            long diskBytes = 0;
             ExceptionDispatchInfo? captureFailure = null;
+
+            void ReserveDisk(long bytes)
+            {
+                if (Interlocked.Add(ref diskBytes, bytes) <= DiskLimit) return;
+                Interlocked.Add(ref diskBytes, -bytes);
+                throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+            }
 
             void Report(RecordingStage stage) => progress?.Report(new RecordingProgress(stage,
                 Volatile.Read(ref capturedCount), Volatile.Read(ref encodedCount),
@@ -49,7 +56,7 @@ namespace RitsukageGif.Core
                 : new EncodingProgress(value =>
                 {
                     Volatile.Write(ref encodedCount, value.Encoded);
-                    Report(value.Stage);
+                    Report(Volatile.Read(ref captureCompleted) == 0 ? RecordingStage.Live : RecordingStage.Encoding);
                 });
             var clock = Stopwatch.StartNew();
             long stoppedAt = -1;
@@ -96,6 +103,8 @@ namespace RitsukageGif.Core
 
                         abortToken.ThrowIfCancellationRequested();
                         if (stop.IsCancellationRequested) break;
+                        if (pixels.Length != checked(options.Width * options.Height * 4))
+                            throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
                         var timestamp = clock.Elapsed.TotalMilliseconds;
                         if (double.IsNaN(origin))
                         {
@@ -106,8 +115,9 @@ namespace RitsukageGif.Core
                         CapturedFrame frame;
                         // The producer is awaited in finally before the semaphore leaves its using scope.
                         // ReSharper disable once AccessToDisposedClosure
-                        if (liveGif && !memorySlots.Wait(0))
+                        if (!memorySlots.Wait(0))
                         {
+                            ReserveDisk(pixels.Length);
                             var path = Path.Combine(directory, $"capture-{sequence:D8}.bgra");
                             await File.WriteAllBytesAsync(path, pixels, abortToken);
                             frame = new CapturedFrame(null, path, timestamp - origin);
@@ -120,7 +130,8 @@ namespace RitsukageGif.Core
                             ? (sequence - 1) * 1000 / (timestamp - origin)
                             : 0);
                         Volatile.Write(ref capturedCount, sequence);
-                        await channel.Writer.WriteAsync(frame, abortToken);
+                        if (!channel.Writer.TryWrite(frame))
+                            throw new InvalidOperationException(UiText.Get("MemoryLimit"));
                         Report(RecordingStage.Recording);
                         next += period;
                         var behind = clock.Elapsed.TotalMilliseconds - next;
@@ -133,6 +144,8 @@ namespace RitsukageGif.Core
                         : stopTicks * 1000.0 / Stopwatch.Frequency;
                     endTime = double.IsNaN(origin) ? 0 : Math.Max(0, ended - origin);
                     Volatile.Write(ref elapsedSeconds, endTime / 1000);
+                    Volatile.Write(ref captureCompleted, 1);
+                    Report(RecordingStage.Encoding);
                     channel.Writer.TryComplete();
                 }
                 catch (Exception ex)
@@ -147,68 +160,67 @@ namespace RitsukageGif.Core
                     throw;
                 }
             }, CancellationToken.None);
+
+            async Task<byte[]> LoadAsync(CapturedFrame frame)
+            {
+                if (frame.Pixels is { } pixels)
+                {
+                    // The encoder and its iterator finish before this method disposes the semaphore.
+                    // ReSharper disable once AccessToDisposedClosure
+                    memorySlots.Release();
+                    return pixels;
+                }
+
+                var data = await File.ReadAllBytesAsync(frame.Path!, abortToken);
+                File.Delete(frame.Path!);
+                // Producer reservations and consumer releases deliberately share this atomic counter.
+                // ReSharper disable once AccessToModifiedClosure
+                Interlocked.Add(ref diskBytes, -data.Length);
+                return data;
+            }
+
+            async IAsyncEnumerable<RawFrame> ReadFrames()
+            {
+                CapturedFrame? pending = null;
+                await foreach (var frame in channel.Reader.ReadAllAsync(abortToken))
+                {
+                    if (pending is { } previous)
+                        yield return new RawFrame(await LoadAsync(previous),
+                            Math.Max(1, (int)(Math.Round(frame.Time) - Math.Round(previous.Time))));
+                    pending = frame;
+                }
+
+                await producer;
+                if (pending is { } last)
+                    yield return new RawFrame(await LoadAsync(last),
+                        Math.Max(1, (int)(Math.Round(endTime) - Math.Round(last.Time))));
+            }
+
             try
             {
-                if (liveGif)
-                {
-                    async IAsyncEnumerable<RawFrame> ReadLiveFrames()
+                if (live)
+                    await StreamingAnimationEncoder.EncodeAsync(ReadFrames(), staging, options, encodingProgress,
+                        abortToken);
+                else
+                    await Task.Run(async () =>
                     {
-                        (byte[] Pixels, double Time)? pending = null;
-                        await foreach (var frame in channel.Reader.ReadAllAsync(abortToken))
+                        await foreach (var raw in ReadFrames())
                         {
-                            var pixels = frame.Pixels;
-                            if (pixels is null)
-                            {
-                                pixels = await File.ReadAllBytesAsync(frame.Path!, abortToken);
-                                File.Delete(frame.Path!);
-                            }
-                            // Encoding and its frame iterator finish before the semaphore is disposed.
-                            // ReSharper disable once AccessToDisposedClosure
-                            else memorySlots.Release();
-
-                            if (pending is { } previousFrame)
-                                yield return new RawFrame(previousFrame.Pixels,
-                                    Math.Max(1, (int)(Math.Round(frame.Time) - Math.Round(previousFrame.Time))));
-                            pending = (pixels, frame.Time);
+                            if (frames.Count >= 100000)
+                                throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+                            ReserveDisk(raw.Pixels.Length + 122L);
+                            var path = Path.Combine(directory, $"{frames.Count:D8}.bmp");
+                            await BitmapSpool.WriteAsync(path, raw.Pixels, options.Width, options.Height, abortToken);
+                            frames.Add(new StoredFrame(path, raw.DelayMs));
                         }
 
-                        await producer;
-                        if (pending is { } lastFrame)
-                            yield return new RawFrame(lastFrame.Pixels,
-                                Math.Max(1, (int)(Math.Round(endTime) - Math.Round(lastFrame.Time))));
-                    }
-
-                    await StreamingGifEncoder.EncodeAsync(ReadLiveFrames(), staging, options, encodingProgress,
-                        abortToken);
-                }
-                else
-                {
-                    double previous = 0;
-                    await foreach (var frame in channel.Reader.ReadAllAsync(abortToken))
-                    {
-                        if (frames.Count > 0)
-                            frames[^1] = frames[^1] with
-                            {
-                                DelayMs = Math.Max(1, (int)(Math.Round(frame.Time) - Math.Round(previous)))
-                            };
-                        var path = Path.Combine(directory, $"{frames.Count:D8}.bmp");
-                        await BitmapSpool.WriteAsync(path, frame.Pixels!, options.Width, options.Height, abortToken);
-                        previous = frame.Time;
-                        frames.Add(new StoredFrame(path, Math.Max(1, 1000 / options.Fps)));
-                    }
-
-                    await producer;
-                    if (frames.Count == 0) throw new InvalidOperationException(UiText.Get("NoFrames"));
-                    frames[^1] = frames[^1] with
-                    {
-                        DelayMs = Math.Max(1, (int)(Math.Round(endTime) - Math.Round(previous)))
-                    };
-                    await AnimationEncoder.EncodeAsync(frames, staging, options, encodingProgress, abortToken);
-                }
+                        await AnimationEncoder.EncodeAsync(frames, staging, options, encodingProgress, abortToken);
+                    }, abortToken);
 
                 cancel.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
                 File.Move(staging, outputPath, false);
+                Report(RecordingStage.Complete);
             }
             catch (OperationCanceledException) when (!cancel.IsCancellationRequested &&
                                                      Volatile.Read(ref captureFailure) is not null)
