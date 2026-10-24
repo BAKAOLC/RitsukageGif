@@ -20,7 +20,7 @@ namespace RitsukageGif.Desktop
 
         private void ConfigureOutputSelector()
         {
-            ToolTip.SetTip(_outputSelector, UiText.Get("OutputPreview"));
+            _outputSelector.Bind(ToolTip.TipProperty, LiveText.Resource("OutputPreview"));
             _outputSelector.SelectionChanged += async (_, _) =>
             {
                 if (_updatingOutputs || _outputSelector.SelectedItem is not ComboBoxItem { Tag: string path }) return;

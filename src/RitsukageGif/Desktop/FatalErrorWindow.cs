@@ -8,26 +8,40 @@ namespace RitsukageGif.Desktop
     {
         public FatalErrorWindow(Exception error)
         {
-            Title = UiText.Get("FatalErrorTitle");
+            this.Bind(TitleProperty, LiveText.Resource("FatalErrorTitle"));
             Width = 620;
             Height = 360;
             MinWidth = 420;
             MinHeight = 240;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            var close = new Button { Content = UiText.Get("Close"), HorizontalAlignment = HorizontalAlignment.Right };
+            Background = AppTheme.Surface;
+            Foreground = AppTheme.Ink;
+            var close = new Button
+            {
+                [!ContentControl.ContentProperty] = LiveText.Resource("Close"),
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            close.Classes.Add("primary");
             close.Click += (_, _) => Close();
             var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), Margin = new(16), RowSpacing = 12 };
-            layout.Children.Add(new TextBlock
+            var message = new TextBlock { TextWrapping = TextWrapping.Wrap };
+
+            void RefreshLanguage()
             {
-                Text = File.Exists(DiagnosticLog.FilePath)
+                message.Text = File.Exists(DiagnosticLog.FilePath)
                     ? UiText.Format("FatalErrorMessage", DiagnosticLog.FilePath)
-                    : UiText.Get("FatalErrorLogUnavailable"),
-                TextWrapping = TextWrapping.Wrap
-            });
+                    : UiText.Get("FatalErrorLogUnavailable");
+            }
+
+            RefreshLanguage();
+            UiText.LanguageChanged += RefreshLanguage;
+            Closed += (_, _) => UiText.LanguageChanged -= RefreshLanguage;
+            layout.Children.Add(message);
             var details = new TextBox
             {
                 Text = $"{typeof(App).Assembly.GetName().Version}{Environment.NewLine}{error}",
-                IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap
+                IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
+                Background = AppTheme.SurfaceTint
             };
             Grid.SetRow(details, 1);
             layout.Children.Add(details);

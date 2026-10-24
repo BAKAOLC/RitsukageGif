@@ -284,9 +284,6 @@
   <data name="EnglishLanguage" xml:space="preserve">
     <value>English</value>
   </data>
-  <data name="LanguageRestart" xml:space="preserve">
-    <value>Applies after restart</value>
-  </data>
   <data name="FfmpegFailed" xml:space="preserve">
     <value>FFmpeg encoding failed ({0}): {1}</value>
   </data>

@@ -284,9 +284,6 @@
   <data name="EnglishLanguage" xml:space="preserve">
     <value>English</value>
   </data>
-  <data name="LanguageRestart" xml:space="preserve">
-    <value>重启后生效</value>
-  </data>
   <data name="FfmpegFailed" xml:space="preserve">
     <value>FFmpeg 编码失败 ({0}): {1}</value>
   </data>

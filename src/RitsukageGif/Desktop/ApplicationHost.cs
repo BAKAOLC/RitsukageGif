@@ -33,6 +33,7 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _stop, _abort;
         private Task? _shutdown;
         private string _status = UiText.Get("Ready");
+        private string? _statusKey = "Ready";
 
         public MainWindow? View { get; private set; }
         public AppSettings Settings => _settings;
@@ -48,7 +49,7 @@ namespace RitsukageGif.Desktop
         public bool IsConfiguring => _configuring;
         public bool IsClosing => _closing;
         public PixelRect? Region => _region;
-        public string Status => _status;
+        public string Status => _statusKey is { } key ? UiText.Get(key) : _status;
         public string? LastPath => _lastPath;
         public RecordingProgress? LatestProgress => _latestProgress;
         public IReadOnlyList<string> LastOutputs => _lastOutputs;
@@ -75,7 +76,14 @@ namespace RitsukageGif.Desktop
 
         public void SetStatus(string message)
         {
+            _statusKey = null;
             _status = message;
+            Notify();
+        }
+
+        private void SetStatusKey(string key)
+        {
+            _statusKey = key;
             Notify();
         }
 
@@ -100,7 +108,7 @@ namespace RitsukageGif.Desktop
         public void CancelRecording()
         {
             _abort?.Cancel();
-            SetStatus(UiText.Get("Cancelling"));
+            SetStatusKey("Cancelling");
         }
 
         public void SetCommon(int fps, int divisor, OutputFormat format, bool? cursor = null)
@@ -142,6 +150,7 @@ namespace RitsukageGif.Desktop
             }
 
             _settings = settings;
+            LiveText.ApplyLanguage(settings.Language);
             ResetCleanupCancellation();
             QueueCleanup();
             _settings.Save();

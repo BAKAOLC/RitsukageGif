@@ -11,10 +11,16 @@ namespace RitsukageGif.Desktop
     {
         private readonly Func<Window, string, Task>? _edit;
         private readonly List<(ComboBox Preset, TextBox Shortcut)> _entries = [];
-        private readonly TextBlock _error = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
-        private readonly ListBox _fileList = new() { Name = "PresetFiles", MinHeight = 100 };
+        private readonly TextBlock _error = new() { Foreground = AppTheme.Error, TextWrapping = TextWrapping.Wrap };
+
+        private readonly ListBox _fileList = new()
+        {
+            Name = "PresetFiles", MinHeight = 100, Background = AppTheme.SurfaceTint, BorderBrush = AppTheme.Outline,
+            BorderThickness = new(1), CornerRadius = new(6)
+        };
+
         private readonly List<string> _files;
-        private readonly StackPanel _rows = new() { Spacing = 6 };
+        private readonly Grid _rows = new() { ColumnDefinitions = new("*,2*,Auto"), RowSpacing = 6 };
 
         public PresetsWindow(IReadOnlyList<string> source, IReadOnlyList<PresetHotkey>? hotkeys = null,
             Func<Window, string, Task>? edit = null, Func<IEnumerable<string>>? reservedHotkeys = null)
@@ -22,13 +28,14 @@ namespace RitsukageGif.Desktop
             _files = source.ToList();
             _edit = edit;
             var reserved = reservedHotkeys ?? (() => []);
-            Title = UiText.Get("PresetsTitle");
+            this.Bind(TitleProperty, LiveText.Resource("PresetsTitle"));
             Width = 640;
             Height = 490;
             MinWidth = 480;
             MinHeight = 380;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            Background = Brushes.White;
+            Background = AppTheme.Surface;
+            Foreground = AppTheme.Ink;
             _fileList.ItemTemplate = new FuncDataTemplate<string>((path, _) =>
             {
                 var label = new TextBlock
@@ -74,24 +81,32 @@ namespace RitsukageGif.Desktop
             var add = Button("AddPresetHotkey", "AddPresetHotkey");
             add.HorizontalAlignment = HorizontalAlignment.Left;
             add.Click += (_, _) => AddRow(null);
-            var heading = new Grid { ColumnDefinitions = new("*,2*,Auto") };
-            heading.Children.Add(new TextBlock { Text = UiText.Get("PresetName"), FontWeight = FontWeight.SemiBold });
-            var shortcutHeading = new TextBlock { Text = UiText.Get("Shortcut"), FontWeight = FontWeight.SemiBold };
+            _rows.RowDefinitions.Add(new(GridLength.Auto));
+            _rows.Children.Add(new TextBlock
+                { [!TextBlock.TextProperty] = LiveText.Resource("PresetName"), FontWeight = FontWeight.SemiBold });
+            var shortcutHeading = new TextBlock
+            {
+                [!TextBlock.TextProperty] = LiveText.Resource("Shortcut"), FontWeight = FontWeight.SemiBold,
+                Margin = new(6, 0)
+            };
             Grid.SetColumn(shortcutHeading, 1);
-            heading.Children.Add(shortcutHeading);
+            _rows.Children.Add(shortcutHeading);
             var bindings = new StackPanel
             {
                 Spacing = 8, Children =
                 {
-                    heading, _rows, add,
+                    _rows, add,
                     new TextBlock
                     {
-                        Text = UiText.Get(HotkeyService.Supported ? "HotkeyHint" : "PlatformGlobalHotkeysUnavailable"),
-                        TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = Brushes.SlateGray,
+                        [!TextBlock.TextProperty] = LiveText.Resource(HotkeyService.Supported
+                            ? "HotkeyHint"
+                            : "PlatformGlobalHotkeysUnavailable"),
+                        TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = AppTheme.Muted,
                     },
                 },
             };
             var save = Button("SaveSettings", "SavePresets");
+            save.Classes.Add("primary");
             save.Click += (_, _) =>
             {
                 try
@@ -126,7 +141,8 @@ namespace RitsukageGif.Desktop
             layout.Children.Add(_fileList);
             var title = new TextBlock
             {
-                Text = UiText.Get("PresetHotkeys"), FontWeight = FontWeight.SemiBold, Margin = new(0, 0, 0, 8),
+                [!TextBlock.TextProperty] = LiveText.Resource("PresetHotkeys"), FontWeight = FontWeight.SemiBold,
+                Margin = new(0, 0, 0, 8),
             };
             Grid.SetRow(title, 2);
             layout.Children.Add(title);
@@ -147,7 +163,8 @@ namespace RitsukageGif.Desktop
         {
             return new()
             {
-                Content = UiText.Get(label), Name = name, Padding = new(9, 4), MinHeight = 28,
+                [!ContentControl.ContentProperty] = LiveText.Resource(label), Name = name, Padding = new(9, 4),
+                MinHeight = 28,
             };
         }
 
@@ -297,19 +314,31 @@ namespace RitsukageGif.Desktop
             clear.Margin = new(4, 0, 0, 0);
             Grid.SetColumn(clear, 1);
             shortcutPanel.Children.Add(clear);
-            var row = new Grid { ColumnDefinitions = new("*,2*,Auto") };
+            var rowIndex = _rows.RowDefinitions.Count;
+            _rows.RowDefinitions.Add(new(GridLength.Auto));
+            Grid.SetRow(preset, rowIndex);
+            Grid.SetRow(shortcutPanel, rowIndex);
+            Grid.SetRow(remove, rowIndex);
             Grid.SetColumn(shortcutPanel, 1);
             Grid.SetColumn(remove, 2);
-            row.Children.Add(preset);
-            row.Children.Add(shortcutPanel);
-            row.Children.Add(remove);
+            _rows.Children.Add(preset);
+            _rows.Children.Add(shortcutPanel);
+            _rows.Children.Add(remove);
             _entries.Add((preset, shortcut));
             remove.Click += (_, _) =>
             {
                 _entries.Remove((preset, shortcut));
-                _rows.Children.Remove(row);
+                var removedRow = Grid.GetRow(preset);
+                _rows.Children.Remove(preset);
+                _rows.Children.Remove(shortcutPanel);
+                _rows.Children.Remove(remove);
+                _rows.RowDefinitions.RemoveAt(removedRow);
+                foreach (var child in _rows.Children)
+                {
+                    var index = Grid.GetRow(child);
+                    if (index > removedRow) Grid.SetRow(child, index - 1);
+                }
             };
-            _rows.Children.Add(row);
             if (binding is null) shortcut.Focus();
         }
     }

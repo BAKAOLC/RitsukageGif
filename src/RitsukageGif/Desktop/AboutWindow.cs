@@ -11,13 +11,14 @@ namespace RitsukageGif.Desktop
     {
         public AboutWindow(AppSettings settings, ApplicationHost? host = null)
         {
-            Title = UiText.Get("About");
+            this.Bind(TitleProperty, LiveText.Resource("About"));
             Width = 560;
             Height = 680;
             MinWidth = 340;
             MinHeight = 300;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            Background = new SolidColorBrush(Color.Parse("#F5F7FA"));
+            Background = AppTheme.Workspace;
+            Foreground = AppTheme.Ink;
             using var resource = typeof(AboutWindow).Assembly.GetManifestResourceStream("RitsukageGif.About.md")!;
             using var reader = new StreamReader(resource);
             var markdown = reader.ReadToEnd();
@@ -29,37 +30,45 @@ namespace RitsukageGif.Desktop
             content.Margin = new Thickness(24);
             var close = new Button
             {
-                Content = UiText.Get("Close"), HorizontalAlignment = HorizontalAlignment.Right,
+                [!ContentControl.ContentProperty] = LiveText.Resource("Close"),
+                HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(24, 10)
             };
             close.Click += (_, _) => Close();
             var cancellation = new CancellationTokenSource();
-            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12 };
-            var check = new Button { Name = "CheckUpdate", Content = UiText.Get("CheckUpdate") };
+            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = AppTheme.Muted };
+            var check = new Button
+                { Name = "CheckUpdate", [!ContentControl.ContentProperty] = LiveText.Resource("CheckUpdate") };
             var download = new Button
             {
-                Name = "DownloadUpdate", Content = UiText.Get("DownloadUpdate"), IsVisible = false,
+                Name = "DownloadUpdate", [!ContentControl.ContentProperty] = LiveText.Resource("DownloadUpdate"),
+                IsVisible = false,
             };
+            download.Classes.Add("primary");
             UpdateRelease? available = host?.AvailableUpdate;
+            string? statusKey = null;
 
             void RefreshUpdate()
             {
                 download.IsVisible = available is not null;
-                if (available is { } release) status.Text = UiText.Format("UpdateAvailable", release.Version);
+                status.Text = statusKey is not null ? UiText.Get(statusKey)
+                    : available is { } release ? UiText.Format("UpdateAvailable", release.Version) : "";
             }
 
             RefreshUpdate();
+            UiText.LanguageChanged += RefreshUpdate;
             check.Click += async (_, _) =>
             {
                 check.IsEnabled = false;
-                status.Text = UiText.Get("CheckingUpdate");
+                statusKey = "CheckingUpdate";
+                RefreshUpdate();
                 try
                 {
                     available = host is null
                         ? await UpdateChecker.CheckAsync(cancellation.Token)
                         : await host.CheckForUpdatesAsync(cancellation.Token);
                     if (cancellation.IsCancellationRequested) return;
-                    status.Text = UiText.Get("UpdateCurrent");
+                    statusKey = available is null ? "UpdateCurrent" : null;
                     RefreshUpdate();
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
@@ -67,7 +76,11 @@ namespace RitsukageGif.Desktop
                 }
                 catch (Exception)
                 {
-                    if (!cancellation.IsCancellationRequested) status.Text = UiText.Get("UpdateFailed");
+                    if (!cancellation.IsCancellationRequested)
+                    {
+                        statusKey = "UpdateFailed";
+                        RefreshUpdate();
+                    }
                 }
                 finally
                 {
@@ -83,29 +96,33 @@ namespace RitsukageGif.Desktop
                 }
                 catch (Exception)
                 {
-                    status.Text = UiText.Get("UpdateOpenFailed");
+                    statusKey = "UpdateOpenFailed";
+                    RefreshUpdate();
                 }
             };
             Closed += (_, _) =>
             {
+                UiText.LanguageChanged -= RefreshUpdate;
                 cancellation.Cancel();
                 cancellation.Dispose();
             };
-            close.Margin = new Thickness(0);
-            var footer = new StackPanel
+            close.Margin = new Thickness(8, 0, 0, 0);
+            close.VerticalAlignment = VerticalAlignment.Bottom;
+            var actions = new Grid { ColumnDefinitions = new("*,Auto") };
+            actions.Children.Add(new WrapPanel
             {
-                Margin = new Thickness(24, 10), Spacing = 6,
-                Children =
-                {
-                    status,
-                    new WrapPanel
-                    {
-                        Orientation = Orientation.Horizontal,
-                        Children = { check, download, close },
-                    },
-                },
-            };
+                Orientation = Orientation.Horizontal,
+                Children = { check, download },
+            });
+            Grid.SetColumn(close, 1);
+            actions.Children.Add(close);
             check.Margin = download.Margin = new Thickness(0, 0, 6, 0);
+            var footer = new Border
+            {
+                Background = AppTheme.Surface, BorderBrush = AppTheme.Outline,
+                BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(24, 12),
+                Child = new StackPanel { Spacing = 6, Children = { status, actions } },
+            };
             var root = new DockPanel { Background = Background };
             DockPanel.SetDock(footer, Dock.Bottom);
             root.Children.Add(footer);

@@ -1,6 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
@@ -20,24 +22,51 @@ namespace RitsukageGif.Desktop
 
         public WindowPickerWindow()
         {
-            Title = UiText.Get("ChooseCaptureWindow");
+            this.Bind(TitleProperty, LiveText.Resource("ChooseCaptureWindow"));
             Width = 620;
             Height = 440;
             MinWidth = 340;
             MinHeight = 260;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            var list = new ListBox();
+            Background = AppTheme.Surface;
+            Foreground = AppTheme.Ink;
+            var list = new ListBox
+            {
+                Name = "CaptureWindows", Background = AppTheme.SurfaceTint, BorderBrush = AppTheme.Outline,
+                BorderThickness = new(1), CornerRadius = new(6), Margin = new(0, 0, 0, 12)
+            };
             IReadOnlyList<WindowTarget> targets = [];
-            var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
-            var refresh = new Button { Content = UiText.Get("RefreshWindows") };
+            var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
+            var refresh = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("RefreshWindows") };
+            var choose = new Button
+            {
+                Name = "ChooseCaptureWindow", [!ContentControl.ContentProperty] = LiveText.Resource("SelectArea"),
+                IsEnabled = false
+            };
             var closed = false;
             var refreshing = false;
+            IDisposable? hintBinding = null;
+
+            void UpdateSelection()
+            {
+                choose.IsEnabled = !closed && !refreshing && list.SelectedIndex >= 0 &&
+                                   list.SelectedIndex < targets.Count;
+            }
+
+            void ChooseSelection()
+            {
+                if (!choose.IsEnabled) return;
+                var target = targets[list.SelectedIndex];
+                _completion.TrySetResult(target);
+                Close(target);
+            }
 
             async Task Refresh()
             {
                 if (closed || refreshing) return;
                 refreshing = true;
                 refresh.IsEnabled = false;
+                UpdateSelection();
                 try
                 {
                     if (OperatingSystem.IsMacOS()) await Task.Run(MacWindowSystem.EnsurePermission);
@@ -47,36 +76,53 @@ namespace RitsukageGif.Desktop
                     targets = updated;
                     list.SelectedIndex = -1;
                     list.ItemsSource = targets.Select(w => $"{w.Process} — {w.Title}").ToArray();
-                    error.Text = UiText.Get("WindowCaptureHint");
+                    hintBinding?.Dispose();
+                    hintBinding = error.Bind(TextBlock.TextProperty, LiveText.Resource("WindowCaptureHint"));
                 }
                 catch (Exception ex)
                 {
-                    if (!closed) error.Text = ex.Message;
+                    if (!closed)
+                    {
+                        hintBinding?.Dispose();
+                        hintBinding = null;
+                        error.Text = ex.Message;
+                    }
                 }
                 finally
                 {
                     refreshing = false;
                     if (!closed) refresh.IsEnabled = true;
+                    UpdateSelection();
                 }
             }
 
             refresh.Click += async (_, _) => await Refresh();
-            var choose = new Button { Content = UiText.Get("SelectArea") };
-            choose.Click += (_, _) =>
+            choose.Classes.Add("primary");
+            choose.Click += (_, _) => ChooseSelection();
+            list.SelectionChanged += (_, _) => UpdateSelection();
+            list.KeyDown += (_, e) =>
             {
-                if (list.SelectedIndex >= 0 && list.SelectedIndex < targets.Count)
-                {
-                    var target = targets[list.SelectedIndex];
-                    _completion.TrySetResult(target);
-                    Close(target);
-                }
+                if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.None || !choose.IsEnabled) return;
+                ChooseSelection();
+                e.Handled = true;
+            };
+            list.DoubleTapped += (_, e) =>
+            {
+                if (e.Source is not Control source) return;
+                var item = source as ListBoxItem ?? source.GetVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
+                if (item?.IsSelected != true || !choose.IsEnabled) return;
+                ChooseSelection();
+                e.Handled = true;
             };
             var footer = new StackPanel
             {
                 Spacing = 8, Children =
                 {
                     error, new StackPanel
-                        { Orientation = Orientation.Horizontal, Spacing = 8, Children = { refresh, choose } }
+                    {
+                        Orientation = Orientation.Horizontal, Spacing = 8,
+                        HorizontalAlignment = HorizontalAlignment.Right, Children = { refresh, choose }
+                    }
                 }
             };
             var root = new DockPanel { Margin = new Thickness(16) };
@@ -88,6 +134,7 @@ namespace RitsukageGif.Desktop
             Closed += (_, _) =>
             {
                 closed = true;
+                hintBinding?.Dispose();
                 _completion.TrySetResult(null);
             };
         }

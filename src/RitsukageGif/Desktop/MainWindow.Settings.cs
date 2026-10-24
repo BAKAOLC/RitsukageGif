@@ -14,9 +14,19 @@ namespace RitsukageGif.Desktop
         private void RefreshPresets()
         {
             var menu = new ContextMenu();
-            var screen = new MenuItem { Name = "SelectScreenRegion", Header = UiText.Get("SelectScreenRegion") };
+            var screen = new MenuItem
+            {
+                Name = "SelectScreenRegion",
+                [!Avalonia.Controls.Primitives.HeaderedSelectingItemsControl.HeaderProperty] =
+                    LiveText.Resource("SelectScreenRegion")
+            };
             screen.Click += async (_, _) => await _host.SelectSourceAsync(CaptureSourceKind.Screen);
-            var window = new MenuItem { Name = "SelectWindowContent", Header = UiText.Get("SelectWindowContent") };
+            var window = new MenuItem
+            {
+                Name = "SelectWindowContent",
+                [!Avalonia.Controls.Primitives.HeaderedSelectingItemsControl.HeaderProperty] =
+                    LiveText.Resource("SelectWindowContent")
+            };
             window.Click += async (_, _) => await _host.SelectSourceAsync(CaptureSourceKind.Window);
             menu.Items.Add(screen);
             menu.Items.Add(window);
@@ -39,10 +49,18 @@ namespace RitsukageGif.Desktop
                 _host.SetStatus(ex.Message);
             }
 
-            var editor = new MenuItem { Header = UiText.Get("EditorTitle") };
+            var editor = new MenuItem
+            {
+                [!Avalonia.Controls.Primitives.HeaderedSelectingItemsControl.HeaderProperty] =
+                    LiveText.Resource("EditorTitle")
+            };
             editor.Click += (_, _) => _host.OpenEditor(null);
             menu.Items.Add(editor);
-            var stop = new MenuItem { Header = UiText.Get("StopPreset") };
+            var stop = new MenuItem
+            {
+                [!Avalonia.Controls.Primitives.HeaderedSelectingItemsControl.HeaderProperty] =
+                    LiveText.Resource("StopPreset")
+            };
             stop.Click += async (_, _) => await _host.ExecuteCommandAsync(["preset", "stop"]);
             menu.Items.Add(stop);
             _select.ContextMenu = menu;

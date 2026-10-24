@@ -77,7 +77,7 @@ namespace RitsukageGif.Desktop
             {
                 if (_closing || finished) return;
                 _latestProgress = value;
-                SetStatus(UiText.Get("Stage" + value.Stage));
+                SetStatusKey("Stage" + value.Stage);
             });
             var sink = new MultiRecordingProgressSink(value =>
             {
@@ -162,7 +162,7 @@ namespace RitsukageGif.Desktop
             catch (OperationCanceledException)
             {
                 _streams = _streams.Select(stream => stream with { State = "cancelled" }).ToArray();
-                SetStatus(UiText.Get("Cancelled"));
+                SetStatusKey("Cancelled");
                 _presets.Signal("cancelled");
                 return new RecordingOutcome(Cancelled: true);
             }

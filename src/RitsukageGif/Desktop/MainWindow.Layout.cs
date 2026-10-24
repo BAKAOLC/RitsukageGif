@@ -29,19 +29,21 @@ namespace RitsukageGif.Desktop
                 { Spacing = 5, Margin = new(5, 5, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
             StyleButton(_record, 100);
             StyleButton(_select, 80);
-            var about = new Button { Content = UiText.Get("About") };
+            var about = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("About") };
             StyleButton(about, 60);
             about.Click += async (_, _) => await new AboutWindow(Settings, _host) { Icon = Icon }.ShowDialog(this);
             left.Children.Add(_record);
             left.Children.Add(_select);
             left.Children.Add(about);
-            left.Children.Add(new TextBlock { Text = UiText.Get("ScaleDivisor"), Margin = new(0, 3, 0, 0) });
+            left.Children.Add(new TextBlock
+                { [!TextBlock.TextProperty] = LiveText.Resource("ScaleDivisor"), Margin = new(0, 3, 0, 0) });
             left.Children.Add(_scale);
-            left.Children.Add(new TextBlock { Text = UiText.Get("FrameRate") });
+            left.Children.Add(new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource("FrameRate") });
             left.Children.Add(_fps);
-            left.Children.Add(new TextBlock { Text = UiText.Get("OutputFormat") });
+            left.Children.Add(new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource("OutputFormat") });
             left.Children.Add(_format);
             left.Children.Add(_cursor);
+            foreach (var control in left.Children) control.HorizontalAlignment = HorizontalAlignment.Left;
             area.Children.Add(left);
             var stats = new Grid
             {
@@ -50,16 +52,16 @@ namespace RitsukageGif.Desktop
                 Margin = new(5, 5, 0, 0),
             };
             Grid.SetColumn(stats, 1);
-            stats.Children.Add(new TextBlock { Text = UiText.Get("EncodingProgress") });
+            stats.Children.Add(new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource("EncodingProgress") });
             Grid.SetColumn(_frames, 1);
             stats.Children.Add(_frames);
-            var rateLabel = new TextBlock { Text = UiText.Get("CaptureRate") };
+            var rateLabel = new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource("CaptureRate") };
             Grid.SetRow(rateLabel, 1);
             stats.Children.Add(rateLabel);
             Grid.SetRow(_captureRate, 1);
             Grid.SetColumn(_captureRate, 1);
             stats.Children.Add(_captureRate);
-            var sizeLabel = new TextBlock { Text = UiText.Get("FileSize") };
+            var sizeLabel = new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource("FileSize") };
             Grid.SetRow(sizeLabel, 2);
             stats.Children.Add(sizeLabel);
             Grid.SetColumn(_size, 1);
@@ -71,10 +73,13 @@ namespace RitsukageGif.Desktop
             _configure.Height = 28;
             _configure.HorizontalAlignment = HorizontalAlignment.Right;
             var editAnimation = new Button
-                { Content = UiText.Get("AnimationEditorOpen"), Name = "OpenAnimationEditor" };
+            {
+                [!ContentControl.ContentProperty] = LiveText.Resource("AnimationEditorOpen"),
+                Name = "OpenAnimationEditor"
+            };
             StyleButton(editAnimation, 68);
             editAnimation.Height = 28;
-            ToolTip.SetTip(editAnimation, UiText.Get("AnimationEditorTitle"));
+            editAnimation.Bind(ToolTip.TipProperty, LiveText.Resource("AnimationEditorTitle"));
             editAnimation.Click += async (_, _) => await _host.ShowAnimationEditorAsync(LastPath);
             var actions = new WrapPanel
                 { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -122,10 +127,13 @@ namespace RitsukageGif.Desktop
             });
             var open = new Button
             {
-                Content = UiText.Get("OpenFolder"), FontSize = 11, Padding = new(2, 0), MinHeight = 0,
+                [!ContentControl.ContentProperty] = LiveText.Resource("OpenFolder"), FontSize = 11, Padding = new(2, 0),
+                MinHeight = 0,
                 Background = Brushes.Transparent, BorderThickness = new(0),
                 VerticalAlignment = VerticalAlignment.Bottom,
             };
+            open.Classes.Add("link");
+            _updateAvailable.Classes.Add("link");
             open.Click += async (_, _) =>
             {
                 var path = LastPath;
@@ -158,8 +166,8 @@ namespace RitsukageGif.Desktop
             content.Children.Add(footer);
             root.Children.Add(content);
             Content = root;
-            ToolTip.SetTip(_scale, UiText.Get("ScaleHint"));
-            ToolTip.SetTip(_fps, UiText.Get("FrameRateHint"));
+            _scale.Bind(ToolTip.TipProperty, LiveText.Resource("ScaleHint"));
+            _fps.Bind(ToolTip.TipProperty, LiveText.Resource("FrameRateHint"));
             ToolTip.SetTip(_select, _regionText.Text);
             Closed += (_, _) => DisposeBackground();
         }

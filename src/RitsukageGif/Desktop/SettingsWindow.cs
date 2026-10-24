@@ -9,7 +9,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SettingsWindow : Window
     {
-        private readonly TextBlock _error = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
+        private readonly TextBlock _error = new() { Foreground = AppTheme.Error, TextWrapping = TextWrapping.Wrap };
 
         public SettingsWindow(AppSettings settings, Func<Window, string, Task>? edit = null)
         {
@@ -17,12 +17,14 @@ namespace RitsukageGif.Desktop
             {
                 PresetHotkeys = [.. settings.PresetHotkeys], PresetFiles = [.. settings.PresetFiles],
             };
-            Title = UiText.Get("SettingsTitle");
+            this.Bind(TitleProperty, LiveText.Resource("SettingsTitle"));
             Width = 590;
             Height = 430;
             MinWidth = 480;
             MinHeight = 300;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            Background = AppTheme.Surface;
+            Foreground = AppTheme.Ink;
             var general = Page();
             var recording = Page();
             var appearance = Page();
@@ -38,26 +40,21 @@ namespace RitsukageGif.Desktop
                 SelectedIndex = Math.Max(0, Array.IndexOf(languageCodes, draft.Language)),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
-            panel.Children.Add(Labeled(UiText.Get("Language"), language));
+            panel.Children.Add(Labeled("Language", language));
             var updates = new CheckBox
             {
-                Name = "CheckForUpdates", Content = UiText.Get("AutomaticUpdates"),
+                Name = "CheckForUpdates", [!ContentControl.ContentProperty] = LiveText.Resource("AutomaticUpdates"),
                 IsChecked = draft.CheckForUpdates,
             };
             general.Children.Add(updates);
-            panel.Children.Add(new TextBlock
-            {
-                Text = UiText.Get("LanguageRestart"), TextWrapping = TextWrapping.Wrap, Foreground = Brushes.SlateGray,
-                FontSize = 12, Margin = new(104, -4, 0, 2),
-            });
-            var presets = new Button { Content = UiText.Get("PresetsTitle") };
+            var presets = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("PresetsTitle") };
             var captureSource = new ComboBox
             {
                 ItemsSource = new[] { UiText.Get("SourceScreen"), UiText.Get("SourceWindow") },
                 SelectedIndex = (int)draft.CaptureSource, HorizontalAlignment = HorizontalAlignment.Stretch,
             };
             panel = recording;
-            panel.Children.Add(Labeled(UiText.Get("CaptureSource"), captureSource));
+            panel.Children.Add(Labeled("CaptureSource", captureSource));
 
             var quality = new ComboBox
             {
@@ -66,25 +63,63 @@ namespace RitsukageGif.Desktop
                 SelectedIndex = (int)draft.Quality,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
-            panel.Children.Add(Labeled(UiText.Get("GifQuality"), quality));
+            panel.Children.Add(Labeled("GifQuality", quality));
+
+            void RefreshLanguage()
+            {
+                var languageIndex = language.SelectedIndex;
+                var sourceIndex = captureSource.SelectedIndex;
+                var qualityIndex = quality.SelectedIndex;
+                language.ItemsSource = new[]
+                {
+                    UiText.Get("SystemLanguage"), UiText.Get("ChineseLanguage"), UiText.Get("EnglishLanguage")
+                };
+                captureSource.ItemsSource = new[] { UiText.Get("SourceScreen"), UiText.Get("SourceWindow") };
+                quality.ItemsSource = new[]
+                {
+                    UiText.Get("QualityFast"), UiText.Get("QualityBalanced"), UiText.Get("QualityBest")
+                };
+                language.SelectedIndex = languageIndex;
+                captureSource.SelectedIndex = sourceIndex;
+                quality.SelectedIndex = qualityIndex;
+            }
+
+            UiText.LanguageChanged += RefreshLanguage;
+            Closed += (_, _) => UiText.LanguageChanged -= RefreshLanguage;
             var ffmpeg = new CheckBox
             {
-                Content = new TextBlock { Text = UiText.Get("UseFfmpeg"), TextWrapping = TextWrapping.Wrap },
+                Content = new TextBlock
+                    { [!TextBlock.TextProperty] = LiveText.Resource("UseFfmpeg"), TextWrapping = TextWrapping.Wrap },
                 IsChecked = draft.UseFfmpeg,
             };
-            panel.Children.Add(ffmpeg);
-            panel.Children.Add(new TextBlock
+            panel.Children.Add(new StackPanel
             {
-                Text = FfmpegEncoder.FindExecutable() is null ? UiText.Get("FfmpegMissing") : UiText.Get("FfmpegFound"),
-                TextWrapping = TextWrapping.Wrap,
+                Spacing = 2,
+                Children =
+                {
+                    ffmpeg,
+                    new TextBlock
+                    {
+                        [!TextBlock.TextProperty] = LiveText.Resource(FfmpegEncoder.FindExecutable() is null
+                            ? "FfmpegMissing"
+                            : "FfmpegFound"),
+                        TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted,
+                        FontSize = 12, Margin = new(24, 0, 0, 0),
+                    },
+                },
             });
             panel = appearance;
             var showBackground = new CheckBox
-                { Content = UiText.Get("ShowBackground"), IsChecked = draft.ShowBackground };
+            {
+                [!ContentControl.ContentProperty] = LiveText.Resource("ShowBackground"),
+                IsChecked = draft.ShowBackground
+            };
             panel.Children.Add(showBackground);
             var background = new TextBox
-                { Text = draft.BackgroundImage, Watermark = UiText.Get("OriginalBackground") };
-            panel.Children.Add(Labeled(UiText.Get("BackgroundImage"), WithButton(background, UiText.Get("Browse"),
+            {
+                Text = draft.BackgroundImage, [!TextBox.WatermarkProperty] = LiveText.Resource("OriginalBackground")
+            };
+            panel.Children.Add(Labeled("BackgroundImage", WithButton(background, "Browse",
                 async () =>
                 {
                     var files = await StorageProvider.OpenFilePickerAsync(new()
@@ -105,17 +140,20 @@ namespace RitsukageGif.Desktop
                     if (files.Count > 0) background.Text = files[0].TryGetLocalPath();
                 })));
             var resetBackground = new Button
-                { Content = UiText.Get("ResetBackground"), Padding = new(6, 2), MinHeight = 0 };
+            {
+                [!ContentControl.ContentProperty] = LiveText.Resource("ResetBackground"), Padding = new(6, 2),
+                MinHeight = 0
+            };
             resetBackground.Click += (_, _) => background.Text = "";
             panel.Children.Add(Labeled("", resetBackground));
             var radius = new CompactNumberInput
                 { Minimum = 0, Maximum = 50, Value = draft.SnapRadius, Width = 90, Height = 28 };
             var threshold = new CompactNumberInput
                 { Minimum = 1, Maximum = 765, Value = draft.EdgeThreshold, Width = 90, Height = 28 };
-            panel.Children.Add(Labeled(UiText.Get("SnapRadius"), radius));
-            panel.Children.Add(Labeled(UiText.Get("EdgeThreshold"), threshold));
+            panel.Children.Add(Labeled("SnapRadius", radius));
+            panel.Children.Add(Labeled("EdgeThreshold", threshold));
             var output = new TextBox { Text = draft.OutputDirectory, IsReadOnly = true };
-            general.Children.Add(Labeled(UiText.Get("OutputDirectory"), WithButton(output, UiText.Get("Browse"),
+            general.Children.Add(Labeled("OutputDirectory", WithButton(output, "Browse",
                 async () =>
                 {
                     var folders =
@@ -124,7 +162,8 @@ namespace RitsukageGif.Desktop
                 })));
             var openOutput = new Button
             {
-                Name = "OpenRecordingDirectory", Content = UiText.Get("OpenRecordingDirectory"),
+                Name = "OpenRecordingDirectory",
+                [!ContentControl.ContentProperty] = LiveText.Resource("OpenRecordingDirectory"),
                 HorizontalAlignment = HorizontalAlignment.Left
             };
             openOutput.Click += async (_, _) =>
@@ -151,8 +190,8 @@ namespace RitsukageGif.Desktop
             panel = hotkeys;
             var record = HotkeyBox(draft.RecordHotkey);
             var select = HotkeyBox(draft.SelectHotkey);
-            panel.Children.Add(Labeled(UiText.Get("RecordHotkey"), record));
-            panel.Children.Add(Labeled(UiText.Get("SelectHotkey"), select));
+            panel.Children.Add(Labeled("RecordHotkey", record));
+            panel.Children.Add(Labeled("SelectHotkey", select));
             presets.Click += async (_, _) =>
             {
                 try
@@ -172,17 +211,19 @@ namespace RitsukageGif.Desktop
             };
             panel.Children.Add(new TextBlock
             {
-                Text = UiText.Get(HotkeyService.Supported ? "HotkeyHint" : "PlatformGlobalHotkeysUnavailable"),
+                [!TextBlock.TextProperty] =
+                    LiveText.Resource(HotkeyService.Supported ? "HotkeyHint" : "PlatformGlobalHotkeysUnavailable"),
                 TextWrapping = TextWrapping.Wrap,
             });
             panel = audio;
-            var sound = new CheckBox { Content = UiText.Get("PlaySound"), IsChecked = draft.Sound };
+            var sound = new CheckBox
+                { [!ContentControl.ContentProperty] = LiveText.Resource("PlaySound"), IsChecked = draft.Sound };
             panel.Children.Add(sound);
             var start = new TextBox { Text = draft.StartSound };
             var stop = new TextBox { Text = draft.StopSound };
-            panel.Children.Add(Labeled(UiText.Get("StartSound"), SoundPicker(start)));
-            panel.Children.Add(Labeled(UiText.Get("StopSound"), SoundPicker(stop)));
-            var import = new Button { Content = UiText.Get("ImportLegacySettings") };
+            panel.Children.Add(Labeled("StartSound", SoundPicker(start)));
+            panel.Children.Add(Labeled("StopSound", SoundPicker(stop)));
+            var import = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("ImportLegacySettings") };
             general.Children.Add(Labeled("", import));
             import.Click += async (_, _) =>
             {
@@ -226,7 +267,11 @@ namespace RitsukageGif.Desktop
             };
 
             var save = new Button
-                { Content = UiText.Get("SaveSettings"), HorizontalAlignment = HorizontalAlignment.Right };
+            {
+                [!ContentControl.ContentProperty] = LiveText.Resource("SaveSettings"),
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+            save.Classes.Add("primary");
             save.Click += (_, _) =>
             {
                 try
@@ -262,37 +307,52 @@ namespace RitsukageGif.Desktop
             };
             var pages = new (string Label, StackPanel Content)[]
             {
-                (UiText.Get("GeneralHeading"), general), (UiText.Get("EncodingHeading"), recording),
-                (UiText.Get("AppearanceHeading"), appearance), (UiText.Get("HotkeysHeading"), hotkeys),
-                (UiText.Get("SoundHeading"), audio),
-                (UiText.Get("CleanupHeading"), cleanup),
+                ("GeneralHeading", general), ("EncodingHeading", recording),
+                ("AppearanceHeading", appearance), ("HotkeysHeading", hotkeys),
+                ("SoundHeading", audio),
+                ("CleanupHeading", cleanup),
             };
             var navigation = new StackPanel { Spacing = 3, Margin = new(8, 12) };
             var view = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Content = general,
+                Content = general, Background = AppTheme.Surface,
             };
             foreach (var page in pages)
             {
-                var button = new Button { Content = page.Label, HorizontalAlignment = HorizontalAlignment.Stretch };
+                var button = new Button
+                {
+                    Content = new TextBlock
+                    {
+                        [!TextBlock.TextProperty] = LiveText.Resource(page.Label), TextWrapping = TextWrapping.Wrap
+                    },
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
                 button.Classes.Add("navigation");
-                if (page.Content == general) button.Classes.Add("selected");
+                var active = page.Content == general;
+                button.Classes.Set("selected", active);
+                button.Classes.Add(active ? "Primary" : "Secondary");
                 button.Click += (_, _) =>
                 {
-                    foreach (var entry in navigation.Children.OfType<Button>()) entry.Classes.Remove("selected");
-                    button.Classes.Add("selected");
+                    foreach (var entry in navigation.Children.OfType<Button>())
+                    {
+                        var selected = ReferenceEquals(entry, button);
+                        entry.Classes.Set("selected", selected);
+                        entry.Classes.Set("Primary", selected);
+                        entry.Classes.Set("Secondary", !selected);
+                    }
+
                     view.Content = page.Content;
                     view.Offset = default;
                 };
                 navigation.Children.Add(button);
             }
 
-            var body = new Grid { ColumnDefinitions = new("112,*") };
+            var body = new Grid { ColumnDefinitions = new("128,*") };
             body.Children.Add(new Border
             {
-                Background = new SolidColorBrush(Color.Parse("#F3F5F7")),
-                BorderBrush = new SolidColorBrush(Color.Parse("#E1E5EA")), BorderThickness = new(0, 0, 1, 0),
+                Background = AppTheme.Workspace,
+                BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 1, 0),
                 Child = navigation,
             });
             Grid.SetColumn(view, 1);
@@ -304,12 +364,12 @@ namespace RitsukageGif.Desktop
             footer.Children.Add(_error);
             Grid.SetColumn(save, 1);
             footer.Children.Add(save);
-            var layout = new Grid { RowDefinitions = new("*,Auto"), Background = Brushes.White };
+            var layout = new Grid { RowDefinitions = new("*,Auto"), Background = AppTheme.Surface };
             layout.Children.Add(body);
             var footerBorder = new Border
             {
-                BorderBrush = new SolidColorBrush(Color.Parse("#E1E5EA")), BorderThickness = new(0, 1, 0, 0),
-                Child = footer,
+                BorderBrush = AppTheme.Outline, BorderThickness = new(0, 1, 0, 0),
+                Background = AppTheme.SurfaceTint, Child = footer,
             };
             Grid.SetRow(footerBorder, 1);
             layout.Children.Add(footerBorder);
@@ -324,7 +384,7 @@ namespace RitsukageGif.Desktop
         private Control SoundPicker(TextBox box)
         {
             var panel = new Grid { ColumnDefinitions = new("*,Auto") };
-            panel.Children.Add(WithButton(box, UiText.Get("BrowseSound"), async () =>
+            panel.Children.Add(WithButton(box, "BrowseSound", async () =>
             {
                 var files = await StorageProvider.OpenFilePickerAsync(new()
                 {
@@ -334,7 +394,8 @@ namespace RitsukageGif.Desktop
                 });
                 if (files.Count > 0) box.Text = files[0].TryGetLocalPath();
             }));
-            var clear = new Button { Content = UiText.Get("Clear"), Padding = new(6, 2), MinHeight = 0 };
+            var clear = new Button
+                { [!ContentControl.ContentProperty] = LiveText.Resource("Clear"), Padding = new(6, 2), MinHeight = 0 };
             clear.Click += (_, _) => box.Text = "";
             clear.Margin = new(6, 0, 0, 0);
             Grid.SetColumn(clear, 1);
@@ -347,13 +408,13 @@ namespace RitsukageGif.Desktop
             var box = new TextBox
             {
                 Text = text, IsReadOnly = true, IsEnabled = HotkeyService.Supported,
-                Watermark = UiText.Get("EnterHotkey"),
+                [!TextBox.WatermarkProperty] = LiveText.Resource("EnterHotkey"),
             };
-            ToolTip.SetTip(box, UiText.Get("HotkeyHint"));
+            box.Bind(ToolTip.TipProperty, LiveText.Resource("HotkeyHint"));
             box.GotFocus += (_, _) => box.SelectAll();
             box.KeyDown += (_, e) =>
             {
-                if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None) return;
+                if (e.Key == Key.Tab && e.KeyModifiers is KeyModifiers.None or KeyModifiers.Shift) return;
                 e.Handled = true;
                 if (e.Key is Key.Back or Key.Delete && e.KeyModifiers == KeyModifiers.None)
                 {
@@ -386,11 +447,13 @@ namespace RitsukageGif.Desktop
         private static Control Labeled(string text, Control control)
         {
             var row = new Grid { ColumnDefinitions = new("104,*") };
-            row.Children.Add(new TextBlock
+            var label = new TextBlock
             {
-                Text = text, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
+                TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
                 Margin = new(0, 0, 10, 0),
-            });
+            };
+            if (text.Length > 0) label.Bind(TextBlock.TextProperty, LiveText.Resource(text));
+            row.Children.Add(label);
             control.VerticalAlignment = VerticalAlignment.Center;
             control.HorizontalAlignment =
                 control is CompactNumberInput ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
@@ -402,7 +465,8 @@ namespace RitsukageGif.Desktop
         private Control WithButton(Control control, string label, Func<Task> action)
         {
             var grid = new Grid { ColumnDefinitions = new("*,Auto") };
-            var button = new Button { Content = label, Margin = new(8, 0, 0, 0) };
+            var button = new Button
+                { [!ContentControl.ContentProperty] = LiveText.Resource(label), Margin = new(8, 0, 0, 0) };
             button.Click += async (_, _) =>
             {
                 try

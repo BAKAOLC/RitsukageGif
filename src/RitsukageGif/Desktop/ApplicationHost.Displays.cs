@@ -16,7 +16,7 @@ namespace RitsukageGif.Desktop
                     screen.Bounds.Width, screen.Bounds.Height)).IsEmpty)) return;
             _region = null;
             Volatile.Write(ref _captureRegion, null);
-            SetStatus(UiText.Get("TopologyChanged"));
+            SetStatusKey("TopologyChanged");
         }
     }
 }

@@ -8,16 +8,20 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class MainWindow : Window
     {
-        private readonly Button _cancel = new() { Content = UiText.Get("CancelProcessing"), IsVisible = false };
+        private readonly Button _cancel = new()
+            { [!ContentControl.ContentProperty] = LiveText.Resource("CancelProcessing"), IsVisible = false };
+
         private readonly Control[] _commonControls;
-        private readonly Button _configure = new() { Content = UiText.Get("Settings") };
+
+        private readonly Button _configure = new()
+            { [!ContentControl.ContentProperty] = LiveText.Resource("Settings") };
 
         private readonly CheckBox _cursor = new()
         {
             Name = "CaptureCursor", MinHeight = 0, Padding = new(0),
             Content = new TextBlock
             {
-                Text = UiText.Get("CaptureCursor"), TextWrapping = TextWrapping.Wrap,
+                [!TextBlock.TextProperty] = LiveText.Resource("CaptureCursor"), TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 76, FontSize = 11,
             },
         };
@@ -32,15 +36,20 @@ namespace RitsukageGif.Desktop
         private readonly ApplicationHost _host;
         private readonly Image _image = new() { Stretch = Stretch.Uniform, MaxHeight = 130 };
         private readonly AnimationPreview _preview;
-        private readonly Button _record = new() { Content = UiText.Get("StartRecording"), IsEnabled = false };
+
+        private readonly Button _record = new()
+            { [!ContentControl.ContentProperty] = LiveText.Resource("StartRecording"), IsEnabled = false };
 
         private readonly TextBlock _regionText = new()
-            { Text = UiText.Get("SelectAreaHint"), TextWrapping = TextWrapping.Wrap };
+            { [!TextBlock.TextProperty] = LiveText.Resource("SelectAreaHint"), TextWrapping = TextWrapping.Wrap };
 
         private readonly CompactNumberInput _scale = new();
-        private readonly Button _select = new() { Content = UiText.Get("SelectArea") };
+        private readonly Button _select = new() { [!ContentControl.ContentProperty] = LiveText.Resource("SelectArea") };
         private readonly TextBlock _size = new() { TextWrapping = TextWrapping.Wrap };
-        private readonly TextBlock _status = new() { Text = UiText.Get("Ready"), TextWrapping = TextWrapping.Wrap };
+
+        private readonly TextBlock _status = new()
+            { [!TextBlock.TextProperty] = LiveText.Resource("Ready"), TextWrapping = TextWrapping.Wrap };
+
         private bool _closing, _allowClose;
         private bool? _displayCursor;
         private OutputFormat? _displayFormat;
@@ -50,6 +59,7 @@ namespace RitsukageGif.Desktop
         internal MainWindow(ApplicationHost host)
         {
             _host = host;
+            Classes.Add("main-window");
             _commonControls = [_select, _fps, _scale, _format, _cursor, _configure];
             Title = "RitsukageGif";
             Width = 287;
@@ -63,6 +73,7 @@ namespace RitsukageGif.Desktop
             RefreshPresets();
             RefreshFromHost();
             _host.Changed += RefreshFromHost;
+            UiText.LanguageChanged += RefreshFromHost;
             _select.Click += async (_, _) => await _host.SelectAsync();
             _record.Click += async (_, _) => await _host.ToggleRecordingAsync();
             _cancel.Click += (_, _) => _host.CancelRecording();
@@ -133,6 +144,7 @@ namespace RitsukageGif.Desktop
             Closed += (_, _) =>
             {
                 _host.Changed -= RefreshFromHost;
+                UiText.LanguageChanged -= RefreshFromHost;
                 _preview.Dispose();
             };
         }
@@ -168,6 +180,7 @@ namespace RitsukageGif.Desktop
             _record.Content =
                 UiText.Get(_host.IsRecording ? "StopRecording" : _host.IsBusy ? "Processing" : "StartRecording");
             _record.Background = _host.IsRecording ? Brushes.Red : Brushes.White;
+            _record.Classes.Set("recording", _host.IsRecording);
             _record.IsEnabled = !_host.IsClosing && !_host.IsSelecting && !_host.IsConfiguring &&
                                 (_host.IsRecording || (!_host.IsBusy && _host.Region is not null));
             _cancel.IsVisible = _host.IsBusy && !_host.IsRecording;

@@ -11,7 +11,8 @@ namespace RitsukageGif.Desktop
             var page = Page();
             var enabled = new CheckBox
             {
-                Name = "CleanupEnabled", Content = UiText.Get("CleanupEnabled"), IsChecked = draft.CleanupEnabled
+                Name = "CleanupEnabled", [!ContentControl.ContentProperty] = LiveText.Resource("CleanupEnabled"),
+                IsChecked = draft.CleanupEnabled
             };
             page.Children.Add(enabled);
             var rules = new StackPanel { Spacing = 8, IsEnabled = enabled.IsChecked == true };
@@ -22,7 +23,10 @@ namespace RitsukageGif.Desktop
             {
                 var checkbox = new CheckBox
                 {
-                    Name = key + "Enabled", Content = UiText.Get(key), IsChecked = value.HasValue,
+                    Name = key + "Enabled",
+                    Content = new TextBlock
+                        { [!TextBlock.TextProperty] = LiveText.Resource(key), TextWrapping = TextWrapping.Wrap },
+                    IsChecked = value.HasValue, Margin = new(0, 0, 12, 0),
                     VerticalAlignment = VerticalAlignment.Center
                 };
                 var number = new CompactNumberInput
@@ -45,12 +49,14 @@ namespace RitsukageGif.Desktop
             var size = Rule("CleanupMaxSizeMiB", draft.CleanupMaxSizeMiB, 1024);
             page.Children.Add(new TextBlock
             {
-                Text = UiText.Get("CleanupRulesHint"), FontSize = 12, Foreground = Brushes.SlateGray,
+                [!TextBlock.TextProperty] = LiveText.Resource("CleanupRulesHint"), FontSize = 12,
+                Foreground = AppTheme.Muted,
                 TextWrapping = TextWrapping.Wrap
             });
             page.Children.Add(new TextBlock
             {
-                Text = UiText.Get("CleanupScopeHint"), FontSize = 12, Foreground = Brushes.SlateGray,
+                [!TextBlock.TextProperty] = LiveText.Resource("CleanupScopeHint"), FontSize = 12,
+                Foreground = AppTheme.Muted,
                 TextWrapping = TextWrapping.Wrap
             });
             apply = () =>

@@ -40,7 +40,7 @@ namespace RitsukageGif.Desktop
             _latestProgress = progress;
             if (manualRecording && progress.Stage is RecordingStage.Encoding or RecordingStage.Complete)
                 _manualCaptureCompleted = true;
-            SetStatus(UiText.Get("Stage" + progress.Stage));
+            SetStatusKey("Stage" + progress.Stage);
         }
 
         private async Task<RecordingOutcome> RecordAsync(PixelRect region, CancellationToken stop,
@@ -116,7 +116,7 @@ namespace RitsukageGif.Desktop
                 await CopyOutputsAsync(path, outputs, abort);
                 _lastPath = path;
                 _lastOutputs = outputs;
-                SetStatus(UiText.Get("RecordingComplete"));
+                SetStatusKey("RecordingComplete");
                 try
                 {
                     if (effective.Copy ?? true) await CopyAsync();
@@ -141,7 +141,7 @@ namespace RitsukageGif.Desktop
             }
             catch (OperationCanceledException)
             {
-                SetStatus(UiText.Get("Cancelled"));
+                SetStatusKey("Cancelled");
                 _presets.Signal("cancelled");
                 return new RecordingOutcome(Cancelled: true);
             }

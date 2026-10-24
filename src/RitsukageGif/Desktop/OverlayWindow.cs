@@ -19,7 +19,7 @@ namespace RitsukageGif.Desktop
             _coordinator = coordinator;
             _sourceLocal = sourceLocal;
             Region = region;
-            Title = UiText.Get("SelectionTitle");
+            this.Bind(TitleProperty, LiveText.Resource("SelectionTitle"));
             SystemDecorations = sourceLocal ? SystemDecorations.Full : SystemDecorations.None;
             CanResize = false;
             ShowInTaskbar = false;
@@ -37,6 +37,8 @@ namespace RitsukageGif.Desktop
                 WindowSource = coordinator.WindowSource
             };
             Content = _canvas;
+            UiText.LanguageChanged += _canvas.InvalidateVisual;
+            Closed += (_, _) => UiText.LanguageChanged -= _canvas.InvalidateVisual;
             Opened += (_, _) =>
             {
                 if (!sourceLocal && OperatingSystem.IsWindows() && TryGetPlatformHandle() is { } handle)
