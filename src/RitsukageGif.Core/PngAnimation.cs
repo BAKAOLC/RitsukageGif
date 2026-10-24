@@ -81,17 +81,25 @@ namespace RitsukageGif.Core
             }
         }
 
-        public static MagickImageCollection Read(string path, uint limit = uint.MaxValue)
+        public static MagickImageCollection Read(string path, uint limit = uint.MaxValue,
+            CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             using var source = File.OpenRead(path);
             Span<byte> signature = stackalloc byte[8];
             source.ReadExactly(signature);
-            if (!signature.SequenceEqual(Signature))
-                return new MagickImageCollection(path, new MagickReadSettings { FrameCount = limit });
             var result = new MagickImageCollection();
             try
             {
-                foreach (var frame in ReadFrames(path))
+                if (!signature.SequenceEqual(Signature))
+                {
+                    result.ReadAsync(path, new MagickReadSettings { FrameCount = limit }, token)
+                        .GetAwaiter().GetResult();
+                    token.ThrowIfCancellationRequested();
+                    return result;
+                }
+
+                foreach (var frame in ReadFrames(path, token))
                 {
                     result.Add(frame);
                     if (result.Count >= limit) break;
@@ -106,7 +114,7 @@ namespace RitsukageGif.Core
             }
         }
 
-        public static IEnumerable<MagickImage> ReadFrames(string path)
+        public static IEnumerable<MagickImage> ReadFrames(string path, CancellationToken token = default)
         {
             using var source = File.OpenRead(path);
             source.Position = 8;
@@ -114,18 +122,24 @@ namespace RitsukageGif.Core
             var shared = new List<(string Type, byte[] Data)>();
             byte[]? control = null;
             using var compressed = new MemoryStream();
-            foreach (var chunk in ReadChunks(source))
+            foreach (var chunk in ReadFrameChunks(source, token))
                 switch (chunk.Type)
                 {
-                    case "IHDR": header = chunk.Data; break;
+                    case "IHDR": header = chunk.Data.ToArray(); break;
                     case "PLTE":
-                    case "tRNS": shared.Add(chunk); break;
+                    case "tRNS":
+                        if (shared.Any(existing => existing.Type == chunk.Type)) throw new InvalidDataException();
+                        shared.Add((chunk.Type, chunk.Data.ToArray()));
+                        break;
                     case "fcTL":
                         if (FinishFrame() is { } previous) yield return previous;
-                        control = chunk.Data;
+                        control = chunk.Data.ToArray();
                         break;
-                    case "IDAT": compressed.Write(chunk.Data); break;
-                    case "fdAT": compressed.Write(chunk.Data.AsSpan(4)); break;
+                    case "IDAT":
+                        if (compressed.Length + chunk.Data.Length > 256L * 1024 * 1024)
+                            throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+                        compressed.Write(chunk.Data.Span);
+                        break;
                     case "IEND":
                         if (FinishFrame() is { } last) yield return last;
                         yield break;
@@ -134,15 +148,30 @@ namespace RitsukageGif.Core
             MagickImage? FinishFrame()
             {
                 if (compressed.Length == 0) return null;
-                using var png = new MemoryStream();
+                using var png = new MemoryStream(checked((int)compressed.Length + 57 +
+                                                         shared.Sum(chunk => chunk.Data.Length + 12)));
                 png.Write(Signature);
                 var frameHeader = (byte[])header.Clone();
                 if (control is not null) control.AsSpan(4, 8).CopyTo(frameHeader);
                 WriteChunk(png, "IHDR", frameHeader);
                 foreach (var chunk in shared) WriteChunk(png, chunk.Type, chunk.Data);
-                WriteChunk(png, "IDAT", compressed.ToArray());
+                WriteChunk(png, "IDAT", compressed.GetBuffer().AsSpan(0, checked((int)compressed.Length)));
                 WriteChunk(png, "IEND", []);
-                var frame = new MagickImage(png.ToArray());
+                token.ThrowIfCancellationRequested();
+                var frame = new MagickImage();
+                try
+                {
+                    frame.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
+                    png.Position = 0;
+                    frame.Read(png);
+                    token.ThrowIfCancellationRequested();
+                }
+                catch
+                {
+                    frame.Dispose();
+                    throw;
+                }
+
                 if (control is not null)
                 {
                     frame.Page = new MagickGeometry(checked((int)Get(control, 12)), checked((int)Get(control, 16)),
@@ -162,11 +191,66 @@ namespace RitsukageGif.Core
             }
         }
 
-        private static IEnumerable<(string Type, byte[] Data)> ReadChunks(Stream stream)
+        private static IEnumerable<(string Type, ReadOnlyMemory<byte> Data)> ReadFrameChunks(Stream stream,
+            CancellationToken token)
+        {
+            var prefix = new byte[8];
+            var buffer = new byte[32768];
+            while (stream.Position < stream.Length)
+            {
+                token.ThrowIfCancellationRequested();
+                stream.ReadExactly(prefix);
+                var length = checked((int)Get(prefix, 0));
+                if (length > stream.Length - stream.Position - 4) throw new InvalidDataException();
+                var type = Encoding.ASCII.GetString(prefix, 4, 4);
+                if (type is "IDAT" or "fdAT")
+                {
+                    if (type == "fdAT")
+                    {
+                        if (length < 4) throw new InvalidDataException();
+                        stream.Position += 4;
+                        length -= 4;
+                    }
+
+                    while (length > 0)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        var take = Math.Min(length, buffer.Length);
+                        stream.ReadExactly(buffer.AsSpan(0, take));
+                        yield return ("IDAT", buffer.AsMemory(0, take));
+                        length -= take;
+                    }
+
+                    stream.Position += 4;
+                    continue;
+                }
+
+                var maximum = type switch
+                {
+                    "IHDR" => 13, "fcTL" => 26, "PLTE" => 768, "tRNS" => 256, "IEND" => 0, _ => -1
+                };
+                if (maximum < 0)
+                {
+                    stream.Position += length + 4;
+                    continue;
+                }
+
+                if (length > maximum || (type is "IHDR" or "fcTL" && length != maximum))
+                    throw new InvalidDataException();
+                stream.ReadExactly(buffer.AsSpan(0, length));
+                stream.Position += 4;
+                yield return (type, buffer.AsMemory(0, length));
+                if (type == "IEND") yield break;
+            }
+        }
+
+        private static IEnumerable<(string Type, byte[] Data)> ReadChunks(Stream stream,
+            CancellationToken token = default)
         {
             var prefix = new byte[8];
             while (stream.Position < stream.Length)
             {
+                token.ThrowIfCancellationRequested();
                 stream.ReadExactly(prefix);
                 var length = checked((int)Get(prefix, 0));
                 if (length > stream.Length - stream.Position - 4) throw new InvalidDataException();
@@ -178,26 +262,18 @@ namespace RitsukageGif.Core
             }
         }
 
-        private static void WriteChunk(Stream stream, string type, byte[] data)
+        private static void WriteChunk(Stream stream, string type, ReadOnlySpan<byte> data)
         {
-            var prefix = new byte[8];
-            Put(prefix, 0, (uint)data.Length);
-            Encoding.ASCII.GetBytes(type).CopyTo(prefix, 4);
+            Span<byte> prefix = stackalloc byte[8];
+            BinaryPrimitives.WriteUInt32BigEndian(prefix, (uint)data.Length);
+            Encoding.ASCII.GetBytes(type, prefix[4..]);
             stream.Write(prefix);
             stream.Write(data);
-            var crc = 0xffffffff;
-            foreach (var b in prefix.AsSpan(4)) crc = UpdateCrc(crc, b);
-            foreach (var b in data) crc = UpdateCrc(crc, b);
-            var suffix = new byte[4];
-            Put(suffix, 0, ~crc);
+            var crc = PngCrc32.Update(uint.MaxValue, prefix[4..]);
+            crc = PngCrc32.Update(crc, data);
+            Span<byte> suffix = stackalloc byte[4];
+            BinaryPrimitives.WriteUInt32BigEndian(suffix, ~crc);
             stream.Write(suffix);
-        }
-
-        private static uint UpdateCrc(uint crc, byte b)
-        {
-            crc ^= b;
-            for (var i = 0; i < 8; i++) crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320u : 0);
-            return crc;
         }
 
         private static uint Get(byte[] data, int offset)

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 
 namespace RitsukageGif.Core
 {
@@ -14,19 +15,41 @@ namespace RitsukageGif.Core
                 var bottom = Math.Min(top + size, area.Bottom);
                 for (var left = area.X; left < area.Right; left += size)
                 {
+                    parallel.CancellationToken.ThrowIfCancellationRequested();
                     var right = Math.Min(left + size, area.Right);
                     long b = 0, g = 0, r = 0, a = 0;
                     for (var y = top; y < bottom; y++)
                     {
+                        if ((y & 63) == 0) parallel.CancellationToken.ThrowIfCancellationRequested();
                         var pixel = (byte*)pixels + (long)y * stride + left * 4L;
                         for (var x = left; x < right; x++, pixel += 4)
                             Accumulate(pixel, premultiplied, 1, ref b, ref g, ref r, ref a);
                     }
 
                     var factor = a > 0 ? 1.0 / a : 0;
-                    var alpha = (double)a / ((right - left) * (bottom - top));
+                    var count = (right - left) * (bottom - top);
+                    // Opaque full-strength blocks have identical output pixels; preserve the same rounding
+                    // once, then fill each block row without repeating the blend for every pixel.
+                    // ReSharper disable once CompareOfFloatsByEqualityOperator
+                    if (a == 255L * count && effect.Amount == 1)
+                    {
+                        var color = Byte(b * factor) | ((uint)Byte(g * factor) << 8) |
+                                    ((uint)Byte(r * factor) << 16) | 0xff000000;
+                        if (!BitConverter.IsLittleEndian) color = BinaryPrimitives.ReverseEndianness(color);
+                        for (var y = top; y < bottom; y++)
+                        {
+                            if ((y & 63) == 0) parallel.CancellationToken.ThrowIfCancellationRequested();
+                            var pixel = (byte*)pixels + (long)y * stride + left * 4L;
+                            new Span<uint>(pixel, right - left).Fill(color);
+                        }
+
+                        continue;
+                    }
+
+                    var alpha = (double)a / count;
                     for (var y = top; y < bottom; y++)
                     {
+                        if ((y & 63) == 0) parallel.CancellationToken.ThrowIfCancellationRequested();
                         var pixel = (byte*)pixels + (long)y * stride + left * 4L;
                         for (var x = left; x < right; x++, pixel += 4)
                             Write(pixel, b * factor, g * factor, r * factor, alpha, effect.Amount, premultiplied);
@@ -56,6 +79,7 @@ namespace RitsukageGif.Core
                             Accumulate(source + x * 4L, premultiplied, 1, ref b, ref g, ref r, ref a);
                         for (var x = 0; x < area.Width; x++)
                         {
+                            if ((x & 4095) == 0) parallel.CancellationToken.ThrowIfCancellationRequested();
                             var count = Math.Min(area.Width - 1, x + effect.Radius) - Math.Max(0, x - effect.Radius) +
                                         1;
                             target[x * 4] = Byte((double)b / (count * 255));
@@ -70,31 +94,46 @@ namespace RitsukageGif.Core
                                 Accumulate(source + add * 4L, premultiplied, 1, ref b, ref g, ref r, ref a);
                         }
                     });
-                    // Columns are independent; the original buffer is retained for strength blending.
-                    Rows(area.Width, area.Height, parallel, column =>
+                    if ((long)area.Width * area.Height >= 4L * 1024 * 1024 &&
+                        area.Width / 64 >= parallel.MaxDegreeOfParallelism)
                     {
-                        var source = (byte*)buffer + column * 4L;
-                        long b = 0, g = 0, r = 0, a = 0;
-                        var bottom = Math.Min(area.Height - 1, effect.Radius);
-                        for (var y = 0; y <= bottom; y++)
-                            Accumulate(source + (long)y * area.Width * 4, true, 1, ref b, ref g, ref r, ref a);
-                        for (var y = 0; y < area.Height; y++)
+                        // Process neighboring columns together so each intermediate and output row stays local
+                        // in cache. Strips own disjoint output pixels and retain the original strength blending.
+                        Rows((area.Width + 63) / 64, (long)area.Height * 64, parallel, strip =>
+                            BlurVerticalStrip(buffer, pixels, stride, area, effect, premultiplied, strip * 64,
+                                parallel.CancellationToken));
+                    }
+                    else
+                    {
+                        // Columns are independent; the original buffer is retained for strength blending.
+                        Rows(area.Width, area.Height, parallel, column =>
                         {
-                            var count = Math.Min(area.Height - 1, y + effect.Radius) - Math.Max(0, y - effect.Radius) +
-                                        1;
-                            var factor = a > 0 ? 1.0 / a : 0;
-                            var target = (byte*)pixels + (long)(area.Y + y) * stride + (area.X + column) * 4L;
-                            Write(target, b * factor, g * factor, r * factor, (double)a / count, effect.Amount,
-                                premultiplied);
-                            var remove = y - effect.Radius;
-                            var add = y + effect.Radius + 1;
-                            if (remove >= 0)
-                                Accumulate(source + (long)remove * area.Width * 4, true, -1, ref b, ref g, ref r,
-                                    ref a);
-                            if (add < area.Height)
-                                Accumulate(source + (long)add * area.Width * 4, true, 1, ref b, ref g, ref r, ref a);
-                        }
-                    });
+                            var source = (byte*)buffer + column * 4L;
+                            long b = 0, g = 0, r = 0, a = 0;
+                            var bottom = Math.Min(area.Height - 1, effect.Radius);
+                            for (var y = 0; y <= bottom; y++)
+                                Accumulate(source + (long)y * area.Width * 4, true, 1, ref b, ref g, ref r, ref a);
+                            for (var y = 0; y < area.Height; y++)
+                            {
+                                if ((y & 63) == 0) parallel.CancellationToken.ThrowIfCancellationRequested();
+                                var count = Math.Min(area.Height - 1, y + effect.Radius) -
+                                            Math.Max(0, y - effect.Radius) +
+                                            1;
+                                var factor = a > 0 ? 1.0 / a : 0;
+                                var target = (byte*)pixels + (long)(area.Y + y) * stride + (area.X + column) * 4L;
+                                Write(target, b * factor, g * factor, r * factor, (double)a / count, effect.Amount,
+                                    premultiplied);
+                                var remove = y - effect.Radius;
+                                var add = y + effect.Radius + 1;
+                                if (remove >= 0)
+                                    Accumulate(source + (long)remove * area.Width * 4, true, -1, ref b, ref g, ref r,
+                                        ref a);
+                                if (add < area.Height)
+                                    Accumulate(source + (long)add * area.Width * 4, true, 1, ref b, ref g, ref r,
+                                        ref a);
+                            }
+                        });
+                    }
                 }
             }
             finally

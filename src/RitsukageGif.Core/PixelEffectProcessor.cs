@@ -21,62 +21,75 @@ namespace RitsukageGif.Core
                 stride < (long)width * 4 || maxDegreeOfParallelism == 0 || maxDegreeOfParallelism < -1 ||
                 effects.Count > 64)
                 throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
-            foreach (var effect in effects)
+            for (var index = 0; index < effects.Count; index++)
             {
+                var effect = effects[index];
                 ArgumentNullException.ThrowIfNull(effect);
                 effect.Validate();
             }
 
-            var parallel = new ParallelOptions
+            ParallelOptions? parallel = null;
+            for (var index = 0; index < effects.Count; index++)
             {
-                CancellationToken = token,
-                MaxDegreeOfParallelism = maxDegreeOfParallelism == -1
-                    ? Math.Min(32, Environment.ProcessorCount)
-                    : maxDegreeOfParallelism
-            };
-            foreach (var effect in effects)
-            {
+                var effect = effects[index];
                 token.ThrowIfCancellationRequested();
                 if (effect.Amount == 0) continue;
                 var area = Clip(effect.Region ?? new PixelRect(0, 0, width, height), width, height);
                 if (area.IsEmpty) continue;
+                // Only exact full strength may bypass blending; nearby values must retain it.
+                // ReSharper disable once CompareOfFloatsByEqualityOperator
+                if (effect.Kind == PixelEffectKind.Fill && effect.Amount == 1)
+                {
+                    Fill(pixels, stride, area, effect.Color, token, premultiplied);
+                    continue;
+                }
+
+                parallel ??= new ParallelOptions
+                {
+                    CancellationToken = token,
+                    MaxDegreeOfParallelism = maxDegreeOfParallelism == -1
+                        ? Math.Min(32, Environment.ProcessorCount)
+                        : maxDegreeOfParallelism
+                };
                 if (effect.Kind == PixelEffectKind.Blur)
                     Blur(pixels, stride, area, effect, parallel, premultiplied);
                 else if (effect.Kind == PixelEffectKind.Mosaic)
                     Mosaic(pixels, stride, area, effect, parallel, premultiplied);
+                // Exact full strength permits an integer path for opaque pixels. Tiny brightness regions
+                // keep the direct calculation instead of building a 256-entry lookup table.
+                // ReSharper disable once CompareOfFloatsByEqualityOperator
+                else if (effect.Amount == 1 && (effect.Kind != PixelEffectKind.BrightnessContrast ||
+                                                (long)area.Width * area.Height >= 256))
+                    ApplyFullStrengthPointEffect(pixels, stride, area, effect, parallel, premultiplied);
                 else
-                    Rows(area.Height, area.Width, parallel, row =>
-                    {
-                        var pixel = (byte*)pixels + (long)(area.Y + row) * stride + area.X * 4L;
-                        for (var x = 0; x < area.Width; x++, pixel += 4)
-                        {
-                            Read(pixel, premultiplied, out var b, out var g, out var r, out var a);
-                            switch (effect.Kind)
-                            {
-                                case PixelEffectKind.Fill:
-                                    b = effect.Color & 255;
-                                    g = (effect.Color >> 8) & 255;
-                                    r = (effect.Color >> 16) & 255;
-                                    a = effect.Color >> 24;
-                                    break;
-                                case PixelEffectKind.Grayscale:
-                                    b = g = r = (29 * b + 150 * g + 77 * r) / 256;
-                                    break;
-                                case PixelEffectKind.Invert:
-                                    b = 255 - b;
-                                    g = 255 - g;
-                                    r = 255 - r;
-                                    break;
-                                case PixelEffectKind.BrightnessContrast:
-                                    b = Adjust(b, effect);
-                                    g = Adjust(g, effect);
-                                    r = Adjust(r, effect);
-                                    break;
-                            }
+                    ApplyPointEffect(pixels, stride, area, effect, parallel, premultiplied);
+            }
+        }
 
-                            Write(pixel, b, g, r, a, effect.Amount, premultiplied);
-                        }
-                    });
+        private static void ApplyPointEffect(nint pixels, int stride, PixelRect area, PixelEffect effect,
+            ParallelOptions parallel, bool premultiplied)
+        {
+            Rows(area.Height, area.Width, parallel, row =>
+            {
+                var pixel = (byte*)pixels + (long)(area.Y + row) * stride + area.X * 4L;
+                ApplyPointRow(pixel, area.Width, effect, premultiplied);
+            });
+        }
+
+        private static void Fill(nint pixels, int stride, PixelRect area, uint color, CancellationToken token,
+            bool premultiplied)
+        {
+            // Use the same alpha conversion and rounding as other effects, once per fill.
+            var sample = stackalloc byte[4];
+            new Span<byte>(sample, 4).Clear();
+            Write(sample, color & 255, (color >> 8) & 255, (color >> 16) & 255, color >> 24, 1,
+                premultiplied);
+            var packed = *(uint*)sample;
+            for (var row = 0; row < area.Height; row++)
+            {
+                token.ThrowIfCancellationRequested();
+                var target = (byte*)pixels + (long)(area.Y + row) * stride + area.X * 4L;
+                new Span<uint>(target, area.Width).Fill(packed);
             }
         }
 

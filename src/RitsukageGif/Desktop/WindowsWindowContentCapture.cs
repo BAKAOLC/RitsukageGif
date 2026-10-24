@@ -16,6 +16,7 @@ namespace RitsukageGif.Desktop
         private bool _frameSubscribed, _closedSubscribed, _disposed;
         public int Width => _size.Width;
         public int Height => _size.Height;
+        public long FrameRevision { get; private set; }
 
         public WindowsWindowContentCapture(nint window, bool cursor)
         {
@@ -198,6 +199,7 @@ namespace RitsukageGif.Desktop
                     ((delegate* unmanaged[Stdcall]<nint, nint, uint, void>)Vtable(_context)[15])(_context, _staging, 0);
                 }
 
+                FrameRevision++;
                 return _pixels;
             }
             finally

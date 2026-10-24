@@ -31,8 +31,8 @@ namespace RitsukageGif.Core
                     }
                     else
                     {
-                        var pixels = Crop(frame.Pixels, options.Width, bounds);
-                        var blend = PrepareSparseDelta(pixels, previous, options.Width, bounds, token);
+                        var blend = IsSparseDelta(frame.Pixels, previous, options.Width, bounds, token);
+                        var pixels = Crop(frame.Pixels, blend ? previous : null, options.Width, bounds, token);
                         using var image = new MagickImage(pixels,
                             new PixelReadSettings((uint)bounds.Width, (uint)bounds.Height, StorageType.Char,
                                 PixelMapping.BGRA));
@@ -87,12 +87,20 @@ namespace RitsukageGif.Core
                 if (a.SequenceEqual(b)) continue;
                 top = Math.Min(top, y);
                 bottom = y;
-                var x = 0;
-                while (a[x] == b[x]) x++;
-                left = Math.Min(left, x);
-                x = width - 1;
-                while (a[x] == b[x]) x--;
-                right = Math.Max(right, x);
+                // Scan individual pixels only when a row expands the accumulated rectangle.
+                if (left > 0 && !a[..left].SequenceEqual(b[..left]))
+                {
+                    var x = 0;
+                    while (a[x] == b[x]) x++;
+                    left = x;
+                }
+
+                if (right < width - 1 && !a[(right + 1)..].SequenceEqual(b[(right + 1)..]))
+                {
+                    var x = width - 1;
+                    while (a[x] == b[x]) x--;
+                    right = x;
+                }
             }
 
             if (right < 0) return default;
@@ -102,43 +110,53 @@ namespace RitsukageGif.Core
             return new PixelRect(left, top, right - left + 1, bottom - top + 1);
         }
 
-        private static bool PrepareSparseDelta(byte[] pixels, byte[]? previous, int width, PixelRect bounds,
+        private static bool IsSparseDelta(byte[] current, byte[]? previous, int width, PixelRect bounds,
             CancellationToken token)
         {
             if (previous is null) return false;
             // Transparent holes skip unchanged pixels. Only opaque replacements can blend exactly.
+            var before = MemoryMarshal.Cast<byte, uint>(previous);
+            var after = MemoryMarshal.Cast<byte, uint>(current);
             var unchanged = 0;
             for (var y = 0; y < bounds.Height; y++)
-            for (var x = 0; x < bounds.Width; x++)
             {
-                if (x == 0) token.ThrowIfCancellationRequested();
-                var at = (y * bounds.Width + x) * 4;
-                var before = ((y + bounds.Y) * width + x + bounds.X) * 4;
-                if (pixels.AsSpan(at, 4).SequenceEqual(previous.AsSpan(before, 4))) unchanged++;
-                else if (pixels[at + 3] != 255) return false;
+                token.ThrowIfCancellationRequested();
+                var offset = (y + bounds.Y) * width + bounds.X;
+                var a = before.Slice(offset, bounds.Width);
+                var b = after.Slice(offset, bounds.Width);
+                for (var x = 0; x < b.Length; x++)
+                {
+                    if (a[x] == b[x]) unchanged++;
+                    else if (current[(offset + x) * 4 + 3] != 255) return false;
+                }
             }
 
-            if (unchanged < bounds.Width * bounds.Height / 4) return false;
-            for (var y = 0; y < bounds.Height; y++)
-            for (var x = 0; x < bounds.Width; x++)
-            {
-                if (x == 0) token.ThrowIfCancellationRequested();
-                var at = (y * bounds.Width + x) * 4;
-                var before = ((y + bounds.Y) * width + x + bounds.X) * 4;
-                if (pixels.AsSpan(at, 4).SequenceEqual(previous.AsSpan(before, 4))) pixels.AsSpan(at, 4).Clear();
-            }
-
-            return true;
+            return unchanged >= bounds.Width * bounds.Height / 4;
         }
 
-        private static byte[] Crop(byte[] input, int width, PixelRect bounds)
+        private static byte[] Crop(byte[] input, byte[]? previous, int width, PixelRect bounds,
+            CancellationToken token)
         {
-            if (bounds.X == 0 && bounds.Width == width && bounds.Y == 0 &&
-                bounds.Height * width * 4 == input.Length) return (byte[])input.Clone();
+            if (previous is null && bounds.X == 0 && bounds.Width == width && bounds.Y == 0 &&
+                bounds.Height * width * 4 == input.Length) return input;
             var result = new byte[checked(bounds.Width * bounds.Height * 4)];
+            var before = MemoryMarshal.Cast<byte, uint>(previous);
+            var after = MemoryMarshal.Cast<byte, uint>(input);
+            var output = MemoryMarshal.Cast<byte, uint>(result.AsSpan());
             for (var y = 0; y < bounds.Height; y++)
-                input.AsSpan(((y + bounds.Y) * width + bounds.X) * 4, bounds.Width * 4)
-                    .CopyTo(result.AsSpan(y * bounds.Width * 4));
+            {
+                token.ThrowIfCancellationRequested();
+                var offset = (y + bounds.Y) * width + bounds.X;
+                var row = after.Slice(offset, bounds.Width);
+                var target = output.Slice(y * bounds.Width, bounds.Width);
+                if (previous is null) row.CopyTo(target);
+                else
+                {
+                    var old = before.Slice(offset, bounds.Width);
+                    for (var x = 0; x < row.Length; x++) target[x] = row[x] == old[x] ? 0 : row[x];
+                }
+            }
+
             return result;
         }
     }

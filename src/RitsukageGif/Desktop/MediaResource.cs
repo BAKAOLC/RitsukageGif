@@ -1,12 +1,22 @@
+using System.Buffers;
 using System.Diagnostics;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class MediaResource(string path, bool temporary) : IDisposable
+    internal sealed partial class MediaResource : IDisposable
     {
         private static readonly HttpClient Client = new();
-        private bool _disposed;
-        public string Path { get; } = path;
+        private readonly Entry? _entry;
+        private int _disposed;
+
+        private MediaResource(string path, Entry? entry = null)
+        {
+            Path = path;
+            _entry = entry;
+        }
+
+        public string Path { get; }
+        internal static TimeSpan BodyIdleTimeout { get; set; } = TimeSpan.FromSeconds(30);
 
         public static async Task<MediaResource> OpenAsync(string location, CancellationToken cancellationToken)
         {
@@ -15,41 +25,98 @@ namespace RitsukageGif.Desktop
             {
                 var local = System.IO.Path.GetFullPath(uri?.IsFile == true ? uri.LocalPath : location);
                 if (!File.Exists(local)) throw new FileNotFoundException(null, local);
-                return new MediaResource(local, false);
+                return new MediaResource(local);
             }
 
             if (uri.Scheme is not ("http" or "https"))
                 throw new NotSupportedException(UiText.Get("UnsupportedMediaLocation"));
+            return await OpenRemoteAsync(uri, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static async Task<Entry> DownloadAsync(Uri uri, CancellationToken cancellationToken)
+        {
             using var response = await Client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
-            var resource = new MediaResource(System.IO.Path.Combine(System.IO.Path.GetTempPath(),
-                $"RitsukageGif-media-{Guid.NewGuid():N}.tmp"), true);
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                $"RitsukageGif-media-{Guid.NewGuid():N}.tmp");
+            var owned = false;
             try
             {
+                long length;
                 await using (var input =
                              await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-                await using (var output = new FileStream(resource.Path, FileMode.CreateNew, FileAccess.Write,
-                                 FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
-                    await input.CopyToAsync(output, cancellationToken).ConfigureAwait(false);
+                await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read,
+                                 65536, FileOptions.Asynchronous | FileOptions.SequentialScan))
+                {
+                    owned = true;
+                    using var idle = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    var buffer = ArrayPool<byte>.Shared.Rent(65536);
+                    try
+                    {
+                        while (true)
+                        {
+                            idle.CancelAfter(BodyIdleTimeout);
+                            int count;
+                            try
+                            {
+                                count = await input.ReadAsync(buffer.AsMemory(), idle.Token).ConfigureAwait(false);
+                            }
+                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                                throw new TimeoutException(UiText.Get("MediaDownloadTimedOut"));
+                            }
+
+                            idle.CancelAfter(Timeout.InfiniteTimeSpan);
+                            if (count == 0) break;
+                            await output.WriteAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+                        }
+
+                        length = output.Length;
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
+                }
+
                 cancellationToken.ThrowIfCancellationRequested();
-                return resource;
+                var expires = DateTimeOffset.MinValue;
+                var cache = response.Headers.CacheControl;
+                // Only explicitly fresh responses are retained; absent directives never imply freshness.
+                if (cache is { NoStore: false, NoCache: false } && cache.MaxAge is { } maxAge &&
+                    response.Headers.Vary.Count == 0)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    var age = response.Headers.Age ?? TimeSpan.Zero;
+                    if (response.Headers.Date is { } date && now - date > age) age = now - date;
+                    var remaining = maxAge - age;
+                    if (remaining > TimeSpan.Zero)
+                        expires = now + (remaining < TimeSpan.FromMinutes(5)
+                            ? remaining
+                            : TimeSpan.FromMinutes(5));
+                }
+
+                return new Entry(path, length, expires);
             }
             catch
             {
-                resource.Dispose();
+                if (owned) DeleteTemporary(path);
                 throw;
             }
         }
 
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
-            if (!temporary) return;
+            if (Interlocked.Exchange(ref _disposed, 1) != 0 || _entry is null) return;
+            lock (Gate) Release(_entry);
+        }
+
+        private static void DeleteTemporary(string path)
+        {
             try
             {
-                File.Delete(Path);
+                File.Delete(path);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {

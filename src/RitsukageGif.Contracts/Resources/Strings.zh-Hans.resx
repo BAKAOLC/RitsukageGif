@@ -627,4 +627,7 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="FatalErrorMessage" xml:space="preserve"><value>程序发生错误，关闭后将退出。日志：{0}</value></data>
   <data name="FatalErrorLogUnavailable" xml:space="preserve"><value>程序发生错误，无法保存日志。请复制下方错误信息。</value></data>
   <data name="UnsupportedMediaLocation" xml:space="preserve"><value>请输入本地路径、文件 URI 或 HTTP/HTTPS 地址</value></data>
+  <data name="MediaDownloadTimedOut" xml:space="preserve">
+    <value>媒体下载超时。</value>
+  </data>
 </root>

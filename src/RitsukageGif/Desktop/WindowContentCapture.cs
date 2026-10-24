@@ -1,4 +1,4 @@
-﻿namespace RitsukageGif.Desktop
+namespace RitsukageGif.Desktop
 {
     internal sealed class WindowContentCapture : IDisposable
     {
@@ -8,6 +8,7 @@
         private int _width, _height;
         public int Width => _windows?.Width ?? _width;
         public int Height => _windows?.Height ?? _height;
+        public long FrameRevision => _windows?.FrameRevision ?? -1;
 
         public WindowContentCapture(nint window, bool cursor, int fps = 60)
         {

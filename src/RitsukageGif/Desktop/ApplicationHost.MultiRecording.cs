@@ -107,7 +107,8 @@ namespace RitsukageGif.Desktop
                 var results = await Task.Run(async () =>
                 {
                     using var context =
-                        new SceneCaptureContext(outputs.Max(output => output.Options.Fps), inputs: _inputs);
+                        new SceneCaptureContext(outputs.Max(output => output.Options.Fps), inputs: _inputs,
+                            bufferWindows: outputs.Count > 1);
                     return await new MultiRecordingSession().RunAsync(outputs, output =>
                     {
                         var source = sources[output.Name];

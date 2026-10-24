@@ -4,7 +4,7 @@ using ImageMagick;
 
 namespace RitsukageGif.Core
 {
-    internal static class MediaPngCodec
+    internal static partial class MediaPngCodec
     {
         private static readonly byte[] Signature = [137, 80, 78, 71, 13, 10, 26, 10];
 
@@ -35,12 +35,13 @@ namespace RitsukageGif.Core
                 }
             }
 
-            foreach (var image in images) image.Dispose();
             images.Clear();
-            foreach (var image in complete) images.Add(image.Clone());
+            foreach (var image in complete) images.Add(image);
+            // RemoveAt transfers ownership, whereas Clear disposes images in this collection.
+            for (var index = complete.Count - 1; index >= 0; index--) complete.RemoveAt(index);
         }
 
-        internal static MagickImageCollection ReadImages(string path)
+        internal static MagickImageCollection ReadImages(string path, CancellationToken token = default)
         {
             using var stream = File.OpenRead(path);
             stream.Position = 8;
@@ -55,7 +56,7 @@ namespace RitsukageGif.Core
                 break;
             }
 
-            var images = PngAnimation.Read(path);
+            var images = PngAnimation.Read(path, token: token);
             if (poster)
             {
                 images[0].Dispose();
@@ -129,13 +130,19 @@ namespace RitsukageGif.Core
 
         internal static void Write(MagickImageCollection images, string path, CancellationToken token)
         {
+            Write(images, images.Count, path, token);
+        }
+
+        internal static void Write(IEnumerable<IMagickImage<byte>> images, int frames, string path,
+            CancellationToken token)
+        {
             using var stream = File.Create(path);
             stream.Write(Signature);
             uint sequence = 0;
-            for (var index = 0; index < images.Count; index++)
+            var index = 0;
+            foreach (var image in images)
             {
                 token.ThrowIfCancellationRequested();
-                var image = images[index];
                 using var png = new MemoryStream(image.ToByteArray(MagickFormat.Png32));
                 png.Position = 8;
                 foreach (var (type, data) in ReadChunks(png, false))
@@ -145,7 +152,7 @@ namespace RitsukageGif.Core
                         {
                             WriteChunk(stream, type, data);
                             var animation = new byte[8];
-                            Put(animation, 0, (uint)images.Count);
+                            Put(animation, 0, (uint)frames);
                             Put(animation, 4, image.AnimationIterations);
                             WriteChunk(stream, "acTL", animation);
                         }
@@ -177,8 +184,11 @@ namespace RitsukageGif.Core
                             WriteChunk(stream, "fdAT", frameData);
                         }
                     }
+
+                index++;
             }
 
+            if (index != frames) throw new InvalidDataException();
             WriteChunk(stream, "IEND", []);
         }
 
@@ -207,26 +217,18 @@ namespace RitsukageGif.Core
             }
         }
 
-        private static void WriteChunk(Stream stream, string type, byte[] data)
+        private static void WriteChunk(Stream stream, string type, ReadOnlySpan<byte> data)
         {
-            var prefix = new byte[8];
-            Put(prefix, 0, (uint)data.Length);
-            Encoding.ASCII.GetBytes(type).CopyTo(prefix, 4);
+            Span<byte> prefix = stackalloc byte[8];
+            BinaryPrimitives.WriteUInt32BigEndian(prefix, (uint)data.Length);
+            Encoding.ASCII.GetBytes(type, prefix[4..]);
             stream.Write(prefix);
             stream.Write(data);
-            var crc = uint.MaxValue;
-            foreach (var value in prefix.AsSpan(4)) crc = UpdateCrc(crc, value);
-            foreach (var value in data) crc = UpdateCrc(crc, value);
+            var crc = PngCrc32.Update(uint.MaxValue, prefix[4..]);
+            crc = PngCrc32.Update(crc, data);
             Span<byte> suffix = stackalloc byte[4];
             BinaryPrimitives.WriteUInt32BigEndian(suffix, ~crc);
             stream.Write(suffix);
-        }
-
-        private static uint UpdateCrc(uint crc, byte value)
-        {
-            crc ^= value;
-            for (var bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xedb88320u : 0);
-            return crc;
         }
 
         private static uint Gcd(uint left, uint right)

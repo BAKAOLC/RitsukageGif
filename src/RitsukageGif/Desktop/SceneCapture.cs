@@ -151,6 +151,20 @@ namespace RitsukageGif.Desktop
             return pixels;
         }
 
+        private byte[] CaptureScreen(Layer layer, PixelRect area, CancellationToken token)
+        {
+            if (layer.Screen is null || area.Width != layer.LastArea.Width || area.Height != layer.LastArea.Height)
+            {
+                layer.Screen?.Dispose();
+                layer.Screen = new DesktopCapture(_options with { Region = area, Divisor = 1 },
+                    _frameDisplayProvider, layer.Bitmap.Width, layer.Bitmap.Height);
+            }
+            else if (area != layer.LastArea) layer.Screen.Move(area);
+
+            layer.LastArea = area;
+            return layer.Screen.Capture(token);
+        }
+
         private void Render(Layer layer, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
@@ -235,25 +249,13 @@ namespace RitsukageGif.Desktop
                             return;
                         }
 
-                        byte[] CaptureScreen()
-                        {
-                            if (layer.Screen is null || area.Width != layer.LastArea.Width ||
-                                area.Height != layer.LastArea.Height)
-                            {
-                                layer.Screen?.Dispose();
-                                layer.Screen = new DesktopCapture(_options with { Region = area, Divisor = 1 },
-                                    _frameDisplayProvider, layer.Bitmap.Width, layer.Bitmap.Height);
-                            }
-                            else if (area != layer.LastArea) layer.Screen.Move(area);
-
-                            layer.LastArea = area;
-                            return layer.Screen.Capture(token);
-                        }
-
                         var pixels = _context is null
-                            ? CaptureScreen()
+                            ? CaptureScreen(layer, area, token)
                             : _context.CaptureScreen(area, layer.Bitmap.Width, layer.Bitmap.Height, _options,
-                                CaptureScreen);
+                                (Scene: this, Layer: layer, Area: area, Token: token),
+                                static request =>
+                                    request.Scene.CaptureScreen(request.Layer, request.Area, request.Token),
+                                token, definition.Absolute && !definition.Follow && state?.Crop is null);
                         if (pixels is not null)
                         {
                             DrawPixels(layer, pixels, layer.Bitmap.Width, layer.Bitmap.Height, null);

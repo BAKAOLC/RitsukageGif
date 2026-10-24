@@ -52,23 +52,49 @@ namespace RitsukageGif.Scripting
                         if (!seen.Add(path)) throw new ArgumentException(UiText.Get("ScriptTypeError"));
                     }
 
-                    using var gate = new SemaphoreSlim(2);
-                    var tasks = destinations.Select(async destination =>
+                    var results = new object?[destinations.Length];
+                    var requests = new List<MediaProcessOutput>(destinations.Length);
+                    var indices = new List<int>(destinations.Length);
+                    for (var index = 0; index < destinations.Length; index++)
                     {
-                        await gate.WaitAsync(token);
+                        var destination = destinations[index];
                         try
                         {
-                            return await Process(input, (string)destination["path"]!,
-                                destination.GetValueOrDefault("options"), token);
+                            requests.Add(new(Resolve((string)destination["path"]!),
+                                ReadOptions(destination.GetValueOrDefault("options"))));
+                            indices.Add(index);
                         }
-                        finally
+                        catch (Exception error) when (error is not OperationCanceledException)
                         {
-                            gate.Release();
+                            results[index] = new ScriptResult(false,
+                                ScriptServiceErrors.FromException(error, (string)destination["path"]!));
                         }
-                    }).ToArray();
-                    return (await Task.WhenAll(tasks)).ToList();
+                    }
+
+                    try
+                    {
+                        var processed = await Host().ProcessManyAsync(Resolve(input), requests, token);
+                        for (var index = 0; index < processed.Count; index++)
+                        {
+                            var result = processed[index];
+                            results[indices[index]] = result.Error is { } error
+                                ? new ScriptResult(false,
+                                    ScriptServiceErrors.FromException(error, requests[index].Path))
+                                : new ScriptResult(true, Info(result.Info!));
+                        }
+                    }
+                    catch (Exception error) when (error is not OperationCanceledException)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        foreach (var index in indices)
+                            results[index] = new ScriptResult(false,
+                                ScriptServiceErrors.FromException(error, (string)destinations[index]["path"]!));
+                    }
+
+                    return results.ToList();
                 }, [new("input", "string"), new("outputs", "MediaOutput[]")],
                 "Result<MediaInfo,ServiceError>[]");
+            MediaOptimizationScriptLibrary.Register(bindings, media, service as IMediaOptimizationService, root);
             return;
 
             string Resolve(string path) => Path.GetFullPath(path, root);
@@ -104,14 +130,14 @@ namespace RitsukageGif.Scripting
             }
         }
 
-        private static Dictionary<string, object?> Info(MediaInfo info) => new()
+        internal static Dictionary<string, object?> Info(MediaInfo info) => new()
         {
             ["path"] = info.Path, ["bytes"] = (double)info.Bytes, ["width"] = (double)info.Width,
             ["height"] = (double)info.Height, ["frames"] = (double)info.Frames,
             ["duration"] = info.DurationSeconds, ["format"] = info.Format
         };
 
-        private static MediaProcessOptions ReadOptions(object? value)
+        internal static MediaProcessOptions ReadOptions(object? value)
         {
             var fields = value as Dictionary<string, object?> ?? [];
 

@@ -627,4 +627,7 @@ Shift cycles snapping; hold to disable: {0}
   <data name="FatalErrorMessage" xml:space="preserve"><value>An unexpected error occurred. Closing this window will exit the application. Log: {0}</value></data>
   <data name="FatalErrorLogUnavailable" xml:space="preserve"><value>An unexpected error occurred and the log could not be saved. Copy the error details below.</value></data>
   <data name="UnsupportedMediaLocation" xml:space="preserve"><value>Enter a local path, file URI, or HTTP/HTTPS address</value></data>
+  <data name="MediaDownloadTimedOut" xml:space="preserve">
+    <value>Media download timed out.</value>
+  </data>
 </root>

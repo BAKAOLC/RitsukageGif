@@ -1,12 +1,13 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
 namespace RitsukageGif.Core
 {
     internal sealed class StreamingPngWriter : IDisposable
     {
-        private static readonly uint[] CrcTable = CreateCrcTable();
         private readonly Stream _stream;
         private readonly int _width;
         private readonly CancellationToken _token;
@@ -92,25 +93,42 @@ namespace RitsukageGif.Core
                     var row = _row.AsSpan(0, bounds.Width * 4 + 1);
                     row[0] = 1; // PNG Sub filter: cheap and effective on gradients and UI rows.
                     var input = pixels.AsSpan(((bounds.Y + y) * _width + bounds.X) * 4, bounds.Width * 4);
-                    byte r = 0, g = 0, b = 0, a = 0;
-                    for (var x = 0; x < bounds.Width; x++)
-                    {
-                        var offset = x * 4;
-                        row[offset + 1] = unchecked((byte)(input[offset + 2] - r));
-                        row[offset + 2] = unchecked((byte)(input[offset + 1] - g));
-                        row[offset + 3] = unchecked((byte)(input[offset] - b));
-                        row[offset + 4] = unchecked((byte)(input[offset + 3] - a));
-                        r = input[offset + 2];
-                        g = input[offset + 1];
-                        b = input[offset];
-                        a = input[offset + 3];
-                    }
+                    FilterRow(input, row[1..]);
 
                     compressed.Write(row);
                 }
             }
 
             _frames = checked(_frames + 1);
+        }
+
+        private static void FilterRow(ReadOnlySpan<byte> input, Span<byte> output)
+        {
+            output[0] = input[2];
+            output[1] = input[1];
+            output[2] = input[0];
+            output[3] = input[3];
+            var offset = 4;
+            if (Vector128.IsHardwareAccelerated)
+            {
+                var order = Vector128.Create((byte)2, 1, 0, 3, 6, 5, 4, 7, 10, 9, 8, 11, 14, 13, 12, 15);
+                ref var source = ref MemoryMarshal.GetReference(input);
+                ref var target = ref MemoryMarshal.GetReference(output);
+                for (; offset <= input.Length - Vector128<byte>.Count; offset += Vector128<byte>.Count)
+                {
+                    var current = Vector128.LoadUnsafe(ref source, (nuint)offset);
+                    var previous = Vector128.LoadUnsafe(ref source, (nuint)(offset - 4));
+                    Vector128.Shuffle(current - previous, order).StoreUnsafe(ref target, (nuint)offset);
+                }
+            }
+
+            for (; offset < input.Length; offset += 4)
+            {
+                output[offset] = unchecked((byte)(input[offset + 2] - input[offset - 2]));
+                output[offset + 1] = unchecked((byte)(input[offset + 1] - input[offset - 3]));
+                output[offset + 2] = unchecked((byte)(input[offset] - input[offset - 4]));
+                output[offset + 3] = unchecked((byte)(input[offset + 3] - input[offset - 1]));
+            }
         }
 
         internal void WriteData(bool first, ReadOnlySpan<byte> data)
@@ -153,31 +171,12 @@ namespace RitsukageGif.Core
             _stream.Write(header);
             _stream.Write(prefix);
             _stream.Write(data);
-            var crc = UpdateCrc(uint.MaxValue, type);
-            crc = UpdateCrc(crc, prefix);
-            crc = UpdateCrc(crc, data);
+            var crc = PngCrc32.Update(uint.MaxValue, type);
+            crc = PngCrc32.Update(crc, prefix);
+            crc = PngCrc32.Update(crc, data);
             Span<byte> checksum = stackalloc byte[4];
             BinaryPrimitives.WriteUInt32BigEndian(checksum, ~crc);
             _stream.Write(checksum);
-        }
-
-        private static uint UpdateCrc(uint crc, ReadOnlySpan<byte> data)
-        {
-            foreach (var value in data) crc = (crc >> 8) ^ CrcTable[(byte)(crc ^ value)];
-            return crc;
-        }
-
-        private static uint[] CreateCrcTable()
-        {
-            var table = new uint[256];
-            for (uint i = 0; i < table.Length; i++)
-            {
-                var crc = i;
-                for (var bit = 0; bit < 8; bit++) crc = (crc >> 1) ^ ((crc & 1) == 0 ? 0 : 0xedb88320u);
-                table[i] = crc;
-            }
-
-            return table;
         }
 
         public void Dispose() => ArrayPool<byte>.Shared.Return(_row);

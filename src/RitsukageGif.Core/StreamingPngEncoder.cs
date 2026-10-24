@@ -52,12 +52,20 @@ namespace RitsukageGif.Core
                 if (a.SequenceEqual(b)) continue;
                 top = Math.Min(top, y);
                 bottom = y;
-                var x = 0;
-                while (a[x] == b[x]) x++;
-                left = Math.Min(left, x);
-                x = width - 1;
-                while (a[x] == b[x]) x--;
-                right = Math.Max(right, x);
+                // Scan individual pixels only when a row expands the accumulated rectangle.
+                if (left > 0 && !a[..left].SequenceEqual(b[..left]))
+                {
+                    var x = 0;
+                    while (a[x] == b[x]) x++;
+                    left = x;
+                }
+
+                if (right < width - 1 && !a[(right + 1)..].SequenceEqual(b[(right + 1)..]))
+                {
+                    var x = width - 1;
+                    while (a[x] == b[x]) x--;
+                    right = x;
+                }
             }
 
             return right < 0 ? default : new PixelRect(left, top, right - left + 1, bottom - top + 1);

@@ -99,9 +99,15 @@ namespace RitsukageGif.Core
                         if (state.Next > now || state.Failure is not null) continue;
                         try
                         {
-                            var pixels = state.Source!.Capture(captureStop.Token);
-                            if (captureStop.IsCancellationRequested) break;
-                            await state.EnqueueAsync(pixels, clock.Elapsed.TotalMilliseconds, cancel);
+                            // A slow disk spill belongs to this output. Other outputs keep their
+                            // cadence, while this one skips deadlines until its buffer is queued.
+                            if (state.EnqueueWorker.IsCompleted)
+                            {
+                                var pixels = state.Source!.Capture(captureStop.Token);
+                                if (captureStop.IsCancellationRequested) break;
+                                state.Enqueue(pixels, clock.Elapsed.TotalMilliseconds);
+                            }
+
                             var period = 1000.0 / state.Output.Options.Fps;
                             // Skip missed deadlines instead of generating catch-up frames or slowing playback.
                             state.Next = Math.Max(state.Next + period,
@@ -120,6 +126,7 @@ namespace RitsukageGif.Core
 
                 var ticks = stopTime.Ticks;
                 var end = ticks < 0 ? clock.Elapsed.TotalMilliseconds : ticks * 1000.0 / Stopwatch.Frequency;
+                foreach (var state in states) await state.EnqueueWorker;
                 foreach (var state in states) state.Complete(end);
                 await Task.WhenAll(states.Select(state => state.Worker));
                 cancel.ThrowIfCancellationRequested();
@@ -135,6 +142,8 @@ namespace RitsukageGif.Core
             }
             finally
             {
+                // Never close a queue or release a source while its final disk write is pending.
+                foreach (var state in states) await state.EnqueueWorker;
                 foreach (var state in states) state.Complete(clock.Elapsed.TotalMilliseconds);
                 await Task.WhenAll(states.Select(state => state.Worker));
                 foreach (var state in states) state.Dispose();

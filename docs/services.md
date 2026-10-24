@@ -64,6 +64,7 @@ if (outcome.isOk) {
 | `media.inspect(path)` | `Result<MediaInfo,ServiceError>`，读取图像或动画信息 |
 | `media.process(input, output, options = {})` | `Result<MediaInfo,ServiceError>`，处理并保存 |
 | `media.processMany(input, outputs)` | `Result<MediaInfo,ServiceError>[]`，每个输出分别报告成功或失败 |
+| `media.optimize(input, output, options)` | `Result<MediaOptimizationResult,ServiceError>`，在指定范围内尝试满足体积预算 |
 
 `MediaInfo` 包含 `path`、`bytes`、`width`、`height`、`frames`、`duration`、`format`。`duration` 单位为秒，静态图像为零。
 
@@ -86,6 +87,10 @@ if (outcome.isOk) {
 
 基础操作顺序是还原动画完整帧、可选提取一帧、裁剪、翻转、旋转、缩放、编码；局部效果按 Source／Output 空间在对应阶段处理。未提取单帧时保留动画帧时序；跨格式转换受目标格式时间精度限制。GIF 颜色量化会影响颜色精度，转换后的文件大小取决于内容和编码参数。服务会限制图像尺寸和解码内存需求，超限返回错误。
 
+单文件处理指定 APNG 的 `frameIndex` 时，只顺序解码到目标帧，并保留合成所需的画布；不会加载后续帧或同时保留整段动画。前面的帧仍可能影响目标帧，所以提取靠后的帧需要更多解码时间。内存限制按单帧合成工作区计算，长动画不会仅因总帧数而被拒绝；单帧尺寸仍受限制。
+
+直接使用 `media.process` 将 APNG 处理为 APNG 时，逐帧解码、变换和编码，保留原有帧数、精确延时及循环次数，不需要将整段动画保留在内存中。这些流式路径不限制输入文件总字节数，但单帧像素工作区和压缩数据仍有内存限制；每帧压缩数据最多 256 MiB。转换到 GIF 或 WebP 仍使用完整解码流程。
+
 ## 一份输入，多个输出
 
 ```rgscript
@@ -100,11 +105,45 @@ for (const item of results) {
 }
 ```
 
-每次最多 16 个输出，最多两个编码任务并行，返回顺序与声明顺序一致。目标路径必须互不重复。个别输出失败不会撤销其他成功的文件；非法列表或重复路径会在开始前报参数错误。
+每次最多 16 个输出，返回顺序与声明顺序一致。输入只解码和合成一次，再依次生成各个输出，减少重复解码和同时驻留的编码工作区。若输入是 APNG，且所有输出都提取指定帧，会按帧号顺序扫描一次，并按原声明顺序返回结果；不保留整段动画。批量输出包含覆盖原输入的操作时，会先完整解码，保证其他输出仍使用原始内容。目标路径必须互不重复。个别输出失败不会撤销其他成功的文件；非法列表或重复路径会在开始前报参数错误。
 
 `media.processMany` 用于转换已有文件。实时采集不同画面和布局使用 [同步多路录制](multi-output.md) 的 `record.startMany`。录制结束后，可从 `status().outputs` 获取已保存文件路径，再交给这些服务处理。
 
 ## 按体积决定下一步
+
+`media.optimize` 自动尝试有限组参数，只在达到目标时保存输出：
+
+```rgscript
+const result = media.optimize('./input.gif', './small.gif', {
+    targetBytes: 30 * 1024 * 1024,
+    processing: {colors: 256, overwrite: true},
+    minimumColors: 128,
+    minimumScale: 0.75,
+    maximumAttempts: 8
+})?;
+if (result.achieved) {
+    print(result.info.path, result.info.bytes, result.settings.width);
+} else {
+    print('未达到目标', result.smallestBytes, result.attempts);
+}
+```
+
+| 字段 | 含义与默认值 |
+| --- | --- |
+| `targetBytes` | 必填，输出文件的最大字节数，正整数 |
+| `processing` | 基础 `MediaOptions`，默认 `{}` |
+| `minimumQuality` | 有损 WebP 允许的最低质量；默认保持基础质量，不会自动切换为有损 |
+| `minimumColors` | GIF 允许的最低颜色上限；默认保持基础颜色上限 |
+| `minimumScale` | 相对基础输出尺寸的最低比例，范围 `(0, 1]`，默认 `1`；整数尺寸向上保留下限，不会因取整低于该比例 |
+| `maximumAttempts` | 最多编码次数，范围 `1`～`32`，默认 `8`；相同参数不会重复编码 |
+
+服务从基础参数逐步走向允许的下限，找到满足预算的第一份结果就停止。多个下限同时指定时同步调整，不保证找到所有可能参数中的最优结果。一次调用内复用原始输入的解码画面，每组参数使用独立画面，不会以前一个候选作为输入。保留帧数与播放时序；只有显式设置 `frameIndex` 时才提取单帧。
+
+解码画面在本次调用成功、失败或取消后释放。完整动画仍需要保留整段解码画面，受解码内存限制；指定 APNG 的 `frameIndex` 时只保留目标帧及其合成工作区。
+
+成功返回值包含 `achieved`、可选的 `info`、`smallestBytes`、`attempts` 和实际 `settings`。未达到预算时 `achieved` 为 `false`，不生成输出，已有目标保持不变；`smallestBytes` 和 `settings` 对应本次最小候选。编码失败返回错误，取消向上传播。临时候选自动清理。允许设置 `processing.overwrite: true` 后原地处理；仅在达到预算时替换原文件。
+
+下面的脚本范例展示自行控制尝试顺序的方式。
 
 完整范例见 [compress-to-budget.rgpreset](../examples/compress-to-budget.rgpreset)。它读取 `params.string('input', 默认路径)` 和 `params.number('targetMB', 30)`，逐步尝试较少的 GIF 颜色，检查字节数，达到目标后复制为最终输出。
 

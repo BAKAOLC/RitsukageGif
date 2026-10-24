@@ -2,8 +2,12 @@ using ImageMagick;
 
 namespace RitsukageGif.Core
 {
-    public sealed class MediaProcessingService : IMediaProcessingService
+    public sealed partial class MediaProcessingService : IMediaProcessingService, IMediaOptimizationService
     {
+        public Task<MediaOptimizationResult> OptimizeAsync(string input, string output,
+            MediaOptimizationOptions options, CancellationToken token = default) =>
+            new MediaOptimizationService(this).OptimizeAsync(input, output, options, token);
+
         private const long PixelBudget = 512L * 1024 * 1024;
 
         public Task<MediaInfo> InspectAsync(string path, CancellationToken token = default)
@@ -16,6 +20,45 @@ namespace RitsukageGif.Core
         {
             ArgumentNullException.ThrowIfNull(options);
             return Task.Run(() => Process(Path.GetFullPath(input), Path.GetFullPath(output), options, token), token);
+        }
+
+        internal static Task<MediaInfo> ProcessPreparedAsync(PreparedMediaInput input, string output,
+            MediaProcessOptions options, CancellationToken token)
+        {
+            return Task.Run(() => Process(input.Info.Path, output, options, token, input), token);
+        }
+
+        internal static MagickImageCollection Decode(string input, MediaInfo info, CancellationToken token)
+        {
+            CheckBudget(info.Width, info.Height, info.Frames);
+            if (info.Bytes > PixelBudget) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+            token.ThrowIfCancellationRequested();
+            var images = info.Format is "png" or "apng"
+                ? MediaPngCodec.ReadImages(input, token)
+                : new MagickImageCollection();
+            try
+            {
+                if (info.Format is not ("png" or "apng"))
+                    images.ReadAsync(input, token).GetAwaiter().GetResult();
+                token.ThrowIfCancellationRequested();
+                if (images.Count != info.Frames) throw new InvalidDataException();
+                var width = checked((int)images.Max(image => Math.Max(image.Width, image.Page.Width)));
+                var height = checked((int)images.Max(image => Math.Max(image.Height, image.Page.Height)));
+                CheckBudget(width, height, images.Count);
+                if (width != info.Width || height != info.Height) throw new InvalidDataException();
+                if (info.Format == "apng") images[0].AnimationIterations = MediaPngCodec.ReadIterations(input);
+                foreach (var image in images)
+                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
+                if (info.Format == "apng") MediaPngCodec.Coalesce(images, token);
+                else images.Coalesce();
+                token.ThrowIfCancellationRequested();
+                return images;
+            }
+            catch
+            {
+                images.Dispose();
+                throw;
+            }
         }
 
         private static MediaInfo Inspect(string path, CancellationToken token)
@@ -36,7 +79,7 @@ namespace RitsukageGif.Core
         }
 
         private static MediaInfo Process(string input, string output, MediaProcessOptions options,
-            CancellationToken token)
+            CancellationToken token, PreparedMediaInput? prepared = null)
         {
             if (options.Effects is { } effects)
             {
@@ -50,8 +93,7 @@ namespace RitsukageGif.Core
 
             var sourceEffects = options.Effects?.Where(effect => effect.Space == PixelEffectSpace.Source).ToArray();
             var outputEffects = options.Effects?.Where(effect => effect.Space == PixelEffectSpace.Output).ToArray();
-            var info = Inspect(input, token);
-            if (info.Bytes > PixelBudget) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+            var info = prepared?.Info ?? Inspect(input, token);
             var format = (options.Format ?? Path.GetExtension(output).TrimStart('.')).ToLowerInvariant();
             if (format is not ("gif" or "webp" or "png" or "apng"))
                 throw new ArgumentOutOfRangeException(nameof(options.Format));
@@ -81,71 +123,62 @@ namespace RitsukageGif.Core
             var targetHeight = options.Height ?? (options.Width.HasValue
                 ? checked((int)Math.Max(1, Math.Round(height * (double)options.Width.Value / width)))
                 : height);
-            CheckBudget(info.Width, info.Height, info.Frames);
-            CheckBudget(targetWidth, targetHeight, info.Frames);
+            var singleApngFrame = info.Format == "apng" && options.FrameIndex.HasValue &&
+                                  (prepared is null || prepared.FrameIndex == options.FrameIndex);
+            var streamApng = prepared is null && info.Format == "apng" && format == "apng" &&
+                             !options.FrameIndex.HasValue;
+            if (!singleApngFrame && !streamApng && info.Bytes > PixelBudget)
+                throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+            // Streaming APNG extraction holds the canvas, current frame and optional previous canvas.
+            CheckBudget(info.Width, info.Height, singleApngFrame || streamApng ? 2 : info.Frames);
+            CheckBudget(targetWidth, targetHeight, options.FrameIndex.HasValue || streamApng ? 1 : info.Frames);
             if (!options.Overwrite && File.Exists(output)) throw new IOException(output);
             var directory = Path.GetDirectoryName(output)!;
             Directory.CreateDirectory(directory);
             var temporary = Path.Combine(directory, $".{Path.GetFileName(output)}.{Guid.NewGuid():N}.tmp");
             try
             {
-                using var images = info.Format is "png" or "apng"
-                    ? MediaPngCodec.ReadImages(input)
-                    : new MagickImageCollection(input);
-                if (images.Count != info.Frames) throw new InvalidDataException();
-                var decodedWidth = checked((int)images.Max(image => Math.Max(image.Width, image.Page.Width)));
-                var decodedHeight = checked((int)images.Max(image => Math.Max(image.Height, image.Page.Height)));
-                CheckBudget(decodedWidth, decodedHeight, images.Count);
-                if (decodedWidth != info.Width || decodedHeight != info.Height) throw new InvalidDataException();
-                if (info.Format == "apng") images[0].AnimationIterations = MediaPngCodec.ReadIterations(input);
-                token.ThrowIfCancellationRequested();
-                foreach (var image in images)
-                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
-                if (info.Format == "apng") MediaPngCodec.Coalesce(images, token);
-                else images.Coalesce();
-                if (options.FrameIndex is { } frameIndex)
-                {
-                    using var selected = images[frameIndex].Clone();
-                    foreach (var image in images) image.Dispose();
-                    images.Clear();
-                    images.Add(selected.Clone());
-                    images[0].AnimationDelay = 0;
-                }
-
-                foreach (var image in images)
-                {
-                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
-                    token.ThrowIfCancellationRequested();
-                    if (crop)
-                        image.Crop(new MagickGeometry(options.CropX!.Value, options.CropY!.Value,
-                            (uint)options.CropWidth!.Value, (uint)options.CropHeight!.Value));
-                    image.ResetPage();
-                    ApplyEffects(image, sourceEffects, token);
-                    if (options.FlipHorizontal) image.Flop();
-                    if (options.FlipVertical) image.Flip();
-                    if (options.Rotation != 0) image.Rotate(options.Rotation);
-                    if (image.Width != targetWidth || image.Height != targetHeight)
-                        image.Resize(new MagickGeometry((uint)targetWidth, (uint)targetHeight)
-                            { IgnoreAspectRatio = true });
-                    image.ResetPage();
-                    ApplyEffects(image, outputEffects, token);
-                    image.Quality = (uint)options.Quality;
-                    if (format == "gif")
-                        image.Quantize(new QuantizeSettings
-                        {
-                            Colors = (uint)options.Colors,
-                            DitherMethod = options.Dither ? DitherMethod.FloydSteinberg : DitherMethod.No
-                        });
-                    if (format == "webp") image.Settings.SetDefine(MagickFormat.WebP, "lossless", options.Lossless);
-                }
-
-                token.ThrowIfCancellationRequested();
-                if (format == "apng") MediaPngCodec.Write(images, temporary, token);
+                if (streamApng)
+                    MediaPngCodec.Write(TransformFrames(MediaPngCodec.ReadCoalescedFrames(input, info, token),
+                            options, crop, targetWidth, targetHeight, sourceEffects, outputEffects, token),
+                        info.Frames, temporary, token);
                 else
-                    images.Write(temporary, format switch
+                {
+                    using var images = prepared is null
+                        ? singleApngFrame
+                            ? MediaPngCodec.ReadFrame(input, options.FrameIndex!.Value, info, token)
+                            : Decode(input, info, token)
+                        : Clone(prepared.GetImages(token), prepared.FrameIndex.HasValue ? 0 : options.FrameIndex,
+                            token);
+                    if (options.FrameIndex is { } frameIndex)
                     {
-                        "gif" => MagickFormat.Gif, "webp" => MagickFormat.WebP, _ => MagickFormat.Png
-                    });
+                        if (prepared is null && !singleApngFrame)
+                        {
+                            // Remove unwanted frames in place; extracting one frame requires no pixel clone.
+                            for (var index = images.Count - 1; index >= 0; index--)
+                                if (index != frameIndex)
+                                {
+                                    images[index].Dispose();
+                                    images.RemoveAt(index);
+                                }
+                        }
+
+                        images[0].AnimationDelay = 0;
+                    }
+
+                    foreach (var image in images)
+                        Transform(image, options, crop, targetWidth, targetHeight, format, sourceEffects, outputEffects,
+                            token);
+
+                    token.ThrowIfCancellationRequested();
+                    if (format == "apng") MediaPngCodec.Write(images, temporary, token);
+                    else
+                        images.Write(temporary, format switch
+                        {
+                            "gif" => MagickFormat.Gif, "webp" => MagickFormat.WebP, _ => MagickFormat.Png
+                        });
+                }
+
                 token.ThrowIfCancellationRequested();
                 var result = Inspect(temporary, token);
                 token.ThrowIfCancellationRequested();
@@ -161,6 +194,70 @@ namespace RitsukageGif.Core
             finally
             {
                 if (File.Exists(temporary)) File.Delete(temporary);
+            }
+        }
+
+        private static void Transform(IMagickImage<byte> image, MediaProcessOptions options, bool crop,
+            int targetWidth, int targetHeight, string format, IReadOnlyList<PixelEffect>? sourceEffects,
+            IReadOnlyList<PixelEffect>? outputEffects, CancellationToken token)
+        {
+            image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
+            token.ThrowIfCancellationRequested();
+            if (crop)
+                image.Crop(new MagickGeometry(options.CropX!.Value, options.CropY!.Value,
+                    (uint)options.CropWidth!.Value, (uint)options.CropHeight!.Value));
+            image.ResetPage();
+            ApplyEffects(image, sourceEffects, token);
+            if (options.FlipHorizontal) image.Flop();
+            if (options.FlipVertical) image.Flip();
+            if (options.Rotation != 0) image.Rotate(options.Rotation);
+            if (image.Width != targetWidth || image.Height != targetHeight)
+                image.Resize(new MagickGeometry((uint)targetWidth, (uint)targetHeight)
+                    { IgnoreAspectRatio = true });
+            image.ResetPage();
+            ApplyEffects(image, outputEffects, token);
+            image.Quality = (uint)options.Quality;
+            if (format == "gif")
+                image.Quantize(new QuantizeSettings
+                {
+                    Colors = (uint)options.Colors,
+                    DitherMethod = options.Dither ? DitherMethod.FloydSteinberg : DitherMethod.No
+                });
+            if (format == "webp") image.Settings.SetDefine(MagickFormat.WebP, "lossless", options.Lossless);
+        }
+
+        private static IEnumerable<IMagickImage<byte>> TransformFrames(IEnumerable<IMagickImage<byte>> frames,
+            MediaProcessOptions options, bool crop, int width, int height,
+            IReadOnlyList<PixelEffect>? sourceEffects, IReadOnlyList<PixelEffect>? outputEffects,
+            CancellationToken token)
+        {
+            foreach (var image in frames)
+            {
+                Transform(image, options, crop, width, height, "apng", sourceEffects, outputEffects, token);
+                yield return image;
+            }
+        }
+
+        private static MagickImageCollection Clone(MagickImageCollection source, int? frameIndex,
+            CancellationToken token)
+        {
+            var result = new MagickImageCollection();
+            try
+            {
+                var start = frameIndex ?? 0;
+                var end = frameIndex.HasValue ? start + 1 : source.Count;
+                for (var index = start; index < end; index++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    result.Add(source[index].Clone());
+                }
+
+                return result;
+            }
+            catch
+            {
+                result.Dispose();
+                throw;
             }
         }
 

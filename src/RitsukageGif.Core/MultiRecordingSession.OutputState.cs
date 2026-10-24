@@ -52,10 +52,30 @@ namespace RitsukageGif.Core
             public MultiRecordingOutput Output { get; }
             public IFrameSource? Source { get; set; }
             public Task Worker { get; set; } = Task.CompletedTask;
+            public Task EnqueueWorker { get; private set; } = Task.CompletedTask;
             public double Next { get; set; }
             public Exception? Failure => Volatile.Read(ref _failure);
 
-            public async Task EnqueueAsync(byte[] pixels, double time, CancellationToken token)
+            public void Enqueue(byte[] pixels, double time)
+            {
+                var write = EnqueueAsync(pixels, time, _abort.Token);
+                if (write.IsCompletedSuccessfully) write.GetAwaiter().GetResult();
+                else EnqueueWorker = FinishEnqueueAsync(write);
+            }
+
+            private async Task FinishEnqueueAsync(ValueTask write)
+            {
+                try
+                {
+                    await write;
+                }
+                catch (Exception error)
+                {
+                    Fail(error);
+                }
+            }
+
+            public async ValueTask EnqueueAsync(byte[] pixels, double time, CancellationToken token)
             {
                 if (pixels.Length != checked(Output.Options.Width * Output.Options.Height * 4))
                     throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
@@ -258,6 +278,6 @@ namespace RitsukageGif.Core
             }
         }
 
-        private sealed record QueuedFrame(byte[]? Pixels, string? Path, double Time);
+        private readonly record struct QueuedFrame(byte[]? Pixels, string? Path, double Time);
     }
 }

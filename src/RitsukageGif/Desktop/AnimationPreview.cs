@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Threading.Channels;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -9,7 +8,7 @@ using Image = Avalonia.Controls.Image;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class AnimationPreview : IDisposable
+    internal sealed partial class AnimationPreview : IDisposable
     {
         private readonly Stopwatch _clock = new();
         private readonly Action<string> _error;
@@ -118,9 +117,12 @@ namespace RitsukageGif.Desktop
 
             using (var buffer = _bitmap.Lock())
             {
-                for (var y = 0; y < frame.Height; y++)
-                    Marshal.Copy(frame.Pixels, y * frame.Width * 4, buffer.Address + y * buffer.RowBytes,
-                        frame.Width * 4);
+                if (buffer.RowBytes == frame.Width * 4)
+                    Marshal.Copy(frame.Pixels, 0, buffer.Address, checked(frame.Width * frame.Height * 4));
+                else
+                    for (var y = 0; y < frame.Height; y++)
+                        Marshal.Copy(frame.Pixels, y * frame.Width * 4, buffer.Address + y * buffer.RowBytes,
+                            frame.Width * 4);
             }
 
             _view.InvalidateVisual();
@@ -148,73 +150,6 @@ namespace RitsukageGif.Desktop
             _view.Source = null;
             _bitmap?.Dispose();
             _bitmap = null;
-        }
-
-        private sealed class Playback : IDisposable
-        {
-            private readonly CancellationTokenSource _cancel = new();
-            private readonly Task _worker;
-            private readonly CancellationToken _token;
-            private int _disposed;
-
-            public Playback(string path)
-            {
-                var token = _token = _cancel.Token;
-                _worker = Task.Run(async () =>
-                {
-                    try
-                    {
-                        while (!token.IsCancellationRequested)
-                        {
-                            var count = 0;
-                            foreach (var frame in PreviewDecoder.Read(path, token))
-                            {
-                                try
-                                {
-                                    await Frames.Writer.WriteAsync(frame, token);
-                                }
-                                catch
-                                {
-                                    frame.Dispose();
-                                    throw;
-                                }
-
-                                count++;
-                            }
-
-                            if (count == 0) throw new InvalidDataException(UiText.Get("NoFrames"));
-                            if (count == 1) break;
-                        }
-
-                        Frames.Writer.TryComplete();
-                    }
-                    catch (OperationCanceledException) when (token.IsCancellationRequested)
-                    {
-                        Frames.Writer.TryComplete();
-                    }
-                    catch (Exception ex)
-                    {
-                        Frames.Writer.TryComplete(ex);
-                    }
-                }, CancellationToken.None);
-            }
-
-            public CancellationToken Token => _token;
-
-            public Channel<PreviewFrame> Frames { get; } = Channel.CreateBounded<PreviewFrame>(
-                new BoundedChannelOptions(2)
-                    { SingleReader = false, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
-
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-                _cancel.Cancel();
-                _ = _worker.ContinueWith(_ =>
-                {
-                    while (Frames.Reader.TryRead(out var frame)) frame.Dispose();
-                    _cancel.Dispose();
-                }, TaskScheduler.Default);
-            }
         }
     }
 }
