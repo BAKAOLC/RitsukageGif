@@ -19,7 +19,8 @@ namespace RitsukageGif.Desktop
         internal readonly TextEditor Editor = new()
         {
             ShowLineNumbers = true, FontFamily = new("Cascadia Code,Consolas"), FontSize = 13,
-            Background = Brushes.White, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Background = AppTheme.Surface, Foreground = AppTheme.Ink,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
 
         private readonly DispatcherTimer _analysis = new() { Interval = TimeSpan.FromMilliseconds(250) };
@@ -28,25 +29,35 @@ namespace RitsukageGif.Desktop
         private readonly ScriptColorizer _colors = new();
         private readonly List<Button> _debugButtons = [];
 
-        private readonly ListBox _diagnostics = new();
+        private readonly ListBox _diagnostics = new() { Background = AppTheme.Surface };
         private readonly List<Button> _fileButtons = [];
 
         private readonly TextBox _output = new()
         {
             IsReadOnly = true, AcceptsReturn = true, FontFamily = new("Consolas"),
-            BorderThickness = new(0),
+            BorderThickness = new(0), Background = AppTheme.Surface,
+            Foreground = AppTheme.Ink, Padding = new(10, 6),
         };
 
         private readonly ApplicationHost _owner;
-        private readonly ComboBox _presets = new() { MinWidth = 130, MaxWidth = 220 };
+
+        private readonly ComboBox _presets = new()
+            { MinWidth = 150, MaxWidth = 220, MinHeight = 30, Padding = new(8, 4) };
+
         private readonly List<Button> _runButtons = [];
         private readonly ScriptSourceResolver _sources;
-        private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+
+        private readonly TextBlock _status = new()
+        {
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = AppTheme.Muted
+        };
 
         private readonly TextBox _variables = new()
         {
             IsReadOnly = true, AcceptsReturn = true, FontFamily = new("Consolas"),
-            BorderThickness = new(0),
+            BorderThickness = new(0), Background = AppTheme.Surface,
+            Foreground = AppTheme.Ink, Padding = new(10, 6),
         };
 
         private bool _allowClose, _closingEditor;
@@ -63,6 +74,10 @@ namespace RitsukageGif.Desktop
         {
             _owner = owner;
             _sources = new(path => _openSources.GetValueOrDefault(path));
+            Classes.Add("script-editor");
+            FontSize = 13;
+            Foreground = AppTheme.Ink;
+            Background = AppTheme.Workspace;
             Width = 1000;
             Height = 720;
             MinWidth = 650;
@@ -76,49 +91,7 @@ namespace RitsukageGif.Desktop
             Editor.Options.HighlightCurrentLine = true;
             Editor.TextArea.IndentationStrategy = new CSharpIndentationStrategy(Editor.Options);
             Editor.TextArea.TextView.LineTransformers.Add(_colors);
-            var toolbar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new(8) };
-
-            void Add(string key, Func<Task> action, List<Button>? group = null)
-            {
-                var button = new Button { Content = UiText.Get(key), Margin = new(0, 0, 5, 4) };
-                button.Click += async (_, _) => await Guard(action);
-                toolbar.Children.Add(button);
-                group?.Add(button);
-            }
-
-            Add("EditorNew", () =>
-            {
-                LoadText(null, "");
-                return Task.CompletedTask;
-            }, _fileButtons);
-            Add("EditorOpen", OpenAsync, _fileButtons);
-            Add("EditorOpenWorkspace", OpenWorkspaceAsync, _fileButtons);
-            Add("EditorSave", async () => { await SaveAsync(); }, _fileButtons);
-            Add("EditorSaveAs", async () => { await SaveAsync(true); }, _fileButtons);
-            toolbar.Children.Add(_presets);
-            Add("EditorRun", () => RunAsync(false), _runButtons);
-            Add("EditorDebug", () => RunAsync(true), _runButtons);
-            Add("EditorPause", () =>
-            {
-                _debugger?.Pause();
-                return Task.CompletedTask;
-            }, _debugButtons);
-            Add("EditorContinue", () =>
-            {
-                _debugger?.Continue();
-                return Task.CompletedTask;
-            }, _debugButtons);
-            Add("EditorStep", () =>
-            {
-                _debugger?.Continue(true);
-                return Task.CompletedTask;
-            }, _debugButtons);
-            Add("EditorStop", StopAsync, _debugButtons);
-            Add("EditorBreakpoint", () =>
-            {
-                ToggleBreakpoint();
-                return Task.CompletedTask;
-            });
+            var toolbar = CreateToolbar();
             var variablesPage = new ScrollViewer { Content = _variables };
             var outputPage = new ScrollViewer { Content = _output };
             var tabs = new TabControl
@@ -127,38 +100,42 @@ namespace RitsukageGif.Desktop
                 {
                     new TabItem
                     {
-                        Header = UiText.Get("EditorProblems"), Content = _diagnostics, FontSize = 13,
+                        [!HeaderedContentControl.HeaderProperty] = LiveText.Resource("EditorProblems"),
+                        Content = _diagnostics, FontSize = 13,
                         Padding = new(8, 5), MinHeight = 28,
                     },
                     new TabItem
                     {
-                        Header = UiText.Get("EditorVariables"), Content = variablesPage, FontSize = 13,
+                        [!HeaderedContentControl.HeaderProperty] = LiveText.Resource("EditorVariables"),
+                        Content = variablesPage, FontSize = 13,
                         Padding = new(8, 5), MinHeight = 28,
                     },
                     new TabItem
                     {
-                        Header = UiText.Get("EditorOutput"), Content = outputPage, FontSize = 13,
+                        [!HeaderedContentControl.HeaderProperty] = LiveText.Resource("EditorOutput"),
+                        Content = outputPage, FontSize = 13,
                         Padding = new(8, 5), MinHeight = 28,
                     },
                 },
             };
-            var body = new Grid { RowDefinitions = new("3*,5,*") };
+            var body = new Grid { RowDefinitions = new("3*,5,*"), Background = AppTheme.Surface };
             body.Children.Add(Editor);
             var splitter = new GridSplitter
             {
                 ResizeDirection = GridResizeDirection.Rows, HorizontalAlignment = HorizontalAlignment.Stretch,
-                Background = Brushes.LightGray,
+                Background = AppTheme.Outline,
             };
             Grid.SetRow(splitter, 1);
             body.Children.Add(splitter);
             Grid.SetRow(tabs, 2);
             body.Children.Add(tabs);
-            var root = new DockPanel { Background = Brushes.White };
+            var root = new DockPanel { Background = AppTheme.Workspace };
             DockPanel.SetDock(toolbar, Dock.Top);
             root.Children.Add(toolbar);
             var footer = new Border
             {
-                Padding = new(8, 5), Background = new SolidColorBrush(Color.Parse("#F3F5F7")),
+                Padding = new(10, 5), Background = AppTheme.SurfaceTint,
+                BorderBrush = AppTheme.Outline, BorderThickness = new(0, 1, 0, 0),
                 Child = CreateProgressFooter(),
             };
             DockPanel.SetDock(footer, Dock.Bottom);
@@ -168,12 +145,7 @@ namespace RitsukageGif.Desktop
             var editorPane = new DockPanel();
             editorPane.Children.Add(documentHeader);
             editorPane.Children.Add(body);
-            var workspace = CreateWorkspacePane();
-            var content = new DockPanel();
-            DockPanel.SetDock(workspace, Dock.Left);
-            content.Children.Add(workspace);
-            content.Children.Add(editorPane);
-            root.Children.Add(content);
+            root.Children.Add(CreateWorkspaceLayout(editorPane));
             Content = root;
             ConfigureDiagnostics();
             Editor.TextChanged += (_, _) =>
@@ -210,6 +182,7 @@ namespace RitsukageGif.Desktop
             };
             Closed += (_, _) =>
             {
+                UiText.LanguageChanged -= RefreshLanguage;
                 _owner.Changed -= RefreshRecordingProgress;
                 _fileMonitor.Dispose();
                 _fileChanges.Stop();
@@ -228,6 +201,7 @@ namespace RitsukageGif.Desktop
             LoadText(_path, _path is null ? "" : File.ReadAllText(_path));
             if (workspacePath is not null) OpenWorkspace(workspacePath);
             UpdateDebugControls();
+            UiText.LanguageChanged += RefreshLanguage;
         }
 
         private bool Active => _debugger is { Snapshot.Finished: false };
@@ -295,7 +269,7 @@ namespace RitsukageGif.Desktop
             else if (e.Key == Key.S && e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
                 e.Handled = true;
-                await Guard(async () => { await SaveAsync(); });
+                await Guard(async () => { await SaveAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift)); });
             }
             else if (e.Key == Key.F9)
             {
@@ -592,14 +566,20 @@ namespace RitsukageGif.Desktop
             foreach (var b in _fileButtons) b.IsEnabled = !Active;
             foreach (var b in _runButtons) b.IsEnabled = !Active && !_settingsMode;
             foreach (var b in _debugButtons) b.IsEnabled = Active;
+            foreach (var (button, key, _) in _toolbarTips)
+            {
+                if (key == "EditorPause") button.IsEnabled = Active && _debugger is { Snapshot.Paused: false };
+                else if (key is "EditorContinue" or "EditorStep")
+                    button.IsEnabled = Active && _debugger is { Snapshot.Paused: true };
+            }
+
             UpdateDocumentHeaders();
         }
 
         internal void SetSettingsMode(bool enabled)
         {
             _settingsMode = enabled;
-            foreach (var button in _runButtons)
-                ToolTip.SetTip(button, enabled ? UiText.Get("EditorSettingsMode") : null);
+            RefreshToolbarTips();
             UpdateDebugControls();
         }
 
@@ -617,16 +597,18 @@ namespace RitsukageGif.Desktop
             if (Editor.Text == _savedText) return true;
             var dialog = new Window
             {
-                Title = UiText.Get("EditorTitle"), Width = 360, SizeToContent = SizeToContent.Height, CanResize = false,
+                [!TitleProperty] = LiveText.Resource("EditorTitle"), Width = 360, SizeToContent = SizeToContent.Height,
+                CanResize = false,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
             };
             var panel = new StackPanel { Spacing = 12, Margin = new(16) };
-            panel.Children.Add(new TextBlock { Text = UiText.Get("EditorUnsaved"), TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock
+                { [!TextBlock.TextProperty] = LiveText.Resource("EditorUnsaved"), TextWrapping = TextWrapping.Wrap });
             var buttons = new StackPanel
                 { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
             foreach (var (key, value) in new[] { ("EditorSave", 1), ("EditorDiscard", 2), ("EditorCancel", 0) })
             {
-                var button = new Button { Content = UiText.Get(key) };
+                var button = new Button { [!ContentControl.ContentProperty] = LiveText.Resource(key) };
                 button.Click += (_, _) => dialog.Close(value);
                 buttons.Children.Add(button);
             }

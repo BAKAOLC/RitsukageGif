@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -15,7 +15,9 @@ namespace RitsukageGif.Desktop
         private readonly ConcurrentDictionary<string, string> _openSources =
             new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
-        private readonly TabControl _documentTabs = new() { Height = 34, FontSize = 13 };
+        private readonly TabControl _documentTabs = new()
+            { MinHeight = 36, FontSize = 13, Background = AppTheme.SurfaceTint };
+
         private readonly EditorFileMonitor _fileMonitor = new();
         private readonly DispatcherTimer _fileChanges = new() { Interval = TimeSpan.FromMilliseconds(200) };
         private readonly TextBlock _fileChangeText = new() { VerticalAlignment = VerticalAlignment.Center };
@@ -36,7 +38,8 @@ namespace RitsukageGif.Desktop
                 VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
             });
             _fileChangeBar.Children.Add(_fileChangeText);
-            var reload = new Button { Content = UiText.Get("EditorReload"), Margin = new Thickness(6, 0) };
+            var reload = new Button
+                { [!ContentControl.ContentProperty] = LiveText.Resource("EditorReload"), Margin = new Thickness(6, 0) };
             reload.Click += async (_, _) => await Guard(async () =>
             {
                 if (_currentDocument?.Path is not { } path) return;
@@ -44,7 +47,7 @@ namespace RitsukageGif.Desktop
                 var text = await ReadEditorFileAsync(path);
                 if (!Active && !_allowClose) ReloadDocument(document, text);
             });
-            var keep = new Button { Content = UiText.Get("EditorKeepLocal") };
+            var keep = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("EditorKeepLocal") };
             keep.Click += (_, _) =>
             {
                 if (_currentDocument is not { } document || Active) return;
@@ -123,8 +126,10 @@ namespace RitsukageGif.Desktop
                 VerticalAlignment = VerticalAlignment.Center,
                 MaxWidth = 180, TextTrimming = TextTrimming.CharacterEllipsis
             });
-            var close = new Button { Content = "×", Padding = new Thickness(3, 0), MinWidth = 18, MinHeight = 18 };
-            ToolTip.SetTip(close, UiText.Get("EditorCloseFile"));
+            var close = new Button
+                { Content = ToolbarIcon("EditorCloseFile"), Padding = new Thickness(4), MinWidth = 24, MinHeight = 24 };
+            close.Classes.Add("icon-button");
+            close.Bind(ToolTip.TipProperty, LiveText.Resource("EditorCloseFile"));
             close.Click += async (_, _) => await Guard(() => CloseDocumentAsync(document));
             header.Children.Add(close);
             item.Header = header;

@@ -1,7 +1,8 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -14,11 +15,13 @@ namespace RitsukageGif.Desktop
 
         private readonly TextBlock _workspaceTitle = new()
         {
-            FontSize = 12, FontWeight = FontWeight.SemiBold,
+            FontSize = 13, Foreground = AppTheme.Muted, FontWeight = FontWeight.SemiBold,
             TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(8, 6)
         };
 
         private Border? _workspacePane;
+        private Grid? _workspaceLayout;
+        private GridSplitter? _workspaceSplitter;
         private string? _workspacePath;
         private int _workspaceRevision;
         private FileSystemWatcher? _workspaceWatcher;
@@ -37,10 +40,11 @@ namespace RitsukageGif.Desktop
             var heading = new DockPanel();
             var refresh = new Button
             {
-                Content = "↻", FontSize = 15, MinHeight = 24, MinWidth = 24,
+                Content = ToolbarIcon("EditorRefreshWorkspace"), MinHeight = 28, MinWidth = 28,
                 Padding = new Thickness(3, 0), Margin = new Thickness(0, 3, 4, 3)
             };
-            ToolTip.SetTip(refresh, UiText.Get("EditorRefreshWorkspace"));
+            refresh.Classes.Add("icon-button");
+            refresh.Bind(ToolTip.TipProperty, LiveText.Resource("EditorRefreshWorkspace"));
             refresh.Click += (_, _) => RefreshWorkspace();
             DockPanel.SetDock(refresh, Dock.Right);
             heading.Children.Add(refresh);
@@ -59,12 +63,45 @@ namespace RitsukageGif.Desktop
             };
             _workspacePane = new Border
             {
-                Width = 200, MinWidth = 180, MaxWidth = 220, IsVisible = false,
-                Background = new SolidColorBrush(Color.Parse("#F7F8FA")),
-                BorderBrush = new SolidColorBrush(Color.Parse("#E2E5E9")),
+                Name = "ScriptWorkspacePane", IsVisible = false,
+                Background = AppTheme.SurfaceTint,
+                BorderBrush = AppTheme.Outline,
                 BorderThickness = new Thickness(0, 0, 1, 0), Child = panel
             };
             return _workspacePane;
+        }
+
+        private Grid CreateWorkspaceLayout(Control editorPane)
+        {
+            var layout = new Grid { Name = "ScriptWorkspaceLayout", ColumnDefinitions = new("0,0,*") };
+            _workspaceLayout = layout;
+            layout.ColumnDefinitions[2].MinWidth = 360;
+            var workspace = CreateWorkspacePane();
+            layout.Children.Add(workspace);
+            _workspaceSplitter = new GridSplitter
+            {
+                Name = "ScriptWorkspaceSplitter", IsVisible = false, Focusable = true,
+                ResizeDirection = GridResizeDirection.Columns, ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+                HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
+                Background = AppTheme.Outline, Cursor = new Cursor(StandardCursorType.SizeWestEast)
+            };
+            Grid.SetColumn(_workspaceSplitter, 1);
+            layout.Children.Add(_workspaceSplitter);
+            Grid.SetColumn(editorPane, 2);
+            layout.Children.Add(editorPane);
+            layout.SizeChanged += (_, _) => ConstrainWorkspaceWidth();
+            return layout;
+        }
+
+        private void ConstrainWorkspaceWidth()
+        {
+            if (_workspaceLayout is not { Bounds.Width: > 0 } layout || _workspacePane is not { IsVisible: true })
+                return;
+            var column = layout.ColumnDefinitions[0];
+            var maximum = Math.Max(160, Math.Min(480, layout.Bounds.Width - 366));
+            column.MaxWidth = maximum;
+            if (column.Width.IsAbsolute && column.Width.Value > maximum)
+                column.Width = new GridLength(maximum);
         }
 
         private async Task OpenWorkspaceAsync()
@@ -88,7 +125,17 @@ namespace RitsukageGif.Desktop
                 _workspacePath = directory.FullName;
                 _workspaceExpanded.Clear();
                 _workspaceTree.Items.Clear();
-                CreateWorkspacePane().IsVisible = true;
+                var pane = CreateWorkspacePane();
+                if (!pane.IsVisible && _workspaceLayout is { } layout)
+                {
+                    layout.ColumnDefinitions[0].MinWidth = 160;
+                    layout.ColumnDefinitions[0].Width = new GridLength(220);
+                    layout.ColumnDefinitions[1].Width = new GridLength(6);
+                    _workspaceSplitter!.IsVisible = true;
+                }
+
+                pane.IsVisible = true;
+                ConstrainWorkspaceWidth();
                 _workspaceTitle.Text = directory.Name.Length == 0 ? directory.FullName : directory.Name;
                 ToolTip.SetTip(_workspaceTitle, UiText.Get("EditorWorkspace") + ": " + directory.FullName);
                 RefreshWorkspace();
@@ -201,7 +248,7 @@ namespace RitsukageGif.Desktop
                 items.Clear();
                 foreach (var entry in entries)
                 {
-                    var node = new TreeViewItem { Header = entry.Name, Tag = entry.FullName, FontSize = 12 };
+                    var node = new TreeViewItem { Header = entry.Name, Tag = entry.FullName, FontSize = 13 };
                     ToolTip.SetTip(node, entry.FullName);
                     if (entry.Directory)
                     {
