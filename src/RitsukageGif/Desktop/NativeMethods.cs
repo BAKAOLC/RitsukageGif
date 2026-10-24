@@ -92,9 +92,6 @@ namespace RitsukageGif.Desktop
         [LibraryImport("user32.dll")]
         internal static partial int PeekMessageW(out Message message, nint window, uint min, uint max, uint remove);
 
-        [LibraryImport("winmm.dll", EntryPoint = "PlaySoundW", StringMarshalling = StringMarshalling.Utf16)]
-        internal static partial int PlaySound(string? path, nint module, uint flags);
-
         public static PixelPoint Mouse()
         {
             if (GetCursorPos(out var point) == 0) throw new InvalidOperationException(UiText.Get("CursorFailed"));

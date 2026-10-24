@@ -78,11 +78,24 @@ namespace RitsukageGif.Desktop
             File.Move(temporary, FilePath, true);
         }
 
-        public void Play(bool start)
+        public void Play(bool start, Action<string> reportError)
         {
             var path = start ? StartSound : StopSound;
-            if (Sound && File.Exists(path))
-                PlatformShell.PlaySound(path);
+            if (Sound && !string.IsNullOrWhiteSpace(path))
+                _ = PlayAsync(path, reportError);
+        }
+
+        private static async Task PlayAsync(string path, Action<string> reportError)
+        {
+            try
+            {
+                await PlatformShell.PlaySoundAsync(path);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceError("Audio playback failed: {0}", ex);
+                reportError(string.Format(UiText.Get("SoundPlaybackFailed"), ex.Message));
+            }
         }
     }
 }

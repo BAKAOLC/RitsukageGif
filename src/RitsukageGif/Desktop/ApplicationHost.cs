@@ -199,7 +199,7 @@ namespace RitsukageGif.Desktop
             if (_operation is not null) await _operation;
             await _inputServer.DisposeAsync();
             _inputs.Dispose();
-            PlatformShell.StopSound();
+            await PlatformShell.StopSoundAsync();
             _services.DisplaysChanged -= DisplayChanged;
             _services.Dispose();
             DesktopCapture.CloseSharedSource();

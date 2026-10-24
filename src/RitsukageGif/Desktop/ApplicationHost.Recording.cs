@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
                 _recording = false;
                 _stop?.Cancel();
                 _presets.NotifyRecordingChanged();
-                (_recordSettings ?? _settings).Play(false);
+                (_recordSettings ?? _settings).Play(false, SetStatus);
                 Notify();
                 return;
             }
@@ -67,7 +67,7 @@ namespace RitsukageGif.Desktop
                 });
                 try
                 {
-                    settings.Play(true);
+                    settings.Play(true, SetStatus);
                     var monitors = Screens.All
                         .Select(s => new PixelRect(s.Bounds.X, s.Bounds.Y, s.Bounds.Width, s.Bounds.Height)).ToArray();
                     if (DesktopCapture.UsesSourceSelection &&

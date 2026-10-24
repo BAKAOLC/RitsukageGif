@@ -107,14 +107,14 @@
   <data name="OutputRequired" xml:space="preserve">
     <value>Choose an output folder.</value>
   </data>
-  <data name="BrowseWav" xml:space="preserve">
+  <data name="BrowseSound" xml:space="preserve">
     <value>Browse…</value>
   </data>
   <data name="ChooseSound" xml:space="preserve">
     <value>Choose sound</value>
   </data>
-  <data name="WavFiles" xml:space="preserve">
-    <value>WAV audio</value>
+  <data name="AudioFiles" xml:space="preserve">
+    <value>Audio files</value>
   </data>
   <data name="Clear" xml:space="preserve">
     <value>Clear</value>
@@ -617,4 +617,6 @@ Shift cycles snapping; hold to disable: {0}
   <data name="CleanupMaxSizeMiB" xml:space="preserve"><value>Maximum total size (MiB)</value></data>
   <data name="CleanupRulesHint" xml:space="preserve"><value>Enabled limits apply together. Oldest files are permanently deleted first.</value></data>
   <data name="CleanupScopeHint" xml:space="preserve"><value>Only manual recordings saved from this version onward are managed. Files used by the preview or clipboard are kept temporarily, so limits may be exceeded.</value></data>
+  <data name="SoundPlaybackFailed" xml:space="preserve"><value>Could not play sound: {0}</value></data>
+  <data name="AudioDeviceUnavailable" xml:space="preserve"><value>Could not open the audio output device</value></data>
 </root>

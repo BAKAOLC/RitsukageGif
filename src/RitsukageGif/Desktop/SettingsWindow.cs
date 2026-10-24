@@ -247,12 +247,13 @@ namespace RitsukageGif.Desktop
         private Control SoundPicker(TextBox box)
         {
             var panel = new Grid { ColumnDefinitions = new("*,Auto") };
-            panel.Children.Add(WithButton(box, UiText.Get("BrowseWav"), async () =>
+            panel.Children.Add(WithButton(box, UiText.Get("BrowseSound"), async () =>
             {
                 var files = await StorageProvider.OpenFilePickerAsync(new()
                 {
                     Title = UiText.Get("ChooseSound"),
-                    FileTypeFilter = [new(UiText.Get("WavFiles")) { Patterns = ["*.wav"] }],
+                    FileTypeFilter =
+                        [new(UiText.Get("AudioFiles")) { Patterns = ["*.wav", "*.mp3", "*.ogg", "*.flac"] }],
                 });
                 if (files.Count > 0) box.Text = files[0].TryGetLocalPath();
             }));

@@ -15,6 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Desktop/**/*.cs" />
+    <PackageReference Include="JAJ.Packages.MiniAudioEx" Version="3.3.7" />
     <ProjectReference Include="../RitsukageGif.Scripting/RitsukageGif.Scripting.csproj" />
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
     <ProjectReference Include="../RitsukageGif.Core/RitsukageGif.Core.csproj" />
