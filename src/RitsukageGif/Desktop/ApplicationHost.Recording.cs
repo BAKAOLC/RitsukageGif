@@ -19,6 +19,7 @@ namespace RitsukageGif.Desktop
             View?.SaveCommon();
             View?.PausePreview();
             _latestProgress = null;
+            _manualCaptureCompleted = false;
             _streams = [];
             _busy = true;
             _recording = true;
@@ -33,10 +34,21 @@ namespace RitsukageGif.Desktop
             await _operation;
         }
 
+        private void UpdateRecordingProgress(RecordingProgress progress, bool manualRecording)
+        {
+            if (_closing) return;
+            _latestProgress = progress;
+            if (manualRecording && progress.Stage is RecordingStage.Encoding or RecordingStage.Complete)
+                _manualCaptureCompleted = true;
+            SetStatus(UiText.Get("Stage" + progress.Stage));
+        }
+
         private async Task<RecordingOutcome> RecordAsync(PixelRect region, CancellationToken stop,
             CancellationToken abort,
             WindowPreset? preset, PresetRecordingSettings? overrides)
         {
+            var manualRecording = _presets.ActivePreset is null &&
+                                  (preset is null || ReferenceEquals(preset, _manualPreset));
             try
             {
                 var effective = preset?.Settings ?? new PresetRecordingSettings();
@@ -59,12 +71,7 @@ namespace RitsukageGif.Desktop
                     options.Format switch { OutputFormat.WebP => ".webp", OutputFormat.APng => ".png", _ => ".gif" };
                 var outputs = BuildOutputPaths(preset, extension, ++_recordSequence);
                 var path = outputs[0];
-                var progress = new RecordingProgressPresenter(p =>
-                {
-                    if (_closing) return;
-                    _latestProgress = p;
-                    SetStatus(UiText.Get("Stage" + p.Stage));
-                });
+                var progress = new RecordingProgressPresenter(p => UpdateRecordingProgress(p, manualRecording));
                 try
                 {
                     settings.Play(true, SetStatus);
@@ -128,7 +135,7 @@ namespace RitsukageGif.Desktop
                     SetStatus(UiText.Get("PreviewFailed") + ex.Message);
                 }
 
-                if (preset is null || ReferenceEquals(preset, _manualPreset)) QueueCleanup(outputs);
+                if (manualRecording) QueueCleanup(outputs);
                 _presets.Signal("saved");
                 return new RecordingOutcome();
             }
@@ -147,11 +154,13 @@ namespace RitsukageGif.Desktop
             finally
             {
                 _recordSettings = null;
+                _manualCaptureCompleted = false;
                 _recordClock.Stop();
                 _recording = _busy = false;
                 _stop?.Dispose();
                 _abort?.Dispose();
                 _stop = _abort = null;
+                if (!_closing && View is { } view) await view.ResumePreviewAsync();
                 RefreshDisplaySelection();
                 Notify();
             }

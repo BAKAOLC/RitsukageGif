@@ -20,6 +20,7 @@ namespace RitsukageGif.Desktop
         private RecordingProgress? _latestProgress;
         private Task<RecordingOutcome>? _operation;
         private bool _recording, _busy, _selecting, _closing, _configuring;
+        private bool _manualCaptureCompleted;
         private PixelRect? _region;
         private SelectionCoordinator? _selection;
         private AppSettings _settings = AppSettings.Load();
@@ -35,7 +36,12 @@ namespace RitsukageGif.Desktop
 
         public MainWindow? View { get; private set; }
         public AppSettings Settings => _settings;
-        internal AppSettings EffectiveSettings => _recordSettings ?? _settings;
+        internal AppSettings EffectiveSettings => CanPrepareNextRecording ? _settings : _recordSettings ?? _settings;
+
+        public bool CanPrepareNextRecording => _busy && !_recording && !_closing &&
+                                               _manualCaptureCompleted && _presets.ActivePreset is null;
+
+        internal bool CanEditRecordingSettings => !_closing && !_recording && (!_busy || CanPrepareNextRecording);
         public bool IsBusy => _busy;
         public bool IsRecording => _recording;
         public bool IsSelecting => _selecting;
@@ -99,7 +105,7 @@ namespace RitsukageGif.Desktop
 
         public void SetCommon(int fps, int divisor, OutputFormat format, bool? cursor = null)
         {
-            if (_busy) return;
+            if (!CanEditRecordingSettings) return;
             _settings.Fps = fps;
             _settings.Divisor = divisor;
             _settings.Format = format;
@@ -109,7 +115,7 @@ namespace RitsukageGif.Desktop
 
         public bool BeginConfigure()
         {
-            if (_busy || _selecting || _configuring || _closing) return false;
+            if (!CanEditRecordingSettings || _selecting || _configuring) return false;
             _configuring = true;
             DeactivatePreset();
             Volatile.Write(ref _captureRegion, null);
@@ -128,6 +134,7 @@ namespace RitsukageGif.Desktop
 
         public void UpdateSettings(AppSettings settings)
         {
+            if (!CanEditRecordingSettings) return;
             if (settings.CaptureSource != _settings.CaptureSource)
             {
                 _manualPreset = null;
@@ -171,7 +178,7 @@ namespace RitsukageGif.Desktop
 
         private async Task ShutdownCoreAsync()
         {
-            if (_editor is { } editor && !await editor.RequestCloseAsync()) return;
+            if (!_closing && _editor is { } editor && !await editor.RequestCloseAsync()) return;
             _closing = true;
             _cleanupTimer?.Stop();
             _cleanupCancellation.Cancel();
@@ -204,7 +211,7 @@ namespace RitsukageGif.Desktop
             _services.Dispose();
             DesktopCapture.CloseSharedSource();
             View?.CloseForShutdown();
-            _desktop.Shutdown();
+            _desktop.Shutdown(_fatalFailure ? 1 : 0);
         }
 
         private void RegisterHotkeys()

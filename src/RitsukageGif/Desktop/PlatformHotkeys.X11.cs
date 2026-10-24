@@ -20,9 +20,7 @@ namespace RitsukageGif.Desktop
                 for (var i = 0; i < keys.Length; i++)
                 {
                     if (keys[i].Key == 0) continue;
-                    var name = keys[i].Key is >= 0x70 and <= 0x87
-                        ? "F" + (keys[i].Key - 0x6f)
-                        : ((char)keys[i].Key).ToString().ToLowerInvariant();
+                    var name = HotkeyKeyMap.X11Name(keys[i].Key);
                     var code = XKeysymToKeycode(display, XStringToKeysym(name));
                     if (code == 0)
                     {

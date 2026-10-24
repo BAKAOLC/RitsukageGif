@@ -23,6 +23,7 @@ namespace RitsukageGif.Desktop
         public string StartSound { get; set; } = "";
         public string StopSound { get; set; } = "";
         public string BackgroundImage { get; set; } = "";
+        public bool ShowBackground { get; set; } = true;
         public int SnapRadius { get; set; } = 12;
         public int EdgeThreshold { get; set; } = 150;
 
@@ -51,7 +52,7 @@ namespace RitsukageGif.Desktop
                 var settings = File.Exists(FilePath)
                     ? JsonSerializer.Deserialize(File.ReadAllText(FilePath), SettingsJsonContext.Default.AppSettings) ??
                       new AppSettings()
-                    : new AppSettings();
+                    : LegacySettingsImporter.FindPrevious() ?? new AppSettings();
                 settings.Fps = Math.Clamp(settings.Fps, 1, 100);
                 settings.Divisor = Math.Clamp(settings.Divisor, 1, 100);
                 settings.SnapRadius = Math.Clamp(settings.SnapRadius, 0, 50);

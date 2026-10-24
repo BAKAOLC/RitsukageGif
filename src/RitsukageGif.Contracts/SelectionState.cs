@@ -21,7 +21,7 @@ namespace RitsukageGif.Contracts
         public void End(PixelPoint point, PixelRect hovered)
         {
             Move(point);
-            if (Selected.Width < 3 && Selected.Height < 3) Selected = hovered;
+            if (point == Anchor) Selected = hovered;
             Dragging = false;
         }
 

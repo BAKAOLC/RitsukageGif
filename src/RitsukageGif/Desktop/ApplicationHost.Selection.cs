@@ -17,7 +17,7 @@ namespace RitsukageGif.Desktop
 
         private Task BeginSelection(Func<CancellationToken, Task> action)
         {
-            if (_recording || _busy || _selecting || _configuring || _closing)
+            if (!CanEditRecordingSettings || _selecting || _configuring)
                 throw new InvalidOperationException(UiText.Get("CommandNotReady"));
             _selecting = true;
             Notify();
@@ -50,7 +50,7 @@ namespace RitsukageGif.Desktop
 
         public async Task SelectSourceAsync(CaptureSourceKind source)
         {
-            if (_recording || _busy || _selecting || _configuring || _closing) return;
+            if (!CanEditRecordingSettings || _selecting || _configuring) return;
             try
             {
                 await BeginSelection(token => SelectCoreAsync(source, token));

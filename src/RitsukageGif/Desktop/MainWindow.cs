@@ -172,7 +172,7 @@ namespace RitsukageGif.Desktop
                                 (_host.IsRecording || (!_host.IsBusy && _host.Region is not null));
             _cancel.IsVisible = _host.IsBusy && !_host.IsRecording;
             foreach (var control in _commonControls)
-                control.IsEnabled = !_host.IsBusy && !_host.IsSelecting && !_host.IsConfiguring && !_host.IsClosing;
+                control.IsEnabled = _host.CanEditRecordingSettings && !_host.IsSelecting && !_host.IsConfiguring;
             _regionText.Text = _host.Region is { } region
                 ? UiText.Format("RegionInfo", region.X, region.Y, region.Width, region.Height)
                 : UiText.Get("SelectAreaHint");
@@ -212,6 +212,18 @@ namespace RitsukageGif.Desktop
                 if (LastPath == path && _image.Source is { } image)
                     ToolTip.SetTip(_image,
                         UiText.Format("PreviewHint", (int)image.Size.Width, (int)image.Size.Height, path));
+            }
+            catch (Exception ex)
+            {
+                _host.SetStatus(UiText.Get("PreviewFailed") + ex.Message);
+            }
+        }
+
+        public async Task ResumePreviewAsync()
+        {
+            try
+            {
+                await _preview.ResumeAsync();
             }
             catch (Exception ex)
             {

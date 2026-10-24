@@ -84,7 +84,7 @@
     <value>Select recording area</value>
   </data>
   <data name="HotkeyHint" xml:space="preserve">
-    <value>Press a shortcut. Backspace clears it.</value>
+    <value>Press a shortcut to assign it. Backspace or Delete clears the binding.</value>
   </data>
   <data name="SoundHeading" xml:space="preserve">
     <value>Sound</value>
@@ -156,7 +156,7 @@
     <value>A shortcut may contain only one non-modifier key.</value>
   </data>
   <data name="HotkeySupported" xml:space="preserve">
-    <value>Shortcuts support Ctrl / Shift / Alt / Win plus letters, digits, or F1–F24.</value>
+    <value>This key is not supported.</value>
   </data>
   <data name="HotkeyModifier" xml:space="preserve">
     <value>A shortcut needs a modifier and a non-modifier key.</value>
@@ -619,4 +619,12 @@ Shift cycles snapping; hold to disable: {0}
   <data name="CleanupScopeHint" xml:space="preserve"><value>Only manual recordings saved from this version onward are managed. Files used by the preview or clipboard are kept temporarily, so limits may be exceeded.</value></data>
   <data name="SoundPlaybackFailed" xml:space="preserve"><value>Could not play sound: {0}</value></data>
   <data name="AudioDeviceUnavailable" xml:space="preserve"><value>Could not open the audio output device</value></data>
+  <data name="AllFiles" xml:space="preserve"><value>All files</value></data>
+  <data name="LegacySettingsInvalid" xml:space="preserve"><value>This is not a RitsukageGif settings file.</value></data>
+  <data name="ShowBackground" xml:space="preserve"><value>Show background image</value></data>
+  <data name="ImportLegacySettings" xml:space="preserve"><value>Import old settings</value></data>
+  <data name="FatalErrorTitle" xml:space="preserve"><value>Application error</value></data>
+  <data name="FatalErrorMessage" xml:space="preserve"><value>An unexpected error occurred. Closing this window will exit the application. Log: {0}</value></data>
+  <data name="FatalErrorLogUnavailable" xml:space="preserve"><value>An unexpected error occurred and the log could not be saved. Copy the error details below.</value></data>
+  <data name="UnsupportedMediaLocation" xml:space="preserve"><value>Enter a local path, file URI, or HTTP/HTTPS address</value></data>
 </root>

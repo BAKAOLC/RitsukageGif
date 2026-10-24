@@ -59,8 +59,8 @@ namespace RitsukageGif.Desktop
 
         private static async Task PlayCoreAsync(string path, CancellationToken cancellationToken)
         {
-            path = Path.GetFullPath(path);
-            if (!File.Exists(path)) throw new FileNotFoundException(null, path);
+            using var resource = await MediaResource.OpenAsync(path, cancellationToken).ConfigureAwait(false);
+            path = resource.Path;
             var device = new ma_ex_device_info { index = -1 };
             var config = MiniAudioExNative.ma_ex_context_config_init(48000, 2, 0, ref device);
             var context = MiniAudioExNative.ma_ex_context_init(ref config);

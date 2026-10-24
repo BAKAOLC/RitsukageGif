@@ -15,6 +15,21 @@ namespace RitsukageGif.Desktop
         [STAThread]
         public static int Main(string[] args)
         {
+            DiagnosticLog.Initialize();
+            try
+            {
+                return Run(args);
+            }
+            catch (Exception error)
+            {
+                Trace.TraceError("Application terminated: {0}", error);
+                Console.Error.WriteLine(error.Message);
+                return 1;
+            }
+        }
+
+        private static int Run(string[] args)
+        {
             UiText.SetLanguage(AppSettings.Load().Language);
             if (args is ["--language-server"])
             {

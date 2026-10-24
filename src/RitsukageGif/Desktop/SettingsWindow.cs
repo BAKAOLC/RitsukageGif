@@ -79,8 +79,11 @@ namespace RitsukageGif.Desktop
                 TextWrapping = TextWrapping.Wrap,
             });
             panel = appearance;
+            var showBackground = new CheckBox
+                { Content = UiText.Get("ShowBackground"), IsChecked = draft.ShowBackground };
+            panel.Children.Add(showBackground);
             var background = new TextBox
-                { Text = draft.BackgroundImage, IsReadOnly = true, Watermark = UiText.Get("OriginalBackground") };
+                { Text = draft.BackgroundImage, Watermark = UiText.Get("OriginalBackground") };
             panel.Children.Add(Labeled(UiText.Get("BackgroundImage"), WithButton(background, UiText.Get("Browse"),
                 async () =>
                 {
@@ -90,7 +93,13 @@ namespace RitsukageGif.Desktop
                         FileTypeFilter =
                         [
                             new(UiText.Get("ImageFiles"))
-                                { Patterns = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp"] },
+                            {
+                                Patterns =
+                                [
+                                    "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp", "*.gif", "*.ico", "*.tif", "*.tiff"
+                                ]
+                            },
+                            new(UiText.Get("AllFiles")) { Patterns = ["*"] },
                         ],
                     });
                     if (files.Count > 0) background.Text = files[0].TryGetLocalPath();
@@ -144,10 +153,52 @@ namespace RitsukageGif.Desktop
             panel = audio;
             var sound = new CheckBox { Content = UiText.Get("PlaySound"), IsChecked = draft.Sound };
             panel.Children.Add(sound);
-            var start = new TextBox { Text = draft.StartSound, IsReadOnly = true };
-            var stop = new TextBox { Text = draft.StopSound, IsReadOnly = true };
+            var start = new TextBox { Text = draft.StartSound };
+            var stop = new TextBox { Text = draft.StopSound };
             panel.Children.Add(Labeled(UiText.Get("StartSound"), SoundPicker(start)));
             panel.Children.Add(Labeled(UiText.Get("StopSound"), SoundPicker(stop)));
+            var import = new Button { Content = UiText.Get("ImportLegacySettings") };
+            general.Children.Add(Labeled("", import));
+            import.Click += async (_, _) =>
+            {
+                try
+                {
+                    var files = await StorageProvider.OpenFilePickerAsync(new()
+                    {
+                        Title = UiText.Get("ImportLegacySettings"),
+                        FileTypeFilter = [new("XML") { Patterns = ["*.config", "*.xml"] }],
+                    });
+                    if (files.Count == 0 || files[0].TryGetLocalPath() is not { } path) return;
+                    var imported = LegacySettingsImporter.Import(path, draft);
+                    draft.Fps = imported.Fps;
+                    draft.Divisor = imported.Divisor;
+                    draft.Format = imported.Format;
+                    draft.Cursor = imported.Cursor;
+                    draft.CheckForUpdates = imported.CheckForUpdates;
+                    draft.UseFfmpeg = imported.UseFfmpeg;
+                    draft.BackgroundImage = imported.BackgroundImage;
+                    draft.ShowBackground = imported.ShowBackground;
+                    draft.RecordHotkey = imported.RecordHotkey;
+                    draft.SelectHotkey = imported.SelectHotkey;
+                    draft.StartSound = imported.StartSound;
+                    draft.StopSound = imported.StopSound;
+                    draft.Sound = imported.Sound;
+                    updates.IsChecked = draft.CheckForUpdates;
+                    ffmpeg.IsChecked = draft.UseFfmpeg;
+                    background.Text = draft.BackgroundImage;
+                    showBackground.IsChecked = draft.ShowBackground;
+                    record.Text = draft.RecordHotkey;
+                    select.Text = draft.SelectHotkey;
+                    start.Text = draft.StartSound;
+                    stop.Text = draft.StopSound;
+                    sound.IsChecked = draft.Sound;
+                    _error.Text = "";
+                }
+                catch (Exception exception)
+                {
+                    _error.Text = exception.Message;
+                }
+            };
 
             var save = new Button
                 { Content = UiText.Get("SaveSettings"), HorizontalAlignment = HorizontalAlignment.Right };
@@ -172,6 +223,7 @@ namespace RitsukageGif.Desktop
                     draft.StartSound = start.Text ?? "";
                     draft.StopSound = stop.Text ?? "";
                     draft.BackgroundImage = background.Text ?? "";
+                    draft.ShowBackground = showBackground.IsChecked == true;
                     draft.SnapRadius = (int)(radius.Value ?? 12);
                     draft.EdgeThreshold = (int)(threshold.Value ?? 150);
                     applyCleanup();
@@ -276,9 +328,9 @@ namespace RitsukageGif.Desktop
             box.GotFocus += (_, _) => box.SelectAll();
             box.KeyDown += (_, e) =>
             {
-                if (e.Key == Key.Tab) return;
+                if (e.Key == Key.Tab && e.KeyModifiers == KeyModifiers.None) return;
                 e.Handled = true;
-                if (e.Key is Key.Back or Key.Delete)
+                if (e.Key is Key.Back or Key.Delete && e.KeyModifiers == KeyModifiers.None)
                 {
                     box.Text = "";
                     return;

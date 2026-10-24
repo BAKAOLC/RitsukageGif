@@ -123,6 +123,7 @@ namespace RitsukageGif.Desktop
                     case "SHIFT": modifiers |= 4; break;
                     case "ALT": modifiers |= 1; break;
                     case "WIN":
+                    case "WINDOWS":
                     case "CMD":
                     case "META":
                     case "SUPER": modifiers |= 8; break;
@@ -132,11 +133,12 @@ namespace RitsukageGif.Desktop
                         if (upper.Length == 1 && char.IsAsciiLetterOrDigit(upper[0])) key = upper[0];
                         else if (upper.StartsWith('F') && int.TryParse(upper[1..], out var f) && f is >= 1 and <= 24)
                             key = (uint)(0x70 + f - 1);
+                        else if (HotkeyKeyMap.TryParse(upper, out var mapped)) key = mapped;
                         else throw new ArgumentException(UiText.Get("HotkeySupported"));
                         break;
                 }
 
-            if (key == 0 || modifiers == 0) throw new ArgumentException(UiText.Get("HotkeyModifier"));
+            if (key == 0) throw new ArgumentException(UiText.Get("HotkeySingleKey"));
             return (modifiers, key);
         }
     }

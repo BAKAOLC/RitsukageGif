@@ -7,7 +7,7 @@ namespace RitsukageGif.Core
         private sealed class OutputState : IDisposable, IProgress<RecordingProgress>
         {
             private const long MemoryLimit = 64L * 1024 * 1024;
-            private const long DiskLimit = 4L * 1024 * 1024 * 1024;
+            private const long BacklogDiskLimit = 4L * 1024 * 1024 * 1024;
 
             private readonly Channel<QueuedFrame> _queue = Channel.CreateBounded<QueuedFrame>(
                 new BoundedChannelOptions(100000)
@@ -65,7 +65,7 @@ namespace RitsukageGif.Core
                 else
                 {
                     Interlocked.Add(ref _memory, -pixels.Length);
-                    ReserveDisk(pixels.Length);
+                    ReserveBacklogDisk(pixels.Length);
                     var path = Path.Combine(_directory, $"raw-{_captured:D8}.bgra");
                     await File.WriteAllBytesAsync(path, pixels, token);
                     frame = new QueuedFrame(null, path, time);
@@ -77,9 +77,9 @@ namespace RitsukageGif.Core
                 Report(new RecordingProgress(RecordingStage.Recording, 0, Volatile.Read(ref _encoded)));
             }
 
-            private void ReserveDisk(long bytes)
+            private void ReserveBacklogDisk(long bytes)
             {
-                if (Interlocked.Add(ref _disk, bytes) > DiskLimit)
+                if (Interlocked.Add(ref _disk, bytes) > BacklogDiskLimit)
                 {
                     Interlocked.Add(ref _disk, -bytes);
                     throw new InvalidOperationException(UiText.Get("MemoryLimit"));
@@ -126,9 +126,7 @@ namespace RitsukageGif.Core
                         var frames = new List<StoredFrame>();
                         await foreach (var raw in ReadFrames())
                         {
-                            if (frames.Count >= 100000)
-                                throw new InvalidOperationException(UiText.Get("MemoryLimit"));
-                            ReserveDisk(raw.Pixels.Length + 122L);
+                            // Completed frame storage is limited by the volume, not the live backlog budget.
                             var path = Path.Combine(_directory, $"frame-{frames.Count:D8}.bmp");
                             await BitmapSpool.WriteAsync(path, raw.Pixels, Output.Options.Width, Output.Options.Height,
                                 _abort.Token);

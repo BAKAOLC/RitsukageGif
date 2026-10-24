@@ -6,7 +6,7 @@ namespace RitsukageGif.Core
 {
     public sealed class RecordingSession(Func<RecordingOptions, IFrameSource> sourceFactory)
     {
-        private const long DiskLimit = 4L * 1024 * 1024 * 1024;
+        private const long BacklogDiskLimit = 4L * 1024 * 1024 * 1024;
 
         private readonly record struct CapturedFrame(byte[]? Pixels, string? Path, double Time);
 
@@ -40,9 +40,9 @@ namespace RitsukageGif.Core
             long diskBytes = 0;
             ExceptionDispatchInfo? captureFailure = null;
 
-            void ReserveDisk(long bytes)
+            void ReserveBacklogDisk(long bytes)
             {
-                if (Interlocked.Add(ref diskBytes, bytes) <= DiskLimit) return;
+                if (Interlocked.Add(ref diskBytes, bytes) <= BacklogDiskLimit) return;
                 Interlocked.Add(ref diskBytes, -bytes);
                 throw new InvalidOperationException(UiText.Get("MemoryLimit"));
             }
@@ -117,7 +117,7 @@ namespace RitsukageGif.Core
                         // ReSharper disable once AccessToDisposedClosure
                         if (!memorySlots.Wait(0))
                         {
-                            ReserveDisk(pixels.Length);
+                            ReserveBacklogDisk(pixels.Length);
                             var path = Path.Combine(directory, $"capture-{sequence:D8}.bgra");
                             await File.WriteAllBytesAsync(path, pixels, abortToken);
                             frame = new CapturedFrame(null, path, timestamp - origin);
@@ -206,9 +206,7 @@ namespace RitsukageGif.Core
                     {
                         await foreach (var raw in ReadFrames())
                         {
-                            if (frames.Count >= 100000)
-                                throw new InvalidOperationException(UiText.Get("MemoryLimit"));
-                            ReserveDisk(raw.Pixels.Length + 122L);
+                            // Completed frame storage is limited by the volume, not the live backlog budget.
                             var path = Path.Combine(directory, $"{frames.Count:D8}.bmp");
                             await BitmapSpool.WriteAsync(path, raw.Pixels, options.Width, options.Height, abortToken);
                             frames.Add(new StoredFrame(path, raw.DelayMs));

@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
     {
         public void SaveCommon()
         {
-            if (_host.IsBusy) return;
+            if (!_host.CanEditRecordingSettings) return;
             _host.SetCommon((int)(_fps.Value ?? 20), (int)(_scale.Value ?? 2),
                 (OutputFormat)Math.Max(0, _format.SelectedIndex), _cursor.IsChecked == true);
         }

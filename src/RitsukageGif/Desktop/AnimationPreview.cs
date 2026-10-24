@@ -19,6 +19,8 @@ namespace RitsukageGif.Desktop
         private long _nextDue;
         private Playback? _playback;
         private bool _disposed;
+        private string? _path;
+        private bool _paused;
 
         public AnimationPreview(Image view, Action<string>? error = null)
         {
@@ -38,6 +40,8 @@ namespace RitsukageGif.Desktop
         {
             if (_disposed) return;
             Clear();
+            _path = path;
+            _paused = false;
             var playback = new Playback(path);
             _playback = playback;
             try
@@ -124,8 +128,16 @@ namespace RitsukageGif.Desktop
 
         public void Pause()
         {
-            Clear();
+            _timer.Stop();
+            _clock.Stop();
+            _playback?.Dispose();
+            _playback = null;
+            _paused = true;
         }
+
+        public Task ResumeAsync() => !_disposed && _paused && _path is { } path
+            ? LoadAsync(path)
+            : Task.CompletedTask;
 
         private void Clear()
         {

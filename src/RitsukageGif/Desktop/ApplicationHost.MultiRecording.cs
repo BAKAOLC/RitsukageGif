@@ -55,7 +55,6 @@ namespace RitsukageGif.Desktop
                 throw new IOException(UiText.Get("DslOutputInvalid"));
             View?.PausePreview();
             _latestProgress = null;
-            _lastOutputs = [];
             _streams = outputs.Select(output =>
                 new PresetRecordingStreamStatus(output.Name, "recording", 0, 0, 0, output.Path)).ToArray();
             _busy = _recording = true;
@@ -118,11 +117,12 @@ namespace RitsukageGif.Desktop
                 _streams = results.Select(result => new PresetRecordingStreamStatus(result.Name,
                     result.Success ? "complete" : "failed", result.Captured, result.Encoded, result.ElapsedSeconds,
                     result.Path, result.Error)).ToArray();
-                _lastOutputs = results.Where(result => result.Success).Select(result => result.Path).ToArray();
-                _lastPath = _lastOutputs.FirstOrDefault();
-                if (_lastOutputs.Count == 0)
+                var successfulOutputs = results.Where(result => result.Success).Select(result => result.Path).ToArray();
+                if (successfulOutputs.Length == 0)
                     throw new InvalidOperationException(string.Join(Environment.NewLine,
                         results.Select(result => result.Name + ": " + result.Error)));
+                _lastOutputs = successfulOutputs;
+                _lastPath = successfulOutputs[0];
                 var copied = results.Where(result => result.Success &&
                                                      (sources[result.Name].Settings?.Copy ??
                                                       sources[result.Name].Preset?.Settings.Copy ?? true))
@@ -182,6 +182,7 @@ namespace RitsukageGif.Desktop
                 _stop?.Dispose();
                 _abort?.Dispose();
                 _stop = _abort = null;
+                if (!_closing && View is { } view) await view.ResumePreviewAsync();
                 RefreshDisplaySelection();
                 Notify();
             }

@@ -395,8 +395,7 @@ namespace RitsukageGif.Desktop
 
         private void EndSelection()
         {
-            var dragged = PixelRect.Between(_state.Anchor, _mouse);
-            _state.End(_mouse, dragged.Width < 3 && dragged.Height < 3
+            _state.End(_mouse, _mouse == _state.Anchor
                 ? ResolveClickTarget(_selectedTarget)
                 : _hovered);
         }

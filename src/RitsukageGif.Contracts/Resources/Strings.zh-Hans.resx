@@ -84,7 +84,7 @@
     <value>选择录制区域</value>
   </data>
   <data name="HotkeyHint" xml:space="preserve">
-    <value>按键录入，退格清空。</value>
+    <value>按下快捷键以设置，退格或 Delete 清除。</value>
   </data>
   <data name="SoundHeading" xml:space="preserve">
     <value>音效</value>
@@ -156,7 +156,7 @@
     <value>快捷键只能包含一个普通键。</value>
   </data>
   <data name="HotkeySupported" xml:space="preserve">
-    <value>快捷键支持 Ctrl / Shift / Alt / Win 和字母、数字、F1–F24。</value>
+    <value>不支持此按键。</value>
   </data>
   <data name="HotkeyModifier" xml:space="preserve">
     <value>快捷键至少需要一个修饰键和一个普通键。</value>
@@ -619,4 +619,12 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="CleanupScopeHint" xml:space="preserve"><value>仅清理本版本起保存的手动录制文件；预览或剪贴板正在使用的文件暂时保留，可能临时超限。</value></data>
   <data name="SoundPlaybackFailed" xml:space="preserve"><value>音效播放失败：{0}</value></data>
   <data name="AudioDeviceUnavailable" xml:space="preserve"><value>无法打开音频输出设备</value></data>
+  <data name="AllFiles" xml:space="preserve"><value>所有文件</value></data>
+  <data name="LegacySettingsInvalid" xml:space="preserve"><value>这不是 RitsukageGif 设置文件。</value></data>
+  <data name="ShowBackground" xml:space="preserve"><value>显示背景图</value></data>
+  <data name="ImportLegacySettings" xml:space="preserve"><value>导入旧版设置</value></data>
+  <data name="FatalErrorTitle" xml:space="preserve"><value>程序发生错误</value></data>
+  <data name="FatalErrorMessage" xml:space="preserve"><value>程序发生错误，关闭后将退出。日志：{0}</value></data>
+  <data name="FatalErrorLogUnavailable" xml:space="preserve"><value>程序发生错误，无法保存日志。请复制下方错误信息。</value></data>
+  <data name="UnsupportedMediaLocation" xml:space="preserve"><value>请输入本地路径、文件 URI 或 HTTP/HTTPS 地址</value></data>
 </root>

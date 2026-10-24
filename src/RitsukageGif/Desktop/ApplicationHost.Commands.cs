@@ -63,12 +63,12 @@ namespace RitsukageGif.Desktop
                         _ = ToggleRecordingAsync();
                         break;
                     case ["select"]:
-                        if (_busy || _selecting || _configuring)
+                        if (!CanEditRecordingSettings || _selecting || _configuring)
                             return new CommandReply(false, CurrentState, UiText.Get("CommandNotReady"));
                         _ = SelectAsync();
                         break;
                     case ["select", var x, var y, var width, var height]:
-                        if (_busy || _selecting || _configuring)
+                        if (!CanEditRecordingSettings || _selecting || _configuring)
                             return new CommandReply(false, CurrentState, UiText.Get("CommandNotReady"));
                         DeactivatePreset();
                         Volatile.Write(ref _captureRegion, null);
@@ -81,7 +81,7 @@ namespace RitsukageGif.Desktop
                     case ["select-window", var process]:
                         return await ExecuteCommandAsync(["select-window", process, "*"]);
                     case ["select-window", var process, var title]:
-                        if (_busy || _selecting || _configuring)
+                        if (!CanEditRecordingSettings || _selecting || _configuring)
                             return new CommandReply(false, CurrentState, UiText.Get("CommandNotReady"));
                         await SelectWindowAsync(process, title);
                         break;

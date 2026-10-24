@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 
 namespace RitsukageGif.Desktop
@@ -16,34 +15,6 @@ namespace RitsukageGif.Desktop
 
         private readonly TextBlock _captureRate = new() { Text = "—", HorizontalAlignment = HorizontalAlignment.Right };
         private readonly TextBlock _frames = new() { Text = "N/A", HorizontalAlignment = HorizontalAlignment.Right };
-        private Bitmap? _background;
-
-        private void ApplyBackground()
-        {
-            Bitmap replacement;
-            try
-            {
-                if (string.IsNullOrWhiteSpace(Settings.BackgroundImage))
-                {
-                    using var stream = AssetLoader.Open(new("avares://RitsukageGif/Background.png"));
-                    replacement = new(stream);
-                }
-                else
-                {
-                    replacement = new(Settings.BackgroundImage);
-                }
-            }
-            catch (Exception ex)
-            {
-                _host.SetStatus(UiText.Get("BackgroundFailed") + ex.Message);
-                using var stream = AssetLoader.Open(new("avares://RitsukageGif/Background.png"));
-                replacement = new(stream);
-            }
-
-            _backgroundView.Source = replacement;
-            _background?.Dispose();
-            _background = replacement;
-        }
 
         private void BuildOriginalLayout()
         {
@@ -104,6 +75,8 @@ namespace RitsukageGif.Desktop
             stats.Children.Add(_configure);
             StyleButton(_cancel, 90);
             _cancel.Height = 28;
+            _cancel.HorizontalAlignment = HorizontalAlignment.Right;
+            _cancel.Margin = new(0, 5, 0, 0);
             Grid.SetRow(_cancel, 4);
             Grid.SetColumnSpan(_cancel, 2);
             stats.Children.Add(_cancel);
@@ -165,7 +138,7 @@ namespace RitsukageGif.Desktop
             ToolTip.SetTip(_scale, UiText.Get("ScaleHint"));
             ToolTip.SetTip(_fps, UiText.Get("FrameRateHint"));
             ToolTip.SetTip(_select, _regionText.Text);
-            Closed += (_, _) => _background?.Dispose();
+            Closed += (_, _) => DisposeBackground();
         }
 
         private static void StyleButton(Button button, double width)

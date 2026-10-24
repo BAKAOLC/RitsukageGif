@@ -105,7 +105,7 @@ namespace RitsukageGif.Desktop
             if (codes.TryGetValue((char)key, out var result)) return result;
             uint[] functions =
                 [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111, 105, 107, 113, 106, 64, 79, 80, 90];
-            return key >= 0x70 && key < 0x70 + functions.Length ? functions[key - 0x70] : null;
+            return key >= 0x70 && key < 0x70 + functions.Length ? functions[key - 0x70] : HotkeyKeyMap.MacCode(key);
         }
 
         [StructLayout(LayoutKind.Sequential)]

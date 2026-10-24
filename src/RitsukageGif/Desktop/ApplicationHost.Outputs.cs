@@ -100,6 +100,13 @@ namespace RitsukageGif.Desktop
                 var escaped = SecurityElement.Escape(path);
                 var qq = Encoding.UTF8.GetBytes(
                     $"<QQRichEditFormat><Info version=\"1001\"></Info><EditElement type=\"1\" filepath=\"{escaped}\" shortcut=\"\"></EditElement></QQRichEditFormat>");
+                var html = ClipboardHtml.CreateFragment(path);
+                if (OperatingSystem.IsWindows())
+                    item.Set(DataFormat.CreateBytesPlatformFormat("HTML Format"), ClipboardHtml.CreateWindows(html));
+                else
+                    item.Set(
+                        DataFormat.CreateStringPlatformFormat(OperatingSystem.IsMacOS() ? "public.html" : "text/html"),
+                        html);
                 item.Set(DataFormat.CreateBytesPlatformFormat("QQ_Unicode_RichEdit_Format"), qq);
                 item.Set(DataFormat.CreateBytesPlatformFormat("QQ_RichEdit_Format"), qq);
                 data.Add(item);
