@@ -108,6 +108,33 @@ namespace RitsukageGif.Core
             Commit(frames);
         }
 
+        public int[] MoveSelected(IReadOnlyCollection<int> indices, int direction)
+        {
+            if (direction is not (-1 or 1)) throw new ArgumentOutOfRangeException(nameof(direction));
+            var selected = Select(indices);
+            // Treat all selected blocks as one move: a boundary stops the complete selection.
+            if (direction < 0 && selected[0] == 0 || direction > 0 && selected[^1] == Frames.Count - 1)
+                return selected;
+            var frames = Frames.ToArray();
+            if (direction < 0)
+            {
+                foreach (var index in selected)
+                    (frames[index - 1], frames[index]) = (frames[index], frames[index - 1]);
+            }
+            else
+            {
+                for (var position = selected.Length - 1; position >= 0; position--)
+                {
+                    var index = selected[position];
+                    (frames[index], frames[index + 1]) = (frames[index + 1], frames[index]);
+                }
+            }
+
+            Commit(frames);
+            for (var position = 0; position < selected.Length; position++) selected[position] += direction;
+            return selected;
+        }
+
         public void AddBlank(int insertIndex, int delayMs, string color = "transparent")
         {
             CheckInsert(insertIndex);
