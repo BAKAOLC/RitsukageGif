@@ -610,4 +610,11 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="UpdateCurrent" xml:space="preserve"><value>已是最新版本。</value></data>
   <data name="UpdateFailed" xml:space="preserve"><value>检查更新失败。</value></data>
   <data name="UpdateOpenFailed" xml:space="preserve"><value>无法打开下载链接。</value></data>
+  <data name="CleanupHeading" xml:space="preserve"><value>存储</value></data>
+  <data name="CleanupEnabled" xml:space="preserve"><value>自动清理录制文件</value></data>
+  <data name="CleanupMaxAgeDays" xml:space="preserve"><value>最多保留（天）</value></data>
+  <data name="CleanupMaxFiles" xml:space="preserve"><value>最多保留（个文件）</value></data>
+  <data name="CleanupMaxSizeMiB" xml:space="preserve"><value>总大小上限（MiB）</value></data>
+  <data name="CleanupRulesHint" xml:space="preserve"><value>勾选的规则同时生效，优先删除最旧文件，不移入回收站。</value></data>
+  <data name="CleanupScopeHint" xml:space="preserve"><value>仅清理本版本起保存的手动录制文件；预览或剪贴板正在使用的文件暂时保留，可能临时超限。</value></data>
 </root>

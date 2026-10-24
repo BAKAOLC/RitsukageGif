@@ -7,7 +7,7 @@ using Avalonia.Platform.Storage;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class SettingsWindow : Window
+    internal sealed partial class SettingsWindow : Window
     {
         private readonly TextBlock _error = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
 
@@ -28,6 +28,7 @@ namespace RitsukageGif.Desktop
             var appearance = Page();
             var hotkeys = Page();
             var audio = Page();
+            var cleanup = CleanupPage(draft, out var applyCleanup);
             var panel = general;
             var languageCodes = new[] { "system", "zh-Hans", "en" };
             var language = new ComboBox
@@ -173,6 +174,7 @@ namespace RitsukageGif.Desktop
                     draft.BackgroundImage = background.Text ?? "";
                     draft.SnapRadius = (int)(radius.Value ?? 12);
                     draft.EdgeThreshold = (int)(threshold.Value ?? 150);
+                    applyCleanup();
                     draft.Save();
                     Close(draft);
                 }
@@ -186,6 +188,7 @@ namespace RitsukageGif.Desktop
                 (UiText.Get("GeneralHeading"), general), (UiText.Get("EncodingHeading"), recording),
                 (UiText.Get("AppearanceHeading"), appearance), (UiText.Get("HotkeysHeading"), hotkeys),
                 (UiText.Get("SoundHeading"), audio),
+                (UiText.Get("CleanupHeading"), cleanup),
             };
             var navigation = new StackPanel { Spacing = 3, Margin = new(8, 12) };
             var view = new ScrollViewer

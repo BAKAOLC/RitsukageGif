@@ -128,6 +128,7 @@ namespace RitsukageGif.Desktop
                     SetStatus(UiText.Get("PreviewFailed") + ex.Message);
                 }
 
+                if (preset is null || ReferenceEquals(preset, _manualPreset)) QueueCleanup(outputs);
                 _presets.Signal("saved");
                 return new RecordingOutcome();
             }

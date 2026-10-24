@@ -610,4 +610,11 @@ Shift cycles snapping; hold to disable: {0}
   <data name="UpdateCurrent" xml:space="preserve"><value>You are up to date.</value></data>
   <data name="UpdateFailed" xml:space="preserve"><value>Could not check for updates.</value></data>
   <data name="UpdateOpenFailed" xml:space="preserve"><value>Could not open the download link.</value></data>
+  <data name="CleanupHeading" xml:space="preserve"><value>Storage</value></data>
+  <data name="CleanupEnabled" xml:space="preserve"><value>Clean up recordings automatically</value></data>
+  <data name="CleanupMaxAgeDays" xml:space="preserve"><value>Maximum age (days)</value></data>
+  <data name="CleanupMaxFiles" xml:space="preserve"><value>Maximum file count</value></data>
+  <data name="CleanupMaxSizeMiB" xml:space="preserve"><value>Maximum total size (MiB)</value></data>
+  <data name="CleanupRulesHint" xml:space="preserve"><value>Enabled limits apply together. Oldest files are permanently deleted first.</value></data>
+  <data name="CleanupScopeHint" xml:space="preserve"><value>Only manual recordings saved from this version onward are managed. Files used by the preview or clipboard are kept temporarily, so limits may be exceeded.</value></data>
 </root>

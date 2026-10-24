@@ -107,6 +107,7 @@ namespace RitsukageGif.Desktop
 
             await clipboard.SetDataAsync(data);
             await clipboard.FlushAsync();
+            QueueCleanup(clipboardPaths: paths);
         }
     }
 }

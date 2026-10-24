@@ -86,6 +86,7 @@ namespace RitsukageGif.Desktop
             }
 
             WindowActivation.Show(View);
+            if (created) StartCleanup();
             if (created) _ = CheckAutomaticUpdateAsync();
             if (created && _lastPath is { } path && !_busy) _ = View.LoadPreviewAsync(path);
         }
@@ -134,6 +135,8 @@ namespace RitsukageGif.Desktop
             }
 
             _settings = settings;
+            ResetCleanupCancellation();
+            QueueCleanup();
             _settings.Save();
             DeactivatePreset();
             Volatile.Write(ref _captureRegion, null);
@@ -170,6 +173,10 @@ namespace RitsukageGif.Desktop
         {
             if (_editor is { } editor && !await editor.RequestCloseAsync()) return;
             _closing = true;
+            _cleanupTimer?.Stop();
+            _cleanupCancellation.Cancel();
+            await _cleanupTask;
+            _cleanupCancellation.Dispose();
             await StopUpdateCheckAsync();
             Notify();
             _commands?.Dispose();

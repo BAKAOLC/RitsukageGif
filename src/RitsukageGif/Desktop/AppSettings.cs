@@ -5,6 +5,10 @@ namespace RitsukageGif.Desktop
     public sealed record AppSettings
     {
         public string Language { get; set; } = "system";
+        public bool CleanupEnabled { get; set; }
+        public int? CleanupMaxAgeDays { get; set; }
+        public int? CleanupMaxFiles { get; set; }
+        public int? CleanupMaxSizeMiB { get; set; }
         public bool CheckForUpdates { get; set; } = true;
         public List<string> PresetFiles { get; set; } = [];
         public List<PresetHotkey> PresetHotkeys { get; set; } = [];
