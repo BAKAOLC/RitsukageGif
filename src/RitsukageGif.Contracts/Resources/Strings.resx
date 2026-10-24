@@ -628,9 +628,9 @@ Shift cycles snapping; hold to disable: {0}
     <value>Media download timed out.</value>
   </data>
   <data name="AnimationEditorTitle" xml:space="preserve"><value>Animation editor</value></data>
-  <data name="AnimationEditorOpen" xml:space="preserve"><value>Edit animation</value></data>
+  <data name="AnimationEditorOpen" xml:space="preserve"><value>Editor</value></data>
   <data name="AnimationAllFrames" xml:space="preserve"><value>All frames</value></data>
-  <data name="AnimationImport" xml:space="preserve"><value>Import frames</value></data>
+  <data name="AnimationImport" xml:space="preserve"><value>Import as frames</value></data>
   <data name="AnimationExport" xml:space="preserve"><value>Export</value></data>
   <data name="AnimationUndo" xml:space="preserve"><value>Undo</value></data>
   <data name="AnimationRedo" xml:space="preserve"><value>Redo</value></data>
@@ -685,9 +685,9 @@ Shift cycles snapping; hold to disable: {0}
   <data name="AnimationFilled" xml:space="preserve"><value>Fill shapes</value></data>
   <data name="AnimationSetBrush" xml:space="preserve"><value>Set brush</value></data>
   <data name="AnimationFontSize" xml:space="preserve"><value>Font size (px)</value></data>
-  <data name="AnimationAddText" xml:space="preserve"><value>Add text</value></data>
+  <data name="AnimationAddText" xml:space="preserve"><value>Insert text</value></data>
   <data name="AnimationUpdateText" xml:space="preserve"><value>Update selected text</value></data>
-  <data name="AnimationAddImage" xml:space="preserve"><value>Add image watermark</value></data>
+  <data name="AnimationAddImage" xml:space="preserve"><value>Insert image</value></data>
   <data name="AnimationOpacity" xml:space="preserve"><value>Opacity (%)</value></data>
   <data name="AnimationUpdateImage" xml:space="preserve"><value>Update selected image</value></data>
   <data name="AnimationDeleteLayer" xml:space="preserve"><value>Delete selected layer</value></data>
@@ -709,6 +709,110 @@ Shift cycles snapping; hold to disable: {0}
   <data name="AnimationItalic" xml:space="preserve"><value>Italic</value></data>
   <data name="AnimationFontFamily" xml:space="preserve"><value>Font family</value></data>
   <data name="OpenRecordingDirectory" xml:space="preserve"><value>Open recording folder</value></data>
+  <data name="AnimationFile" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="AnimationInsert" xml:space="preserve">
+    <value>Insert</value>
+  </data>
+  <data name="AnimationImage" xml:space="preserve">
+    <value>Image</value>
+  </data>
+  <data name="AnimationView" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="AnimationTiming" xml:space="preserve">
+    <value>Timing</value>
+  </data>
+  <data name="AnimationImageProperties" xml:space="preserve">
+    <value>Image layer</value>
+  </data>
+  <data name="AnimationActualSize" xml:space="preserve">
+    <value>Actual size</value>
+  </data>
+  <data name="AnimationZoomOut" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="AnimationZoomIn" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="AnimationFirstFrame" xml:space="preserve">
+    <value>First</value>
+  </data>
+  <data name="AnimationPreviousFrame" xml:space="preserve">
+    <value>Previous</value>
+  </data>
+  <data name="AnimationNextFrame" xml:space="preserve">
+    <value>Next</value>
+  </data>
+  <data name="AnimationLastFrame" xml:space="preserve">
+    <value>Last</value>
+  </data>
+  <data name="AnimationSelectionSummary" xml:space="preserve">
+    <value>{0}/{1} · {2} selected · {3} ms</value>
+  </data>
+  <data name="AnimationTimingHint" xml:space="preserve">
+    <value>Duration applies to selected frames. Zero loops repeats forever.</value>
+  </data>
+  <data name="AnimationWholeAnimationHint" xml:space="preserve">
+    <value>Changes the canvas for the whole animation.</value>
+  </data>
+  <data name="AnimationImageLayerHint" xml:space="preserve">
+    <value>Drag to move. Drag a corner to scale proportionally; hold Shift for free scaling.</value>
+  </data>
+  <data name="AnimationPanHint" xml:space="preserve">
+    <value>Drag to pan the canvas; scroll to zoom.</value>
+  </data>
+  <data name="AnimationPositionX" xml:space="preserve">
+    <value>Position X</value>
+  </data>
+  <data name="AnimationPositionY" xml:space="preserve">
+    <value>Position Y</value>
+  </data>
+  <data name="AnimationSetPosition" xml:space="preserve">
+    <value>Update position</value>
+  </data>
+  <data name="AnimationBringFront" xml:space="preserve">
+    <value>Bring to front</value>
+  </data>
+  <data name="AnimationSendBack" xml:space="preserve">
+    <value>Send to back</value>
+  </data>
+  <data name="AnimationPropertiesToggle" xml:space="preserve">
+    <value>Tool properties</value>
+  </data>
+  <data name="AnimationEditHistory" xml:space="preserve">
+    <value>History</value>
+  </data>
+  <data name="AnimationFrameOrder" xml:space="preserve">
+    <value>Frame order</value>
+  </data>
+  <data name="AnimationCanvasGroup" xml:space="preserve">
+    <value>Canvas</value>
+  </data>
+  <data name="AnimationZoomGroup" xml:space="preserve">
+    <value>Display zoom</value>
+  </data>
+  <data name="AnimationImageInsertHint" xml:space="preserve">
+    <value>Overlay on the current frame, or apply to selected frames.</value>
+  </data>
+  <data name="AnimationCloseProperties" xml:space="preserve"><value>Hide</value></data>
+  <data name="AnimationApplyDraft" xml:space="preserve"><value>Apply</value></data>
+  <data name="AnimationDiscardDraft" xml:space="preserve"><value>Discard</value></data>
+  <data name="AnimationCurrentFrame" xml:space="preserve"><value>Current frame</value></data>
+  <data name="AnimationSelectedFrames" xml:space="preserve"><value>Selected frames</value></data>
+  <data name="AnimationDraftScopeHint" xml:space="preserve"><value>Drawing applies to the current frame. Image and text overlays can also be applied to selected frames.</value></data>
   <data name="NumericIncrease" xml:space="preserve"><value>Increase</value></data>
   <data name="NumericDecrease" xml:space="preserve"><value>Decrease</value></data>
+  <data name="AnimationTextContent" xml:space="preserve"><value>Text and style</value></data>
+  <data name="AnimationImageSize" xml:space="preserve"><value>Image size</value></data>
+  <data name="AnimationLayerPosition" xml:space="preserve"><value>Position</value></data>
+  <data name="AnimationLayerOrder" xml:space="preserve"><value>Layer order</value></data>
+  <data name="AnimationInsertShort" xml:space="preserve"><value>Insert</value></data>
+  <data name="AnimationUpdateShort" xml:space="preserve"><value>Update</value></data>
+  <data name="AnimationFrontShort" xml:space="preserve"><value>Front</value></data>
+  <data name="AnimationBackShort" xml:space="preserve"><value>Back</value></data>
+  <data name="AnimationDeleteShort" xml:space="preserve"><value>Delete</value></data>
+  <data name="AnimationSelectAllFrames" xml:space="preserve"><value>Select all frames</value></data>
+  <data name="AnimationSelectFrames" xml:space="preserve"><value>Select frames first.</value></data>
 </root>

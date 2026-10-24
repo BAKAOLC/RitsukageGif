@@ -16,7 +16,7 @@ namespace RitsukageGif.Desktop
             _operation = cancellation;
             _editing.IsEnabled = false;
             _cancel.IsVisible = true;
-            _status.Text = UiText.Get("AnimationWorking");
+            SetStatus("AnimationWorking");
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _activeOperation = completion.Task;
             try
@@ -27,11 +27,11 @@ namespace RitsukageGif.Desktop
             }
             catch (OperationCanceledException)
             {
-                _status.Text = UiText.Get("Cancelled");
+                SetStatus("Cancelled");
             }
             catch (Exception exception)
             {
-                _status.Text = exception.Message;
+                SetStatusError(exception.Message);
             }
             finally
             {
@@ -47,7 +47,7 @@ namespace RitsukageGif.Desktop
             if (_document is null) return;
             if (_canvas.HasChanges)
             {
-                _status.Text = UiText.Get("AnimationApplyFirst");
+                SetStatus("AnimationApplyFirst");
                 return;
             }
 
@@ -67,7 +67,7 @@ namespace RitsukageGif.Desktop
             if (_document is null) return;
             if (_canvas.HasChanges)
             {
-                _status.Text = UiText.Get("AnimationApplyFirst");
+                SetStatus("AnimationApplyFirst");
                 return;
             }
 
@@ -108,10 +108,29 @@ namespace RitsukageGif.Desktop
             return MutateAsync(d => d.Redo());
         }
 
-        private Task MoveFrameAsync(int offset)
+        private async Task MoveFrameAsync(int offset)
         {
-            var index = CurrentFrame;
-            return MutateAsync(d => d.Move(index, Math.Clamp(index + offset, 0, d.Frames.Count - 1)));
+            var frames = SelectedFrames();
+            if (!HasFrameSelection(frames)) return;
+            var primary = Math.Max(0, Array.IndexOf(frames, CurrentFrame));
+            int[]? moved = null;
+            await MutateAsync(d => moved = d.MoveSelected(frames, offset));
+            if (moved is null || moved.Length == 0) return;
+            var current = moved[Math.Min(primary, moved.Length - 1)];
+            var selection = new List<int>(moved.Length) { current };
+            selection.AddRange(moved.Where(index => index != current));
+            _refreshing = true;
+            try
+            {
+                _frames.SelectedItems = selection;
+            }
+            finally
+            {
+                _refreshing = false;
+            }
+
+            ShowFrame();
+            _frames.ScrollIntoView(current);
         }
 
         private static FilePickerFileType AnimationFiles() => new(UiText.Get("AnimationFiles"))
@@ -203,7 +222,7 @@ namespace RitsukageGif.Desktop
             if (_document is null) return;
             if (_canvas.HasChanges)
             {
-                _status.Text = UiText.Get("AnimationApplyFirst");
+                SetStatus("AnimationApplyFirst");
                 return;
             }
 
@@ -235,7 +254,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 Refresh();
-                _status.Text = UiText.Format("AnimationExported", path);
+                SetStatus("AnimationExported", path);
             });
         }
 
@@ -244,16 +263,20 @@ namespace RitsukageGif.Desktop
             if (!_dirty && !_canvas.HasChanges) return true;
             var dialog = new Window
             {
-                Title = UiText.Get("AnimationEditorTitle"), Width = 390, SizeToContent = SizeToContent.Height,
+                [!TitleProperty] = LiveText.Resource("AnimationEditorTitle"), Width = 390,
+                SizeToContent = SizeToContent.Height,
                 CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
             var panel = new StackPanel { Margin = new(16), Spacing = 12 };
             panel.Children.Add(new TextBlock
-                { Text = UiText.Get("AnimationUnsaved"), TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+            {
+                [!TextBlock.TextProperty] = LiveText.Resource("AnimationUnsaved"),
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            });
             var buttons = new StackPanel
                 { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            var discard = new Button { Content = UiText.Get("EditorDiscard") };
-            var cancel = new Button { Content = UiText.Get("EditorCancel") };
+            var discard = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("EditorDiscard") };
+            var cancel = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("EditorCancel") };
             discard.Click += (_, _) => dialog.Close(true);
             cancel.Click += (_, _) => dialog.Close(false);
             buttons.Children.Add(discard);

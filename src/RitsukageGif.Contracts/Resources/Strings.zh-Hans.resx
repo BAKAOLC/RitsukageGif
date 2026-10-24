@@ -630,7 +630,7 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="AnimationEditorTitle" xml:space="preserve"><value>动图编辑器</value></data>
   <data name="AnimationEditorOpen" xml:space="preserve"><value>编辑动图</value></data>
   <data name="AnimationAllFrames" xml:space="preserve"><value>全部帧</value></data>
-  <data name="AnimationImport" xml:space="preserve"><value>导入帧</value></data>
+  <data name="AnimationImport" xml:space="preserve"><value>导入为新帧</value></data>
   <data name="AnimationExport" xml:space="preserve"><value>导出</value></data>
   <data name="AnimationUndo" xml:space="preserve"><value>撤销</value></data>
   <data name="AnimationRedo" xml:space="preserve"><value>重做</value></data>
@@ -685,9 +685,9 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="AnimationFilled" xml:space="preserve"><value>填充形状</value></data>
   <data name="AnimationSetBrush" xml:space="preserve"><value>应用画笔样式</value></data>
   <data name="AnimationFontSize" xml:space="preserve"><value>字号（像素）</value></data>
-  <data name="AnimationAddText" xml:space="preserve"><value>添加文字</value></data>
+  <data name="AnimationAddText" xml:space="preserve"><value>插入文字</value></data>
   <data name="AnimationUpdateText" xml:space="preserve"><value>修改选中文字</value></data>
-  <data name="AnimationAddImage" xml:space="preserve"><value>添加图片水印</value></data>
+  <data name="AnimationAddImage" xml:space="preserve"><value>插入图片</value></data>
   <data name="AnimationOpacity" xml:space="preserve"><value>不透明度（%）</value></data>
   <data name="AnimationUpdateImage" xml:space="preserve"><value>修改选中图片</value></data>
   <data name="AnimationDeleteLayer" xml:space="preserve"><value>删除选中图层</value></data>
@@ -709,6 +709,110 @@ Shift 切换感知，长按临时关闭：{0}
   <data name="AnimationItalic" xml:space="preserve"><value>斜体</value></data>
   <data name="AnimationFontFamily" xml:space="preserve"><value>字体</value></data>
   <data name="OpenRecordingDirectory" xml:space="preserve"><value>打开录制文件夹</value></data>
+  <data name="AnimationFile" xml:space="preserve">
+    <value>文件</value>
+  </data>
+  <data name="AnimationInsert" xml:space="preserve">
+    <value>插入</value>
+  </data>
+  <data name="AnimationImage" xml:space="preserve">
+    <value>图像</value>
+  </data>
+  <data name="AnimationView" xml:space="preserve">
+    <value>视图</value>
+  </data>
+  <data name="AnimationTiming" xml:space="preserve">
+    <value>时长与循环</value>
+  </data>
+  <data name="AnimationImageProperties" xml:space="preserve">
+    <value>图片图层</value>
+  </data>
+  <data name="AnimationActualSize" xml:space="preserve">
+    <value>实际大小</value>
+  </data>
+  <data name="AnimationZoomOut" xml:space="preserve">
+    <value>缩小</value>
+  </data>
+  <data name="AnimationZoomIn" xml:space="preserve">
+    <value>放大</value>
+  </data>
+  <data name="AnimationFirstFrame" xml:space="preserve">
+    <value>首帧</value>
+  </data>
+  <data name="AnimationPreviousFrame" xml:space="preserve">
+    <value>上一帧</value>
+  </data>
+  <data name="AnimationNextFrame" xml:space="preserve">
+    <value>下一帧</value>
+  </data>
+  <data name="AnimationLastFrame" xml:space="preserve">
+    <value>末帧</value>
+  </data>
+  <data name="AnimationSelectionSummary" xml:space="preserve">
+    <value>{0}/{1} 帧 · 已选 {2} 帧 · {3} ms</value>
+  </data>
+  <data name="AnimationTimingHint" xml:space="preserve">
+    <value>时长应用到选中的帧。循环次数为 0 时无限循环。</value>
+  </data>
+  <data name="AnimationWholeAnimationHint" xml:space="preserve">
+    <value>调整整个动画的画布。</value>
+  </data>
+  <data name="AnimationImageLayerHint" xml:space="preserve">
+    <value>拖动移动，拖动四角等比缩放；按住 Shift 自由缩放。</value>
+  </data>
+  <data name="AnimationPanHint" xml:space="preserve">
+    <value>拖动画布移动视图，滚轮缩放。</value>
+  </data>
+  <data name="AnimationPositionX" xml:space="preserve">
+    <value>水平位置</value>
+  </data>
+  <data name="AnimationPositionY" xml:space="preserve">
+    <value>垂直位置</value>
+  </data>
+  <data name="AnimationSetPosition" xml:space="preserve">
+    <value>更新位置</value>
+  </data>
+  <data name="AnimationBringFront" xml:space="preserve">
+    <value>移到顶层</value>
+  </data>
+  <data name="AnimationSendBack" xml:space="preserve">
+    <value>移到底层</value>
+  </data>
+  <data name="AnimationPropertiesToggle" xml:space="preserve">
+    <value>工具属性</value>
+  </data>
+  <data name="AnimationEditHistory" xml:space="preserve">
+    <value>编辑历史</value>
+  </data>
+  <data name="AnimationFrameOrder" xml:space="preserve">
+    <value>帧顺序</value>
+  </data>
+  <data name="AnimationCanvasGroup" xml:space="preserve">
+    <value>画布</value>
+  </data>
+  <data name="AnimationZoomGroup" xml:space="preserve">
+    <value>显示缩放</value>
+  </data>
+  <data name="AnimationImageInsertHint" xml:space="preserve">
+    <value>叠加到当前帧，也可应用到所选帧。</value>
+  </data>
+  <data name="AnimationCloseProperties" xml:space="preserve"><value>收起</value></data>
+  <data name="AnimationApplyDraft" xml:space="preserve"><value>应用</value></data>
+  <data name="AnimationDiscardDraft" xml:space="preserve"><value>放弃</value></data>
+  <data name="AnimationCurrentFrame" xml:space="preserve"><value>当前帧</value></data>
+  <data name="AnimationSelectedFrames" xml:space="preserve"><value>所选帧</value></data>
+  <data name="AnimationDraftScopeHint" xml:space="preserve"><value>绘制应用到当前帧；只有图片和文字图层时可应用到所选帧。</value></data>
   <data name="NumericIncrease" xml:space="preserve"><value>增大</value></data>
   <data name="NumericDecrease" xml:space="preserve"><value>减小</value></data>
+  <data name="AnimationTextContent" xml:space="preserve"><value>文字内容与样式</value></data>
+  <data name="AnimationImageSize" xml:space="preserve"><value>图像尺寸</value></data>
+  <data name="AnimationLayerPosition" xml:space="preserve"><value>位置</value></data>
+  <data name="AnimationLayerOrder" xml:space="preserve"><value>图层顺序</value></data>
+  <data name="AnimationInsertShort" xml:space="preserve"><value>插入</value></data>
+  <data name="AnimationUpdateShort" xml:space="preserve"><value>更新</value></data>
+  <data name="AnimationFrontShort" xml:space="preserve"><value>置顶</value></data>
+  <data name="AnimationBackShort" xml:space="preserve"><value>置底</value></data>
+  <data name="AnimationDeleteShort" xml:space="preserve"><value>删除</value></data>
+  <data name="AnimationSelectAllFrames" xml:space="preserve"><value>全选帧</value></data>
+  <data name="AnimationSelectFrames" xml:space="preserve"><value>请先选择帧。</value></data>
 </root>
