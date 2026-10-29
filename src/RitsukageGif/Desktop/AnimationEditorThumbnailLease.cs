@@ -6,6 +6,10 @@ namespace RitsukageGif.Desktop
     {
         private Action? _release = release;
         public Bitmap Bitmap { get; } = bitmap;
-        public void Dispose() => Interlocked.Exchange(ref _release, null)?.Invoke();
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _release, null)?.Invoke();
+        }
     }
 }

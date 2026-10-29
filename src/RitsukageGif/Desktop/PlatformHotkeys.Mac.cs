@@ -1,5 +1,5 @@
-using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Desktop
 {
@@ -8,9 +8,10 @@ namespace RitsukageGif.Desktop
         private const string Carbon = "/System/Library/Frameworks/Carbon.framework/Carbon";
 
         internal static unsafe IDisposable RegisterMac((uint Modifiers, uint Key)[] keys, Action<int> pressed,
-            Action<string> error)
+            Action<string> error, Action ready)
         {
             var registered = new List<nint>();
+            var failed = false;
             var state = GCHandle.Alloc(new MacCallback(pressed, keys.Length));
             nint handler = 0;
             try
@@ -26,6 +27,7 @@ namespace RitsukageGif.Desktop
                     var code = MacKey(keys[i].Key);
                     if (code is null)
                     {
+                        failed = true;
                         error(UiText.Get("HotkeySupported"));
                         continue;
                     }
@@ -33,12 +35,19 @@ namespace RitsukageGif.Desktop
                     var modifiers = keys[i].Modifiers;
                     var mask = ((modifiers & 1) != 0 ? 1u << 11 : 0) | ((modifiers & 2) != 0 ? 1u << 12 : 0) |
                                ((modifiers & 4) != 0 ? 1u << 9 : 0) | ((modifiers & 8) != 0 ? 1u << 8 : 0);
-                    if (RegisterEventHotKey(code.Value, mask, new HotKeyId { Signature = 0x52475348, Id = (uint)i },
+                    if (RegisterEventHotKey(code.Value, mask, new() { Signature = 0x52475348, Id = (uint)i },
                             target, 0, out var handle) == 0)
+                    {
                         registered.Add(handle);
-                    else error(UiText.Get("HotkeyOccupied"));
+                    }
+                    else
+                    {
+                        failed = true;
+                        error(UiText.Get("HotkeyOccupied"));
+                    }
                 }
 
+                if (!failed) ready();
                 return new MacRegistration(registered, handler, state);
             }
             catch
@@ -47,29 +56,6 @@ namespace RitsukageGif.Desktop
                 if (handler != 0) _ = RemoveEventHandler(handler);
                 state.Free();
                 throw;
-            }
-        }
-
-        private sealed class MacRegistration(List<nint> keys, nint handler, GCHandle state) : IDisposable
-        {
-            private bool _disposed;
-            private GCHandle _state = state;
-
-            public void Dispose()
-            {
-                if (_disposed) return;
-                _disposed = true;
-                foreach (var key in keys) _ = UnregisterEventHotKey(key);
-                _ = RemoveEventHandler(handler);
-                _state.Free();
-            }
-        }
-
-        private sealed class MacCallback(Action<int> pressed, int count)
-        {
-            public void Invoke(int index)
-            {
-                if (index >= 0 && index < count) pressed(index);
             }
         }
 
@@ -100,24 +86,12 @@ namespace RitsukageGif.Desktop
                 ['B'] = 11, ['Q'] = 12, ['W'] = 13, ['E'] = 14, ['R'] = 15, ['Y'] = 16, ['T'] = 17,
                 ['1'] = 18, ['2'] = 19, ['3'] = 20, ['4'] = 21, ['6'] = 22, ['5'] = 23, ['9'] = 25, ['7'] = 26,
                 ['8'] = 28, ['0'] = 29, ['O'] = 31, ['U'] = 32, ['I'] = 34, ['P'] = 35, ['L'] = 37, ['J'] = 38,
-                ['K'] = 40, ['N'] = 45, ['M'] = 46
+                ['K'] = 40, ['N'] = 45, ['M'] = 46,
             };
             if (codes.TryGetValue((char)key, out var result)) return result;
             uint[] functions =
                 [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111, 105, 107, 113, 106, 64, 79, 80, 90];
             return key >= 0x70 && key < 0x70 + functions.Length ? functions[key - 0x70] : HotkeyKeyMap.MacCode(key);
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct HotKeyId
-        {
-            public uint Signature, Id;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct EventType
-        {
-            public uint Class, Kind;
         }
 
         [LibraryImport(Carbon)]
@@ -140,5 +114,40 @@ namespace RitsukageGif.Desktop
         [LibraryImport(Carbon)]
         private static partial int GetEventParameter(nint nativeEvent, uint name, uint desiredType, nint actualType,
             uint size, nint actualSize, out HotKeyId data);
+
+        private sealed class MacRegistration(List<nint> keys, nint handler, GCHandle state) : IDisposable
+        {
+            private bool _disposed;
+            private GCHandle _state = state;
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                foreach (var key in keys) _ = UnregisterEventHotKey(key);
+                _ = RemoveEventHandler(handler);
+                _state.Free();
+            }
+        }
+
+        private sealed class MacCallback(Action<int> pressed, int count)
+        {
+            public void Invoke(int index)
+            {
+                if (index >= 0 && index < count) pressed(index);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct HotKeyId
+        {
+            public uint Signature, Id;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct EventType
+        {
+            public uint Class, Kind;
+        }
     }
 }

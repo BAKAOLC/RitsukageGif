@@ -1,17 +1,18 @@
+using System.Globalization;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Styling;
-using Semi.Avalonia;
 using Avalonia.Threading;
-using System.Diagnostics;
-using System.Globalization;
+using Semi.Avalonia;
 
 namespace RitsukageGif.Desktop
 {
     public sealed class App : Application
     {
-        private ApplicationHost? _host;
+        private static readonly ILogger AppLogger = LogHub.GetLogger("Desktop.Application");
         private FatalErrorWindow? _fatalError;
+        private ApplicationHost? _host;
 
         public override void Initialize()
         {
@@ -21,7 +22,7 @@ namespace RitsukageGif.Desktop
             {
                 Locale = CultureInfo.GetCultureInfo(CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh"
                     ? "zh-CN"
-                    : "en-US")
+                    : "en-US"),
             });
             Styles.Add(new AppTheme());
             Styles.Add(new EditorStyles());
@@ -32,8 +33,8 @@ namespace RitsukageGif.Desktop
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnExplicitShutdown;
-                _host = new ApplicationHost(desktop);
+                desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                _host = new(desktop);
                 desktop.ShutdownRequested += async (_, e) =>
                 {
                     if (_host.IsClosing) return;
@@ -48,19 +49,26 @@ namespace RitsukageGif.Desktop
 
         private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
         {
-            Trace.TraceError("Unhandled UI exception: {0}", args.Exception);
+            AppLogger.ZLogCritical(args.Exception, $"Unhandled UI exception.");
             if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop) return;
             args.Handled = true;
             if (_fatalError is not null) return;
-            _fatalError = new FatalErrorWindow(args.Exception);
-            foreach (var window in desktop.Windows) window.IsEnabled = false;
+            _fatalError = new(args.Exception);
+            foreach (var window in desktop.Windows.ToArray())
+            {
+                WindowDiagnostics.Write(AppLogger, "BeforeFatalCancellation", window);
+                window.IsEnabled = false;
+            }
+
             try
             {
                 _host?.SuspendAfterFailure();
+                foreach (var window in desktop.Windows.ToArray())
+                    WindowDiagnostics.Write(AppLogger, "AfterFatalCancellation", window);
             }
             catch (Exception error)
             {
-                Trace.TraceError("Cancelling after UI failure: {0}", error);
+                AppLogger.ZLogError(error, $"Failure suspension could not complete.");
             }
 
             _fatalError.Closed += async (_, _) =>
@@ -71,7 +79,7 @@ namespace RitsukageGif.Desktop
                 }
                 catch (Exception error)
                 {
-                    Trace.TraceError("Shutdown after UI failure: {0}", error);
+                    AppLogger.ZLogError(error, $"Shutdown after UI failure failed.");
                 }
                 finally
                 {
@@ -79,6 +87,8 @@ namespace RitsukageGif.Desktop
                 }
             };
             _fatalError.Show();
+            _fatalError.Activate();
+            WindowDiagnostics.Write(AppLogger, "FatalErrorShown", _fatalError);
         }
     }
 }

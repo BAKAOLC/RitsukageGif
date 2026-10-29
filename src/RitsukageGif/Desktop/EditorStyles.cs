@@ -1,7 +1,13 @@
+using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
+
 namespace RitsukageGif.Desktop
 {
-    internal sealed class EditorStyles : Avalonia.Styling.Styles
+    internal sealed class EditorStyles : Styles
     {
-        public EditorStyles() => Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this);
+        public EditorStyles()
+        {
+            AvaloniaXamlLoader.Load(this);
+        }
     }
 }

@@ -7,16 +7,16 @@ namespace RitsukageGif.Desktop
     internal sealed class BufferedSceneWindowSource(Func<ISceneWindowSource> factory, int fps) : ISceneWindowSource
     {
         private readonly Lock _gate = new();
-        private readonly CancellationTokenSource _stop = new();
-        private readonly ManualResetEventSlim _ready = new();
         private readonly TimeSpan _maximumAge = TimeSpan.FromSeconds(Math.Max(.25, 2.0 / fps));
-        private CancellationTokenRegistration _registration;
-        private Task? _worker;
+        private readonly ManualResetEventSlim _ready = new();
+        private readonly CancellationTokenSource _stop = new();
+        private long _completedAt;
+        private ExceptionDispatchInfo? _failure;
+        private bool _hasFrame, _disposed;
         private byte[]? _latestPixels, _readPixels;
         private int _latestWidth, _latestHeight;
-        private long _completedAt;
-        private bool _hasFrame, _disposed;
-        private ExceptionDispatchInfo? _failure;
+        private CancellationTokenRegistration _registration;
+        private Task? _worker;
 
         public int Width { get; private set; }
         public int Height { get; private set; }
@@ -53,6 +53,18 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            CancelSource();
+            _worker?.GetAwaiter().GetResult();
+            _registration.Dispose();
+            _ready.Dispose();
+            _stop.Dispose();
+            _latestPixels = _readPixels = null;
+        }
+
         private void Produce()
         {
             try
@@ -76,7 +88,10 @@ namespace RitsukageGif.Desktop
                     {
                         if (pixels is null || revision < 0 || revision != previousRevision)
                         {
-                            if (pixels is null || source.OwnsFrameBuffers) _latestPixels = pixels;
+                            if (pixels is null || source.OwnsFrameBuffers)
+                            {
+                                _latestPixels = pixels;
+                            }
                             else
                             {
                                 if (_latestPixels?.Length != pixels.Length) _latestPixels = new byte[pixels.Length];
@@ -120,18 +135,6 @@ namespace RitsukageGif.Desktop
             {
                 Trace.TraceWarning("Capture cancellation callback failed: {0}", error);
             }
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            CancelSource();
-            _worker?.GetAwaiter().GetResult();
-            _registration.Dispose();
-            _ready.Dispose();
-            _stop.Dispose();
-            _latestPixels = _readPixels = null;
         }
     }
 }

@@ -48,6 +48,7 @@ namespace RitsukageGif.Desktop
             name = name.ToUpperInvariant() switch
             {
                 "RETURN" => "Enter", "ESC" => "Escape", "BACKSPACE" => "Back",
+                "`" => "OemTilde",
                 "PRIOR" => "PageUp", "NEXT" => "PageDown", "CAPITAL" => "CapsLock",
                 "SCROLLLOCK" => "Scroll", "SNAPSHOT" => "PrintScreen",
                 "OEM1" => "OemSemicolon", "OEM2" => "OemQuestion", "OEM3" => "OemTilde",

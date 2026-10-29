@@ -4,7 +4,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class SoundPlayback
     {
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
         private CancellationTokenSource? _cancellation;
         private Task _pending = Task.CompletedTask;
 
@@ -44,7 +44,7 @@ namespace RitsukageGif.Desktop
                             cancellation.Dispose();
                         }
                     }
-                });
+                }, CancellationToken.None);
             }
         }
 
@@ -71,7 +71,7 @@ namespace RitsukageGif.Desktop
             {
                 var engine = MiniAudioExNative.ma_ex_context_get_engine(context);
                 cancellationToken.ThrowIfCancellationRequested();
-                sound = new ma_sound_ptr(true);
+                sound = new(true);
                 if (sound.pointer == 0) throw new OutOfMemoryException();
                 const ma_sound_flags flags = ma_sound_flags.stream | ma_sound_flags.no_spatialization;
                 Check(OperatingSystem.IsWindows()
@@ -83,7 +83,7 @@ namespace RitsukageGif.Desktop
                 while (MiniAudioNative.ma_sound_is_playing(sound) != 0)
                     await Task.Delay(20, cancellationToken).ConfigureAwait(false);
                 // The decoder can finish while the device still has queued samples.
-                await Task.Delay(GetDrainDelay(new ma_engine_ptr(engine)), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(GetDrainDelay(new(engine)), cancellationToken).ConfigureAwait(false);
             }
             finally
             {

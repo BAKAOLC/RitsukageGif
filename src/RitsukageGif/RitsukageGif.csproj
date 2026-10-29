@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyTitle>RitsukageGif</AssemblyTitle>
+    <Product>RitsukageGif</Product>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -20,9 +22,16 @@
     <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
     <ProjectReference Include="../RitsukageGif.Core/RitsukageGif.Core.csproj" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.22" />
     <PackageReference Include="Semi.Avalonia" Version="11.3.22" />
     <PackageReference Include="Markdig" Version="1.4.2" />
     <EmbeddedResource Include="About.md" LogicalName="RitsukageGif.About.md" />
     <AvaloniaResource Include="Background.png" />
+    <None Include="../../THIRD-PARTY-NOTICES/Fluent-System-Icons.txt"
+          Link="THIRD-PARTY-NOTICES/Fluent-System-Icons.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../THIRD-PARTY-NOTICES/Logging.txt"
+          Link="THIRD-PARTY-NOTICES/Logging.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

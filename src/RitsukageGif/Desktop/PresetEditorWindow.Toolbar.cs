@@ -1,39 +1,16 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class PresetEditorWindow
     {
-        private Control CreateToolbar()
+        private Border CreateToolbar()
         {
             var fileTools = new WrapPanel { Orientation = Orientation.Horizontal };
             var executionTools = new WrapPanel { Orientation = Orientation.Horizontal };
-
-            void Add(Panel panel, string key, Func<Task> action, List<Button>? group = null,
-                string? shortcut = null, bool primary = false)
-            {
-                var content = new StackPanel
-                    { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-                content.Children.Add(ToolbarIcon(key, primary ? Brushes.White : AppTheme.Muted));
-                content.Children.Add(new TextBlock
-                {
-                    [!TextBlock.TextProperty] = LiveText.Resource(key), VerticalAlignment = VerticalAlignment.Center
-                });
-                var button = new Button
-                {
-                    Content = content, MinHeight = 30, Padding = new(8, 4),
-                    Margin = new(0, 2, 4, 2), FontSize = 13,
-                    VerticalContentAlignment = VerticalAlignment.Center
-                };
-                button.Classes.Add(primary ? "primary" : "tool");
-                _toolbarTips.Add((button, key, shortcut));
-                RefreshToolbarTip(button, key, shortcut);
-                button.Click += async (_, _) => await Guard(action);
-                panel.Children.Add(button);
-                group?.Add(button);
-            }
 
             Add(fileTools, "EditorNew", () =>
             {
@@ -74,16 +51,40 @@ namespace RitsukageGif.Desktop
             rows.Children.Add(new Border
             {
                 Child = executionTools, BorderBrush = AppTheme.Outline,
-                BorderThickness = new(0, 1, 0, 0), Padding = new(0, 3, 0, 0), Margin = new(0, 3, 0, 0)
+                BorderThickness = new(0, 1, 0, 0), Padding = new(0, 3, 0, 0), Margin = new(0, 3, 0, 0),
             });
-            return new Border
+            return new()
             {
                 Child = rows, Padding = new(8, 4), Background = AppTheme.Surface,
-                BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 0, 1)
+                BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 0, 1),
             };
+
+            void Add(Panel panel, string key, Func<Task> action, List<Button>? group = null,
+                string? shortcut = null, bool primary = false)
+            {
+                var content = new StackPanel
+                    { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+                content.Children.Add(ToolbarIcon(key, primary ? Brushes.White : AppTheme.Muted));
+                content.Children.Add(new TextBlock
+                {
+                    [!TextBlock.TextProperty] = LiveText.Resource(key), VerticalAlignment = VerticalAlignment.Center,
+                });
+                var button = new Button
+                {
+                    Content = content, MinHeight = 30, Padding = new(8, 4),
+                    Margin = new(0, 2, 4, 2), FontSize = 13,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                };
+                button.Classes.Add(primary ? "primary" : "tool");
+                _toolbarTips.Add((button, key, shortcut));
+                RefreshToolbarTip(button, key, shortcut);
+                button.Click += async (_, _) => await Guard(action);
+                panel.Children.Add(button);
+                group?.Add(button);
+            }
         }
 
-        private static Control ToolbarIcon(string key, IBrush? brush = null)
+        private static Path ToolbarIcon(string key, IBrush? brush = null)
         {
             var geometry = key switch
             {
@@ -103,13 +104,13 @@ namespace RitsukageGif.Desktop
                 "EditorBreakpoint" => "M8,2 A6,6 0 1 1 8,14 A6,6 0 1 1 8,2 Z",
                 "EditorCloseFile" => "M4,4 L12,12 M12,4 L4,12",
                 "EditorRefreshWorkspace" => "M13,7 A5,5 0 1 0 13,11 M13,2 L13,7 8,7",
-                _ => "M3,3 L13,3 13,13 3,13 Z"
+                _ => "M3,3 L13,3 13,13 3,13 Z",
             };
-            return new Avalonia.Controls.Shapes.Path
+            return new()
             {
                 Data = Geometry.Parse(geometry), Stroke = brush ?? AppTheme.Muted,
                 StrokeThickness = 1.5, Width = 16, Height = 16,
-                Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center
+                Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center,
             };
         }
     }

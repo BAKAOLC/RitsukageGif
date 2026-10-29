@@ -10,6 +10,20 @@ namespace RitsukageGif.Desktop
         public static WindowControlTarget? Find(WindowTarget window, PixelPoint point,
             CancellationToken cancellationToken = default)
         {
+            return FindCore(window, point, null, cancellationToken);
+        }
+
+        internal static IReadOnlyList<WindowControlTarget> FindHierarchy(WindowTarget window, PixelPoint point,
+            CancellationToken cancellationToken = default)
+        {
+            var hierarchy = new List<WindowControlTarget> { new(window, window.Handle, window.Bounds) };
+            FindCore(window, point, hierarchy, cancellationToken);
+            return hierarchy;
+        }
+
+        private static WindowControlTarget? FindCore(WindowTarget window, PixelPoint point,
+            List<WindowControlTarget>? hierarchy, CancellationToken cancellationToken)
+        {
             if (!OperatingSystem.IsWindows() || !window.Bounds.Contains(point) ||
                 cancellationToken.IsCancellationRequested) return null;
             var previousDpi = SetThreadDpiAwarenessContext(-4);
@@ -30,7 +44,7 @@ namespace RitsukageGif.Desktop
                     if (GetClientRect(parent, out var client) == 0) break;
                     var origin = new NativeMethods.Point();
                     if (ClientToScreen(parent, ref origin) == 0) break;
-                    clip = clip.Intersect(new PixelRect(origin.X, origin.Y, client.Right, client.Bottom));
+                    clip = clip.Intersect(new(origin.X, origin.Y, client.Right, client.Bottom));
                     if (clip.IsEmpty || !clip.Contains(point)) break;
                     var found = false;
                     for (var child = NativeMethods.GetTopWindow(parent);
@@ -44,7 +58,8 @@ namespace RitsukageGif.Desktop
                             NativeMethods.GetWindowRect(child, out var bounds) == 0) continue;
                         var visible = clip.Intersect(bounds.Pixels);
                         if (visible.IsEmpty || !visible.Contains(point)) continue;
-                        result = new WindowControlTarget(window, child, visible);
+                        result = new(window, child, visible);
+                        if (hierarchy is not null && hierarchy[^1].Bounds != visible) hierarchy.Add(result);
                         parent = child;
                         clip = visible;
                         found = true;

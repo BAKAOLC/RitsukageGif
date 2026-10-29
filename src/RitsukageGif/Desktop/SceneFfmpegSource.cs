@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.Json;
 
 namespace RitsukageGif.Desktop
 {
@@ -7,18 +9,38 @@ namespace RitsukageGif.Desktop
     {
         private readonly Lock _gate = new();
         private readonly List<Task> _loads = [];
-        private CancellationTokenSource? _loading;
-        private FfmpegInputSource? _source;
+        private FfmpegDependencyException? _dependencyError;
+        private bool _disposed;
         private FfmpegFileSource? _file;
-        private PresetMediaSource? _media;
-        private PresetPlaybackState? _playback;
         private (byte[]? Pixels, int Width, int Height) _frozen;
         private int _generation;
         private bool _isLoading;
+        private CancellationTokenSource? _loading;
+        private PresetMediaSource? _media;
+        private PresetPlaybackState? _playback;
         private long _retryAt;
         private int _retryFailures;
-        private FfmpegDependencyException? _dependencyError;
-        private bool _disposed;
+        private FfmpegInputSource? _source;
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _loading?.Cancel();
+                _source?.Dispose();
+                _source = null;
+                _file?.Dispose();
+                _file = null;
+                _frozen = default;
+            }
+
+            // Startup observes cancellation and releases any decoder it created before completion.
+            Task.WhenAll(_loads).GetAwaiter().GetResult();
+            _loading?.Dispose();
+            _loads.Clear();
+        }
 
         public (byte[]? Pixels, int Width, int Height) Read(PresetMediaSource media,
             PresetPlaybackState? playback, double motionTime, double elapsedSeconds, CancellationToken token)
@@ -71,7 +93,7 @@ namespace RitsukageGif.Desktop
                     Width = media.Width, Height = media.Height, Loop = playback?.Loop ?? media.Loop,
                     PlaybackRate = speed == 0 ? 1 : speed, PositionSeconds = position,
                     Live = media.Live, HoldLastFrame = playback?.HoldLast ?? media.HoldLast,
-                    StaleAfterSeconds = media.StaleAfter
+                    StaleAfterSeconds = media.StaleAfter,
                 };
                 var load = LoadAsync(options, paused, generation, loading);
                 _loads.RemoveAll(task => task.IsCompleted);
@@ -100,7 +122,7 @@ namespace RitsukageGif.Desktop
                         _file.Dispose();
                         _file = null;
                         ScheduleRetry();
-                        return (playback?.HoldLast ?? media.HoldLast) ? _frozen : default;
+                        return playback?.HoldLast ?? media.HoldLast ? _frozen : default;
                     }
 
                 if (_source is null) return _frozen;
@@ -156,8 +178,8 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception error) when (error is OperationCanceledException or IOException
                                               or InvalidOperationException or TimeoutException
-                                              or System.ComponentModel.Win32Exception
-                                              or System.Text.Json.JsonException)
+                                              or Win32Exception
+                                              or JsonException)
             {
                 lock (_gate)
                     if (!_disposed && generation == _generation && !loading.IsCancellationRequested)
@@ -178,26 +200,6 @@ namespace RitsukageGif.Desktop
         {
             var delay = Math.Min(30, 1 << Math.Min(_retryFailures++, 5));
             _retryAt = Stopwatch.GetTimestamp() + delay * Stopwatch.Frequency;
-        }
-
-        public void Dispose()
-        {
-            lock (_gate)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                _loading?.Cancel();
-                _source?.Dispose();
-                _source = null;
-                _file?.Dispose();
-                _file = null;
-                _frozen = default;
-            }
-
-            // Startup observes cancellation and releases any decoder it created before completion.
-            Task.WhenAll(_loads).GetAwaiter().GetResult();
-            _loading?.Dispose();
-            _loads.Clear();
         }
     }
 }

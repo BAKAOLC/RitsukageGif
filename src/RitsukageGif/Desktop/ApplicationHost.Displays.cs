@@ -4,17 +4,18 @@ namespace RitsukageGif.Desktop
     {
         private void DisplayChanged(object? sender, EventArgs args)
         {
+            WindowsDisplayColor.Invalidate();
             RefreshDisplaySelection();
         }
 
         private void RefreshDisplaySelection()
         {
-            if (_closing || _busy || _selecting || DesktopCapture.UsesSourceSelection ||
-                _presets.ActivePreset is not null || _manualPreset is not null || _region is not { } region)
+            if (IsClosing || IsBusy || IsSelecting || DesktopCapture.UsesSourceSelection ||
+                _presets.ActivePreset is not null || _manualPreset is not null || Region is not { } region)
                 return;
-            if (Screens.All.Any(screen => !region.Intersect(new PixelRect(screen.Bounds.X, screen.Bounds.Y,
+            if (Screens.All.Any(screen => !region.Intersect(new(screen.Bounds.X, screen.Bounds.Y,
                     screen.Bounds.Width, screen.Bounds.Height)).IsEmpty)) return;
-            _region = null;
+            Region = null;
             Volatile.Write(ref _captureRegion, null);
             SetStatusKey("TopologyChanged");
         }

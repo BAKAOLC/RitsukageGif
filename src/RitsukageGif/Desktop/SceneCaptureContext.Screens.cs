@@ -7,33 +7,8 @@ namespace RitsukageGif.Desktop
         private readonly List<ScreenKey> _expiredScreens = [];
         private readonly Dictionary<ScreenKey, ScreenRetry> _screenRetries = [];
 
-        private readonly record struct ScreenRetry(DisplayTopology Topology, long At);
-
-        private readonly record struct ScreenKey(
-            PixelRect Area,
-            int Width,
-            int Height,
-            // Cursor visibility is part of cache identity even though no caller reads this property.
-            // ReSharper disable once NotAccessedPositionalProperty.Local
-            bool Cursor,
-            int Fps,
-            // Keep synchronous and buffered captures in separate cache entries.
-            // ReSharper disable once NotAccessedPositionalProperty.Local
-            bool Buffered);
-
-        private sealed class BufferedScreen(ISceneWindowSource capture, DisplayTopology topology)
-        {
-            public ISceneWindowSource Capture { get; } = capture;
-            public DisplayTopology Topology { get; } = topology;
-            public double LastUsed;
-        }
-
-        public byte[]? CaptureScreen(PixelRect area, int width, int height, RecordingOptions options,
-            Func<byte[]> capture) =>
-            CaptureScreen(area, width, height, options, capture, static callback => callback());
-
         public byte[]? CaptureScreen<TState>(PixelRect area, int width, int height, RecordingOptions options,
-            TState state, Func<TState, byte[]> capture, CancellationToken token = default, bool buffer = false)
+            TState state, Func<TState, byte[]> capture, bool buffer = false, CancellationToken token = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
@@ -51,7 +26,7 @@ namespace RitsukageGif.Desktop
                 if (_bufferedScreens.Remove(key, out var lost))
                 {
                     lost.Capture.Dispose();
-                    _screenRetries[key] = new ScreenRetry(lost.Topology, Environment.TickCount64 + 500);
+                    _screenRetries[key] = new(lost.Topology, Environment.TickCount64 + 500);
                 }
 
                 pixels = null;
@@ -81,7 +56,7 @@ namespace RitsukageGif.Desktop
             {
                 if (_bufferedScreens.Count + _screenRetries.Count >= MaximumBufferedSources) return fallback(state);
                 var fixedOptions = options with { Region = key.Area, Divisor = 1, Fps = key.Fps };
-                screen = new BufferedScreen(new BufferedSceneWindowSource(
+                screen = new(new BufferedSceneWindowSource(
                     () => _screenFactory(fixedOptions, topology, key.Width, key.Height), key.Fps), topology);
                 _bufferedScreens.Add(key, screen);
             }
@@ -109,6 +84,27 @@ namespace RitsukageGif.Desktop
             _expiredScreens.Clear();
         }
 
+        private readonly record struct ScreenRetry(DisplayTopology Topology, long At);
+
+        private readonly record struct ScreenKey(
+            PixelRect Area,
+            int Width,
+            int Height,
+            // Cursor visibility is part of cache identity even though no caller reads this property.
+            // ReSharper disable once NotAccessedPositionalProperty.Local
+            bool Cursor,
+            int Fps,
+            // Keep synchronous and buffered captures in separate cache entries.
+            // ReSharper disable once NotAccessedPositionalProperty.Local
+            bool Buffered);
+
+        private sealed class BufferedScreen(ISceneWindowSource capture, DisplayTopology topology)
+        {
+            public double LastUsed;
+            public ISceneWindowSource Capture { get; } = capture;
+            public DisplayTopology Topology { get; } = topology;
+        }
+
         private sealed class ScreenSource(RecordingOptions options, DisplayTopology topology, int width, int height)
             : ISceneWindowSource
         {
@@ -116,8 +112,16 @@ namespace RitsukageGif.Desktop
             public int Width => width;
             public int Height => height;
             public bool OwnsFrameBuffers => true;
-            public byte[] Capture(CancellationToken token) => _capture.Capture(token);
-            public void Dispose() => _capture.Dispose();
+
+            public byte[] Capture(CancellationToken token)
+            {
+                return _capture.Capture(token);
+            }
+
+            public void Dispose()
+            {
+                _capture.Dispose();
+            }
         }
     }
 }

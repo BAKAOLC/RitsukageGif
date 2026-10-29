@@ -1,5 +1,4 @@
-using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
+﻿using Avalonia.Controls;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -8,7 +7,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly List<(Button Button, string Key, string? Shortcut)> _toolbarTips = [];
 
-        internal void RefreshLanguage()
+        private void RefreshLanguage()
         {
             if (!Dispatcher.UIThread.CheckAccess())
             {
@@ -27,11 +26,11 @@ namespace RitsukageGif.Desktop
             RefreshRecordingProgress();
             // AvaloniaEdit resolves its search labels when applying the template.
             // Keep the panel (and its query/options) while recreating only that visual tree.
-            if (Editor.SearchPanel is { Template: { } template } search)
+            if (_editor.SearchPanel is { Template: { } template } search)
             {
-                search.SetCurrentValue(TemplatedControl.TemplateProperty, null);
+                search.SetCurrentValue(TemplateProperty, null);
                 search.ApplyTemplate();
-                search.SetCurrentValue(TemplatedControl.TemplateProperty, template);
+                search.SetCurrentValue(TemplateProperty, template);
                 search.ApplyTemplate();
             }
 

@@ -32,9 +32,9 @@ namespace RitsukageGif.Desktop
                             "--height" => options with { Height = int.Parse(value, CultureInfo.InvariantCulture) },
                             "--idle-timeout" => options with
                             {
-                                IdleTimeoutSeconds = int.Parse(value, CultureInfo.InvariantCulture)
+                                IdleTimeoutSeconds = int.Parse(value, CultureInfo.InvariantCulture),
                             },
-                            _ => throw new ArgumentException(UiText.Get("CommandHelp"))
+                            _ => throw new ArgumentException(UiText.Get("CommandHelp")),
                         };
                     }
 
@@ -45,7 +45,7 @@ namespace RitsukageGif.Desktop
                     throw new ArgumentException(UiText.Get("CommandHelp"));
             }
 
-            return new CommandReply(true, CurrentState, Inputs: _inputServer.List(), InputClock: ExternalInputHub.Now);
+            return new(true, CurrentState, Inputs: _inputServer.List(), InputClock: ExternalInputHub.Now);
         }
     }
 }

@@ -4,22 +4,54 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class ApplicationHost
     {
-        private Task? _selectionOperation;
         private CancellationTokenSource? _selectionCancellation;
         private Window? _selectionDialog;
+        private Task? _selectionOperation;
+
+        internal bool HasActivePreset => _presets.ActivePreset is not null;
+        internal string? ActivePresetName => _presets.ActivePreset?.Name;
+
+        internal CaptureSourceKind SelectedCaptureSource => Region is null
+            ? Settings.CaptureSource
+            : (_presets.ActivePreset ?? _manualPreset)?.Source ??
+              (DesktopCapture.UsesSourceSelection && NativeCaptureSession.SourceIsWindow
+                  ? CaptureSourceKind.Window
+                  : CaptureSourceKind.Screen);
+
+        internal string SelectedCaptureSourceKey => Region is null
+            ? "SelectArea"
+            : (_presets.ActivePreset ?? _manualPreset)?.Layout is not null
+                ? "MainSourceLayout"
+                : SelectedCaptureSource == CaptureSourceKind.Window
+                    ? "MainSourceWindow"
+                    : "MainSourceScreen";
 
         private void CancelSelection()
         {
-            _selectionCancellation?.Cancel();
-            _selection?.Cancel();
-            _selectionDialog?.Close();
+            try
+            {
+                _selectionCancellation?.Cancel();
+            }
+            finally
+            {
+                try
+                {
+                    _selection?.Cancel();
+                }
+                finally
+                {
+                    _selectionDialog?.Close();
+                }
+            }
         }
 
         private Task BeginSelection(Func<CancellationToken, Task> action)
         {
-            if (!CanEditRecordingSettings || _selecting || _configuring)
+            HostLogger.ZLogInformation(
+                $"Region selection requested. Closing={IsClosing} Selecting={IsSelecting} Configuring={IsConfiguring}");
+            if (!CanEditRecordingSettings || IsSelecting || IsConfiguring)
                 throw new InvalidOperationException(UiText.Get("CommandNotReady"));
-            _selecting = true;
+            IsSelecting = true;
             Notify();
             var cancellation = new CancellationTokenSource();
             _selectionCancellation = cancellation;
@@ -40,17 +72,21 @@ namespace RitsukageGif.Desktop
                 _selectionDialog = null;
                 _selectionCancellation = null;
                 cancellation.Dispose();
-                _selecting = false;
+                IsSelecting = false;
+                HostLogger.ZLogInformation($"Region selection ended. Closing={IsClosing} Region={Region}");
                 RefreshDisplaySelection();
                 Notify();
             }
         }
 
-        public Task SelectAsync() => SelectSourceAsync(_settings.CaptureSource);
+        private Task SelectAsync()
+        {
+            return SelectSourceAsync(Settings.CaptureSource);
+        }
 
         public async Task SelectSourceAsync(CaptureSourceKind source)
         {
-            if (!CanEditRecordingSettings || _selecting || _configuring) return;
+            if (!CanEditRecordingSettings || IsSelecting || IsConfiguring) return;
             try
             {
                 await BeginSelection(token => SelectCoreAsync(source, token));
@@ -60,7 +96,7 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception ex)
             {
-                if (!_closing) SetStatus(ex.Message);
+                if (!IsClosing) SetStatus(ex.Message);
             }
         }
 
@@ -68,32 +104,34 @@ namespace RitsukageGif.Desktop
         {
             var viewBeforeSelection = View;
             var wasVisible = viewBeforeSelection?.IsVisible == true;
+            using var settingsVisibility = await CaptureWindowVisibilityLease.HideAsync(_settingsWindow,
+                () => !IsClosing, token);
             var completed = false;
-            viewBeforeSelection?.Hide();
             try
             {
-                if (wasVisible)
-                    await Task.Delay(150, token); // Wait for the compositor to remove this window from the snapshot.
+                await CaptureWindowVisibility.HideAsync(viewBeforeSelection, token);
                 token.ThrowIfCancellationRequested();
-                using var selection = new SelectionCoordinator(Screens, _settings.SnapRadius, _settings.EdgeThreshold,
-                    source == CaptureSourceKind.Window, _settings.Cursor, _settings.Fps);
+                using var selection = new SelectionCoordinator(Screens, Settings.SnapRadius, Settings.EdgeThreshold,
+                    source == CaptureSourceKind.Window, Settings.Cursor, Settings.Fps);
+                ConfigureSelectionPreferences(selection);
                 _selection = selection;
-                var selected = await selection.ShowAsync();
+                var result = await selection.ShowAsync();
                 token.ThrowIfCancellationRequested();
-                if (selected is { } result)
+                if (result is not null)
                 {
                     ValidateRegion(result.Region, !DesktopCapture.UsesSourceSelection && !result.WindowSource);
                     selection.CommitSource(token);
                     DeactivatePreset();
                     SetRegion(result.Region, !DesktopCapture.UsesSourceSelection && !result.WindowSource);
                     _manualPreset = result.CreatePreset();
-                    _settings.CaptureSource = result.WindowSource ? CaptureSourceKind.Window : CaptureSourceKind.Screen;
+                    _captureHistory.RecordRegion(result);
+                    Settings.CaptureSource = result.WindowSource ? CaptureSourceKind.Window : CaptureSourceKind.Screen;
                     completed = true;
                 }
             }
             finally
             {
-                if (!_closing && wasVisible && viewBeforeSelection is not null)
+                if (!IsClosing && wasVisible && viewBeforeSelection is not null)
                 {
                     var activate = viewBeforeSelection.ShowActivated;
                     viewBeforeSelection.ShowActivated = completed;
@@ -115,7 +153,7 @@ namespace RitsukageGif.Desktop
             {
                 var preset = WindowPreset.ForWindow(process, title) with
                 {
-                    Source = _settings.CaptureSource, Follow = true
+                    Source = Settings.CaptureSource, Follow = true,
                 };
                 var windows = await Task.Run(WindowLocator.List, token);
                 token.ThrowIfCancellationRequested();

@@ -4,7 +4,7 @@ namespace RitsukageGif.Desktop
     {
         private const long MaximumCacheBytes = 128L * 1024 * 1024;
         private const int MaximumCacheEntries = 16;
-        private static readonly object Gate = new();
+        private static readonly Lock Gate = new();
         private static readonly Dictionary<string, Entry> Cache = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, Download> Downloads = new(StringComparer.Ordinal);
 
@@ -30,12 +30,12 @@ namespace RitsukageGif.Desktop
                 {
                     cached.References++;
                     cached.LastUsed = Environment.TickCount64;
-                    return new MediaResource(cached.Path, cached);
+                    return new(cached.Path, cached);
                 }
 
                 if (!Downloads.TryGetValue(key, out download!))
                 {
-                    download = new Download();
+                    download = new();
                     Downloads.Add(key, download);
                     download.Task = DownloadAsync(uri, download.Cancellation.Token);
                 }
@@ -62,13 +62,12 @@ namespace RitsukageGif.Desktop
                         }
                     }
 
-                    return new MediaResource(entry.Path, entry);
+                    return new(entry.Path, entry);
                 }
             }
             finally
             {
                 lock (Gate)
-                {
                     if (--download.Waiters == 0)
                     {
                         Downloads.Remove(key);
@@ -76,22 +75,18 @@ namespace RitsukageGif.Desktop
                         _ = download.Task.ContinueWith(completed =>
                         {
                             lock (Gate)
-                            {
                                 if (completed.IsCompletedSuccessfully) Release(completed.Result);
                                 else _ = completed.Exception;
-                            }
 
                             download.Cancellation.Dispose();
                         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
                     }
-                }
             }
         }
 
         private static void TrimCache()
         {
             lock (Gate)
-            {
                 while (Cache.Count > 0)
                 {
                     string? victim = null;
@@ -118,10 +113,9 @@ namespace RitsukageGif.Desktop
                     _cacheBytes -= entry.Length;
                     Release(entry);
                 }
-            }
         }
 
-        internal static void ClearCache()
+        private static void ClearCache()
         {
             lock (Gate)
             {

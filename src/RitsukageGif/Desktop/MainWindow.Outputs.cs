@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -10,8 +9,8 @@ namespace RitsukageGif.Desktop
         private readonly ComboBox _outputSelector = new()
         {
             IsVisible = false, MinHeight = 0, Height = 24, FontSize = 12,
-            Padding = new Thickness(4, 0), Margin = new Thickness(0, 5, 0, 0),
-            HorizontalAlignment = HorizontalAlignment.Stretch
+            Padding = new(4, 0), Margin = new(0, 5, 0, 0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
 
         private string[] _displayOutputs = [];
@@ -34,7 +33,7 @@ namespace RitsukageGif.Desktop
         {
             var outputs = _host.LastOutputs;
             if (_displayOutputs.SequenceEqual(outputs, StringComparer.Ordinal)) return;
-            _displayOutputs = outputs.ToArray();
+            _displayOutputs = [.. outputs];
             _updatingOutputs = true;
             try
             {
@@ -48,8 +47,8 @@ namespace RitsukageGif.Desktop
                         Tag = path,
                         Content = new TextBlock
                         {
-                            Text = Path.GetFileName(path), TextTrimming = TextTrimming.CharacterEllipsis
-                        }
+                            Text = Path.GetFileName(path), TextTrimming = TextTrimming.CharacterEllipsis,
+                        },
                     };
                     ToolTip.SetTip(item, path);
                     return item;
@@ -94,7 +93,7 @@ namespace RitsukageGif.Desktop
                             "encoding" => "StageEncoding",
                             "complete" => "RecordingComplete",
                             "cancelled" => "Cancelled",
-                            _ => "RecordingFailed"
+                            _ => "RecordingFailed",
                         });
                         return $"{stream.Name}: {state} · {stream.Encoded} / {stream.Captured}" +
                                (stream.Error is { Length: > 0 } error ? $" · {error}" : "");

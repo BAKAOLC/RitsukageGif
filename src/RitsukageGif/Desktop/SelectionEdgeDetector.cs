@@ -3,9 +3,9 @@ namespace RitsukageGif.Desktop
     /// <summary>Finds coherent axis-aligned boundaries in a bounded area of the frozen screen image.</summary>
     internal sealed class SelectionEdgeDetector
     {
-        private readonly int _width;
         private readonly int _height;
         private readonly byte[] _pixels;
+        private readonly int _width;
 
         public SelectionEdgeDetector(int width, int height, byte[] pixels)
         {

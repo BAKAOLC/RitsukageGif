@@ -21,7 +21,7 @@ namespace RitsukageGif.Desktop
                     var input = layer.InputFrame;
                     if (input is null) return false;
                     var crop = state?.Crop ?? WindowPreset.ResolveArea(definition.Area,
-                        new PixelRect(0, 0, input.Width, input.Height), _preset.Constants, _frame.Variables);
+                        new(0, 0, input.Width, input.Height), _preset.Constants, _frame.Variables);
                     sourceWidth = layer.InputWidth = crop.Width;
                     sourceHeight = layer.InputHeight = crop.Height;
                     DrawPixels(layer, input.Pixels.Span, input.Width, input.Height,
@@ -44,12 +44,12 @@ namespace RitsukageGif.Desktop
                 if (media.Ffmpeg)
                 {
                     layer.ResolvedMedia ??= media with { File = path };
-                    layer.Ffmpeg ??= new SceneFfmpegSource();
+                    layer.Ffmpeg ??= new();
                     var frame = layer.Ffmpeg.Read(layer.ResolvedMedia, state?.Playback, _frameMotionTime,
                         _context?.ElapsedSeconds ?? _clock.Elapsed.TotalSeconds, token);
                     if (frame.Pixels is null) return false;
                     var crop = state?.Crop ?? WindowPreset.ResolveArea(definition.Area,
-                        new PixelRect(0, 0, frame.Width, frame.Height), _preset.Constants, _frame.Variables);
+                        new(0, 0, frame.Width, frame.Height), _preset.Constants, _frame.Variables);
                     sourceWidth = layer.InputWidth = crop.Width;
                     sourceHeight = layer.InputHeight = crop.Height;
                     DrawPixels(layer, frame.Pixels, frame.Width, frame.Height,
@@ -57,9 +57,9 @@ namespace RitsukageGif.Desktop
                     return true;
                 }
 
-                var source = _context?.GetMedia(path, token) ?? (layer.Media ??= new MediaFrameSource(path, token));
+                var source = _context?.GetMedia(path, token) ?? (layer.Media ??= new(path, token: token));
                 var area = state?.Crop ?? WindowPreset.ResolveArea(definition.Area,
-                    new PixelRect(0, 0, source.Width, source.Height), _preset.Constants, _frame.Variables);
+                    new(0, 0, source.Width, source.Height), _preset.Constants, _frame.Variables);
                 sourceWidth = layer.InputWidth = area.Width;
                 sourceHeight = layer.InputHeight = area.Height;
                 var playback = state?.Playback;
@@ -69,7 +69,7 @@ namespace RitsukageGif.Desktop
                     playback?.Speed ?? media.Speed, playback?.Position ?? media.Position,
                     !(playback?.HoldLast ?? media.HoldLast));
                 if (bitmap is null) return false;
-                layer.Drawing.DrawBitmap(bitmap, new SKRect(area.X, area.Y, area.Right, area.Bottom),
+                layer.Drawing.DrawBitmap(bitmap, new(area.X, area.Y, area.Right, area.Bottom),
                     new SKRect(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
                 return true;
             }

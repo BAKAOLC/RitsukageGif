@@ -5,12 +5,15 @@ namespace RitsukageGif.Desktop
 {
     internal static class MacWindowSystem
     {
-        private static readonly object Sync = new();
+        private static readonly Lock Sync = new();
         private static Process? _server;
         private static IReadOnlyList<WindowTarget> _windows = [];
         private static long _updated;
 
-        static MacWindowSystem() => AppDomain.CurrentDomain.ProcessExit += (_, _) => Close();
+        static MacWindowSystem()
+        {
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => Close();
+        }
 
         internal static void EnsurePermission()
         {
@@ -42,7 +45,7 @@ namespace RitsukageGif.Desktop
                         var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "RitsukageGif.Capture"))
                         {
                             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                            UseShellExecute = false
+                            UseShellExecute = false,
                         };
                         start.ArgumentList.Add("window-server");
                         _server = Process.Start(start) ??
@@ -58,7 +61,7 @@ namespace RitsukageGif.Desktop
                     if (line is null)
                     {
                         _server.WaitForExit(100);
-                        throw new IOException(UiText.Get(_server.HasExited && _server.ExitCode == 77
+                        throw new IOException(UiText.Get(_server is { HasExited: true, ExitCode: 77 }
                             ? "PlatformCapturePermission"
                             : "CaptureFailed"));
                     }
@@ -72,7 +75,7 @@ namespace RitsukageGif.Desktop
                             continue;
                         var bounds = Rectangle(window.GetProperty("bounds"));
                         if (bounds.IsEmpty) continue;
-                        result.Add(new WindowTarget((nint)window.GetProperty("handle").GetInt64(),
+                        result.Add(new((nint)window.GetProperty("handle").GetInt64(),
                             window.GetProperty("process").GetString() ?? "",
                             window.GetProperty("title").GetString() ?? "",
                             bounds, Rectangle(window.GetProperty("client"))));
@@ -90,9 +93,12 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static PixelRect Rectangle(JsonElement value) => new(value.GetProperty("x").GetInt32(),
-            value.GetProperty("y").GetInt32(), value.GetProperty("width").GetInt32(),
-            value.GetProperty("height").GetInt32());
+        private static PixelRect Rectangle(JsonElement value)
+        {
+            return new(value.GetProperty("x").GetInt32(),
+                value.GetProperty("y").GetInt32(), value.GetProperty("width").GetInt32(),
+                value.GetProperty("height").GetInt32());
+        }
 
         private static void Close()
         {

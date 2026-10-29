@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
@@ -8,20 +9,20 @@ namespace RitsukageGif.Desktop
     internal sealed partial class AnimationEditorCanvas
     {
         private bool _dragging;
-        private bool _panning;
-        private Point _start;
-        private Point _last;
-        private Point _screenLast;
-        private IPointer? _pointer;
-        private AnimationEditorDraftState? _gestureState;
         private Vector _gesturePan;
         private Rect? _gestureSelection;
+        private AnimationEditorDraftState? _gestureState;
+        private Point _last;
+        private bool _panning;
+        private IPointer? _pointer;
+        private Point _screenLast;
+        private Point _start;
         public bool HasOverlay => _layers.Count > 0;
 
         public byte[] ExportOverlayPng()
         {
             if (_bitmap is null) throw new InvalidOperationException();
-            using var target = new RenderTargetBitmap(new PixelSize(_width, _height), new Vector(96, 96));
+            using var target = new RenderTargetBitmap(new(_width, _height), new(96, 96));
             using (var context = target.CreateDrawingContext())
                 foreach (var layer in _layers)
                 {
@@ -50,7 +51,7 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            if (!point.Properties.IsLeftButtonPressed && !point.Properties.IsMiddleButtonPressed) return;
+            if (point.Properties is { IsLeftButtonPressed: false, IsMiddleButtonPressed: false }) return;
             Focus();
             _panning = Tool == AnimationEditorTool.Pan || point.Properties.IsMiddleButtonPressed;
             _start = _last = ToImage(point.Position);
@@ -66,23 +67,25 @@ namespace RitsukageGif.Desktop
             if (!_panning)
             {
                 if (Tool is not (AnimationEditorTool.Selection or AnimationEditorTool.Select))
-                {
                     _gestureState = Snapshot();
-                }
 
-                if (Tool == AnimationEditorTool.Select)
+                switch (Tool)
                 {
-                    if (_resizeCorner < 0) _selected = _layers.LastOrDefault(layer => layer.Bounds.Contains(_start));
-                    _layerStartBounds = _selected?.Bounds ?? default;
-                    _layerChanged = false;
-                    SelectionChanged?.Invoke(this, EventArgs.Empty);
+                    case AnimationEditorTool.Select:
+                        if (_resizeCorner < 0)
+                            _selected = _layers.LastOrDefault(layer => layer.Bounds.Contains(_start));
+                        _layerStartBounds = _selected?.Bounds ?? default;
+                        _layerChanged = false;
+                        SelectionChanged?.Invoke(this, EventArgs.Empty);
+                        break;
+                    case AnimationEditorTool.Brush or AnimationEditorTool.Eraser:
+                        Stroke(_start, _start, Tool == AnimationEditorTool.Eraser);
+                        Upload();
+                        break;
+                    case AnimationEditorTool.Selection:
+                        Selection = null;
+                        break;
                 }
-                else if (Tool is AnimationEditorTool.Brush or AnimationEditorTool.Eraser)
-                {
-                    Stroke(_start, _start, Tool == AnimationEditorTool.Eraser);
-                    Upload();
-                }
-                else if (Tool == AnimationEditorTool.Selection) Selection = null;
             }
 
             InvalidateVisual();
@@ -101,23 +104,22 @@ namespace RitsukageGif.Desktop
             }
 
             if (_panning)
-            {
                 _pan += screen - _screenLast;
-            }
-            else if (Tool == AnimationEditorTool.Select)
-            {
-                UpdateLayerGesture(next, e.KeyModifiers);
-            }
-            else if (Tool is AnimationEditorTool.Brush or AnimationEditorTool.Eraser)
-            {
-                Stroke(_last, next, Tool == AnimationEditorTool.Eraser);
-                Upload();
-            }
-            else if (Tool == AnimationEditorTool.Selection)
-            {
-                Selection = Region(_start, next).Intersect(new Rect(0, 0, _width, _height));
-                SelectionChanged?.Invoke(this, EventArgs.Empty);
-            }
+            else
+                switch (Tool)
+                {
+                    case AnimationEditorTool.Select:
+                        UpdateLayerGesture(next, e.KeyModifiers);
+                        break;
+                    case AnimationEditorTool.Brush or AnimationEditorTool.Eraser:
+                        Stroke(_last, next, Tool == AnimationEditorTool.Eraser);
+                        Upload();
+                        break;
+                    case AnimationEditorTool.Selection:
+                        Selection = Region(_start, next).Intersect(new(0, 0, _width, _height));
+                        SelectionChanged?.Invoke(this, EventArgs.Empty);
+                        break;
+                }
 
             _last = next;
             _screenLast = screen;
@@ -130,35 +132,36 @@ namespace RitsukageGif.Desktop
             base.OnPointerReleased(e);
             if (!_dragging) return;
             if (!_panning)
-            {
-                if (Tool == AnimationEditorTool.Select && _layerChanged && _selected is { } layer)
+                switch (Tool)
                 {
-                    var finalBounds = layer.Bounds;
-                    layer.Bounds = _layerStartBounds;
-                    Remember();
-                    layer.Bounds = finalBounds;
-                    Changed();
-                }
-                else if (Tool is AnimationEditorTool.Line or AnimationEditorTool.Rectangle
-                         or AnimationEditorTool.Ellipse)
-                {
-                    if (Tool == AnimationEditorTool.Line ||
-                        Math.Abs(_start.X - _last.X) >= .01 && Math.Abs(_start.Y - _last.Y) >= .01)
+                    case AnimationEditorTool.Select when _layerChanged && _selected is { } layer:
+                        var finalBounds = layer.Bounds;
+                        layer.Bounds = _layerStartBounds;
+                        Remember();
+                        layer.Bounds = finalBounds;
+                        Changed();
+                        break;
+                    case AnimationEditorTool.Line or AnimationEditorTool.Arrow or AnimationEditorTool.Rectangle
+                        or AnimationEditorTool.Ellipse:
                     {
-                        RasterShape(_start, _last);
+                        if (Tool is AnimationEditorTool.Line or AnimationEditorTool.Arrow ||
+                            (Math.Abs(_start.X - _last.X) >= .01 && Math.Abs(_start.Y - _last.Y) >= .01))
+                        {
+                            RasterShape(_start, _last);
+                            Remember(_gestureState);
+                            HasRasterChanges = true;
+                            Upload();
+                            Changed();
+                        }
+
+                        break;
+                    }
+                    case AnimationEditorTool.Brush or AnimationEditorTool.Eraser:
                         Remember(_gestureState);
                         HasRasterChanges = true;
-                        Upload();
                         Changed();
-                    }
+                        break;
                 }
-                else if (Tool is AnimationEditorTool.Brush or AnimationEditorTool.Eraser)
-                {
-                    Remember(_gestureState);
-                    HasRasterChanges = true;
-                    Changed();
-                }
-            }
 
             _gestureState = null;
             _layerChanged = false;
@@ -219,7 +222,7 @@ namespace RitsukageGif.Desktop
             InvalidateVisual();
         }
 
-        protected override void OnLostFocus(Avalonia.Interactivity.RoutedEventArgs e)
+        protected override void OnLostFocus(RoutedEventArgs e)
         {
             base.OnLostFocus(e);
             CancelGesture();
@@ -228,29 +231,49 @@ namespace RitsukageGif.Desktop
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
-            if (e.Key == Key.Escape)
+            // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
+            switch (e.Key)
             {
-                CancelGesture();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Delete && !_dragging)
-            {
-                DeleteSelected();
-                e.Handled = true;
+                case Key.Escape:
+                    CancelGesture();
+                    e.Handled = true;
+                    break;
+                case Key.Delete when !_dragging:
+                    DeleteSelected();
+                    e.Handled = true;
+                    break;
             }
         }
 
-        private static Rect Region(Point a, Point b) => new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(a.X - b.X),
-            Math.Abs(a.Y - b.Y));
+        private static Rect Region(Point a, Point b)
+        {
+            return new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(a.X - b.X),
+                Math.Abs(a.Y - b.Y));
+        }
 
         private void DrawShape(DrawingContext context, Point start, Point end)
         {
             var brush = new SolidColorBrush(BrushColor);
             var pen = new Pen(brush, Math.Clamp(BrushSize, 1, 1024));
-            if (Tool == AnimationEditorTool.Line) context.DrawLine(pen, start, end);
-            else if (Tool == AnimationEditorTool.Rectangle)
-                context.DrawRectangle(Filled ? brush : null, pen, Region(start, end));
-            else context.DrawEllipse(Filled ? brush : null, pen, Region(start, end));
+            switch (Tool)
+            {
+                case AnimationEditorTool.Line or AnimationEditorTool.Arrow:
+                    context.DrawLine(pen, start, end);
+                    if (Tool == AnimationEditorTool.Arrow)
+                    {
+                        var (leftTip, rightTip) = ArrowTips(start, end);
+                        context.DrawLine(pen, end, leftTip);
+                        context.DrawLine(pen, end, rightTip);
+                    }
+
+                    break;
+                case AnimationEditorTool.Rectangle:
+                    context.DrawRectangle(Filled ? brush : null, pen, Region(start, end));
+                    break;
+                default:
+                    context.DrawEllipse(Filled ? brush : null, pen, Region(start, end));
+                    break;
+            }
         }
 
         private void Stroke(Point start, Point end, bool erase)
@@ -300,9 +323,16 @@ namespace RitsukageGif.Desktop
 
         private void RasterShape(Point start, Point end)
         {
-            if (Tool == AnimationEditorTool.Line)
+            if (Tool is AnimationEditorTool.Line or AnimationEditorTool.Arrow)
             {
                 Stroke(start, end, false);
+                if (Tool == AnimationEditorTool.Arrow)
+                {
+                    var (leftTip, rightTip) = ArrowTips(start, end);
+                    Stroke(end, leftTip, false);
+                    Stroke(end, rightTip, false);
+                }
+
                 return;
             }
 
@@ -322,7 +352,9 @@ namespace RitsukageGif.Desktop
                 var ry = region.Height / 2;
                 bool inside;
                 if (Tool == AnimationEditorTool.Rectangle)
+                {
                     inside = dx <= rx + half && dy <= ry + half && (Filled || dx >= rx - half || dy >= ry - half);
+                }
                 else
                 {
                     var outer = dx * dx / ((rx + half) * (rx + half)) + dy * dy / ((ry + half) * (ry + half)) <= 1;

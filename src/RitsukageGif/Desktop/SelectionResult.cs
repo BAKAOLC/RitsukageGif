@@ -1,9 +1,13 @@
 namespace RitsukageGif.Desktop
 {
-    internal sealed record SelectionResult(PixelRect Region, bool WindowSource, WindowTarget? Target)
+    internal sealed record SelectionResult(
+        PixelRect Region,
+        bool WindowSource,
+        WindowTarget? Target,
+        bool Cursor = false)
     {
         internal static SelectionResult? Create(PixelRect region, bool windowSource, WindowTarget? target,
-            bool sourceLocal = false)
+            bool sourceLocal = false, bool cursor = false)
         {
             if (windowSource && !sourceLocal)
             {
@@ -11,23 +15,23 @@ namespace RitsukageGif.Desktop
                 region = region.Intersect(target.Client);
             }
 
-            return region.IsEmpty ? null : new SelectionResult(region, windowSource, target);
+            return region.IsEmpty ? null : new SelectionResult(region, windowSource, target, cursor);
         }
 
         internal WindowPreset? CreatePreset()
         {
-            if (!WindowSource || Target is not { } target) return null;
-            return WindowPreset.ForWindow(target.Process, target.Title) with
+            if (!WindowSource || Target is null) return null;
+            return WindowPreset.ForWindow(Target.Process, Target.Title) with
             {
-                Source = CaptureSourceKind.Window, Follow = true, FixedHandle = target.Handle,
-                Area = Region == target.Client
+                Source = CaptureSourceKind.Window, Follow = true, FixedHandle = Target.Handle,
+                Area = Region == Target.Client
                     ? [new PresetLiteral(0d), new PresetLiteral(0d), new PresetPercent(100), new PresetPercent(100)]
                     :
                     [
-                        new PresetLiteral((double)(Region.X - target.Client.X)),
-                        new PresetLiteral((double)(Region.Y - target.Client.Y)),
-                        new PresetLiteral((double)Region.Width), new PresetLiteral((double)Region.Height)
-                    ]
+                        new PresetLiteral((double)(Region.X - Target.Client.X)),
+                        new PresetLiteral((double)(Region.Y - Target.Client.Y)),
+                        new PresetLiteral((double)Region.Width), new PresetLiteral((double)Region.Height),
+                    ],
             };
         }
     }

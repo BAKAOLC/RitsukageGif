@@ -17,9 +17,12 @@ namespace RitsukageGif.Desktop
                 (long)width * height * 4 != count || count > 512 * 1024 * 1024 ||
                 (long)x + width > int.MaxValue || (long)y + height > int.MaxValue)
                 throw Invalid();
-            return new CaptureFrameHeader(width, height, x, y, (int)count);
+            return new(width, height, x, y, (int)count);
         }
 
-        private static InvalidDataException Invalid() => new(UiText.Get("InvalidFrameBuffer"));
+        private static InvalidDataException Invalid()
+        {
+            return new(UiText.Get("InvalidFrameBuffer"));
+        }
     }
 }

@@ -14,7 +14,7 @@ namespace RitsukageGif.Desktop
             var outputX = (float)width / region.Width;
             var outputY = (float)height / region.Height;
             drawing.DrawBitmap(bitmap,
-                new SKRect((clipped.X - bounds.X) * scaleX, (clipped.Y - bounds.Y) * scaleY,
+                new((clipped.X - bounds.X) * scaleX, (clipped.Y - bounds.Y) * scaleY,
                     (clipped.Right - bounds.X) * scaleX, (clipped.Bottom - bounds.Y) * scaleY),
                 new SKRect((clipped.X - region.X) * outputX, (clipped.Y - region.Y) * outputY,
                     (clipped.Right - region.X) * outputX, (clipped.Bottom - region.Y) * outputY), paint);

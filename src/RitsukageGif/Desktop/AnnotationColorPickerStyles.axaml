@@ -1,0 +1,22 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="RitsukageGif.Desktop.AnnotationColorPickerStyles">
+  <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+  <Style Selector="ColorPicker /template/ DropDownButton">
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+  </Style>
+  <Style Selector="ColorPicker /template/ DropDownButton:not(:disabled)">
+    <Setter Property="Padding" Value="4" />
+  </Style>
+  <Style Selector="ColorPicker /template/ DropDownButton:disabled">
+    <Setter Property="Padding" Value="4" />
+  </Style>
+  <Style Selector="ColorPicker /template/ DropDownButton /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Width" Value="8" />
+    <Setter Property="Height" Value="8" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Margin" Value="2,0,0,0" />
+    <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+  </Style>
+</Styles>

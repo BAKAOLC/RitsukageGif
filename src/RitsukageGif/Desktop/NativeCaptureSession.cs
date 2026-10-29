@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
@@ -7,21 +8,21 @@ namespace RitsukageGif.Desktop
     internal sealed partial class NativeCaptureSession : IDisposable
     {
         private static readonly SemaphoreSlim SelectionLock = new(1, 1);
-        private static readonly object SharedLock = new();
+        private static readonly Lock SharedLock = new();
         private static NativeCaptureSession? _shared;
         private static long _sharedVersion;
+        private readonly bool _cursor, _window;
+        private readonly TaskCompletionSource _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly int _fps;
         private readonly object _gate = new();
         private readonly Process _process;
-        private readonly CancellationTokenSource _stop = new();
-        private readonly TaskCompletionSource _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly Task _reader, _errors;
+        private readonly CancellationTokenSource _stop = new();
+        private string _diagnostic = "";
+        private bool _disposed;
+        private Exception? _failure;
         private byte[]? _pixels;
         private int _width, _height, _x, _y;
-        private string _diagnostic = "";
-        private Exception? _failure;
-        private bool _disposed;
-        private readonly bool _cursor, _window;
-        private readonly int _fps;
 
         private NativeCaptureSession(string mode, bool cursor, int fps, PixelRect? monitor = null, nint window = 0)
         {
@@ -34,7 +35,7 @@ namespace RitsukageGif.Desktop
             var start = new ProcessStartInfo(executable)
             {
                 UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true,
-                RedirectStandardInput = true, CreateNoWindow = true
+                RedirectStandardInput = true, CreateNoWindow = true,
             };
             start.ArgumentList.Add(mode);
             Add("--fps", _fps);
@@ -94,19 +95,45 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public static NativeCaptureSession CreateScreen(PixelRect monitor, bool cursor, int fps) =>
-            new("screen", cursor, fps, monitor);
-
-        public static NativeCaptureSession CreateWindow(nint window, bool cursor, int fps = 60) =>
-            new("window", cursor, fps, window: window);
-
-        public static CaptureSourceFrame ReadShared(CancellationToken token = default)
+        public void Dispose()
         {
-            token.ThrowIfCancellationRequested();
-            NativeCaptureSession session;
-            lock (SharedLock)
-                session = _shared ?? throw new CaptureSourceLostException();
-            return session.Read(token);
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _disposed = true;
+            }
+
+            _stop.Cancel();
+            try
+            {
+                _process.StandardInput.Close();
+            }
+            catch (IOException)
+            {
+            }
+
+            try
+            {
+                if (!_process.HasExited) _process.Kill(true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (Win32Exception)
+            {
+            }
+
+            _ = FinishAsync();
+        }
+
+        public static NativeCaptureSession CreateScreen(PixelRect monitor, bool cursor, int fps)
+        {
+            return new("screen", cursor, fps, monitor);
+        }
+
+        public static NativeCaptureSession CreateWindow(nint window, bool cursor, int fps = 60)
+        {
+            return new("window", cursor, fps, window: window);
         }
 
         public static void UseSharedFrame(CaptureFrameConsumer consume, CancellationToken token = default)
@@ -151,7 +178,7 @@ namespace RitsukageGif.Desktop
                 token.ThrowIfCancellationRequested();
                 var frame = CurrentFrame();
                 consume(
-                    new CaptureFrameHeader(frame.Width, frame.Height, frame.OriginX, frame.OriginY,
+                    new(frame.Width, frame.Height, frame.OriginX, frame.OriginY,
                         frame.Pixels.Length), frame.Pixels);
             }
         }
@@ -183,7 +210,7 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_failure is not null) ExceptionDispatchInfo.Throw(_failure);
             if (_pixels is null) throw new CaptureSourceLostException();
-            return new CaptureSourceFrame(_width, _height, _pixels, _x, _y);
+            return new(_width, _height, _pixels, _x, _y);
         }
 
         private async Task ReadFramesAsync()
@@ -214,15 +241,13 @@ namespace RitsukageGif.Desktop
             catch (Exception error) when (error is IOException or InvalidDataException or OperationCanceledException
                                               or InvalidOperationException)
             {
-                if (!_stop.IsCancellationRequested)
+                try
                 {
-                    try
-                    {
+                    if (!_stop.IsCancellationRequested)
                         await _errors.WaitAsync(TimeSpan.FromMilliseconds(250));
-                    }
-                    catch (Exception waitError) when (waitError is TimeoutException or OperationCanceledException)
-                    {
-                    }
+                }
+                catch (Exception waitError) when (waitError is TimeoutException or OperationCanceledException)
+                {
                 }
 
                 if (_stop.IsCancellationRequested)
@@ -258,47 +283,16 @@ namespace RitsukageGif.Desktop
             string diagnostic;
             lock (_gate) diagnostic = _diagnostic;
             var code = diagnostic.Split([':', '\r', '\n'], 2)[0].Trim();
-            if (code == "source-lost" || code.Length == 0 && _first.Task.IsCompletedSuccessfully &&
-                error is EndOfStreamException)
+            if (code == "source-lost" || (code.Length == 0 && _first.Task.IsCompletedSuccessfully &&
+                                          error is EndOfStreamException))
                 return new CaptureSourceLostException(error);
             return new IOException(UiText.Get(code switch
             {
                 "permission-denied" => "CapturePermissionDenied", "cancelled" => "CaptureSourceCancelled",
                 "dependency-missing" => "CaptureDependencyMissing", "timeout" => "CaptureSourceTimeout",
                 "unsupported" => "CapturePlatformUnsupported",
-                _ => "CaptureFailed"
+                _ => "CaptureFailed",
             }), error);
-        }
-
-        public void Dispose()
-        {
-            lock (_gate)
-            {
-                if (_disposed) return;
-                _disposed = true;
-            }
-
-            _stop.Cancel();
-            try
-            {
-                _process.StandardInput.Close();
-            }
-            catch (IOException)
-            {
-            }
-
-            try
-            {
-                if (!_process.HasExited) _process.Kill(true);
-            }
-            catch (InvalidOperationException)
-            {
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-            }
-
-            _ = FinishAsync();
         }
 
         private async Task FinishAsync()

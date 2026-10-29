@@ -1,21 +1,17 @@
-﻿namespace RitsukageGif.Desktop
+using System.Diagnostics;
+
+namespace RitsukageGif.Desktop
 {
-    internal sealed class DesktopCapture : IFrameSource
+    internal sealed class DesktopCapture : IFrameSource, IColorFrameSource
     {
-        private WindowsDesktopCapture? _windows;
-        private PortableDesktopCapture? _portable;
         private readonly Func<DisplayTopology>? _displayProvider;
-        private DisplayTopology _topology;
-        private RecordingOptions _options;
         private readonly int _width, _height;
-        private long _nextRetry;
         private bool _disposed;
-
-        public static bool UsesSourceSelection => OperatingSystem.IsLinux() &&
-                                                  !string.IsNullOrEmpty(
-                                                      Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
-
-        public static PixelRect? SourceBounds => NativeCaptureSession.SourceBounds;
+        private long _nextRetry;
+        private RecordingOptions _options;
+        private PortableDesktopCapture? _portable;
+        private DisplayTopology _topology;
+        private WindowsDesktopCapture? _windows;
 
         public DesktopCapture(RecordingOptions options, IEnumerable<PixelRect>? monitors = null,
             int? outputWidth = null, int? outputHeight = null)
@@ -41,7 +37,49 @@
             _topology = topology;
         }
 
-        public byte[] Capture() => Capture(default);
+        public static bool UsesSourceSelection => OperatingSystem.IsLinux() &&
+                                                  !string.IsNullOrEmpty(
+                                                      Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
+
+        public static PixelRect? SourceBounds => NativeCaptureSession.SourceBounds;
+
+        public CapturedFrameSet CaptureFrames(CancellationToken token = default)
+        {
+            token.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (!OperatingSystem.IsWindows())
+            {
+                var pixels = Capture(token);
+                var color = new FrameColorInfo(false);
+                return new(new(_width, _height, _width * 4, CapturePixelFormat.Bgra8Srgb, pixels, color,
+                        CaptureAlphaMode.Opaque, -1, [new(new(0, 0, _width, _height), color)]), null,
+                    Stopwatch.GetTimestamp());
+            }
+
+            var topology = _displayProvider?.Invoke() ?? _topology;
+            if (!ReferenceEquals(topology, _topology))
+            {
+                ReleaseSource();
+                _topology = topology;
+            }
+
+            if (!topology.Covers(_options.Region)) throw new CaptureSourceLostException();
+            _windows ??= new(_options, topology.Monitors, _width, _height);
+            try
+            {
+                return _windows.CaptureFrames(token);
+            }
+            catch (CaptureSourceLostException)
+            {
+                ReleaseSource();
+                throw;
+            }
+        }
+
+        public byte[] Capture()
+        {
+            return Capture(CancellationToken.None);
+        }
 
         public byte[] Capture(CancellationToken token)
         {
@@ -56,20 +94,20 @@
                 _nextRetry = 0;
             }
 
-            if (!UsesSourceSelection && !topology.Covers(_options.Region)) throw new CaptureSourceLostException();
-            if (Environment.TickCount64 < _nextRetry) throw new CaptureSourceLostException();
+            if ((!UsesSourceSelection && !topology.Covers(_options.Region)) || Environment.TickCount64 < _nextRetry)
+                throw new CaptureSourceLostException();
             try
             {
                 if (_windows is null && _portable is null)
                 {
                     if (OperatingSystem.IsWindows())
-                        _windows = new WindowsDesktopCapture(_options, topology.Monitors, _width, _height);
+                        _windows = new(_options, topology.Monitors, _width, _height);
                     else
-                        _portable = new PortableDesktopCapture(_options, topology.Monitors.ToArray(), _width, _height);
+                        _portable = new(_options, [.. topology.Monitors], _width, _height);
                 }
 
                 token.ThrowIfCancellationRequested();
-                var pixels = _windows?.Capture() ?? _portable!.Capture(token);
+                var pixels = _windows?.Capture(token) ?? _portable!.Capture(token);
                 token.ThrowIfCancellationRequested();
                 return pixels;
             }
@@ -80,6 +118,13 @@
                 _nextRetry = Environment.TickCount64 + 500;
                 throw;
             }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            ReleaseSource();
         }
 
         public void Move(PixelRect region)
@@ -103,24 +148,21 @@
         }
 
         public static Task<NativeCaptureSelection> BeginSourceSelectionAsync(bool window = false,
-            CancellationToken token = default, bool cursor = true, int fps = 60) =>
-            NativeCaptureSession.BeginSelectionAsync(window, token, cursor, fps);
+            bool cursor = true, int fps = 60, CancellationToken token = default)
+        {
+            return NativeCaptureSession.BeginSelectionAsync(window, token, cursor, fps);
+        }
 
         public static Task<CaptureSourceFrame> PrepareSourceAsync(bool window = false,
-            CancellationToken token = default, bool cursor = true, int fps = 60) =>
-            NativeCaptureSession.PrepareAsync(window, token, cursor, fps);
+            bool cursor = true, int fps = 60, CancellationToken token = default)
+        {
+            return NativeCaptureSession.PrepareAsync(window, token, cursor, fps);
+        }
 
         public static void CloseSharedSource()
         {
             NativeCaptureSession.CloseShared();
             NativeCaptureLease.CloseAll();
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            ReleaseSource();
         }
     }
 }

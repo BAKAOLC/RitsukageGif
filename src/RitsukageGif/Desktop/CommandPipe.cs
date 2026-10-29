@@ -10,6 +10,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class CommandPipe : IDisposable
     {
+        private static readonly ILogger PipeLogger = LogHub.GetLogger("Desktop.IPC");
         private readonly CancellationTokenSource _cancel = new();
         private readonly ConcurrentDictionary<Task, byte> _clients = new();
         private readonly Task _server;
@@ -19,11 +20,7 @@ namespace RitsukageGif.Desktop
             _server = ServeAsync(execute, name ?? Name, _cancel.Token);
         }
 
-        internal static string Name { get; } = "RitsukageGif-" + Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes(Environment.UserName + ":" + (OperatingSystem.IsWindows()
-                ? Process.GetCurrentProcess().SessionId.ToString()
-                : Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ??
-                  Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)))))[..24];
+        private static string Name { get; } = CreateName();
 
         internal static string MutexName => (OperatingSystem.IsWindows() ? "Local\\" : "") + Name;
 
@@ -32,6 +29,22 @@ namespace RitsukageGif.Desktop
             _cancel.Cancel();
             // All accept/read operations observe cancellation; no UI-thread blocking join.
             _ = Task.WhenAll(_clients.Keys.Append(_server)).ContinueWith(_ => _cancel.Dispose(), TaskScheduler.Default);
+        }
+
+        private static string CreateName()
+        {
+            var identity = Environment.UserName + ":" + (OperatingSystem.IsWindows()
+                ? Process.GetCurrentProcess().SessionId.ToString()
+                : Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR") ??
+                  Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+            if (ApplicationStorage.IsCustomDirectory)
+            {
+                var directory = Path.TrimEndingDirectorySeparator(ApplicationStorage.DataDirectory);
+                if (OperatingSystem.IsWindows()) directory = directory.ToUpperInvariant();
+                identity += ":" + directory;
+            }
+
+            return "RitsukageGif-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity)))[..24];
         }
 
         private async Task ServeAsync(Func<string[], Task<CommandReply>> execute, string name, CancellationToken token)
@@ -50,7 +63,7 @@ namespace RitsukageGif.Desktop
                     }
                     catch
                     {
-                        pipe.Dispose();
+                        await pipe.DisposeAsync();
                         throw;
                     }
 
@@ -87,7 +100,6 @@ namespace RitsukageGif.Desktop
             CancellationToken token)
         {
             await using (pipe)
-            {
                 try
                 {
                     using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -100,8 +112,9 @@ namespace RitsukageGif.Desktop
                 }
                 catch (Exception ex) when (ex is IOException or OperationCanceledException or JsonException)
                 {
+                    PipeLogger.ZLogDebug(ex,
+                        $"IPC client disconnected or supplied an invalid request. ServerStopping={token.IsCancellationRequested}");
                 }
-            }
         }
 
         public static async Task<CommandReply> SendAsync(string[] args, CancellationToken token, string? name = null)
@@ -109,7 +122,7 @@ namespace RitsukageGif.Desktop
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             timeout.CancelAfter(TimeSpan.FromSeconds(10));
             token = timeout.Token;
-            using var pipe = new NamedPipeClientStream(".", name ?? Name, PipeDirection.InOut,
+            await using var pipe = new NamedPipeClientStream(".", name ?? Name, PipeDirection.InOut,
                 PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
             await pipe.ConnectAsync(5000, token);
             if (OperatingSystem.IsWindows() && args is ["show"])

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
@@ -11,20 +10,22 @@ namespace RitsukageGif.Desktop
 {
     internal static class MarkdownContent
     {
-        public static StackPanel Render(string source) => Blocks(Markdown.Parse(source));
+        public static StackPanel Render(string source)
+        {
+            return Blocks(Markdown.Parse(source));
+        }
 
         private static StackPanel Blocks(ContainerBlock blocks)
         {
             var panel = new StackPanel { Spacing = 9 };
             foreach (var block in blocks)
-            {
                 switch (block)
                 {
                     case HeadingBlock heading:
                         var title = Text(heading.Inline);
                         title.FontSize = heading.Level switch { 1 => 28, 2 => 21, _ => 16 };
                         title.FontWeight = FontWeight.SemiBold;
-                        title.Margin = new Thickness(0, heading.Level == 1 ? 0 : 14, 0, 3);
+                        title.Margin = new(0, heading.Level == 1 ? 0 : 14, 0, 3);
                         panel.Children.Add(title);
                         break;
                     case ParagraphBlock paragraph: panel.Children.Add(Text(paragraph.Inline)); break;
@@ -32,7 +33,7 @@ namespace RitsukageGif.Desktop
                         var index = 1;
                         foreach (var item in list.OfType<ListItemBlock>())
                         {
-                            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("24,*") };
+                            var row = new Grid { ColumnDefinitions = new("24,*") };
                             row.Children.Add(new TextBlock
                                 { Text = list.IsOrdered ? $"{index++}." : "•", FontSize = 14 });
                             var body = Blocks(item);
@@ -45,27 +46,26 @@ namespace RitsukageGif.Desktop
                     case CodeBlock code:
                         panel.Children.Add(new Border
                         {
-                            Background = AppTheme.SurfaceTint, CornerRadius = new CornerRadius(6),
-                            Padding = new Thickness(12),
+                            Background = AppTheme.SurfaceTint, CornerRadius = new(6),
+                            Padding = new(12),
                             Child = new SelectableTextBlock
                             {
-                                Text = code.Lines.ToString(), FontFamily = new FontFamily("Consolas"),
-                                TextWrapping = TextWrapping.Wrap
-                            }
+                                Text = code.Lines.ToString(), FontFamily = new("Consolas"),
+                                TextWrapping = TextWrapping.Wrap,
+                            },
                         });
                         break;
                     case QuoteBlock quote:
                         panel.Children.Add(new Border
                         {
-                            BorderBrush = AppTheme.Accent, BorderThickness = new Thickness(3, 0, 0, 0),
-                            Padding = new Thickness(12, 4), Child = Blocks(quote)
+                            BorderBrush = AppTheme.Accent, BorderThickness = new(3, 0, 0, 0),
+                            Padding = new(12, 4), Child = Blocks(quote),
                         });
                         break;
                     case ThematicBreakBlock:
                         panel.Children.Add(new Border
-                            { Height = 1, Background = AppTheme.Outline, Margin = new Thickness(0, 8) }); break;
+                            { Height = 1, Background = AppTheme.Outline, Margin = new(0, 8) }); break;
                 }
-            }
 
             return panel;
         }
@@ -80,13 +80,12 @@ namespace RitsukageGif.Desktop
         private static void AddInlines(InlineCollection target, ContainerInline source)
         {
             foreach (var inline in source)
-            {
                 switch (inline)
                 {
                     case LiteralInline literal: target.Add(new Run(literal.Content.ToString())); break;
                     case CodeInline code:
                         target.Add(new Run(code.Content)
-                            { FontFamily = new FontFamily("Consolas"), Background = AppTheme.SurfaceTint }); break;
+                            { FontFamily = new("Consolas"), Background = AppTheme.SurfaceTint }); break;
                     case LineBreakInline line: target.Add(line.IsHard ? new LineBreak() : new Run(" ")); break;
                     case EmphasisInline emphasis:
                         var span = new Span();
@@ -95,12 +94,11 @@ namespace RitsukageGif.Desktop
                         AddInlines(span.Inlines, emphasis);
                         target.Add(span);
                         break;
-                    case LinkInline link when !link.IsImage:
+                    case LinkInline { IsImage: false } link:
                         target.Add(new InlineUIContainer(Link(link)));
                         break;
                     case ContainerInline container: AddInlines(target, container); break;
                 }
-            }
         }
 
         private static Button Link(LinkInline link)
@@ -108,8 +106,8 @@ namespace RitsukageGif.Desktop
             var label = Text(link);
             var button = new Button
             {
-                Content = label, Padding = new Thickness(0), Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0), MinHeight = 0
+                Content = label, Padding = new(0), Background = Brushes.Transparent,
+                BorderThickness = new(0), MinHeight = 0,
             };
             label.Foreground = AppTheme.Accent;
             label.IsHitTestVisible = false;

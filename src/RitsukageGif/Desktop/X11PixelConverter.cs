@@ -11,7 +11,7 @@ namespace RitsukageGif.Desktop
             if (width <= 0 || height <= 0 || width > 32768 || height > 32768 ||
                 bitsPerPixel is not (8 or 16 or 24 or 32) || stride < (long)width * pixelBytes ||
                 (long)stride * height > source.Length || (long)width * height * 4 > 512L * 1024 * 1024 ||
-                red == 0 || green == 0 || blue == 0 || ((red | green | blue) >> bitsPerPixel) != 0 ||
+                red == 0 || green == 0 || blue == 0 || (red | green | blue) >> bitsPerPixel != 0 ||
                 (red & green) != 0 || (red & blue) != 0 || (green & blue) != 0)
                 throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
             var redShift = BitOperations.TrailingZeroCount(red);
@@ -47,10 +47,19 @@ namespace RitsukageGif.Desktop
             return pixels;
         }
 
-        private static byte Channel(uint value, ulong mask, int shift) =>
-            (byte)(((value & mask) >> shift) * 255 / (mask >> shift));
+        private static byte Channel(uint value, ulong mask, int shift)
+        {
+            return (byte)(((value & mask) >> shift) * 255 / (mask >> shift));
+        }
 
-        private static byte Unpremultiply(byte value, byte alpha) => alpha == 0 ? (byte)0 :
-            alpha == 255 ? value : (byte)Math.Min(255, (value * 255 + alpha / 2) / alpha);
+        private static byte Unpremultiply(byte value, byte alpha)
+        {
+            return alpha switch
+            {
+                0 => 0,
+                255 => value,
+                _ => (byte)Math.Min(255, (value * 255 + alpha / 2) / alpha),
+            };
+        }
     }
 }

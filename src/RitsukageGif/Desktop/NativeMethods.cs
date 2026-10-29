@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
         internal static partial int GdiFlush();
 
         [LibraryImport("user32.dll")]
-        internal static partial int GetCursorPos(out Point point);
+        private static partial int GetCursorPos(out Point point);
 
         [LibraryImport("user32.dll")]
         internal static partial int GetCursorInfo(ref CursorInfo info);
@@ -95,21 +95,7 @@ namespace RitsukageGif.Desktop
         public static PixelPoint Mouse()
         {
             if (GetCursorPos(out var point) == 0) throw new InvalidOperationException(UiText.Get("CursorFailed"));
-            return new PixelPoint(point.X, point.Y);
-        }
-
-        public static List<PixelRect> VisibleWindows()
-        {
-            var result = new List<PixelRect>();
-            for (var hwnd = GetTopWindow(0); hwnd != 0; hwnd = GetWindow(hwnd, 2))
-            {
-                if (IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0) continue;
-                if (DwmGetWindowAttribute(hwnd, 9, out var rect, 16) != 0 &&
-                    GetWindowRect(hwnd, out rect) == 0) continue;
-                if (!rect.Pixels.IsEmpty) result.Add(rect.Pixels);
-            }
-
-            return result;
+            return new(point.X, point.Y);
         }
 
         [StructLayout(LayoutKind.Sequential)]

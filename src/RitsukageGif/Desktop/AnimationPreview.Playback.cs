@@ -9,8 +9,8 @@ namespace RitsukageGif.Desktop
             private const long CacheBytes = 16L * 1024 * 1024;
             private const int CacheFrames = 256;
             private readonly CancellationTokenSource _cancel = new();
-            private readonly Task _worker;
             private readonly CancellationToken _token;
+            private readonly Task _worker;
             private int _disposed;
 
             public Playback(string path)
@@ -24,6 +24,17 @@ namespace RitsukageGif.Desktop
             public Channel<PreviewFrame> Frames { get; } = Channel.CreateBounded<PreviewFrame>(
                 new BoundedChannelOptions(2)
                     { SingleReader = false, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                _cancel.Cancel();
+                _ = _worker.ContinueWith(_ =>
+                {
+                    while (Frames.Reader.TryRead(out var frame)) frame.Dispose();
+                    _cancel.Dispose();
+                }, TaskScheduler.Default);
+            }
 
             private async Task DecodeAsync(string path)
             {
@@ -47,16 +58,16 @@ namespace RitsukageGif.Desktop
                         var canCache = stamp.HasValue;
                         long bytes = 0;
                         var count = 0;
-                        foreach (var frame in PreviewDecoder.Read(path, _token))
+                        foreach (var frame in PreviewDecoder.Read(path, _token, OperatingSystem.IsWindows()))
                         {
                             try
                             {
                                 if (canCache)
                                 {
-                                    if (cached.Count < CacheFrames && bytes + frame.Pixels.Length <= CacheBytes)
+                                    if (cached.Count < CacheFrames && bytes + frame.StorageBytes <= CacheBytes)
                                     {
                                         cached.Add(frame.Retain());
-                                        bytes += frame.Pixels.Length;
+                                        bytes += frame.StorageBytes;
                                     }
                                     else
                                     {
@@ -96,6 +107,8 @@ namespace RitsukageGif.Desktop
                     ClearCache();
                 }
 
+                return;
+
                 void ClearCache()
                 {
                     foreach (var frame in cached) frame.Dispose();
@@ -120,17 +133,6 @@ namespace RitsukageGif.Desktop
             {
                 var file = new FileInfo(path);
                 return file.Exists ? (file.Length, file.LastWriteTimeUtc) : null;
-            }
-
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-                _cancel.Cancel();
-                _ = _worker.ContinueWith(_ =>
-                {
-                    while (Frames.Reader.TryRead(out var frame)) frame.Dispose();
-                    _cancel.Dispose();
-                }, TaskScheduler.Default);
             }
         }
     }

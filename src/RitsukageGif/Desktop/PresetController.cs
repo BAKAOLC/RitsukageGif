@@ -8,13 +8,17 @@ namespace RitsukageGif.Desktop
         Action<string> error,
         Func<IReadOnlyList<string>>? outputs = null,
         Func<IReadOnlyList<PresetRecordingStreamStatus>>? streams = null,
-        IInputChannelReader? inputs = null) : IDisposable
+        IInputChannelReader? inputs = null,
+        IStaticCaptureService? staticCaptureService = null,
+        IVideoRecordingService? videoService = null,
+        ITextRecognitionService? textRecognitionService = null,
+        IBarcodeRecognitionService? barcodeRecognitionService = null,
+        IPrivacyDetectionService? privacyDetectionService = null) : IDisposable
     {
         private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(50) };
         private PresetControllerRun? _active;
         public WindowTarget? Target => _active?.Target;
         public WindowPreset? ActivePreset => _active?.Preset;
-        public PixelRect? Region => _active?.Region;
         public string? Name => ActivePreset?.Name;
         public string? State => _active is { } owner ? owner.Script is not null ? "script" : owner.Machine.State : null;
 
@@ -25,23 +29,6 @@ namespace RitsukageGif.Desktop
         public PresetRuntime? Runtime => _active is { } owner ? owner.Script?.Runtime ?? owner.Machine.Runtime : null;
         public PresetDebugger? Debugger => _active?.Debugger;
         public string? ParameterSession => _active?.ParameterSession;
-
-        public void NotifyRecordingChanged() => _active?.Script?.NotifyParameterWait();
-
-        public void UpdateParameters(string session, IReadOnlyDictionary<string, object?> changes)
-        {
-            if (_active is not { } owner || owner.ParameterSession != session || !IsCurrent(owner) ||
-                owner.Preset.Program is null || owner.ScriptTask?.IsCompleted == true)
-                throw new InvalidOperationException(UiText.Get("CommandNotReady"));
-            owner.Parameters.Update(changes);
-        }
-
-        public void Signal(string name)
-        {
-            if (_active is not { } owner) return;
-            owner.Signals.Add(name);
-            owner.Script?.Signal(name);
-        }
 
         public void Dispose()
         {
@@ -65,11 +52,41 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        public void NotifyRecordingChanged()
+        {
+            _active?.Script?.NotifyParameterWait();
+        }
+
+        public void PrepareVideoRecording()
+        {
+            _active?.Script?.PrepareVideoRecording();
+        }
+
+        public void CompleteVideoRecording(WindowPreset? preset)
+        {
+            if (_active?.Preset == preset) _active?.Script?.CompleteVideoRecording();
+        }
+
+        public void UpdateParameters(string session, IReadOnlyDictionary<string, object?> changes)
+        {
+            if (_active is not { } owner || owner.ParameterSession != session || !IsCurrent(owner) ||
+                owner.Preset.Program is null || owner.ScriptTask?.IsCompleted == true)
+                throw new InvalidOperationException(UiText.Get("CommandNotReady"));
+            owner.Parameters.Update(changes);
+        }
+
+        public void Signal(string name)
+        {
+            if (_active is not { } owner) return;
+            owner.Signals.Add(name);
+            owner.Script?.Signal(name);
+        }
+
         public void Activate(WindowPreset preset, PresetDebugger? debugger = null,
             IReadOnlyDictionary<string, object?>? parameters = null)
         {
             if (DesktopCapture.UsesSourceSelection && (preset.Layout is { } layout
-                    ? layout.Layers.Any(layer => !layer.Absolute && layer.Media is null)
+                    ? layout.Layers.Any(layer => layer is { Absolute: false, Media: null })
                     : !preset.Absolute))
                 throw new PlatformNotSupportedException(UiText.Get("PlatformWindowMatchingUnavailable"));
             Dispose();
@@ -84,8 +101,10 @@ namespace RitsukageGif.Desktop
             Tick(null, EventArgs.Empty);
         }
 
-        private bool IsCurrent(PresetControllerRun owner) =>
-            ReferenceEquals(owner, _active) && !owner.Token.IsCancellationRequested;
+        private bool IsCurrent(PresetControllerRun owner)
+        {
+            return ReferenceEquals(owner, _active) && !owner.Token.IsCancellationRequested;
+        }
 
         private void EnsureCurrent(PresetControllerRun owner)
         {
@@ -130,7 +149,7 @@ namespace RitsukageGif.Desktop
                 ? null
                 : new PresetWindowState(observed.Handle, observed.Title,
                     owner.Preset.ClientArea ? observed.Client : observed.Bounds);
-            return new PresetContext(state, status.Recording, status.Busy, 0, status.RecordingElapsed,
+            return new(state, status.Recording, status.Busy, 0, status.RecordingElapsed,
                 owner.Preset.Constants, Outputs: outputs?.Invoke().ToArray(), Streams: streams?.Invoke());
         }
 
@@ -172,7 +191,6 @@ namespace RitsukageGif.Desktop
                 else if (preset.Absolute) owner.Region = preset.Resolve(default, default, machine.Values);
                 else if (current is not null &&
                          (owner.Region is null || preset.Follow || current.Handle != old?.Handle))
-                {
                     try
                     {
                         owner.Region = preset.Resolve(current.Bounds, current.Client, machine.Values);
@@ -181,9 +199,8 @@ namespace RitsukageGif.Desktop
                     {
                         owner.Region = null;
                     }
-                }
 
-                if (owner.Region is not null) await ExecuteAsync(owner, new PresetAction("follow"));
+                if (owner.Region is not null) await ExecuteAsync(owner, new("follow"));
                 EnsureCurrent(owner);
                 if (old is not null && current?.Handle != old.Handle && WindowLocator.IsWindow(old.Handle) == 0)
                     Signal("closed");
@@ -200,7 +217,11 @@ namespace RitsukageGif.Desktop
                             async action => await Dispatcher.UIThread.InvokeAsync(() => ExecuteAsync(owner, action)),
                             owner.Debugger, isCurrent: () => IsCurrent(owner),
                             mediaService: new MediaProcessingService(), parameters: owner.Parameters,
-                            imageService: new ImageCompositionService(), inputReader: inputs);
+                            imageService: new ImageCompositionService(), inputReader: inputs,
+                            staticCaptureService: staticCaptureService, videoService: videoService,
+                            textRecognitionService: textRecognitionService,
+                            barcodeRecognitionService: barcodeRecognitionService,
+                            privacyService: privacyDetectionService);
                         owner.Script = session;
                         owner.Acquire();
                         owner.ScriptTask = RunScriptAsync(owner, session);
@@ -237,7 +258,7 @@ namespace RitsukageGif.Desktop
                     if (!IsCurrent(owner)) return;
                     error(ex.Message);
                     if (!IsCurrent(owner)) return;
-                    await ExecuteAsync(owner, new PresetAction("cancel"));
+                    await ExecuteAsync(owner, new("cancel"));
                 }
                 catch (Exception)
                 {

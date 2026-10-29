@@ -36,7 +36,7 @@ namespace RitsukageGif.Desktop
                 var brush = token.Kind switch
                 {
                     "keyword" => Brushes.RoyalBlue, "string" => Brushes.Brown, "comment" => Brushes.SeaGreen,
-                    "number" => Brushes.DarkViolet, "function" => Brushes.SaddleBrown, _ => Brushes.DarkSlateGray
+                    "number" => Brushes.DarkViolet, "function" => Brushes.SaddleBrown, _ => Brushes.DarkSlateGray,
                 };
                 ChangeLinePart(Math.Max(line.Offset, token.Offset),
                     Math.Min(line.EndOffset, token.Offset + token.Length),

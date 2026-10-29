@@ -5,20 +5,15 @@ namespace RitsukageGif.Desktop
 {
     internal sealed unsafe class CaptureFrameSignal : IDisposable
     {
-        private sealed record Subscription(CaptureFrameSignal Signal, bool Closed);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Handler
-        {
-            public nint Vtable, Target;
-            public int References;
-            public Guid Interface;
-        }
-
         private static readonly nint HandlerVtable = CreateVtable();
         private readonly AutoResetEvent _arrived = new(false);
         private int _closed;
         public bool IsClosed => Volatile.Read(ref _closed) != 0;
+
+        public void Dispose()
+        {
+            _arrived.Dispose();
+        }
 
         public nint CreateHandler(bool closed)
         {
@@ -38,7 +33,7 @@ namespace RitsukageGif.Desktop
             handler->Target = GCHandle.ToIntPtr(target);
             handler->References = 1;
             handler->Interface = closed
-                ? new Guid("e9c610c0-a68c-5bd9-8021-8589346eeee2")
+                ? new("e9c610c0-a68c-5bd9-8021-8589346eeee2")
                 : new Guid("51a947f7-79cf-5a3e-a3a5-1289cfa6dfe8");
             return (nint)handler;
         }
@@ -70,8 +65,6 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public void Dispose() => _arrived.Dispose();
-
         private static nint CreateVtable()
         {
             var table = (nint*)RuntimeHelpers.AllocateTypeAssociatedMemory(typeof(CaptureFrameSignal),
@@ -97,7 +90,10 @@ namespace RitsukageGif.Desktop
         }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-        private static uint AddReference(Handler* handler) => (uint)Interlocked.Increment(ref handler->References);
+        private static uint AddReference(Handler* handler)
+        {
+            return (uint)Interlocked.Increment(ref handler->References);
+        }
 
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
         private static uint ReleaseReference(Handler* handler)
@@ -115,6 +111,16 @@ namespace RitsukageGif.Desktop
             var subscription = (Subscription)GCHandle.FromIntPtr(handler->Target).Target!;
             subscription.Signal.Notify(subscription.Closed);
             return 0;
+        }
+
+        private sealed record Subscription(CaptureFrameSignal Signal, bool Closed);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Handler
+        {
+            public nint Vtable, Target;
+            public int References;
+            public Guid Interface;
         }
     }
 }

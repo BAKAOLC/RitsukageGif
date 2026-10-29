@@ -5,25 +5,31 @@ namespace RitsukageGif.Desktop
     internal sealed partial class AnimationEditorCanvas
     {
         private const long HistoryBudget = 64L * 1024 * 1024;
-        private readonly List<AnimationEditorDraftState> _undo = [];
-        private readonly List<AnimationEditorDraftState> _redo = [];
         private readonly HashSet<Bitmap> _ownedImages = [];
+        private readonly List<AnimationEditorDraftState> _redo = [];
+        private readonly List<AnimationEditorDraftState> _undo = [];
         public bool HasRasterChanges { get; private set; }
         public bool CanUndoDraft => _undo.Count > 0;
         public bool CanRedoDraft => _redo.Count > 0;
 
-        private static AnimationEditorLayer CloneLayer(AnimationEditorLayer layer) => new()
+        private static AnimationEditorLayer CloneLayer(AnimationEditorLayer layer)
         {
-            Text = layer.Text, FontSize = layer.FontSize, Formatted = layer.Formatted,
-            FontFamily = layer.FontFamily, Bold = layer.Bold, Italic = layer.Italic, Color = layer.Color,
-            Image = layer.Image, Bounds = layer.Bounds, Opacity = layer.Opacity
-        };
+            return new()
+            {
+                Text = layer.Text, FontSize = layer.FontSize, Formatted = layer.Formatted,
+                FontFamily = layer.FontFamily, Bold = layer.Bold, Italic = layer.Italic, Color = layer.Color,
+                Image = layer.Image, Bounds = layer.Bounds, Opacity = layer.Opacity,
+            };
+        }
 
-        private AnimationEditorDraftState Snapshot() => new()
+        private AnimationEditorDraftState Snapshot()
         {
-            Pixels = _pixels!.ToArray(), Layers = _layers.Select(CloneLayer).ToList(),
-            Changed = _changed, RasterChanged = HasRasterChanges
-        };
+            return new()
+            {
+                Pixels = [.. _pixels!], Layers = [.. _layers.Select(CloneLayer)],
+                Changed = _changed, RasterChanged = HasRasterChanges,
+            };
+        }
 
         private void Remember()
         {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
@@ -70,7 +71,7 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception exception)
             {
-                System.Diagnostics.Trace.TraceError("Background loading failed: {0}", exception);
+                Trace.TraceError("Background loading failed: {0}", exception);
             }
             finally
             {
@@ -86,14 +87,14 @@ namespace RitsukageGif.Desktop
         private static Bitmap LoadOriginalBackground()
         {
             using var stream = AssetLoader.Open(new("avares://RitsukageGif/Background.png"));
-            return new Bitmap(stream);
+            return new(stream);
         }
 
         private static Bitmap DecodeBackground(string path)
         {
             try
             {
-                return new Bitmap(path);
+                return new(path);
             }
             catch (ArgumentException)
             {
@@ -102,7 +103,7 @@ namespace RitsukageGif.Desktop
                 using var converted = new MemoryStream();
                 decoded.Write(converted, MagickFormat.Png);
                 converted.Position = 0;
-                return new Bitmap(converted);
+                return new(converted);
             }
         }
 

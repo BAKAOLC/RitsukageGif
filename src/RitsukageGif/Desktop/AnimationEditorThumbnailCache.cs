@@ -1,67 +1,50 @@
 using System.Buffers.Binary;
 using System.Runtime.InteropServices;
-using Avalonia;
+using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using ImageMagick;
-using Avalonia.Media.Imaging;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed class AnimationEditorThumbnailCache : IDisposable
     {
         private const int Capacity = 256;
-        private readonly object _sync = new();
         private const int PendingCapacity = 128;
-        private readonly List<AnimationEditorThumbnailEntry> _pending = [];
-        private int _workers;
         private readonly Dictionary<string, AnimationEditorThumbnailEntry> _entries = new(StringComparer.Ordinal);
-        private long _stamp;
+        private readonly List<AnimationEditorThumbnailEntry> _pending = [];
+        private readonly Lock _sync = new();
         private bool _disposed;
-        internal int DecodeCount { get; private set; }
+        private long _stamp;
+        private int _workers;
 
-        internal int Count
+        public void Dispose()
         {
-            get
+            lock (_sync)
             {
-                lock (_sync) return _entries.Count;
-            }
-        }
-
-        internal int PendingCount
-        {
-            get
-            {
-                lock (_sync) return _pending.Count;
-            }
-        }
-
-        internal int WorkerCount
-        {
-            get
-            {
-                lock (_sync) return _workers;
+                _disposed = true;
+                Clear();
             }
         }
 
         public bool TryAcquire(string path, out AnimationEditorThumbnailLease? lease)
         {
             lock (_sync)
-            {
                 if (!_disposed && _entries.TryGetValue(path, out var entry) && entry.Bitmap is { } bitmap)
                 {
                     entry.Leases++;
                     entry.Stamp = ++_stamp;
-                    lease = new AnimationEditorThumbnailLease(bitmap, () => Release(entry));
+                    lease = new(bitmap, () => Release(entry));
                     return true;
                 }
-            }
 
             lease = null;
             return false;
         }
 
-        public Task<AnimationEditorThumbnailLease?> AcquireAsync(string path, CancellationToken token = default) =>
-            AcquireAsync(path, false, token);
+        public Task<AnimationEditorThumbnailLease?> AcquireAsync(string path, CancellationToken token = default)
+        {
+            return AcquireAsync(path, false, token);
+        }
 
         private async Task<AnimationEditorThumbnailLease?> AcquireAsync(string path, bool prefetch,
             CancellationToken token)
@@ -80,13 +63,13 @@ namespace RitsukageGif.Desktop
                         RetirePending(obsolete);
                     }
 
-                    entry = new AnimationEditorThumbnailEntry { Path = path, Leases = 1, PrefetchOnly = prefetch };
+                    entry = new() { Path = path, Leases = 1, PrefetchOnly = prefetch };
                     _entries.Add(path, entry);
                     _pending.Add(entry);
                     if (_workers < 2)
                     {
                         _workers++;
-                        _ = Task.Run(DecodePending);
+                        _ = Task.Run(DecodePending, CancellationToken.None);
                     }
                 }
                 else
@@ -110,13 +93,13 @@ namespace RitsukageGif.Desktop
                 }
             }
 
-            using var registration = token.Register(ReleaseOnce);
+            await using var registration = token.Register(ReleaseOnce);
             try
             {
                 var bitmap = await entry.Loading.WaitAsync(token).ConfigureAwait(false);
                 // Stop cancellation callbacks before handing ownership of the bitmap to the caller.
                 // ReSharper disable once DisposeOnUsingVariable
-                registration.Dispose();
+                await registration.DisposeAsync().ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
                 if (bitmap is null)
                 {
@@ -124,7 +107,7 @@ namespace RitsukageGif.Desktop
                     return null;
                 }
 
-                return new AnimationEditorThumbnailLease(bitmap, ReleaseOnce);
+                return new(bitmap, ReleaseOnce);
             }
             catch
             {
@@ -189,7 +172,6 @@ namespace RitsukageGif.Desktop
 
                 lock (_sync)
                 {
-                    if (bitmap is not null) DecodeCount++;
                     entry.Bitmap = bitmap;
                     if (bitmap is null)
                     {
@@ -197,7 +179,7 @@ namespace RitsukageGif.Desktop
                             _entries.Remove(entry.Path);
                         entry.Retired = true;
                     }
-                    else if (entry.Retired && entry.Leases == 0)
+                    else if (entry is { Retired: true, Leases: 0 })
                     {
                         entry.Bitmap = null;
                         bitmap.Dispose();
@@ -212,7 +194,7 @@ namespace RitsukageGif.Desktop
 
         private static Bitmap Decode(string path)
         {
-            using var stream = File.OpenRead(path);
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             Span<byte> header = stackalloc byte[24];
             stream.ReadExactly(header);
             if (!header[..8].SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
@@ -230,7 +212,7 @@ namespace RitsukageGif.Desktop
                     (uint)Math.Max(1, Math.Round(height * scale))) { IgnoreAspectRatio = true });
                 using var pixels = image.GetPixels();
                 var bytes = pixels.ToByteArray(PixelMapping.BGRA)!;
-                var bitmap = new WriteableBitmap(new PixelSize((int)image.Width, (int)image.Height), new Vector(96, 96),
+                var bitmap = new WriteableBitmap(new((int)image.Width, (int)image.Height), new(96, 96),
                     PixelFormat.Bgra8888, AlphaFormat.Unpremul);
                 using var buffer = bitmap.Lock();
                 for (var y = 0; y < image.Height; y++)
@@ -249,8 +231,8 @@ namespace RitsukageGif.Desktop
             lock (_sync)
             {
                 entry.Leases--;
-                if (entry.Leases == 0 && !entry.Started && !entry.Loading.IsCompleted) RetirePending(entry);
-                if (entry.Retired && entry.Leases == 0)
+                if (entry is { Leases: 0, Started: false, Loading.IsCompleted: false }) RetirePending(entry);
+                if (entry is { Retired: true, Leases: 0 })
                 {
                     entry.Bitmap?.Dispose();
                     entry.Bitmap = null;
@@ -266,7 +248,7 @@ namespace RitsukageGif.Desktop
             {
                 AnimationEditorThumbnailEntry? oldest = null;
                 foreach (var candidate in _entries.Values)
-                    if (candidate.Leases == 0 && candidate.Bitmap is not null &&
+                    if (candidate is { Leases: 0, Bitmap: not null } &&
                         (oldest is null || candidate.Stamp < oldest.Stamp))
                         oldest = candidate;
                 if (oldest is null) return;
@@ -294,15 +276,6 @@ namespace RitsukageGif.Desktop
                 foreach (var entry in _pending) entry.Completion.TrySetResult(null);
                 _pending.Clear();
                 _entries.Clear();
-            }
-        }
-
-        public void Dispose()
-        {
-            lock (_sync)
-            {
-                _disposed = true;
-                Clear();
             }
         }
     }

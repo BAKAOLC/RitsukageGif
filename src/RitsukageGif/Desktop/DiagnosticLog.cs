@@ -1,49 +1,80 @@
 using System.Diagnostics;
-using System.Text;
+using System.Globalization;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class DiagnosticLog(string path) : TraceListener
+    internal sealed class DiagnosticLog : TraceListener
     {
-        private const int MaximumBytes = 1024 * 1024;
-        private static readonly string Version = typeof(DiagnosticLog).Assembly.GetName().Version?.ToString() ?? "";
-        private readonly object _gate = new();
+        private static readonly ILogger TraceLogger = LogHub.GetLogger("Desktop.Framework");
+        private static int _initialized;
 
-        internal static string FilePath { get; } = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RitsukageGif", "logs",
-            "application.log");
+        internal static string FilePath => LogHub.CurrentFilePath ??
+                                           Path.Combine(ApplicationStorage.DataDirectory, "logs", "emergency.log");
 
-        internal static void Initialize()
+        internal static void Initialize(string role = "desktop")
         {
-            Trace.Listeners.Add(new DiagnosticLog(FilePath));
+            if (Interlocked.Exchange(ref _initialized, 1) != 0) return;
+            LogHub.Initialize(ApplicationStorage.DataDirectory, ApplicationVersion.Display, role);
+            Trace.Listeners.Add(new DiagnosticLog());
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-                Trace.TraceError("Unhandled exception: {0}", args.ExceptionObject);
+            {
+                if (args.ExceptionObject is Exception error)
+                    TraceLogger.ZLogCritical(error, $"Unhandled process exception. Terminating={args.IsTerminating}");
+                else
+                    TraceLogger.ZLogCritical($"Unhandled process failure. Terminating={args.IsTerminating}");
+                if (args.IsTerminating) Shutdown();
+            };
             TaskScheduler.UnobservedTaskException += (_, args) =>
-                Trace.TraceError("Unobserved task exception: {0}", args.Exception);
+                TraceLogger.ZLogError(args.Exception, $"Unobserved background task exception.");
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+            {
+                TraceLogger.ZLogInformation($"Process exit observed. ExitCode={Environment.ExitCode}");
+                Shutdown();
+            };
         }
 
-        public override void Write(string? message) => WriteLine(message);
+        internal static void Shutdown()
+        {
+            LogHub.ShutdownAsync().AsTask().GetAwaiter().GetResult();
+        }
+
+        public override void Write(string? message)
+        {
+            WriteLine(message);
+        }
 
         public override void WriteLine(string? message)
         {
-            if (string.IsNullOrWhiteSpace(message)) return;
-            lock (_gate)
+            if (!string.IsNullOrWhiteSpace(message)) TraceLogger.ZLogDebug($"Framework diagnostic: {message}");
+        }
+
+        public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType,
+            int id, string? message)
+        {
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+            switch (eventType)
             {
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                    if (message.Length > MaximumBytes / 8) message = message[..(MaximumBytes / 8)];
-                    var entry = $"{DateTimeOffset.Now:O} [{Version}] {message}{Environment.NewLine}";
-                    if (File.Exists(path) &&
-                        new FileInfo(path).Length + Encoding.UTF8.GetByteCount(entry) > MaximumBytes)
-                        File.Move(path, Path.ChangeExtension(path, "previous.log"), true);
-                    File.AppendAllText(path, entry, Encoding.UTF8);
-                }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-                {
-                    // Logging must never replace the original failure with a second exception.
-                }
+                case TraceEventType.Critical:
+                    TraceLogger.ZLogCritical($"Legacy diagnostic. Source={source} EventId={id} Detail={message}");
+                    break;
+                case TraceEventType.Error:
+                    TraceLogger.ZLogError($"Legacy diagnostic. Source={source} EventId={id} Detail={message}"); break;
+                case TraceEventType.Warning:
+                    TraceLogger.ZLogWarning($"Legacy diagnostic. Source={source} EventId={id} Detail={message}"); break;
+                case TraceEventType.Information:
+                    TraceLogger.ZLogInformation($"Legacy diagnostic. Source={source} EventId={id} Detail={message}");
+                    break;
+                default:
+                    TraceLogger.ZLogDebug($"Legacy diagnostic. Source={source} EventId={id} Detail={message}"); break;
             }
+        }
+
+        public override void TraceEvent(TraceEventCache? eventCache, string source, TraceEventType eventType,
+            int id, string? format, params object?[]? args)
+        {
+            TraceEvent(eventCache, source, eventType, id, args is { Length: > 0 }
+                ? string.Format(CultureInfo.InvariantCulture, format ?? "", args)
+                : format);
         }
     }
 }

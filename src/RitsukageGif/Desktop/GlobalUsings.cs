@@ -3,3 +3,6 @@ global using PixelPoint = RitsukageGif.Contracts.PixelPoint;
 global using RitsukageGif.Core;
 global using RitsukageGif.Scripting;
 global using RitsukageGif.Contracts;
+global using RitsukageGif.Diagnostics;
+global using Microsoft.Extensions.Logging;
+global using ZLogger;

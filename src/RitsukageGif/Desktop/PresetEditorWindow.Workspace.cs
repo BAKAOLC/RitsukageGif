@@ -1,4 +1,3 @@
-﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -11,29 +10,31 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PresetEditorWindow
     {
-        private readonly TreeView _workspaceTree = new();
+        private readonly HashSet<TreeViewItem> _workspaceLoaded = [];
+        private readonly DispatcherTimer _workspaceRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
 
         private readonly TextBlock _workspaceTitle = new()
         {
             FontSize = 13, Foreground = AppTheme.Muted, FontWeight = FontWeight.SemiBold,
-            TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(8, 6)
+            TextTrimming = TextTrimming.CharacterEllipsis, Margin = new(8, 6),
         };
 
-        private Border? _workspacePane;
-        private Grid? _workspaceLayout;
-        private GridSplitter? _workspaceSplitter;
-        private string? _workspacePath;
-        private int _workspaceRevision;
-        private FileSystemWatcher? _workspaceWatcher;
-        private readonly DispatcherTimer _workspaceRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+        private readonly TreeView _workspaceTree = new();
         private bool _workspaceDisposed;
-        private readonly HashSet<TreeViewItem> _workspaceLoaded = [];
 
         private HashSet<string> _workspaceExpanded = new(OperatingSystem.IsWindows()
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal);
 
-        private Control CreateWorkspacePane()
+        private Grid? _workspaceLayout;
+
+        private Border? _workspacePane;
+        private string? _workspacePath;
+        private int _workspaceRevision;
+        private GridSplitter? _workspaceSplitter;
+        private FileSystemWatcher? _workspaceWatcher;
+
+        private Border CreateWorkspacePane()
         {
             if (_workspacePane is not null) return _workspacePane;
             var panel = new DockPanel();
@@ -41,7 +42,7 @@ namespace RitsukageGif.Desktop
             var refresh = new Button
             {
                 Content = ToolbarIcon("EditorRefreshWorkspace"), MinHeight = 28, MinWidth = 28,
-                Padding = new Thickness(3, 0), Margin = new Thickness(0, 3, 4, 3)
+                Padding = new(3, 0), Margin = new(0, 3, 4, 3),
             };
             refresh.Classes.Add("icon-button");
             refresh.Bind(ToolTip.TipProperty, LiveText.Resource("EditorRefreshWorkspace"));
@@ -54,19 +55,19 @@ namespace RitsukageGif.Desktop
             panel.Children.Add(new ScrollViewer
             {
                 Content = _workspaceTree, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             });
             _workspaceRefreshTimer.Tick += (_, _) =>
             {
                 _workspaceRefreshTimer.Stop();
                 RefreshWorkspace();
             };
-            _workspacePane = new Border
+            _workspacePane = new()
             {
                 Name = "ScriptWorkspacePane", IsVisible = false,
                 Background = AppTheme.SurfaceTint,
                 BorderBrush = AppTheme.Outline,
-                BorderThickness = new Thickness(0, 0, 1, 0), Child = panel
+                BorderThickness = new(0, 0, 1, 0), Child = panel,
             };
             return _workspacePane;
         }
@@ -78,12 +79,12 @@ namespace RitsukageGif.Desktop
             layout.ColumnDefinitions[2].MinWidth = 360;
             var workspace = CreateWorkspacePane();
             layout.Children.Add(workspace);
-            _workspaceSplitter = new GridSplitter
+            _workspaceSplitter = new()
             {
                 Name = "ScriptWorkspaceSplitter", IsVisible = false, Focusable = true,
                 ResizeDirection = GridResizeDirection.Columns, ResizeBehavior = GridResizeBehavior.PreviousAndNext,
                 HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
-                Background = AppTheme.Outline, Cursor = new Cursor(StandardCursorType.SizeWestEast)
+                Background = AppTheme.Outline, Cursor = new(StandardCursorType.SizeWestEast),
             };
             Grid.SetColumn(_workspaceSplitter, 1);
             layout.Children.Add(_workspaceSplitter);
@@ -101,14 +102,14 @@ namespace RitsukageGif.Desktop
             var maximum = Math.Max(160, Math.Min(480, layout.Bounds.Width - 366));
             column.MaxWidth = maximum;
             if (column.Width.IsAbsolute && column.Width.Value > maximum)
-                column.Width = new GridLength(maximum);
+                column.Width = new(maximum);
         }
 
         private async Task OpenWorkspaceAsync()
         {
-            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            var folders = await StorageProvider.OpenFolderPickerAsync(new()
             {
-                Title = UiText.Get("EditorOpenWorkspace"), AllowMultiple = false
+                Title = UiText.Get("EditorOpenWorkspace"), AllowMultiple = false,
             });
             if (_allowClose) return;
             if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path) OpenWorkspace(path);
@@ -129,8 +130,8 @@ namespace RitsukageGif.Desktop
                 if (!pane.IsVisible && _workspaceLayout is { } layout)
                 {
                     layout.ColumnDefinitions[0].MinWidth = 160;
-                    layout.ColumnDefinitions[0].Width = new GridLength(220);
-                    layout.ColumnDefinitions[1].Width = new GridLength(6);
+                    layout.ColumnDefinitions[0].Width = new(220);
+                    layout.ColumnDefinitions[1].Width = new(6);
                     _workspaceSplitter!.IsVisible = true;
                 }
 
@@ -140,10 +141,12 @@ namespace RitsukageGif.Desktop
                 ToolTip.SetTip(_workspaceTitle, UiText.Get("EditorWorkspace") + ": " + directory.FullName);
                 RefreshWorkspace();
                 StartWorkspaceWatcher(directory.FullName);
+                Logger.ZLogInformation($"Script workspace opened.");
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
                                                   or ArgumentException)
             {
+                Logger.ZLogWarning(exception, $"Script workspace open failed.");
                 _status.Text = exception.Message;
             }
         }
@@ -165,7 +168,7 @@ namespace RitsukageGif.Desktop
             var watcher = new FileSystemWatcher(path)
             {
                 IncludeSubdirectories = true,
-                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
             };
             _workspaceWatcher = watcher;
             watcher.Created += WorkspaceChanged;
@@ -183,9 +186,17 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private void WorkspaceChanged(object sender, FileSystemEventArgs args) => QueueWorkspaceRefresh(sender);
+        private void WorkspaceChanged(object sender, FileSystemEventArgs args)
+        {
+            QueueWorkspaceRefresh(sender);
+        }
 
-        private void WorkspaceWatcherError(object sender, ErrorEventArgs args) => QueueWorkspaceRefresh(sender);
+        private void WorkspaceWatcherError(object sender, ErrorEventArgs args)
+        {
+            var error = args.GetException();
+            Logger.ZLogError(error, $"Script workspace watcher reported an error.");
+            QueueWorkspaceRefresh(sender);
+        }
 
         private void QueueWorkspaceRefresh(object sender)
         {
@@ -283,6 +294,7 @@ namespace RitsukageGif.Desktop
             {
                 if (_allowClose || _workspaceDisposed || revision != _workspaceRevision) return;
                 if (parent is not null) _workspaceLoaded.Remove(parent);
+                Logger.ZLogWarning(exception, $"Script workspace enumeration failed.");
                 _status.Text = exception.Message;
             }
         }

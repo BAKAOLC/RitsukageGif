@@ -1,0 +1,38 @@
+namespace RitsukageGif.Desktop
+{
+    internal enum MouseAction
+    {
+        Select,
+        Confirm,
+        Cancel,
+        Clear,
+        Copy,
+        Save,
+        ToggleCursor,
+        ToggleControls,
+        ToggleSource,
+        CycleHints,
+        CycleSnapping,
+        Undo,
+        Redo,
+        MoveWindow,
+        ContextMenu,
+        ActualSize,
+        Hide,
+        Close,
+        Zoom,
+        FineZoom,
+        AdjustOpacity,
+        Reset,
+        CopyAndClose,
+        Destroy,
+        SelectThumbnailRegion,
+        ToggleThumbnail,
+        MoveThumbnailRegion,
+        CopyRecognizedText,
+        ToggleAnnotationToolbar,
+        MoveWindowIgnoringText,
+        DragContent,
+        ToggleSelection,
+    }
+}

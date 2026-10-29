@@ -4,10 +4,10 @@ namespace RitsukageGif.Desktop
 {
     internal sealed unsafe partial class X11Capture : IDisposable
     {
-        private readonly object _gate = new();
-        private nint _display;
-        private readonly nuint _window, _root;
         private readonly bool _cursor;
+        private readonly Lock _gate = new();
+        private readonly nuint _window, _root;
+        private nint _display;
         private bool _redirected;
 
         public X11Capture(nint window, bool cursor)
@@ -44,6 +44,20 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (_display == 0) return;
+                if (_redirected) XCompositeUnredirectWindow(_display, _window, 0);
+                _ = XSync(_display, 0);
+                X11ErrorTrap.Unregister(_display);
+                _ = XCloseDisplay(_display);
+                _display = 0;
+                _redirected = false;
+            }
+        }
+
         public CaptureSourceFrame? CaptureScreen(PixelRect region)
         {
             lock (_gate)
@@ -51,7 +65,7 @@ namespace RitsukageGif.Desktop
                 ObjectDisposedException.ThrowIf(_display == 0, this);
                 X11ErrorTrap.Clear(_display);
                 if (XGetWindowAttributes(_display, _root, out var root) == 0) throw CaptureError();
-                var clipped = region.Intersect(new PixelRect(0, 0, root.Width, root.Height));
+                var clipped = region.Intersect(new(0, 0, root.Width, root.Height));
                 if (clipped.IsEmpty) return null;
                 var frame = Read(_root, clipped.X, clipped.Y, clipped.Width, clipped.Height, false, root.VisualPointer);
                 if (frame is null) throw CaptureError();
@@ -123,9 +137,9 @@ namespace RitsukageGif.Desktop
                 if ((long)info.BytesPerLine * height > 512L * 1024 * 1024)
                     throw new IOException(UiText.Get("InvalidFrameBuffer"));
                 var pixels = X11PixelConverter.Convert(
-                    new ReadOnlySpan<byte>((void*)info.Data, checked(info.BytesPerLine * height)),
+                    new((void*)info.Data, checked(info.BytesPerLine * height)),
                     width, height, info.BytesPerLine, info.BitsPerPixel, info.ByteOrder == 0, red, green, blue, alpha);
-                return new CaptureSourceFrame(width, height, pixels);
+                return new(width, height, pixels);
             }
             finally
             {
@@ -180,20 +194,9 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static IOException CaptureError() => new(UiText.Get("CaptureFailed"));
-
-        public void Dispose()
+        private static IOException CaptureError()
         {
-            lock (_gate)
-            {
-                if (_display == 0) return;
-                if (_redirected) XCompositeUnredirectWindow(_display, _window, 0);
-                _ = XSync(_display, 0);
-                X11ErrorTrap.Unregister(_display);
-                _ = XCloseDisplay(_display);
-                _display = 0;
-                _redirected = false;
-            }
+            return new(UiText.Get("CaptureFailed"));
         }
     }
 }

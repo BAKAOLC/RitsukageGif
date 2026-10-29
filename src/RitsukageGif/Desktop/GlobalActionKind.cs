@@ -1,0 +1,33 @@
+namespace RitsukageGif.Desktop
+{
+    public enum GlobalActionKind
+    {
+        SelectRegion,
+        ToggleRecording,
+        StartRecording,
+        StopRecording,
+        Screenshot,
+        RunPreset,
+        OpenScriptEditor,
+        OpenImageEditor,
+        OpenVideoRecorder,
+        OpenOutputDirectory,
+        ShowMainWindow,
+        HideMainWindow,
+        ShowPinnedImages,
+        HidePinnedImages,
+        ScreenshotAndCopy,
+        ScreenshotAndPin,
+        ScreenshotAndSave,
+        ScreenshotQuickSave,
+        CaptureActiveWindow,
+        CaptureLastRegion,
+        RestoreLastPinnedImage,
+        PinClipboard,
+        ScreenshotAndCopyText,
+        ScreenshotAndScroll,
+        ClosePinnedImages,
+        TogglePinnedImages,
+        ToggleGlobalShortcuts,
+    }
+}

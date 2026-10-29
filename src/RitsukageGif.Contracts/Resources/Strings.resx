@@ -1226,9 +1226,6 @@ X {0}, Y {1}</value>
   <data name="SelectionSelected" xml:space="preserve">
     <value>Selected</value>
   </data>
-  <data name="ScrollCaptureFinish" xml:space="preserve">
-    <value>Finish</value>
-  </data>
   <data name="ScrollCaptureTitle" xml:space="preserve">
     <value>Scrolling capture</value>
   </data>
@@ -1250,9 +1247,6 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureUnmatched" xml:space="preserve">
     <value>No overlap. Scroll back to the last matched content.</value>
   </data>
-  <data name="ScrollCaptureUndo" xml:space="preserve">
-    <value>Undo stitch</value>
-  </data>
   <data name="ScrollCaptureReady" xml:space="preserve">
     <value>Scroll the content to stitch. Drag the handle to move the fixed-size region along the capture axis.</value>
   </data>
@@ -1273,21 +1267,6 @@ X {0}, Y {1}</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
     <value>Hide to tray when minimized</value>
-  </data>
-  <data name="ScrollCaptureRightInset" xml:space="preserve">
-    <value>Exclude right (px)</value>
-  </data>
-  <data name="ScrollCaptureLeftInset" xml:space="preserve">
-    <value>Exclude left (px)</value>
-  </data>
-  <data name="ScrollCaptureTopInset" xml:space="preserve">
-    <value>Exclude top (px)</value>
-  </data>
-  <data name="ScrollCaptureInsetInvalid" xml:space="preserve">
-    <value>Keep at least 16 pixels along the capture axis.</value>
-  </data>
-  <data name="ScrollCaptureBottomInset" xml:space="preserve">
-    <value>Exclude bottom (px)</value>
   </data>
   <data name="ScrollCaptureStart" xml:space="preserve">
     <value>Start</value>
@@ -2057,13 +2036,10 @@ X {0}, Y {1}</value>
   <data name="SelectionCaptureWindow" xml:space="preserve"><value>Capture window content</value></data>
   <data name="SelectionCaptureScreen" xml:space="preserve"><value>Capture screen pixels</value></data>
   <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>Capture window content, following its position</value></data>
-  <data name="ScrollCaptureInsets" xml:space="preserve"><value>Fixed content crop</value></data>
   <data name="ScrollCaptureCollecting" xml:space="preserve"><value>Scroll to extend the capture</value></data>
   <data name="ScrollCapturePaused" xml:space="preserve"><value>Paused</value></data>
-  <data name="ScrollCaptureReturn" xml:space="preserve"><value>Back to selection</value></data>
   <data name="ScrollCaptureMoveVertical" xml:space="preserve"><value>Move region vertically</value></data>
   <data name="ScrollCaptureMoveHorizontal" xml:space="preserve"><value>Move region horizontally</value></data>
-  <data name="ScrollCapturePreview" xml:space="preserve"><value>Stitched preview</value></data>
   <data name="ScrollCaptureDirectionReset" xml:space="preserve"><value>Direction changed. Start a new capture.</value></data>
   <data name="GlobalActionDisabledState" xml:space="preserve"><value>Disabled</value></data>
   <data name="GlobalActionEdit" xml:space="preserve"><value>Edit action</value></data>
@@ -3196,5 +3172,33 @@ X {0}, Y {1}</value>
   </data>
   <data name="ToolbarMoveHint" xml:space="preserve">
     <value>Drag toolbar; double-click to restore automatic placement</value>
+  </data>
+  <data name="SettingsInvalidNumber" xml:space="preserve"><value>Enter a number between {0} and {1}.</value></data>
+  <data name="ScrollCaptureEdit" xml:space="preserve">
+    <value>Edit captured image</value>
+  </data>
+  <data name="ScrollCaptureQuickSave" xml:space="preserve">
+    <value>Quick save</value>
+  </data>
+  <data name="ScrollCaptureOcrCopy" xml:space="preserve">
+    <value>Recognize text and copy</value>
+  </data>
+  <data name="ScrollCaptureClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="ScrollCaptureCrop" xml:space="preserve">
+    <value>Crop</value>
+  </data>
+  <data name="ScrollCaptureCropTop" xml:space="preserve">
+    <value>Crop above the current frame</value>
+  </data>
+  <data name="ScrollCaptureCropBottom" xml:space="preserve">
+    <value>Crop below the current frame</value>
+  </data>
+  <data name="ScrollCaptureCropLeft" xml:space="preserve">
+    <value>Crop to the left of the current frame</value>
+  </data>
+  <data name="ScrollCaptureCropRight" xml:space="preserve">
+    <value>Crop to the right of the current frame</value>
   </data>
 </root>

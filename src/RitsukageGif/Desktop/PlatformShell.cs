@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
             {
                 FileName = OperatingSystem.IsWindows() ? "explorer.exe" :
                     OperatingSystem.IsMacOS() ? "/usr/bin/open" : "xdg-open",
-                UseShellExecute = false
+                UseShellExecute = false,
             };
             start.ArgumentList.Add(directory);
             Process.Start(start)?.Dispose();
@@ -44,7 +44,10 @@ namespace RitsukageGif.Desktop
             Process.Start(start)?.Dispose();
         }
 
-        public static Task PlaySoundAsync(string path) => Sound.PlayAsync(path);
+        public static Task PlaySoundAsync(string path)
+        {
+            return Sound.PlayAsync(path);
+        }
 
         public static async Task StopSoundAsync()
         {

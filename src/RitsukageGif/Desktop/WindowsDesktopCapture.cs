@@ -1,18 +1,22 @@
-﻿using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class WindowsDesktopCapture : IFrameSource
+    internal sealed class WindowsDesktopCapture : IFrameSource, IColorFrameSource
     {
+        private readonly Dictionary<PixelRect, WindowsWindowContentCapture> _colorCaptures = [];
+        private readonly Dictionary<PixelRect, WindowsWindowContentCapture> _hdrCaptures = [];
         private readonly PixelRect[] _monitors;
         private readonly nint _pixels;
         private readonly nint _scaledPixels;
         private readonly int _width, _height;
+        private long _colorRevision;
+        private bool _disposed;
         private RecordingOptions _options;
         private nint _scaledDc, _scaledBitmap, _scaledOld;
         private nint _screen, _memory, _bitmap, _old;
         private CaptureSegment[] _segments;
-        private bool _disposed;
 
         public WindowsDesktopCapture(RecordingOptions options, IEnumerable<PixelRect>? monitors = null,
             int? outputWidth = null,
@@ -23,7 +27,7 @@ namespace RitsukageGif.Desktop
             _height = outputHeight ?? options.Height;
             if (_width <= 0 || _height <= 0 || (long)_width * _height * 4 > 512L * 1024 * 1024)
                 throw new ArgumentException(UiText.Get("SelectionTooLarge"));
-            _monitors = (monitors ?? [options.Region]).ToArray();
+            _monitors = [.. monitors ?? [options.Region]];
             options.Validate();
             _segments = ScreenComposition.Split(options.Region, _monitors);
             if (_segments.Length == 0) throw new ArgumentException(UiText.Get("NoMonitor"));
@@ -37,7 +41,7 @@ namespace RitsukageGif.Desktop
                 var info = new NativeMethods.BitmapInfo
                 {
                     Size = 40, Width = options.Region.Width,
-                    Height = -options.Region.Height, Planes = 1, BitCount = 32
+                    Height = -options.Region.Height, Planes = 1, BitCount = 32,
                 };
                 _bitmap = NativeMethods.CreateDibSection(_screen, ref info, 0, out _pixels, 0, 0);
                 if (_screen == 0 || _memory == 0 || _bitmap == 0)
@@ -52,8 +56,9 @@ namespace RitsukageGif.Desktop
                     if (_scaledDc == 0 || _scaledBitmap == 0)
                         throw new InvalidOperationException(UiText.Get("ScaleBufferFailed"));
                     _scaledOld = NativeMethods.SelectObject(_scaledDc, _scaledBitmap);
-                    NativeMethods.SetStretchBltMode(_scaledDc, 4); // HALFTONE area sampling
-                    NativeMethods.SetBrushOrgEx(_scaledDc, 0, 0, 0);
+                    if (NativeMethods.SetStretchBltMode(_scaledDc, 4) == 0 ||
+                        NativeMethods.SetBrushOrgEx(_scaledDc, 0, 0, 0) == 0)
+                        throw new InvalidOperationException(UiText.Get("ScaleBufferFailed"));
                 }
             }
             catch
@@ -63,17 +68,66 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public unsafe byte[] Capture()
+        public CapturedFrameSet CaptureFrames(CancellationToken token = default)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            token.ThrowIfCancellationRequested();
+            List<(PixelRect Bounds, CapturedFrameSet Frame)> sources = [];
+            foreach (var segment in _segments)
+            {
+                token.ThrowIfCancellationRequested();
+                var monitor = WindowsDisplayColor.Bounds(WindowsDisplayColor.ForRegion(segment.Source));
+                if (sources.Any(item => item.Bounds == monitor)) continue;
+                if (!_colorCaptures.TryGetValue(monitor, out var capture))
+                {
+                    capture = new(WindowsDisplayColor.ForRegion(monitor), _options.Cursor, true);
+                    _colorCaptures.Add(monitor, capture);
+                }
+
+                sources.Add((monitor, capture.CaptureFrames(token)));
+            }
+
+            if (sources.Count == 0) throw new CaptureSourceLostException();
+            return ColorFrameComposition.Compose(sources, _options.Region, _width, _height, ++_colorRevision, token);
+        }
+
+        public byte[] Capture()
+        {
+            return Capture(CancellationToken.None);
+        }
+
+        public unsafe byte[] Capture(CancellationToken token)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_segments.Length == 0) throw new CaptureSourceLostException();
             var r = _options.Region;
             var data = new Span<byte>((void*)_pixels, checked(r.Width * r.Height * 4));
             data.Clear();
-            foreach (var segment in _segments)
+            foreach (var (source, destinationX, destinationY) in _segments)
             {
-                var source = segment.Source;
-                if (NativeMethods.BitBlt(_memory, segment.DestinationX, segment.DestinationY, source.Width,
+                token.ThrowIfCancellationRequested();
+                var handle = WindowsDisplayColor.ForRegion(source);
+                var monitor = WindowsDisplayColor.Bounds(handle);
+                if (_hdrCaptures.TryGetValue(monitor, out var hdr) || WindowsDisplayColor.Read(handle).Hdr)
+                {
+                    if (hdr is null)
+                    {
+                        hdr = new(handle, false, true);
+                        _hdrCaptures.Add(monitor, hdr);
+                    }
+
+                    var frame = hdr.Capture(token);
+                    if (hdr.Width != monitor.Width || hdr.Height != monitor.Height)
+                        throw new CaptureSourceLostException();
+                    for (var row = 0; row < source.Height; row++)
+                        frame.AsSpan(((source.Y - monitor.Y + row) * hdr.Width + source.X - monitor.X) * 4,
+                                source.Width * 4)
+                            .CopyTo(data.Slice(((destinationY + row) * r.Width + destinationX) * 4,
+                                source.Width * 4));
+                    continue;
+                }
+
+                if (NativeMethods.BitBlt(_memory, destinationX, destinationY, source.Width,
                         source.Height,
                         _screen, source.X, source.Y, 0x40cc0020) == 0)
                     throw new CaptureSourceLostException();
@@ -85,18 +139,22 @@ namespace RitsukageGif.Desktop
                 if (NativeMethods.StretchBlt(_scaledDc, 0, 0, _width, _height, _memory, 0, 0, r.Width,
                         r.Height, 0x00cc0020) == 0)
                     throw new InvalidOperationException(UiText.Get("ScaleFailed"));
-                data = new Span<byte>((void*)_scaledPixels, checked(_width * _height * 4));
+                data = new((void*)_scaledPixels, checked(_width * _height * 4));
             }
 
-            NativeMethods.GdiFlush(); // Complete batched GDI writes before reading DIB memory.
+            if (NativeMethods.GdiFlush() == 0) throw new CaptureSourceLostException();
             for (var i = 3; i < data.Length; i += 4) data[i] = 255;
-            return data.ToArray();
+            return [.. data];
         }
 
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
+            foreach (var capture in _hdrCaptures.Values) capture.Dispose();
+            _hdrCaptures.Clear();
+            foreach (var capture in _colorCaptures.Values) capture.Dispose();
+            _colorCaptures.Clear();
             if (_scaledOld != 0)
             {
                 NativeMethods.SelectObject(_scaledDc, _scaledOld);
@@ -105,13 +163,13 @@ namespace RitsukageGif.Desktop
 
             if (_scaledBitmap != 0)
             {
-                NativeMethods.DeleteObject(_scaledBitmap);
+                ReportCleanup(NativeMethods.DeleteObject(_scaledBitmap), nameof(NativeMethods.DeleteObject));
                 _scaledBitmap = 0;
             }
 
             if (_scaledDc != 0)
             {
-                NativeMethods.DeleteDC(_scaledDc);
+                ReportCleanup(NativeMethods.DeleteDC(_scaledDc), nameof(NativeMethods.DeleteDC));
                 _scaledDc = 0;
             }
 
@@ -123,19 +181,19 @@ namespace RitsukageGif.Desktop
 
             if (_bitmap != 0)
             {
-                NativeMethods.DeleteObject(_bitmap);
+                ReportCleanup(NativeMethods.DeleteObject(_bitmap), nameof(NativeMethods.DeleteObject));
                 _bitmap = 0;
             }
 
             if (_memory != 0)
             {
-                NativeMethods.DeleteDC(_memory);
+                ReportCleanup(NativeMethods.DeleteDC(_memory), nameof(NativeMethods.DeleteDC));
                 _memory = 0;
             }
 
             if (_screen != 0)
             {
-                NativeMethods.ReleaseDC(0, _screen);
+                ReportCleanup(NativeMethods.ReleaseDC(0, _screen), nameof(NativeMethods.ReleaseDC));
                 _screen = 0;
             }
         }
@@ -149,6 +207,11 @@ namespace RitsukageGif.Desktop
             _segments = ScreenComposition.Split(region, _monitors);
         }
 
+        private static void ReportCleanup(int result, string operation)
+        {
+            if (result == 0) Trace.TraceWarning("Native capture cleanup failed: {0}", operation);
+        }
+
         private void DrawCursor()
         {
             var cursor = new NativeMethods.CursorInfo { Size = Marshal.SizeOf<NativeMethods.CursorInfo>() };
@@ -156,13 +219,16 @@ namespace RitsukageGif.Desktop
             if (NativeMethods.GetIconInfo(cursor.Cursor, out var icon) == 0) return;
             try
             {
-                NativeMethods.DrawIconEx(_memory, cursor.Position.X - _options.Region.X - (int)icon.XHotspot,
-                    cursor.Position.Y - _options.Region.Y - (int)icon.YHotspot, cursor.Cursor, 0, 0, 0, 0, 3);
+                if (NativeMethods.DrawIconEx(_memory, cursor.Position.X - _options.Region.X - (int)icon.XHotspot,
+                        cursor.Position.Y - _options.Region.Y - (int)icon.YHotspot, cursor.Cursor, 0, 0, 0, 0, 3) == 0)
+                    Trace.TraceWarning("Could not draw the capture cursor.");
             }
             finally
             {
-                if (icon.Color != 0) NativeMethods.DeleteObject(icon.Color);
-                if (icon.Mask != 0) NativeMethods.DeleteObject(icon.Mask);
+                if (icon.Color != 0)
+                    ReportCleanup(NativeMethods.DeleteObject(icon.Color), nameof(NativeMethods.DeleteObject));
+                if (icon.Mask != 0)
+                    ReportCleanup(NativeMethods.DeleteObject(icon.Mask), nameof(NativeMethods.DeleteObject));
             }
         }
     }

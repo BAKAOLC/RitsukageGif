@@ -7,12 +7,18 @@ namespace RitsukageGif.Desktop
         internal void SuspendAfterFailure()
         {
             _fatalFailure = true;
-            _closing = true;
-            _hotkeys?.Dispose();
+            IsClosing = true;
+            HostLogger.ZLogCritical(
+                $"Application entering failure suspension. Recording={IsRecording} Selecting={IsSelecting} TakingScreenshot={IsTakingScreenshot}");
+            RunShutdownStage("failure global hotkeys", () => _hotkeys?.Dispose());
             _hotkeys = null;
-            _stop?.Cancel();
-            _abort?.Cancel();
-            CancelSelection();
+            RunShutdownStage("failure global mouse", () => _globalMouse?.Dispose());
+            _globalMouse = null;
+            RunShutdownStage("failure session shortcuts", StopSessionShortcuts);
+            RunShutdownStage("failure recording stop", () => _stop?.Cancel());
+            RunShutdownStage("failure recording abort", () => _abort?.Cancel());
+            RunShutdownStage("failure selection cancellation", CancelSelection);
+            RunShutdownStage("failure screenshot cancellation", CancelScreenshot);
         }
     }
 }

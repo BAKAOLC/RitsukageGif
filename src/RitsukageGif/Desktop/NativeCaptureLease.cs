@@ -2,18 +2,10 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class NativeCaptureLease : IDisposable
     {
-        private sealed record Key(PixelRect? Monitor, nint WindowHandle, bool Cursor, int Fps);
-
-        private sealed class Entry(NativeCaptureSession session)
-        {
-            public NativeCaptureSession Session { get; } = session;
-            public int References;
-        }
-
-        private static readonly object PoolLock = new();
+        private static readonly Lock PoolLock = new();
         private static readonly Dictionary<Key, Entry> Pool = [];
-        private readonly Key _key;
         private readonly Entry _entry;
+        private readonly Key _key;
         private int _disposed;
 
         private NativeCaptureLease(Key key, Entry entry)
@@ -22,11 +14,29 @@ namespace RitsukageGif.Desktop
             _entry = entry;
         }
 
-        public static NativeCaptureLease Screen(PixelRect monitor, bool cursor, int fps) =>
-            Acquire(new Key(monitor, 0, cursor, Math.Clamp(fps, 1, 120)));
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            var release = false;
+            lock (PoolLock)
+                if (--_entry.References == 0)
+                {
+                    if (Pool.TryGetValue(_key, out var entry) && ReferenceEquals(entry, _entry)) Pool.Remove(_key);
+                    release = true;
+                }
 
-        public static NativeCaptureLease Window(nint window, bool cursor, int fps = 60) =>
-            Acquire(new Key(null, window, cursor, Math.Clamp(fps, 1, 120)));
+            if (release) _entry.Session.Dispose();
+        }
+
+        public static NativeCaptureLease Screen(PixelRect monitor, bool cursor, int fps)
+        {
+            return Acquire(new(monitor, 0, cursor, Math.Clamp(fps, 1, 120)));
+        }
+
+        public static NativeCaptureLease Window(nint window, bool cursor, int fps = 60)
+        {
+            return Acquire(new(null, window, cursor, Math.Clamp(fps, 1, 120)));
+        }
 
         private static NativeCaptureLease Acquire(Key key)
         {
@@ -37,11 +47,11 @@ namespace RitsukageGif.Desktop
                     var session = key.Monitor is { } monitor
                         ? NativeCaptureSession.CreateScreen(monitor, key.Cursor, key.Fps)
                         : NativeCaptureSession.CreateWindow(key.WindowHandle, key.Cursor, key.Fps);
-                    Pool[key] = entry = new Entry(session);
+                    Pool[key] = entry = new(session);
                 }
 
                 entry.References++;
-                return new NativeCaptureLease(key, entry);
+                return new(key, entry);
             }
         }
 
@@ -62,27 +72,19 @@ namespace RitsukageGif.Desktop
             Entry[] entries;
             lock (PoolLock)
             {
-                entries = Pool.Values.ToArray();
+                entries = [.. Pool.Values];
                 Pool.Clear();
             }
 
             foreach (var entry in entries) entry.Session.Dispose();
         }
 
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            var release = false;
-            lock (PoolLock)
-            {
-                if (--_entry.References == 0)
-                {
-                    if (Pool.TryGetValue(_key, out var entry) && ReferenceEquals(entry, _entry)) Pool.Remove(_key);
-                    release = true;
-                }
-            }
+        private sealed record Key(PixelRect? Monitor, nint WindowHandle, bool Cursor, int Fps);
 
-            if (release) _entry.Session.Dispose();
+        private sealed class Entry(NativeCaptureSession session)
+        {
+            public int References;
+            public NativeCaptureSession Session { get; } = session;
         }
     }
 }

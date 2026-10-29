@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
 
         internal async Task ShowAnimationEditorAsync(string? path = null)
         {
-            if (_closing) return;
+            if (IsClosing) return;
             if (_animationEditor is { } existing)
             {
                 WindowActivation.Show(existing);

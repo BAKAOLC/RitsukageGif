@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -9,8 +10,10 @@ namespace RitsukageGif.Desktop
         {
             // The newly launched process grants foreground permission to the connected instance
             // before asking its UI thread to show the window.
-            if (GetNamedPipeServerProcessId(pipe, out var processId) != 0)
-                AllowSetForegroundWindow(processId);
+            if (GetNamedPipeServerProcessId(pipe, out var processId) != 0 &&
+                AllowSetForegroundWindow(processId) == 0)
+                Trace.TraceInformation("Windows did not grant foreground activation permission to process {0}.",
+                    processId);
         }
 
         [LibraryImport("kernel32.dll")]

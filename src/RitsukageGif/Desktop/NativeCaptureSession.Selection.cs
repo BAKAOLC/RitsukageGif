@@ -8,7 +8,7 @@ namespace RitsukageGif.Desktop
             await SelectionLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                return await CreateSelectionAsync(window, token, cursor, fps).ConfigureAwait(false);
+                return await CreateSelectionAsync(window, cursor, fps, token).ConfigureAwait(false);
             }
             finally
             {
@@ -28,7 +28,7 @@ namespace RitsukageGif.Desktop
                     && current._window == window && current.IsAvailable)
                     return current.Read(token);
 
-                using var selection = await CreateSelectionAsync(window, token, cursor, fps).ConfigureAwait(false);
+                using var selection = await CreateSelectionAsync(window, cursor, fps, token).ConfigureAwait(false);
                 selection.Commit(token);
                 return selection.Frame;
             }
@@ -38,8 +38,8 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static async Task<NativeCaptureSelection> CreateSelectionAsync(bool window, CancellationToken token,
-            bool cursor, int fps)
+        private static async Task<NativeCaptureSelection> CreateSelectionAsync(bool window, bool cursor, int fps,
+            CancellationToken token)
         {
             if (!DesktopCapture.UsesSourceSelection)
                 throw new NotSupportedException(UiText.Get("CapturePlatformUnsupported"));
@@ -50,7 +50,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 await session._first.Task.WaitAsync(TimeSpan.FromSeconds(155), token).ConfigureAwait(false);
-                return new NativeCaptureSelection(session, version, session.Read(token));
+                return new(session, version, session.Read(token));
             }
             catch (Exception error)
             {

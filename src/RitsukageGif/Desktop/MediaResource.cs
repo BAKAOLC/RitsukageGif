@@ -16,7 +16,13 @@ namespace RitsukageGif.Desktop
         }
 
         public string Path { get; }
-        internal static TimeSpan BodyIdleTimeout { get; set; } = TimeSpan.FromSeconds(30);
+        private static TimeSpan BodyIdleTimeout { get; } = TimeSpan.FromSeconds(30);
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0 || _entry is null) return;
+            lock (Gate) Release(_entry);
+        }
 
         public static async Task<MediaResource> OpenAsync(string location, CancellationToken cancellationToken)
         {
@@ -25,7 +31,7 @@ namespace RitsukageGif.Desktop
             {
                 var local = System.IO.Path.GetFullPath(uri?.IsFile == true ? uri.LocalPath : location);
                 if (!File.Exists(local)) throw new FileNotFoundException(null, local);
-                return new MediaResource(local);
+                return new(local);
             }
 
             if (uri.Scheme is not ("http" or "https"))
@@ -84,7 +90,7 @@ namespace RitsukageGif.Desktop
                 var expires = DateTimeOffset.MinValue;
                 var cache = response.Headers.CacheControl;
                 // Only explicitly fresh responses are retained; absent directives never imply freshness.
-                if (cache is { NoStore: false, NoCache: false } && cache.MaxAge is { } maxAge &&
+                if (cache is { NoStore: false, NoCache: false, MaxAge: { } maxAge } &&
                     response.Headers.Vary.Count == 0)
                 {
                     var now = DateTimeOffset.UtcNow;
@@ -97,19 +103,13 @@ namespace RitsukageGif.Desktop
                             : TimeSpan.FromMinutes(5));
                 }
 
-                return new Entry(path, length, expires);
+                return new(path, length, expires);
             }
             catch
             {
                 if (owned) DeleteTemporary(path);
                 throw;
             }
-        }
-
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0 || _entry is null) return;
-            lock (Gate) Release(_entry);
         }
 
         private static void DeleteTemporary(string path)

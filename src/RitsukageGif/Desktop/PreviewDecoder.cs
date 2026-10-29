@@ -5,10 +5,16 @@ using SkiaSharp;
 
 namespace RitsukageGif.Desktop
 {
-    internal static class PreviewDecoder
+    internal static partial class PreviewDecoder
     {
-        public static IEnumerable<PreviewFrame> Read(string path, CancellationToken token)
+        public static IEnumerable<PreviewFrame> Read(string path, CancellationToken token, bool preserveHdr = false)
         {
+            if (PngAnimation.HasHdrPqMetadata(path, token))
+            {
+                foreach (var frame in ReadHdr(path, preserveHdr, token)) yield return frame;
+                yield break;
+            }
+
             using var codec = SKCodec.Create(path) ?? throw new InvalidDataException();
             var info = codec.Info.WithColorType(SKColorType.Bgra8888).WithAlphaType(SKAlphaType.Premul);
             using var canvas = new SKBitmap(info);
@@ -40,13 +46,15 @@ namespace RitsukageGif.Desktop
                         surface.DrawBitmap(bitmap, frame.Page.X, frame.Page.Y, blend);
                         yield return Snapshot((int)(frame.AnimationDelay * 1000L /
                                                     Math.Max(1, frame.AnimationTicksPerSecond)));
-                        if (frame.GifDisposeMethod == GifDisposeMethod.Previous)
+                        // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
+                        switch (frame.GifDisposeMethod)
                         {
-                            Copy(restore, canvas);
-                        }
-                        else if (frame.GifDisposeMethod == GifDisposeMethod.Background)
-                        {
-                            surface.DrawRect(frame.Page.X, frame.Page.Y, frame.Width, frame.Height, clear);
+                            case GifDisposeMethod.Previous:
+                                Copy(restore, canvas);
+                                break;
+                            case GifDisposeMethod.Background:
+                                surface.DrawRect(frame.Page.X, frame.Page.Y, frame.Width, frame.Height, clear);
+                                break;
                         }
                     }
 
@@ -62,7 +70,7 @@ namespace RitsukageGif.Desktop
                 var restorePrevious = metadata.Length > i &&
                                       metadata[i].DisposalMethod == SKCodecAnimationDisposalMethod.RestorePrevious;
                 if (restorePrevious) Copy(canvas, restore);
-                var result = codec.GetPixels(info, canvas.GetPixels(), new SKCodecOptions(i, prior));
+                var result = codec.GetPixels(info, canvas.GetPixels(), new(i, prior));
                 if (result != SKCodecResult.Success) throw new InvalidDataException(result.ToString());
                 yield return Snapshot(metadata.Length > i ? metadata[i].Duration : 100);
                 if (restorePrevious)
@@ -75,6 +83,8 @@ namespace RitsukageGif.Desktop
                     prior = i;
                 }
             }
+
+            yield break;
 
             PreviewFrame Snapshot(int delay)
             {
@@ -89,7 +99,7 @@ namespace RitsukageGif.Desktop
                         for (var y = 0; y < canvas.Height; y++)
                             Marshal.Copy(canvas.GetPixels() + y * canvas.RowBytes, buffer, y * canvas.Width * 4,
                                 canvas.Width * 4);
-                    return new PreviewFrame(buffer, canvas.Width, canvas.Height, Math.Max(10, delay));
+                    return new(buffer, canvas.Width, canvas.Height, Math.Max(10, delay));
                 }
                 catch
                 {

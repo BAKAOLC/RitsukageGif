@@ -1226,9 +1226,6 @@ X {0}, Y {1}</value>
   <data name="SelectionSelected" xml:space="preserve">
     <value>已选中</value>
   </data>
-  <data name="ScrollCaptureFinish" xml:space="preserve">
-    <value>完成</value>
-  </data>
   <data name="ScrollCaptureTitle" xml:space="preserve">
     <value>长截图</value>
   </data>
@@ -1250,9 +1247,6 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureUnmatched" xml:space="preserve">
     <value>未找到重叠，请回滚到上次匹配的画面。</value>
   </data>
-  <data name="ScrollCaptureUndo" xml:space="preserve">
-    <value>撤销拼接</value>
-  </data>
   <data name="ScrollCaptureReady" xml:space="preserve">
     <value>滚动画面以拼接。拖动上方按钮可沿拼接方向移动采集框，大小保持不变。</value>
   </data>
@@ -1273,21 +1267,6 @@ X {0}, Y {1}</value>
   </data>
   <data name="MinimizeToTray" xml:space="preserve">
     <value>最小化时隐藏到托盘</value>
-  </data>
-  <data name="ScrollCaptureRightInset" xml:space="preserve">
-    <value>排除右侧（像素）</value>
-  </data>
-  <data name="ScrollCaptureLeftInset" xml:space="preserve">
-    <value>排除左侧（像素）</value>
-  </data>
-  <data name="ScrollCaptureTopInset" xml:space="preserve">
-    <value>排除顶部（像素）</value>
-  </data>
-  <data name="ScrollCaptureInsetInvalid" xml:space="preserve">
-    <value>拼接方向至少保留 16 像素。</value>
-  </data>
-  <data name="ScrollCaptureBottomInset" xml:space="preserve">
-    <value>排除底部（像素）</value>
   </data>
   <data name="ScrollCaptureStart" xml:space="preserve">
     <value>开始</value>
@@ -2057,13 +2036,10 @@ X {0}, Y {1}</value>
   <data name="SelectionCaptureWindow" xml:space="preserve"><value>捕获窗口内容</value></data>
   <data name="SelectionCaptureScreen" xml:space="preserve"><value>捕获屏幕画面</value></data>
   <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>捕获窗口内容，随窗口移动</value></data>
-  <data name="ScrollCaptureInsets" xml:space="preserve"><value>固定内容裁剪</value></data>
   <data name="ScrollCaptureCollecting" xml:space="preserve"><value>滚动内容以继续拼接</value></data>
   <data name="ScrollCapturePaused" xml:space="preserve"><value>已暂停</value></data>
-  <data name="ScrollCaptureReturn" xml:space="preserve"><value>返回选区</value></data>
   <data name="ScrollCaptureMoveVertical" xml:space="preserve"><value>上下移动选区</value></data>
   <data name="ScrollCaptureMoveHorizontal" xml:space="preserve"><value>左右移动选区</value></data>
-  <data name="ScrollCapturePreview" xml:space="preserve"><value>拼接预览</value></data>
   <data name="ScrollCaptureDirectionReset" xml:space="preserve"><value>方向已切换，重新开始拼接</value></data>
   <data name="GlobalActionDisabledState" xml:space="preserve"><value>停用</value></data>
   <data name="GlobalActionEdit" xml:space="preserve"><value>编辑动作</value></data>
@@ -3196,5 +3172,33 @@ X {0}, Y {1}</value>
   </data>
   <data name="ToolbarMoveHint" xml:space="preserve">
     <value>拖动工具栏，双击恢复自动位置</value>
+  </data>
+  <data name="SettingsInvalidNumber" xml:space="preserve"><value>请输入 {0} 至 {1} 之间的数字。</value></data>
+  <data name="ScrollCaptureEdit" xml:space="preserve">
+    <value>编辑长截图</value>
+  </data>
+  <data name="ScrollCaptureQuickSave" xml:space="preserve">
+    <value>快速保存</value>
+  </data>
+  <data name="ScrollCaptureOcrCopy" xml:space="preserve">
+    <value>识别文字并复制</value>
+  </data>
+  <data name="ScrollCaptureClose" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="ScrollCaptureCrop" xml:space="preserve">
+    <value>裁剪</value>
+  </data>
+  <data name="ScrollCaptureCropTop" xml:space="preserve">
+    <value>裁掉当前画面上方</value>
+  </data>
+  <data name="ScrollCaptureCropBottom" xml:space="preserve">
+    <value>裁掉当前画面下方</value>
+  </data>
+  <data name="ScrollCaptureCropLeft" xml:space="preserve">
+    <value>裁掉当前画面左侧</value>
+  </data>
+  <data name="ScrollCaptureCropRight" xml:space="preserve">
+    <value>裁掉当前画面右侧</value>
   </data>
 </root>

@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 
 namespace RitsukageGif.Desktop
@@ -8,9 +11,11 @@ namespace RitsukageGif.Desktop
     {
         private Task _activeOperation = Task.CompletedTask;
 
-        private async Task RunAsync(Func<CancellationToken, Task> action)
+        private async Task RunAsync(Func<CancellationToken, Task> action, [CallerMemberName] string operation = "")
         {
             if (_operation is not null) return;
+            var started = Stopwatch.GetTimestamp();
+            Logger.ZLogInformation($"Animation editor operation started. Operation={operation} ImageMode={_imageMode}");
             _playback.Stop();
             using var cancellation = new CancellationTokenSource();
             _operation = cancellation;
@@ -24,13 +29,18 @@ namespace RitsukageGif.Desktop
                 await _frameLoad;
                 cancellation.Token.ThrowIfCancellationRequested();
                 await action(cancellation.Token);
+                var elapsed = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+                Logger.ZLogInformation(
+                    $"Animation editor operation completed. Operation={operation} ElapsedMs={elapsed} FrameCount={_document?.Frames.Count ?? 0}");
             }
             catch (OperationCanceledException)
             {
+                Logger.ZLogInformation($"Animation editor operation canceled. Operation={operation}");
                 SetStatus("Cancelled");
             }
             catch (Exception exception)
             {
+                Logger.ZLogError(exception, $"Animation editor operation failed. Operation={operation}");
                 SetStatusError(exception.Message);
             }
             finally
@@ -42,49 +52,63 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private Task MutateAsync(Action<AnimationEditDocument> action) => RunAsync(async token =>
+        private Task MutateAsync(Action<AnimationEditDocument> action, [CallerMemberName] string operation = "")
         {
-            if (_document is null) return;
-            if (_canvas.HasChanges)
+            return RunAsync(async token =>
             {
-                SetStatus("AnimationApplyFirst");
-                return;
-            }
-
-            var before = _document.Frames;
-            var iterations = _document.Iterations;
-            await Task.Run(() =>
-            {
-                token.ThrowIfCancellationRequested();
-                action(_document);
-            }, token);
-            if (!ReferenceEquals(before, _document.Frames) || iterations != _document.Iterations) _dirty = true;
-            Refresh();
-        });
-
-        private Task EditAsync(Action<AnimationEditDocument, CancellationToken> action) => RunAsync(async token =>
-        {
-            if (_document is null) return;
-            if (_canvas.HasChanges)
-            {
-                SetStatus("AnimationApplyFirst");
-                return;
-            }
-
-            var before = _document.Frames;
-            try
-            {
-                await Task.Run(() => action(_document, token), token);
-            }
-            finally
-            {
-                if (!ReferenceEquals(before, _document.Frames))
+                if (_document is null) return;
+                if (_canvas.HasChanges)
                 {
-                    _dirty = true;
-                    Refresh();
+                    SetStatus("AnimationApplyFirst");
+                    return;
                 }
-            }
-        });
+
+                var before = _document.Frames;
+                var iterations = _document.Iterations;
+                await Task.Run(() =>
+                {
+                    token.ThrowIfCancellationRequested();
+                    action(_document);
+                }, token);
+                if (!ReferenceEquals(before, _document.Frames) || iterations != _document.Iterations) _dirty = true;
+                Refresh();
+            }, operation);
+        }
+
+        private Task EditAsync(Action<AnimationEditDocument, CancellationToken> action,
+            [CallerMemberName] string operation = "")
+        {
+            return RunAsync(async token =>
+            {
+                if (_document is null) return;
+                if (_canvas.HasChanges)
+                {
+                    if (_imageMode)
+                    {
+                        await CommitImageDraftAsync(token);
+                    }
+                    else
+                    {
+                        SetStatus("AnimationApplyFirst");
+                        return;
+                    }
+                }
+
+                var before = _document.Frames;
+                try
+                {
+                    await Task.Run(() => action(_document, token), token);
+                }
+                finally
+                {
+                    if (!ReferenceEquals(before, _document.Frames))
+                    {
+                        _dirty = true;
+                        Refresh();
+                    }
+                }
+            }, operation);
+        }
 
         private Task UndoAsync()
         {
@@ -133,8 +157,11 @@ namespace RitsukageGif.Desktop
             _frames.ScrollIntoView(current);
         }
 
-        private static FilePickerFileType AnimationFiles() => new(UiText.Get("AnimationFiles"))
-            { Patterns = ["*.gif", "*.webp", "*.apng", "*.png", "*.jpg", "*.jpeg", "*.bmp"] };
+        private static FilePickerFileType AnimationFiles()
+        {
+            return new(UiText.Get("AnimationFiles"))
+                { Patterns = ["*.gif", "*.webp", "*.apng", "*.png", "*.jpg", "*.jpeg", "*.bmp"] };
+        }
 
         internal async Task OpenPathAsync(string path)
         {
@@ -146,31 +173,43 @@ namespace RitsukageGif.Desktop
         {
             if (!await ConfirmDiscardAsync()) return;
             var files = await StorageProvider.OpenFilePickerAsync(new()
-                { Title = UiText.Get("EditorOpen"), FileTypeFilter = [AnimationFiles()] });
+            {
+                Title = UiText.Get("EditorOpen"), FileTypeFilter = _imageMode ? StaticImageFiles() : [AnimationFiles()],
+            });
             if (files.Count > 0 && files[0].TryGetLocalPath() is { } path) await LoadAsync(path);
         }
 
-        private Task LoadAsync(string path) => RunAsync(async token =>
+        private Task LoadAsync(string path)
         {
-            var loaded = await Task.Run(() => AnimationEditDocument.Open(path, token), token);
-            try
+            return RunAsync(async token =>
             {
-                await _canvas.LoadFrameAsync(loaded.Frames[0].Path, token);
-            }
-            catch
-            {
-                loaded.Dispose();
-                throw;
-            }
+                if (_imageMode)
+                {
+                    var image = await Task.Run(() => AnimationEditDocument.OpenImage(path, token), token);
+                    await InstallImageDocumentAsync(image, path, false, token);
+                    return;
+                }
 
-            _displayedPath = loaded.Frames[0].Path;
-            _thumbnailCache.Clear();
-            _document?.Dispose();
-            _document = loaded;
-            _path = path;
-            _dirty = false;
-            Refresh();
-        });
+                var loaded = await Task.Run(() => AnimationEditDocument.Open(path, token), token);
+                try
+                {
+                    await _canvas.LoadFrameAsync(loaded.Frames[0].Path, token);
+                }
+                catch
+                {
+                    loaded.Dispose();
+                    throw;
+                }
+
+                _displayedPath = loaded.Frames[0].Path;
+                _thumbnailCache.Clear();
+                _document?.Dispose();
+                _document = loaded;
+                _path = path;
+                _dirty = false;
+                Refresh();
+            });
+        }
 
         private async Task NewAsync()
         {
@@ -221,6 +260,12 @@ namespace RitsukageGif.Desktop
 
         private async Task ExportAsync()
         {
+            if (_imageMode)
+            {
+                await SaveImageAsync(true);
+                return;
+            }
+
             if (_document is null) return;
             if (_canvas.HasChanges)
             {
@@ -236,14 +281,14 @@ namespace RitsukageGif.Desktop
                 SuggestedFileName =
                     $"{(_path is null ? "animation" : Path.GetFileNameWithoutExtension(_path))}-edited.{format}",
                 DefaultExtension = format, ShowOverwritePrompt = true,
-                FileTypeChoices = [new(format.ToUpperInvariant()) { Patterns = [$"*.{format}"] }]
+                FileTypeChoices = [new(format.ToUpperInvariant()) { Patterns = [$"*.{format}"] }],
             });
             if (file?.TryGetLocalPath() is not { } path) return;
             var selectedFrame = CurrentFrame;
             var options = new MediaProcessOptions
             {
                 Format = format, Quality = Value(_exportQuality), Colors = Value(_colors),
-                Lossless = _lossless.IsChecked == true, Dither = _dither.IsChecked == true, Overwrite = true
+                Lossless = _lossless.IsChecked == true, Dither = _dither.IsChecked == true, Overwrite = true,
             };
             await RunAsync(async token =>
             {
@@ -265,20 +310,21 @@ namespace RitsukageGif.Desktop
             if (!_dirty && !_canvas.HasChanges) return true;
             var dialog = new Window
             {
-                [!TitleProperty] = LiveText.Resource("AnimationEditorTitle"), Width = 390,
+                [!TitleProperty] = LiveText.Resource(_imageMode ? "ImageEditorTitle" : "AnimationEditorTitle"),
+                Width = 390,
                 SizeToContent = SizeToContent.Height,
-                CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner
+                CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner,
             };
             var panel = new StackPanel { Margin = new(16), Spacing = 12 };
             panel.Children.Add(new TextBlock
             {
                 [!TextBlock.TextProperty] = LiveText.Resource("AnimationUnsaved"),
-                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+                TextWrapping = TextWrapping.Wrap,
             });
             var buttons = new StackPanel
                 { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
-            var discard = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("EditorDiscard") };
-            var cancel = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("EditorCancel") };
+            var discard = new Button { [!ContentProperty] = LiveText.Resource("EditorDiscard") };
+            var cancel = new Button { [!ContentProperty] = LiveText.Resource("EditorCancel") };
             discard.Click += (_, _) => dialog.Close(true);
             cancel.Click += (_, _) => dialog.Close(false);
             buttons.Children.Add(discard);
@@ -292,16 +338,28 @@ namespace RitsukageGif.Desktop
         {
             if (_allowClose) return true;
             if (_confirming) return false;
+            Logger.ZLogInformation(
+                $"Animation editor close requested. ActiveOperation={_operation is not null} UnsavedChanges={_dirty || _canvas.HasChanges}");
             _confirming = true;
             try
             {
-                _operation?.Cancel();
+                if (_operation is { } operation) await operation.CancelAsync();
                 await _activeOperation;
                 await _frameLoad;
-                if (!await ConfirmDiscardAsync()) return false;
+                if (!await ConfirmDiscardAsync())
+                {
+                    Logger.ZLogInformation($"Animation editor close canceled by user.");
+                    return false;
+                }
+
                 _allowClose = true;
                 Close();
                 return true;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(error, $"Animation editor close failed.");
+                throw;
             }
             finally
             {
@@ -309,11 +367,23 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async void OnClosing(object? sender, WindowClosingEventArgs args)
+        private void OnClosing(object? sender, WindowClosingEventArgs args)
         {
             if (_allowClose) return;
             args.Cancel = true;
-            await RequestCloseAsync();
+            _ = CloseFromEventAsync();
+        }
+
+        private async Task CloseFromEventAsync()
+        {
+            try
+            {
+                await RequestCloseAsync();
+            }
+            catch (Exception error)
+            {
+                _status.Text = error.Message;
+            }
         }
     }
 }

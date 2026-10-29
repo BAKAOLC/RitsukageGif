@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 
@@ -9,12 +10,12 @@ namespace RitsukageGif.Desktop
     public sealed partial class MainWindow : Window
     {
         private readonly Button _cancel = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("CancelProcessing"), IsVisible = false };
+            { [!ContentProperty] = LiveText.Resource("CancelProcessing"), IsVisible = false };
 
         private readonly Control[] _commonControls;
 
         private readonly Button _configure = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("Settings") };
+            { [!ContentProperty] = LiveText.Resource("Settings") };
 
         private readonly CheckBox _cursor = new()
         {
@@ -33,18 +34,25 @@ namespace RitsukageGif.Desktop
         };
 
         private readonly CompactNumberInput _fps = new();
+
+        private readonly HdrPreviewHost _hdrPreview = new()
+            { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+
         private readonly ApplicationHost _host;
         private readonly Image _image = new() { Stretch = Stretch.Uniform, MaxHeight = 130 };
         private readonly AnimationPreview _preview;
+        private readonly Grid _previewSurface = new();
 
         private readonly Button _record = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("StartRecording"), IsEnabled = false };
+            { [!ContentProperty] = LiveText.Resource("StartRecording"), IsEnabled = false };
 
         private readonly TextBlock _regionText = new()
             { [!TextBlock.TextProperty] = LiveText.Resource("SelectAreaHint"), TextWrapping = TextWrapping.Wrap };
 
         private readonly CompactNumberInput _scale = new();
-        private readonly Button _select = new() { [!ContentControl.ContentProperty] = LiveText.Resource("SelectArea") };
+
+        private readonly Button _select = new() { [!ContentProperty] = LiveText.Resource("SelectArea") };
+        private readonly Button _selectMenu = new() { Name = "SelectRecordingSource" };
         private readonly TextBlock _size = new() { TextWrapping = TextWrapping.Wrap };
 
         private readonly TextBlock _status = new()
@@ -60,7 +68,7 @@ namespace RitsukageGif.Desktop
         {
             _host = host;
             Classes.Add("main-window");
-            _commonControls = [_select, _fps, _scale, _format, _cursor, _configure];
+            _commonControls = [_select, _fps, _scale, _format, _cursor];
             Title = "RitsukageGif";
             Width = 287;
             Height = 420;
@@ -68,14 +76,18 @@ namespace RitsukageGif.Desktop
             MinHeight = 390;
             FontSize = 12;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            _preview = new(_image, _host.SetStatus);
+            _preview = new(_image, _hdrPreview, _host.SetStatus);
+            _previewSurface.Children.Add(_image);
+            _previewSurface.Children.Add(_hdrPreview);
             BuildOriginalLayout();
+            InitializeActionPresentation();
+            InitializeTrayBehavior();
             RefreshPresets();
             RefreshFromHost();
             _host.Changed += RefreshFromHost;
             UiText.LanguageChanged += RefreshFromHost;
-            _select.Click += async (_, _) => await _host.SelectAsync();
-            _record.Click += async (_, _) => await _host.ToggleRecordingAsync();
+            _select.Click += async (_, _) => await _host.SelectSourceAsync(_host.SelectedCaptureSource);
+            _record.Click += async (_, _) => await RunMainActionAsync(_host.ToggleRecordingAsync);
             _cancel.Click += (_, _) => _host.CancelRecording();
             _configure.Click += async (_, _) => await ConfigureAsync();
             _updateAvailable.Click += (_, _) => OpenAvailableUpdate();
@@ -115,6 +127,8 @@ namespace RitsukageGif.Desktop
             Closing += async (_, e) =>
             {
                 if (_allowClose) return;
+                if (TryCloseToTray(e)) return;
+
                 e.Cancel = true;
                 if (_closing) return;
                 _closing = true;
@@ -158,7 +172,7 @@ namespace RitsukageGif.Desktop
             Close();
         }
 
-        public void RefreshFromHost()
+        private void RefreshFromHost()
         {
             _updateAvailable.IsVisible = _host.AvailableUpdate is not null;
             ToolTip.SetTip(_updateAvailable, _host.AvailableUpdate is { } release
@@ -173,31 +187,43 @@ namespace RitsukageGif.Desktop
                 _format.SelectedIndex = (int)settings.Format;
             }
 
-            if (_displayCursor != settings.Cursor) _cursor.IsChecked = _displayCursor = settings.Cursor;
+            if (_displayCursor != settings.Cursor || _cursor.IsChecked != settings.Cursor)
+                _cursor.IsChecked = _displayCursor = settings.Cursor;
             _status.Text = _host.Status;
             RefreshOutputs();
             RefreshStreamStatus();
-            _record.Content =
-                UiText.Get(_host.IsRecording ? "StopRecording" : _host.IsBusy ? "Processing" : "StartRecording");
-            _record.Background = _host.IsRecording ? Brushes.Red : Brushes.White;
+            RefreshActionPresentation();
             _record.Classes.Set("recording", _host.IsRecording);
-            _record.IsEnabled = !_host.IsClosing && !_host.IsSelecting && !_host.IsConfiguring &&
-                                (_host.IsRecording || (!_host.IsBusy && _host.Region is not null));
-            _cancel.IsVisible = _host.IsBusy && !_host.IsRecording;
+            _record.IsEnabled = _host.CanToggleRecording;
+            _cancel.IsVisible = _host is { IsBusy: true, IsRecording: false };
             foreach (var control in _commonControls)
-                control.IsEnabled = _host.CanEditRecordingSettings && !_host.IsSelecting && !_host.IsConfiguring;
+                control.IsEnabled = _host is
+                    { CanEditRecordingSettings: true, IsSelecting: false, IsConfiguring: false };
+            _configure.IsEnabled = _host is { IsClosing: false, IsSelecting: false, IsConfiguring: false };
             _regionText.Text = _host.Region is { } region
                 ? UiText.Format("RegionInfo", region.X, region.Y, region.Width, region.Height)
                 : UiText.Get("SelectAreaHint");
-            ToolTip.SetTip(_select, _regionText.Text);
-            _frames.Text = _host.LatestProgress is { } progress ? $"{progress.Encoded} / {progress.Captured}" : "N/A";
+            var regionDescription = _regionText.Text;
+            if (_host.Region is { } selectedRegion)
+                _regionText.Text =
+                    $"{selectedRegion.X}, {selectedRegion.Y} · {selectedRegion.Width} × {selectedRegion.Height}";
+            ToolTip.SetTip(_regionText, regionDescription);
+            SetActionTip(_select, regionDescription, Settings.GetActionShortcut(GlobalActionKind.SelectRegion));
+            _frames.Text = _host.LatestProgress is { } progress ? $"{progress.Encoded} / {progress.Captured}" : "—";
             _captureRate.Text = _host.LatestProgress is { } captureProgress
                 ? UiText.Format("CaptureRateValue", captureProgress.CapturedFps)
                 : "—";
             ToolTip.SetTip(_frames, _host.LatestProgress is { } details ? RecordingProgressText.Format(details) : null);
             if (_displayPath == LastPath) return;
             _displayPath = LastPath;
-            if (LastPath is null) return;
+            if (LastPath is null)
+            {
+                _size.Text = "—";
+                _size.Foreground = Brushes.Black;
+                _size.FontWeight = FontWeight.Normal;
+                return;
+            }
+
             try
             {
                 var bytes = new FileInfo(LastPath).Length;
@@ -208,11 +234,15 @@ namespace RitsukageGif.Desktop
             }
             catch (IOException)
             {
-                _size.Text = "N/A";
+                _size.Text = "—";
+                _size.Foreground = Brushes.Black;
+                _size.FontWeight = FontWeight.Normal;
             }
             catch (UnauthorizedAccessException)
             {
-                _size.Text = "N/A";
+                _size.Text = "—";
+                _size.Foreground = Brushes.Black;
+                _size.FontWeight = FontWeight.Normal;
             }
         }
 

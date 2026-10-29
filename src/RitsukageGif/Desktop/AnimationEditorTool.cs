@@ -7,8 +7,9 @@ namespace RitsukageGif.Desktop
         Brush,
         Eraser,
         Line,
+        Arrow,
         Rectangle,
         Ellipse,
-        Selection
+        Selection,
     }
 }

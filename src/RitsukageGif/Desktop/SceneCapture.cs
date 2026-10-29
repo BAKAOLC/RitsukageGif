@@ -4,30 +4,30 @@ using SkiaSharp;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed partial class SceneCapture : IFrameSource
+    internal sealed partial class SceneCapture : IFrameSource, IColorFrameSource
     {
+        private readonly SKColor _background;
+        private readonly SKBitmap _canvas;
+        private readonly Stopwatch _clock = new();
+        private readonly SceneCaptureContext? _context;
+        private readonly Func<DisplayTopology> _displayProvider;
+        private readonly SKCanvas _drawing;
+        private readonly Func<DisplayTopology> _frameDisplayProvider;
+        private readonly Layer[] _layers;
+        private readonly bool _needsWindowTargets;
+
+        private readonly RecordingOptions _options;
+        private readonly bool _ownsContext;
+        private readonly SKPaint _paint = new();
         private readonly WindowPreset _preset;
         private readonly PresetRuntime? _runtime;
-        private readonly SceneCaptureContext? _context;
-        private readonly bool _ownsContext;
         private readonly PresetRuntimeSnapshot _staticFrame;
-        private readonly bool _needsWindowTargets;
+        private bool _disposed;
 
         private PresetRuntimeSnapshot _frame;
         private double _frameMotionTime;
-
-        private readonly RecordingOptions _options;
-        private readonly Func<DisplayTopology> _displayProvider;
-        private readonly Func<DisplayTopology> _frameDisplayProvider;
-        private DisplayTopology _topology;
-        private bool _disposed;
-        private readonly SKBitmap _canvas;
-        private readonly SKCanvas _drawing;
-        private readonly SKPaint _paint = new();
-        private readonly SKColor _background;
-        private readonly Layer[] _layers;
-        private readonly Stopwatch _clock = new();
         private double _nextSearch;
+        private DisplayTopology _topology;
         private IReadOnlyList<WindowTarget> _windows = [];
 
         public SceneCapture(RecordingOptions options, PixelRect[] monitors, WindowPreset preset,
@@ -36,19 +36,13 @@ namespace RitsukageGif.Desktop
         {
         }
 
-        private static Func<DisplayTopology> ConstantDisplay(PixelRect[] monitors)
-        {
-            var topology = new DisplayTopology(monitors);
-            return () => topology;
-        }
-
         public SceneCapture(RecordingOptions options, Func<DisplayTopology> displayProvider, WindowPreset preset,
             PresetRuntime? runtime = null, SceneCaptureContext? context = null, ExternalInputHub? inputs = null)
         {
             _runtime = runtime;
             _ownsContext = context is null;
             _context = context ?? new SceneCaptureContext(options.Fps, inputs: inputs);
-            _staticFrame = new PresetRuntimeSnapshot(preset.InitialValues ?? new Dictionary<string, object>(),
+            _staticFrame = new(preset.InitialValues ?? new Dictionary<string, object>(),
                 new Dictionary<string, PresetLayerState>());
             _frame = _staticFrame;
             _preset = preset;
@@ -56,29 +50,29 @@ namespace RitsukageGif.Desktop
             _displayProvider = displayProvider;
             _topology = displayProvider();
             _frameDisplayProvider = () => _topology;
-            _canvas = new SKBitmap(options.Width, options.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-            _drawing = new SKCanvas(_canvas);
+            _canvas = new(options.Width, options.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            _drawing = new(_canvas);
             _paint.FilterQuality = SKFilterQuality.Medium;
             _paint.IsAntialias = true;
             _background = preset.Layout is null ? SKColors.Transparent : ParseColor(preset.Layout.Background);
             var definitions = preset.Layout?.Layers ??
             [
-                new PresetLayer(preset.Name, null, preset.Title, preset.ClientArea,
-                    preset.Area, new PixelRect(0, 0, options.Region.Width, options.Region.Height),
-                    new PresetShape("rect"),
-                    preset.Source, preset.Missing ?? new PresetFallback(), preset.Follow, preset.Absolute)
+                new(preset.Name, null, preset.Title, preset.ClientArea,
+                    preset.Area, new(0, 0, options.Region.Width, options.Region.Height),
+                    new("rect"),
+                    preset.Source, preset.Missing ?? new PresetFallback(), preset.Follow, preset.Absolute),
             ];
-            _needsWindowTargets = definitions.Any(definition => !definition.Absolute && definition.Media is null);
+            _needsWindowTargets = definitions.Any(definition => definition is { Absolute: false, Media: null });
             var layers = new List<Layer>();
             try
             {
                 if (DesktopCapture.UsesSourceSelection &&
-                    (definitions.Any(definition => !definition.Absolute && definition.Media is null) ||
+                    (definitions.Any(definition => definition is { Absolute: false, Media: null }) ||
                      definitions.Where(definition => definition.Media is null).Select(definition => definition.Source)
                          .Distinct().Count() > 1))
                     throw new NotSupportedException(UiText.Get("CapturePlatformUnsupported"));
-                foreach (var definition in definitions) layers.Add(new Layer(definition, options.Divisor));
-                _layers = layers.ToArray();
+                foreach (var definition in definitions) layers.Add(new(definition, options.Divisor));
+                _layers = [.. layers];
             }
             catch
             {
@@ -90,7 +84,10 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public byte[] Capture() => Capture(default);
+        public byte[] Capture()
+        {
+            return Capture(CancellationToken.None);
+        }
 
         public byte[] Capture(CancellationToken token)
         {
@@ -101,11 +98,15 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             _frame = _runtime is null ? _staticFrame : _context?.GetSnapshot(_runtime) ?? _runtime.Snapshot;
             _frameMotionTime = _context?.MotionTime ?? PresetMotion.Now;
-            if (_needsWindowTargets && _context is not null) _windows = _context.GetWindows();
-            else if (_needsWindowTargets && _clock.Elapsed.TotalMilliseconds >= _nextSearch)
+            switch (_needsWindowTargets)
             {
-                _windows = WindowLocator.List();
-                _nextSearch = _clock.Elapsed.TotalMilliseconds + 100;
+                case true when _context is not null:
+                    _windows = _context.GetWindows();
+                    break;
+                case true when _clock.Elapsed.TotalMilliseconds >= _nextSearch:
+                    _windows = WindowLocator.List();
+                    _nextSearch = _clock.Elapsed.TotalMilliseconds + 100;
+                    break;
             }
 
             foreach (var layer in _layers)
@@ -151,15 +152,36 @@ namespace RitsukageGif.Desktop
             return pixels;
         }
 
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            DisposeHdr();
+            foreach (var layer in _layers) layer.Dispose();
+            if (_ownsContext) _context!.Dispose();
+            _drawing.Dispose();
+            _canvas.Dispose();
+            _paint.Dispose();
+        }
+
+        private static Func<DisplayTopology> ConstantDisplay(PixelRect[] monitors)
+        {
+            var topology = new DisplayTopology(monitors);
+            return () => topology;
+        }
+
         private byte[] CaptureScreen(Layer layer, PixelRect area, CancellationToken token)
         {
             if (layer.Screen is null || area.Width != layer.LastArea.Width || area.Height != layer.LastArea.Height)
             {
                 layer.Screen?.Dispose();
-                layer.Screen = new DesktopCapture(_options with { Region = area, Divisor = 1 },
+                layer.Screen = new(_options with { Region = area, Divisor = 1 },
                     _frameDisplayProvider, layer.Bitmap.Width, layer.Bitmap.Height);
             }
-            else if (area != layer.LastArea) layer.Screen.Move(area);
+            else if (area != layer.LastArea)
+            {
+                layer.Screen.Move(area);
+            }
 
             layer.LastArea = area;
             return layer.Screen.Capture(token);
@@ -172,12 +194,12 @@ namespace RitsukageGif.Desktop
             layer.Rendered = true;
             var definition = layer.Definition;
             WindowTarget? target = null;
-            if (!definition.Absolute && definition.Media is null)
+            if (definition is { Absolute: false, Media: null })
             {
                 var match = _preset with
                 {
                     Process = definition.Process ?? _preset.Process,
-                    Title = definition.Process is null ? _preset.Title : definition.Title
+                    Title = definition.Process is null ? _preset.Title : definition.Title,
                 };
                 target = definition.Process is null && _preset.FixedHandle != 0
                     ? _windows.SingleOrDefault(w => w.Handle == _preset.FixedHandle)
@@ -227,7 +249,7 @@ namespace RitsukageGif.Desktop
                     {
                         var basis = definition.Absolute ? default :
                             definition.ClientArea ? target!.Client : target!.Bounds;
-                        area = new PixelRect(checked(basis.X + crop.X), checked(basis.Y + crop.Y), crop.Width,
+                        area = new(checked(basis.X + crop.X), checked(basis.Y + crop.Y), crop.Width,
                             crop.Height);
                     }
 
@@ -255,7 +277,7 @@ namespace RitsukageGif.Desktop
                                 (Scene: this, Layer: layer, Area: area, Token: token),
                                 static request =>
                                     request.Scene.CaptureScreen(request.Layer, request.Area, request.Token),
-                                token, definition.Absolute && !definition.Follow && state?.Crop is null);
+                                definition is { Absolute: true, Follow: false } && state?.Crop is null, token);
                         if (pixels is not null)
                         {
                             DrawPixels(layer, pixels, layer.Bitmap.Width, layer.Bitmap.Height, null);
@@ -267,10 +289,12 @@ namespace RitsukageGif.Desktop
                         byte[]? pixels;
                         int width, height;
                         if (_context is not null)
+                        {
                             (pixels, width, height) = _context.CaptureWindow(target!.Handle, _options, token);
+                        }
                         else
                         {
-                            layer.Window ??= new WindowContentCapture(target!.Handle, _options.Cursor, _options.Fps);
+                            layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps);
                             pixels = layer.Window.Capture(token);
                             width = layer.Window.Width;
                             height = layer.Window.Height;
@@ -320,13 +344,13 @@ namespace RitsukageGif.Desktop
             if (layer.SourceBitmap is null || layer.SourceBitmap.Width != width || layer.SourceBitmap.Height != height)
             {
                 layer.SourceBitmap?.Dispose();
-                layer.SourceBitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+                layer.SourceBitmap = new(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             }
 
-            pixels.CopyTo(new Span<byte>((void*)layer.SourceBitmap.GetPixels(), pixels.Length));
+            pixels.CopyTo(new((void*)layer.SourceBitmap.GetPixels(), pixels.Length));
             layer.SourceBitmap.NotifyPixelsChanged();
             layer.Drawing.DrawBitmap(layer.SourceBitmap, source ?? new SKRect(0, 0, width, height),
-                new SKRect(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
+                new(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
         }
 
         private void DrawFallback(Layer layer, CancellationToken token)
@@ -366,45 +390,37 @@ namespace RitsukageGif.Desktop
             return bitmap;
         }
 
-        private static SKColor ParseColor(string value) =>
-            value == "transparent" ? SKColors.Transparent : SKColor.Parse(value);
-
-        public void Dispose()
+        private static SKColor ParseColor(string value)
         {
-            if (_disposed) return;
-            _disposed = true;
-            foreach (var layer in _layers) layer.Dispose();
-            if (_ownsContext) _context!.Dispose();
-            _drawing.Dispose();
-            _canvas.Dispose();
-            _paint.Dispose();
+            return value == "transparent" ? SKColors.Transparent : SKColor.Parse(value);
         }
 
         private sealed class Layer : IDisposable
         {
             public readonly PresetLayer Definition;
+            public readonly SKPath Mask = new();
             public SKBitmap Bitmap;
             public SKCanvas Drawing;
-            public readonly SKPath Mask = new();
-            public SKBitmap? SourceBitmap, FallbackImage;
-            public DesktopCapture? Screen;
-            public WindowContentCapture? Window;
-            public nint Handle;
-            public PixelRect LastArea;
-            public PixelRect? FrozenArea;
-            public bool Rendered;
-            public int InputWidth, InputHeight;
-            public MediaFrameSource? Media;
-            public string? MediaPath;
-            public PresetMediaSource? ResolvedMedia;
-            public SceneFfmpegSource? Ffmpeg;
-            public ExternalInputFrame? InputFrame;
-            public long NextMediaRetry;
-            public IReadOnlyList<PixelEffect>? Effects;
-            public PixelEffect[] MappedEffects = [];
 
             public (int SourceWidth, int SourceHeight, int OutputWidth, int OutputHeight, int Width, int Height)
                 EffectSize;
+
+            public IReadOnlyList<PixelEffect>? Effects;
+            public SceneFfmpegSource? Ffmpeg;
+            public PixelRect? FrozenArea;
+            public nint Handle;
+            public ExternalInputFrame? InputFrame;
+            public int InputWidth, InputHeight;
+            public PixelRect LastArea;
+            public PixelEffect[] MappedEffects = [];
+            public MediaFrameSource? Media;
+            public string? MediaPath;
+            public long NextMediaRetry;
+            public bool Rendered;
+            public PresetMediaSource? ResolvedMedia;
+            public DesktopCapture? Screen;
+            public SKBitmap? SourceBitmap, FallbackImage;
+            public WindowContentCapture? Window;
 
             public Layer(PresetLayer definition, int divisor)
             {
@@ -412,11 +428,24 @@ namespace RitsukageGif.Desktop
                 var p = definition.Placement;
                 InputWidth = p.Width;
                 InputHeight = p.Height;
-                Bitmap = new SKBitmap(Math.Max(1, p.Width / divisor), Math.Max(1, p.Height / divisor),
+                Bitmap = new(Math.Max(1, p.Width / divisor), Math.Max(1, p.Height / divisor),
                     SKColorType.Bgra8888,
                     SKAlphaType.Premul);
-                Drawing = new SKCanvas(Bitmap);
-                BuildMask();
+                Drawing = new(Bitmap);
+                BuildMask(Definition);
+            }
+
+            public void Dispose()
+            {
+                ReleaseCapture();
+                Media?.Dispose();
+                Ffmpeg?.Dispose();
+                InputFrame = null;
+                SourceBitmap?.Dispose();
+                FallbackImage?.Dispose();
+                Drawing.Dispose();
+                Bitmap.Dispose();
+                Mask.Dispose();
             }
 
             public void EnsureResolution(int width, int height, int divisor)
@@ -428,16 +457,15 @@ namespace RitsukageGif.Desktop
                 Drawing.Dispose();
                 Bitmap.Dispose();
                 Bitmap = bitmap;
-                Drawing = new SKCanvas(Bitmap);
+                Drawing = new(Bitmap);
                 Screen?.Dispose();
                 Screen = null;
-                BuildMask();
+                BuildMask(Definition);
             }
 
-            private void BuildMask()
+            private void BuildMask(PresetLayer definition)
             {
                 Mask.Reset();
-                var definition = Definition;
                 var scaleX = (float)Bitmap.Width / definition.Placement.Width;
                 var scaleY = (float)Bitmap.Height / definition.Placement.Height;
                 var rect = new SKRect(0, 0, Bitmap.Width, Bitmap.Height);
@@ -464,19 +492,6 @@ namespace RitsukageGif.Desktop
                 Screen = null;
                 Window?.Dispose();
                 Window = null;
-            }
-
-            public void Dispose()
-            {
-                ReleaseCapture();
-                Media?.Dispose();
-                Ffmpeg?.Dispose();
-                InputFrame = null;
-                SourceBitmap?.Dispose();
-                FallbackImage?.Dispose();
-                Drawing.Dispose();
-                Bitmap.Dispose();
-                Mask.Dispose();
             }
         }
     }

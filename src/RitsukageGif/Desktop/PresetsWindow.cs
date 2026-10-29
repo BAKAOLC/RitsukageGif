@@ -4,10 +4,11 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class PresetsWindow : Window
+    internal sealed partial class PresetsWindow : Window
     {
         private readonly Func<Window, string, Task>? _edit;
         private readonly List<(ComboBox Preset, TextBox Shortcut)> _entries = [];
@@ -16,7 +17,7 @@ namespace RitsukageGif.Desktop
         private readonly ListBox _fileList = new()
         {
             Name = "PresetFiles", MinHeight = 100, Background = AppTheme.SurfaceTint, BorderBrush = AppTheme.Outline,
-            BorderThickness = new(1), CornerRadius = new(6)
+            BorderThickness = new(1), CornerRadius = new(6),
         };
 
         private readonly List<string> _files;
@@ -25,24 +26,25 @@ namespace RitsukageGif.Desktop
         public PresetsWindow(IReadOnlyList<string> source, IReadOnlyList<PresetHotkey>? hotkeys = null,
             Func<Window, string, Task>? edit = null, Func<IEnumerable<string>>? reservedHotkeys = null)
         {
-            _files = source.ToList();
+            _files = [.. source];
             _edit = edit;
             var reserved = reservedHotkeys ?? (() => []);
-            this.Bind(TitleProperty, LiveText.Resource("PresetsTitle"));
-            Width = 640;
-            Height = 490;
-            MinWidth = 480;
-            MinHeight = 380;
+            Bind(TitleProperty, LiveText.Resource("PresetsTitle"));
+            Width = 760;
+            Height = 600;
+            MinWidth = 560;
+            MinHeight = 420;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             Background = AppTheme.Surface;
             Foreground = AppTheme.Ink;
-            _fileList.ItemTemplate = new FuncDataTemplate<string>((path, _) =>
+            _fileList.Styles.Add(new Style(selector => selector.OfType<ListBoxItem>())
             {
-                var label = new TextBlock
-                    { Text = Path.GetFileName(path), TextTrimming = TextTrimming.CharacterEllipsis };
-                ToolTip.SetTip(label, path);
-                return label;
+                Setters =
+                {
+                    new Setter(HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch),
+                },
             });
+            _fileList.ItemTemplate = new FuncDataTemplate<string>((path, _) => CreateFileCard(path));
             var import = Button("ImportTemplate", "ImportPreset");
             import.Click += async (_, _) => await GuardAsync(ImportAsync);
             var create = Button("EditorNew", "CreatePreset");
@@ -87,7 +89,7 @@ namespace RitsukageGif.Desktop
             var shortcutHeading = new TextBlock
             {
                 [!TextBlock.TextProperty] = LiveText.Resource("Shortcut"), FontWeight = FontWeight.SemiBold,
-                Margin = new(6, 0)
+                Margin = new(6, 0),
             };
             Grid.SetColumn(shortcutHeading, 1);
             _rows.Children.Add(shortcutHeading);
@@ -163,7 +165,7 @@ namespace RitsukageGif.Desktop
         {
             return new()
             {
-                [!ContentControl.ContentProperty] = LiveText.Resource(label), Name = name, Padding = new(9, 4),
+                [!ContentProperty] = LiveText.Resource(label), Name = name, Padding = new(9, 4),
                 MinHeight = 28,
             };
         }
@@ -176,12 +178,13 @@ namespace RitsukageGif.Desktop
 
         private string[] Names()
         {
-            return PresetCatalog.Load(_files).Select(p => p.Name).ToArray();
+            return [.. PresetCatalog.Load(_files).Select(p => p.Name)];
         }
 
         private void RefreshFiles()
         {
             var selected = _fileList.SelectedItem;
+            ReadFileDetails();
             _fileList.ItemsSource = _files.ToArray();
             _fileList.SelectedItem = selected is string path && _files.Contains(path) ? path : _files.FirstOrDefault();
         }
@@ -195,7 +198,7 @@ namespace RitsukageGif.Desktop
                 {
                     var selected = entry.Preset.SelectedItem as string;
                     entry.Preset.ItemsSource = selected is not null && !names.Contains(selected)
-                        ? names.Append(selected).ToArray()
+                        ? [.. names, selected]
                         : names;
                     entry.Preset.SelectedItem = selected ?? names.FirstOrDefault();
                 }
@@ -208,14 +211,14 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        internal async Task CreateTemplateAsync(string? path)
+        private async Task CreateTemplateAsync(string? path)
         {
             if (path is null) return;
             var name = Path.GetFileNameWithoutExtension(path);
             var names = Names();
             var candidate = name;
             for (var suffix = 2; names.Contains(candidate); suffix++) candidate = name + " " + suffix;
-            var escaped = candidate.Replace("\\", "\\\\").Replace("\"", "\\\"")
+            var escaped = candidate.Replace(@"\", @"\\").Replace("\"", "\\\"")
                 .Replace("\r", "\\r").Replace("\n", "\\n").Replace("\t", "\\t");
             var text = "preset \"" + escaped +
                        "\" {\n    area screen(0, 0, 1, 1);\n    script {\n        return;\n    }\n}\n";
@@ -254,6 +257,7 @@ namespace RitsukageGif.Desktop
         {
             if (_edit is null || _fileList.SelectedItem is not string path) return;
             await _edit(this, path);
+            RefreshFiles();
             RefreshBindings();
         }
 
@@ -287,7 +291,8 @@ namespace RitsukageGif.Desktop
             if (selectedName is null && _fileList.SelectedItem is string path)
                 try
                 {
-                    selectedName = PresetCatalog.Load([path]).FirstOrDefault()?.Name;
+                    var presets = PresetCatalog.Load([path]);
+                    selectedName = presets.Count == 0 ? null : presets[0].Name;
                 }
                 catch (Exception exception)
                 {
@@ -302,6 +307,8 @@ namespace RitsukageGif.Desktop
             };
             preset.DropDownOpened += (_, _) => RefreshBindings();
             var shortcut = SettingsWindow.HotkeyBox(binding?.Shortcut ?? "");
+            shortcut.TextChanged += (_, _) => RefreshShortcutLabels();
+            preset.SelectionChanged += (_, _) => RefreshShortcutLabels();
             var clear = Button("Clear", "ClearPresetHotkey");
             clear.Click += (_, _) =>
             {
@@ -325,9 +332,11 @@ namespace RitsukageGif.Desktop
             _rows.Children.Add(shortcutPanel);
             _rows.Children.Add(remove);
             _entries.Add((preset, shortcut));
+            RefreshShortcutLabels();
             remove.Click += (_, _) =>
             {
                 _entries.Remove((preset, shortcut));
+                RefreshShortcutLabels();
                 var removedRow = Grid.GetRow(preset);
                 _rows.Children.Remove(preset);
                 _rows.Children.Remove(shortcutPanel);

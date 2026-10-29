@@ -5,35 +5,37 @@ namespace RitsukageGif.Desktop
     // Used only by the recording producer; consumers must not mutate cached frame buffers.
     internal sealed partial class SceneCaptureContext : IDisposable
     {
-        private readonly Dictionary<PresetRuntime, PresetRuntimeSnapshot> _snapshots = [];
-        private readonly Dictionary<nint, WindowTarget?> _targets = [];
-
-        private readonly Dictionary<ScreenKey, byte[]?> _screens = [];
-
-        private readonly Dictionary<(nint Handle, bool Cursor, int Fps), WindowEntry> _windows = [];
-        private readonly HashSet<(nint Handle, bool Cursor, int Fps)> _unavailable = [];
+        private readonly bool _bufferSources;
+        private readonly int? _captureFps;
         private readonly List<(nint Handle, bool Cursor, int Fps)> _expired = [];
-        private DisplayTopology? _topology;
-        private IReadOnlyList<WindowTarget> _windowList = [];
-        private double _nextSearch;
-        private double? _timeOrigin;
-        private bool _runtimeClock;
-        private readonly ExternalInputHub? _inputs;
-        private double _liveTimestamp;
 
         private readonly Dictionary<(string Name, double Delay, double StaleAfter, bool Hold), ExternalInputFrame?>
             _inputFrames = [];
 
+        private readonly ExternalInputHub? _inputs;
+        private readonly long _maxMediaBytes;
+
         private readonly Dictionary<string, MediaFrameSource> _media =
             new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
-        private bool _disposed;
-        private long _mediaBytes;
-        private readonly long _maxMediaBytes;
-        private readonly int? _captureFps;
-        private readonly Func<nint, bool, int, ISceneWindowSource> _windowFactory;
-        private readonly bool _bufferSources;
         private readonly Func<RecordingOptions, DisplayTopology, int, int, ISceneWindowSource> _screenFactory;
+
+        private readonly Dictionary<ScreenKey, byte[]?> _screens = [];
+        private readonly Dictionary<PresetRuntime, PresetRuntimeSnapshot> _snapshots = [];
+        private readonly Dictionary<nint, WindowTarget?> _targets = [];
+        private readonly HashSet<(nint Handle, bool Cursor, int Fps)> _unavailable = [];
+        private readonly Func<nint, bool, int, ISceneWindowSource> _windowFactory;
+
+        private readonly Dictionary<(nint Handle, bool Cursor, int Fps), WindowEntry> _windows = [];
+
+        private bool _disposed;
+        private double _liveTimestamp;
+        private long _mediaBytes;
+        private double _nextSearch;
+        private bool _runtimeClock;
+        private double? _timeOrigin;
+        private DisplayTopology? _topology;
+        private IReadOnlyList<WindowTarget> _windowList = [];
 
         public SceneCaptureContext(int? captureFps = null,
             Func<nint, bool, int, ISceneWindowSource>? windowFactory = null, long maxMediaBytes = 512L * 1024 * 1024,
@@ -41,7 +43,7 @@ namespace RitsukageGif.Desktop
             Func<RecordingOptions, DisplayTopology, int, int, ISceneWindowSource>? screenFactory = null)
         {
             if (captureFps is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(captureFps));
-            if (maxMediaBytes < 0 || maxMediaBytes > 512L * 1024 * 1024)
+            if (maxMediaBytes is < 0 or > 512L * 1024 * 1024)
                 throw new ArgumentOutOfRangeException(nameof(maxMediaBytes));
             _maxMediaBytes = maxMediaBytes;
             _inputs = inputs;
@@ -54,6 +56,25 @@ namespace RitsukageGif.Desktop
 
         public double MotionTime { get; private set; } = PresetMotion.Now;
         public double ElapsedSeconds { get; private set; }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            foreach (var entry in _windows.Values) entry.Capture.Dispose();
+            foreach (var source in _media.Values) source.Dispose();
+            foreach (var screen in _bufferedScreens.Values) screen.Capture.Dispose();
+            _bufferedScreens.Clear();
+            _screenRetries.Clear();
+            _media.Clear();
+            _mediaBytes = 0;
+            _windows.Clear();
+            _screens.Clear();
+            _snapshots.Clear();
+            _inputFrames.Clear();
+            _targets.Clear();
+            _unavailable.Clear();
+        }
 
         public void BeginFrame(double elapsedSeconds)
         {
@@ -71,10 +92,8 @@ namespace RitsukageGif.Desktop
             _unavailable.Clear();
             _screens.Clear();
             foreach (var (key, entry) in _windows)
-            {
                 if (MotionTime - entry.LastUsed > 5) _expired.Add(key);
                 else entry.HasFrame = false;
-            }
 
             foreach (var key in _expired)
             {
@@ -152,7 +171,7 @@ namespace RitsukageGif.Desktop
                 var capture = _bufferSources && _windows.Count < MaximumBufferedSources
                     ? new BufferedSceneWindowSource(() => _windowFactory(handle, options.Cursor, fps), fps)
                     : _windowFactory(handle, options.Cursor, fps);
-                entry = new WindowEntry(capture);
+                entry = new(capture);
                 _windows.Add(key, entry);
             }
 
@@ -189,31 +208,12 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (!_media.TryGetValue(path, out var source))
             {
-                source = new MediaFrameSource(path, token, _maxMediaBytes - _mediaBytes);
+                source = new(path, _maxMediaBytes - _mediaBytes, token);
                 _media.Add(path, source);
                 _mediaBytes += source.DecodedBytes;
             }
 
             return source;
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            foreach (var entry in _windows.Values) entry.Capture.Dispose();
-            foreach (var source in _media.Values) source.Dispose();
-            foreach (var screen in _bufferedScreens.Values) screen.Capture.Dispose();
-            _bufferedScreens.Clear();
-            _screenRetries.Clear();
-            _media.Clear();
-            _mediaBytes = 0;
-            _windows.Clear();
-            _screens.Clear();
-            _snapshots.Clear();
-            _inputFrames.Clear();
-            _targets.Clear();
-            _unavailable.Clear();
         }
 
         private sealed class WindowSource(nint handle, bool cursor, int fps) : ISceneWindowSource
@@ -222,16 +222,24 @@ namespace RitsukageGif.Desktop
             public int Width => _capture.Width;
             public int Height => _capture.Height;
             public long FrameRevision => _capture.FrameRevision;
-            public byte[]? Capture(CancellationToken token) => _capture.Capture(token);
-            public void Dispose() => _capture.Dispose();
+
+            public byte[]? Capture(CancellationToken token)
+            {
+                return _capture.Capture(token);
+            }
+
+            public void Dispose()
+            {
+                _capture.Dispose();
+            }
         }
 
         private sealed class WindowEntry(ISceneWindowSource capture)
         {
             public readonly ISceneWindowSource Capture = capture;
-            public byte[]? Pixels;
             public bool HasFrame;
             public double LastUsed;
+            public byte[]? Pixels;
         }
     }
 }

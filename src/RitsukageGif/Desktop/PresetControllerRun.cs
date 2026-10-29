@@ -4,10 +4,19 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class PresetControllerRun
     {
-        private readonly object _gate = new();
         private readonly CancellationTokenSource _cancellation = new();
-        private int _users;
+        private readonly Lock _gate = new();
         private bool _retired;
+        private int _users;
+
+        public PresetControllerRun(WindowPreset preset, PresetDebugger? debugger)
+        {
+            Preset = preset;
+            Debugger = debugger;
+            Machine = new(preset, debugger);
+            Token = _cancellation.Token;
+        }
+
         public CancellationToken Token { get; }
         public WindowPreset Preset { get; }
         public string ParameterSession { get; } = Guid.NewGuid().ToString("N");
@@ -25,14 +34,6 @@ namespace RitsukageGif.Desktop
         public Task? ScriptTask { get; set; }
         public string? Failure { get; set; }
         public Exception? ScriptFailure { get; set; }
-
-        public PresetControllerRun(WindowPreset preset, PresetDebugger? debugger)
-        {
-            Preset = preset;
-            Debugger = debugger;
-            Machine = new PresetMachine(preset, debugger);
-            Token = _cancellation.Token;
-        }
 
         public void Acquire()
         {

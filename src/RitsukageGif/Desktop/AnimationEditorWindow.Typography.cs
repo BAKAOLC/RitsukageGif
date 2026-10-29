@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Styling;
 
@@ -20,19 +19,19 @@ namespace RitsukageGif.Desktop
             foreach (var type in new[]
                      {
                          typeof(Button), typeof(TextBox), typeof(ComboBox), typeof(CheckBox), typeof(NumericUpDown),
-                         typeof(TabItem)
+                         typeof(TabItem),
                      })
                 Styles.Add(new Style(s => s.OfType(type))
                 {
                     Setters =
                     {
-                        new Setter(TemplatedControl.FontSizeProperty, new DynamicResourceExtension(EditorFontResource)),
-                        new Setter(MinHeightProperty, new DynamicResourceExtension(ButtonHeightResource))
-                    }
+                        new Setter(FontSizeProperty, new DynamicResourceExtension(EditorFontResource)),
+                        new Setter(MinHeightProperty, new DynamicResourceExtension(ButtonHeightResource)),
+                    },
                 });
             Styles.Add(new Style(s => s.OfType<TextBlock>().Class("editor-caption"))
             {
-                Setters = { new Setter(TextBlock.FontSizeProperty, new DynamicResourceExtension(CaptionFontResource)) }
+                Setters = { new Setter(TextBlock.FontSizeProperty, new DynamicResourceExtension(CaptionFontResource)) },
             });
             PropertyChanged += (_, change) =>
             {
@@ -55,9 +54,11 @@ namespace RitsukageGif.Desktop
 
         private static TextBlock Heading(string key)
         {
-            var heading = new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource(key) };
-            heading[!TextBlock.FontSizeProperty] = new DynamicResourceExtension(HeadingFontResource);
-            return heading;
+            return new()
+            {
+                [!TextBlock.TextProperty] = LiveText.Resource(key),
+                [!TextBlock.FontSizeProperty] = new DynamicResourceExtension(HeadingFontResource),
+            };
         }
     }
 }

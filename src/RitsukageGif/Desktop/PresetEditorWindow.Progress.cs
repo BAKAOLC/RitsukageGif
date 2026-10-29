@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly TextBlock _recordingProgress = new() { FontSize = 11 };
 
-        private Control CreateProgressFooter()
+        private StackPanel CreateProgressFooter()
         {
             var panel = new StackPanel { Spacing = 3 };
             panel.Children.Add(_status);

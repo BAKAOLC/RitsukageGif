@@ -20,15 +20,18 @@ namespace RitsukageGif.Desktop
             if (ClientToScreen(handle, ref origin) == 0) return null;
             return target with
             {
-                Bounds = bounds.Pixels, Client = new PixelRect(origin.X, origin.Y, client.Right, client.Bottom)
+                Bounds = bounds.Pixels, Client = new(origin.X, origin.Y, client.Right, client.Bottom),
             };
         }
 
         [LibraryImport("user32.dll", EntryPoint = "IsWindow")]
         private static partial int IsNativeWindow(nint window);
 
-        internal static int IsWindow(nint window) => OperatingSystem.IsWindows() ? IsNativeWindow(window) :
-            List().Any(target => target.Handle == window) ? 1 : 0;
+        internal static int IsWindow(nint window)
+        {
+            return OperatingSystem.IsWindows() ? IsNativeWindow(window) :
+                List().Any(target => target.Handle == window) ? 1 : 0;
+        }
 
         public static PixelRect? ResolveRegion(nint handle, WindowPreset preset)
         {
@@ -44,7 +47,7 @@ namespace RitsukageGif.Desktop
             if (GetClientRect(handle, out var client) == 0) return null;
             var origin = new NativeMethods.Point();
             if (ClientToScreen(handle, ref origin) == 0) return null;
-            return preset.Resolve(bounds.Pixels, new PixelRect(origin.X, origin.Y, client.Right, client.Bottom));
+            return preset.Resolve(bounds.Pixels, new(origin.X, origin.Y, client.Right, client.Bottom));
         }
 
         [LibraryImport("user32.dll", EntryPoint = "GetWindowTextW")]
@@ -85,10 +88,7 @@ namespace RitsukageGif.Desktop
 
                     var title = new char[1024];
                     int length;
-                    fixed (char* buffer = title)
-                    {
-                        length = GetWindowText(handle, buffer, title.Length);
-                    }
+                    fixed (char* buffer = title) length = GetWindowText(handle, buffer, title.Length);
 
                     if (length == 0) continue;
                     if (NativeMethods.DwmGetWindowAttribute(handle, 9, out var bounds, 16) != 0 &&
@@ -96,8 +96,8 @@ namespace RitsukageGif.Desktop
                     if (GetClientRect(handle, out var client) == 0) continue;
                     var origin = new NativeMethods.Point();
                     if (ClientToScreen(handle, ref origin) == 0) continue;
-                    result.Add(new WindowTarget(handle, name, new string(title, 0, length), bounds.Pixels,
-                        new PixelRect(origin.X, origin.Y, client.Right, client.Bottom)));
+                    result.Add(new(handle, name, new(title, 0, length), bounds.Pixels,
+                        new(origin.X, origin.Y, client.Right, client.Bottom)));
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
                 {

@@ -6,15 +6,15 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class AnimationEditorCanvas
     {
-        private int _resizeCorner = -1;
-        private Rect _layerStartBounds;
-        private bool _layerChanged;
         private static readonly Cursor MoveCursor = new(StandardCursorType.SizeAll);
         private static readonly Cursor PanCursor = new(StandardCursorType.Hand);
         private static readonly Cursor ArrowCursor = new(StandardCursorType.Arrow);
         private static readonly Cursor CrossCursor = new(StandardCursorType.Cross);
         private static readonly Cursor DiagonalCursor = new(StandardCursorType.TopLeftCorner);
         private static readonly Cursor OppositeDiagonalCursor = new(StandardCursorType.TopRightCorner);
+        private bool _layerChanged;
+        private Rect _layerStartBounds;
+        private int _resizeCorner = -1;
 
         public void SetSelectedBounds(double x, double y, double width, double height)
         {
@@ -22,7 +22,7 @@ namespace RitsukageGif.Desktop
                 !double.IsFinite(width) || !double.IsFinite(height)) return;
             var size = layer.Image is null
                 ? layer.Bounds.Size
-                : new Size(Math.Clamp(width, 1, 65536), Math.Clamp(height, 1, 65536));
+                : new(Math.Clamp(width, 1, 65536), Math.Clamp(height, 1, 65536));
             var bounds = new Rect(Math.Clamp(x, -65536, 65536), Math.Clamp(y, -65536, 65536), size.Width, size.Height);
             if (bounds == layer.Bounds) return;
             Remember();
@@ -30,8 +30,15 @@ namespace RitsukageGif.Desktop
             Changed();
         }
 
-        public void BringSelectedToFront() => ReorderSelected(true);
-        public void SendSelectedToBack() => ReorderSelected(false);
+        public void BringSelectedToFront()
+        {
+            ReorderSelected(true);
+        }
+
+        public void SendSelectedToBack()
+        {
+            ReorderSelected(false);
+        }
 
         private void ReorderSelected(bool front)
         {
@@ -42,13 +49,16 @@ namespace RitsukageGif.Desktop
             Changed();
         }
 
-        private static Point Corner(Rect bounds, int index) => index switch
+        private static Point Corner(Rect bounds, int index)
         {
-            0 => bounds.TopLeft,
-            1 => bounds.TopRight,
-            2 => bounds.BottomRight,
-            _ => bounds.BottomLeft
-        };
+            return index switch
+            {
+                0 => bounds.TopLeft,
+                1 => bounds.TopRight,
+                2 => bounds.BottomRight,
+                _ => bounds.BottomLeft,
+            };
+        }
 
         private int HitCorner(Point point)
         {
@@ -72,7 +82,7 @@ namespace RitsukageGif.Desktop
             for (var index = 0; index < 4; index++)
             {
                 var corner = Corner(selected.Bounds, index);
-                context.DrawRectangle(Brushes.White, pen, new Rect(corner.X - 4 / zoom, corner.Y - 4 / zoom,
+                context.DrawRectangle(Brushes.White, pen, new(corner.X - 4 / zoom, corner.Y - 4 / zoom,
                     8 / zoom, 8 / zoom));
             }
         }
@@ -81,7 +91,9 @@ namespace RitsukageGif.Desktop
         {
             if (_selected is not { } layer) return;
             if (_resizeCorner < 0)
+            {
                 layer.Bounds = _layerStartBounds.Translate(next - _start);
+            }
             else
             {
                 var anchor = Corner(_layerStartBounds, (_resizeCorner + 2) % 4);
@@ -98,7 +110,7 @@ namespace RitsukageGif.Desktop
                     height = _layerStartBounds.Height * scale;
                 }
 
-                layer.Bounds = new Rect(left ? anchor.X - width : anchor.X, top ? anchor.Y - height : anchor.Y, width,
+                layer.Bounds = new(left ? anchor.X - width : anchor.X, top ? anchor.Y - height : anchor.Y, width,
                     height);
             }
 
@@ -111,11 +123,11 @@ namespace RitsukageGif.Desktop
         {
             var corner = Tool == AnimationEditorTool.Select ? HitCorner(imagePoint) : -1;
             Cursor = corner >= 0
-                ? (corner is 0 or 2 ? DiagonalCursor : OppositeDiagonalCursor)
+                ? corner is 0 or 2 ? DiagonalCursor : OppositeDiagonalCursor
                 : Tool == AnimationEditorTool.Pan
                     ? PanCursor
                     : Tool == AnimationEditorTool.Select
-                        ? (_layers.Any(layer => layer.Bounds.Contains(imagePoint)) ? MoveCursor : ArrowCursor)
+                        ? _layers.Any(layer => layer.Bounds.Contains(imagePoint)) ? MoveCursor : ArrowCursor
                         : CrossCursor;
         }
     }

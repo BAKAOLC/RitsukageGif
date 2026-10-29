@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -11,17 +12,20 @@ namespace RitsukageGif.Desktop
         private static readonly Lock Sync = new();
         private static nint _display;
 
-        static X11WindowSystem() => AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        static X11WindowSystem()
         {
-            lock (Sync)
+            AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             {
-                if (_display == 0) return;
-                _ = XSync(_display, 0);
-                X11ErrorTrap.Unregister(_display);
-                _ = XCloseDisplay(_display);
-                _display = 0;
-            }
-        };
+                lock (Sync)
+                {
+                    if (_display == 0) return;
+                    _ = XSync(_display, 0);
+                    X11ErrorTrap.Unregister(_display);
+                    _ = XCloseDisplay(_display);
+                    _display = 0;
+                }
+            };
+        }
 
         private static nint Display()
         {
@@ -47,9 +51,9 @@ namespace RitsukageGif.Desktop
                 var bottom = target.Bounds.Bottom - target.Client.Bottom;
                 return target with
                 {
-                    Client = new PixelRect(x, y, attributes.Width, attributes.Height),
-                    Bounds = new PixelRect(x - left, y - top, attributes.Width + left + right,
-                        attributes.Height + top + bottom)
+                    Client = new(x, y, attributes.Width, attributes.Height),
+                    Bounds = new(x - left, y - top, attributes.Width + left + right,
+                        attributes.Height + top + bottom),
                 };
             }
         }
@@ -88,7 +92,7 @@ namespace RitsukageGif.Desktop
                             process = owner.ProcessName;
                         }
                         catch (Exception error) when (error is ArgumentException or InvalidOperationException
-                                                          or System.ComponentModel.Win32Exception)
+                                                          or Win32Exception)
                         {
                         }
 
@@ -103,11 +107,11 @@ namespace RitsukageGif.Desktop
                         var bottom = BitConverter.ToInt32(extents, IntPtr.Size * 3);
                         if (left >= 0 && right >= 0 && top >= 0 && bottom >= 0 && left + right < 4096 &&
                             top + bottom < 4096)
-                            bounds = new PixelRect(x - left, y - top, attributes.Width + left + right,
+                            bounds = new(x - left, y - top, attributes.Width + left + right,
                                 attributes.Height + top + bottom);
                     }
 
-                    if (!bounds.IsEmpty) result.Add(new WindowTarget(window, process, title, bounds, client));
+                    if (!bounds.IsEmpty) result.Add(new(window, process, title, bounds, client));
                 }
 
                 return result;
@@ -140,21 +144,6 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct WindowAttributes
-        {
-            public int X, Y, Width, Height, BorderWidth, Depth;
-            public nint Visual, Root;
-            public int Class, BitGravity, WinGravity, BackingStore;
-            public nuint BackingPlanes, BackingPixel;
-            public int SaveUnder;
-            public nint Colormap;
-            public int MapInstalled, MapState;
-            public nint AllEventMasks, YourEventMask, DoNotPropagateMask;
-            public int OverrideRedirect;
-            public nint Screen;
-        }
-
         [LibraryImport(Library)]
         private static partial int XSync(nint display, int discard);
 
@@ -184,5 +173,20 @@ namespace RitsukageGif.Desktop
         [LibraryImport(Library)]
         private static partial int XTranslateCoordinates(nint display, nint source, nint destination, int x, int y,
             out int translatedX, out int translatedY, out nint child);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WindowAttributes
+        {
+            public int X, Y, Width, Height, BorderWidth, Depth;
+            public nint Visual, Root;
+            public int Class, BitGravity, WinGravity, BackingStore;
+            public nuint BackingPlanes, BackingPixel;
+            public int SaveUnder;
+            public nint Colormap;
+            public int MapInstalled, MapState;
+            public nint AllEventMasks, YourEventMask, DoNotPropagateMask;
+            public int OverrideRedirect;
+            public nint Screen;
+        }
     }
 }

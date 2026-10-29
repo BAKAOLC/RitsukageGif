@@ -1,45 +1,57 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Media;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class AnimationEditorWindow : Window
     {
-        private readonly AnimationEditorCanvas _canvas = new();
-        private readonly ListBox _frames = new() { SelectionMode = SelectionMode.Multiple, Height = 94 };
-        private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
-        private readonly Grid _editing = new() { RowDefinitions = new("Auto,*,Auto,Auto") };
-        private readonly DispatcherTimer _playback = new();
-        private readonly CompactNumberInput _delay = Number(100, 1, 3600000);
-        private readonly CompactNumberInput _width = Number(640, 1, 16384);
-        private readonly CompactNumberInput _height = Number(480, 1, 16384);
-        private readonly CompactNumberInput _loops = Number(0, 0, 65535);
+        private static readonly ILogger Logger = LogHub.GetLogger("Desktop.AnimationEditor");
 
         private readonly Button _cancel = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("CancelProcessing"), IsVisible = false };
+            { [!ContentProperty] = LiveText.Resource("CancelProcessing"), IsVisible = false };
+
+        private readonly AnimationEditorCanvas _canvas = new();
+        private readonly CompactNumberInput _delay = Number(100, 1, 3600000);
+        private readonly Grid _editing = new() { RowDefinitions = new("Auto,*,Auto,Auto") };
+        private readonly ListBox _frames = new() { SelectionMode = SelectionMode.Multiple, Height = 94 };
+        private readonly CompactNumberInput _height = Number(480, 1, 16384);
+
+        private readonly bool _imageMode;
+        private readonly CompactNumberInput _loops = Number(0, 0, 65535);
+        private readonly Stopwatch _playClock = new();
+        private readonly DispatcherTimer _playback = new();
+        private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
+        private readonly CompactNumberInput _width = Number(640, 1, 16384);
+        private bool _dirty, _allowClose, _confirming, _refreshing;
+        private int _displayedFrame;
+        private string? _displayedPath;
 
         private AnimationEditDocument? _document;
-        private CancellationTokenSource? _operation;
-        private string? _path;
-        private string? _displayedPath;
         private Task _frameLoad = Task.CompletedTask;
         private int _frameLoadVersion;
-        private int _displayedFrame;
-        private readonly Stopwatch _playClock = new();
         private double _nextFrameAt;
-        private bool _dirty, _allowClose, _confirming, _refreshing;
+        private CancellationTokenSource? _operation;
+        private string? _path;
 
-        public AnimationEditorWindow(string? initialPath = null)
+        public AnimationEditorWindow(string? initialPath = null, bool imageMode = false, byte[]? initialImage = null)
         {
+            _imageMode = imageMode;
+            if (imageMode)
+            {
+                _format.ItemsSource = new[] { "PNG", "JPEG", "BMP" };
+                _format.SelectedIndex = 0;
+            }
+
             ConfigureTypography();
             Foreground = AppTheme.Ink;
-            Title = UiText.Get("AnimationEditorTitle");
+            Title = UiText.Get(imageMode ? "ImageEditorTitle" : "AnimationEditorTitle");
             Width = 1280;
             Height = 800;
             MinWidth = 1280;
@@ -51,7 +63,7 @@ namespace RitsukageGif.Desktop
             body.Children.Add(new Border
             {
                 Background = new SolidColorBrush(Color.Parse("#20232A")), BorderBrush = AppTheme.Outline,
-                BorderThickness = new(1), CornerRadius = new(6), ClipToBounds = true, Child = _canvas
+                BorderThickness = new(1), CornerRadius = new(6), ClipToBounds = true, Child = _canvas,
             });
             var properties = BuildProperties();
             _sidebar = properties;
@@ -69,7 +81,7 @@ namespace RitsukageGif.Desktop
                     panel.Children.Add(new TextBlock
                     {
                         Text = $"{index + 1} · {frame.DelayMs} ms", Classes = { "editor-caption" },
-                        TextAlignment = TextAlignment.Center
+                        TextAlignment = TextAlignment.Center,
                     });
                 }
 
@@ -91,13 +103,22 @@ namespace RitsukageGif.Desktop
             _frames.CornerRadius = new(6);
             Grid.SetRow(_frames, 2);
             _editing.Children.Add(_frames);
+            _frames.IsVisible = !imageMode;
             var frameTools = BuildTransport();
             Grid.SetRow(frameTools, 3);
             _editing.Children.Add(frameTools);
+            frameTools.IsVisible = !imageMode;
             _frames.ContextMenu = BuildFrameMenu();
             var root = new Grid { RowDefinitions = new("*,Auto") };
             root.Children.Add(_editing);
             var bottom = new DockPanel { Margin = new(10, 2, 10, 8) };
+            if (imageMode)
+            {
+                Detach(_zoomLabel);
+                DockPanel.SetDock(_zoomLabel, Dock.Right);
+                bottom.Children.Add(_zoomLabel);
+            }
+
             DockPanel.SetDock(_cancel, Dock.Right);
             bottom.Children.Add(_cancel);
             bottom.Children.Add(_status);
@@ -105,10 +126,12 @@ namespace RitsukageGif.Desktop
             root.Children.Add(bottom);
             Content = root;
             _cancel.Click += (_, _) => _operation?.Cancel();
+            _format.SelectionChanged += (_, _) => UpdateExportOptions();
             _playback.Tick += (_, _) => AdvancePlayback();
             Closing += OnClosing;
             Closed += (_, _) =>
             {
+                Logger.ZLogInformation($"Animation editor window closed. ImageMode={_imageMode}");
                 _languageClosed = true;
                 UiText.LanguageChanged -= RefreshLanguage;
                 _playback.Stop();
@@ -118,26 +141,38 @@ namespace RitsukageGif.Desktop
             };
             Opened += async (_, _) =>
             {
-                if (initialPath is not null) await LoadAsync(initialPath);
+                Logger.ZLogInformation(
+                    $"Animation editor window opened. ImageMode={_imageMode} HasInitialPath={initialPath is not null} HasInitialImage={initialImage is not null}");
+                if (initialImage is not null) await LoadScreenshotAsync(initialImage);
+                else if (initialPath is not null) await LoadAsync(initialPath);
                 else
                     await RunAsync(async token =>
-                    {
-                        _document = await Task.Run(() => AnimationEditDocument.Create(640, 480), token);
-                        Refresh();
-                    });
+                        {
+                            _document = await Task.Run(() => AnimationEditDocument.Create(640, 480), token);
+                            Refresh();
+                        },
+                        // ReSharper disable once ExplicitCallerInfoArgument
+                        "InitializeDocument");
             };
             UiText.LanguageChanged += RefreshLanguage;
-            AddHandler(Avalonia.Input.InputElement.KeyDownEvent, HandleEditorKeyDown,
-                Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            AddHandler(KeyDownEvent, HandleEditorKeyDown,
+                RoutingStrategies.Tunnel);
             _frames.PointerPressed += (_, _) => _playback.Stop();
             _canvas.ViewChanged += (_, _) => UpdateZoomLabel();
-            _canvas.DraftChanged += (_, _) => UpdateDraftActions();
+            _canvas.DraftChanged += (_, _) =>
+            {
+                if (_canvas.HasChanges) _playback.Stop();
+                UpdateDraftActions();
+            };
             _canvas.SelectionChanged += (_, _) => SyncLayerProperties();
         }
 
         private int CurrentFrame => _frames.SelectedIndex >= 0 ? _frames.SelectedIndex : _displayedFrame;
 
-        private int[] SelectedFrames() => _frames.SelectedItems?.Cast<int>().Order().ToArray() ?? [];
+        private int[] SelectedFrames()
+        {
+            return _frames.SelectedItems?.Cast<int>().Order().ToArray() ?? [];
+        }
 
         private bool HasFrameSelection(int[] frames)
         {
@@ -148,13 +183,18 @@ namespace RitsukageGif.Desktop
 
         private static CompactNumberInput Number(int value, int minimum, int maximum)
         {
-            var input = new CompactNumberInput { Minimum = minimum, Maximum = maximum, Value = value, Width = 86 };
-            input[!FontSizeProperty] = new DynamicResourceExtension(EditorFontResource);
-            input[!HeightProperty] = new DynamicResourceExtension(ButtonHeightResource);
-            return input;
+            return new()
+            {
+                Minimum = minimum, Maximum = maximum, Value = value, Width = 86,
+                [!FontSizeProperty] = new DynamicResourceExtension(EditorFontResource),
+                [!HeightProperty] = new DynamicResourceExtension(ButtonHeightResource),
+            };
         }
 
-        private static int Value(CompactNumberInput input) => (int)(input.Value ?? 0);
+        private static int Value(CompactNumberInput input)
+        {
+            return (int)(input.Value ?? 0);
+        }
 
         private static Button ActionButton(string key, Func<Task> action)
         {
@@ -162,24 +202,39 @@ namespace RitsukageGif.Desktop
             {
                 Content = new TextBlock { [!TextBlock.TextProperty] = LiveText.Resource(key) }, Tag = key,
                 Margin = new(0, 0, 4, 3), Padding = new(8, 4),
-                HorizontalContentAlignment = HorizontalAlignment.Center
+                HorizontalContentAlignment = HorizontalAlignment.Center,
             };
-            button.Click += async (_, _) => await action();
+            button.Click += async (_, _) =>
+            {
+                try
+                {
+                    await action();
+                }
+                catch (Exception error)
+                {
+                    Logger.ZLogError(error, $"Animation editor action failed. Action={key}");
+                    throw;
+                }
+            };
             return button;
         }
 
-        private static Control Row(string key, Control control)
+        private static Grid Row(string key, Control control)
         {
             Detach(control);
             control.Margin = default;
-            if (control is CompactNumberInput) control.Width = 86;
-            else if (control is TextBox) control.Width = 110;
+            control.Width = control switch
+            {
+                CompactNumberInput => 86,
+                TextBox => 110,
+                _ => control.Width,
+            };
             var row = new Grid { ColumnDefinitions = new("*,Auto"), Margin = new(0, 0, 0, 7) };
             row.Children.Add(new TextBlock
             {
                 [!TextBlock.TextProperty] = LiveText.Resource(key), VerticalAlignment = VerticalAlignment.Center,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new(0, 0, 8, 0)
+                Margin = new(0, 0, 8, 0),
             });
             Grid.SetColumn(control, 1);
             row.Children.Add(control);
@@ -233,12 +288,13 @@ namespace RitsukageGif.Desktop
             var document = _document;
             var index = CurrentFrame;
             var frame = document.Frames[index];
-            _displayedFrame = index;
+            var loaded = false;
             _canvas.IsEnabled = false;
             try
             {
                 if (!_canvas.HasChanges && !string.Equals(_displayedPath, frame.Path, StringComparison.Ordinal))
                     await _canvas.LoadFrameAsync(frame.Path);
+                loaded = true;
             }
             catch (OperationCanceledException)
             {
@@ -246,21 +302,35 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception exception)
             {
-                if (version == _frameLoadVersion) SetStatusError(exception.Message);
+                if (version == _frameLoadVersion)
+                {
+                    Logger.ZLogError(exception, $"Animation editor frame load failed. FrameIndex={index}");
+                    _playback.Stop();
+                    _refreshing = true;
+                    _frames.SelectedIndex = Math.Clamp(_displayedFrame, 0, document.Frames.Count - 1);
+                    _refreshing = false;
+                    UpdateFrameSummary();
+                    SetStatusError(exception.Message);
+                }
+
                 return;
             }
             finally
             {
-                if (version == _frameLoadVersion) _canvas.IsEnabled = true;
+                if (version == _frameLoadVersion)
+                    _canvas.IsEnabled = loaded || _displayedPath == document.Frames[CurrentFrame].Path;
             }
 
             if (version != _frameLoadVersion || !ReferenceEquals(document, _document) || index != CurrentFrame) return;
+            _displayedFrame = index;
             _displayedPath = frame.Path;
             _delay.Value = frame.DelayMs;
             RequestThumbnailPrefetch();
             UpdateFrameSummary();
-            SetStatus("AnimationFrameStatus", CurrentFrame + 1, _document.Frames.Count,
-                _document.Width, _document.Height);
+            if (_imageMode) SetStatus("ImageFrameStatus", _document.Width, _document.Height);
+            else
+                SetStatus("AnimationFrameStatus", CurrentFrame + 1, _document.Frames.Count,
+                    _document.Width, _document.Height);
         }
 
         private void TogglePlayback()

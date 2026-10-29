@@ -6,39 +6,42 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using ImageMagick;
+using FontWeight = Avalonia.Media.FontWeight;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class AnimationEditorCanvas : Control, IDisposable
     {
         private static readonly IBrush CanvasBackground = new SolidColorBrush(Color.FromRgb(30, 32, 37));
-        private readonly SemaphoreSlim _loadGate = new(1, 1);
-        private int _loadVersion;
-        private bool _disposed;
-        private WriteableBitmap? _bitmap;
-        private byte[]? _pixels;
-        private string? _path;
-        private int _width;
-        private int _height;
-        private double _zoom = 1;
-        private Vector _pan;
-        private bool _fit = true;
         private readonly List<AnimationEditorLayer> _layers = [];
-        private AnimationEditorLayer? _selected;
+        private readonly SemaphoreSlim _loadGate = new(1, 1);
+        private WriteableBitmap? _bitmap;
         private bool _changed;
+        private bool _disposed;
+        private bool _fit = true;
+        private int _height;
+        private int _loadVersion;
+        private Vector _pan;
+        private string? _path;
+        private byte[]? _pixels;
+        private AnimationEditorLayer? _selected;
 
-        private AnimationEditorTool _tool;
+        private int _width;
+        private double _zoom = 1;
 
-        public AnimationEditorCanvas() => Focusable = true;
+        public AnimationEditorCanvas()
+        {
+            Focusable = true;
+        }
 
         public AnimationEditorTool Tool
         {
-            get => _tool;
+            get;
             set
             {
-                if (_tool == value) return;
+                if (field == value) return;
                 CancelGesture();
-                _tool = value;
+                field = value;
                 InvalidateVisual();
             }
         }
@@ -58,9 +61,6 @@ namespace RitsukageGif.Desktop
         public double SelectedOpacity => _selected?.Opacity ?? 1;
         public Rect? SelectedBounds => _selected?.Bounds;
         public bool HasSelectedLayer => _selected is not null;
-        public event EventHandler? DraftChanged;
-        public event EventHandler? SelectionChanged;
-        public event EventHandler? ViewChanged;
 
         public double Zoom
         {
@@ -81,6 +81,25 @@ namespace RitsukageGif.Desktop
                 Math.Min(Math.Max(1, Bounds.Width - 24) / _width, Math.Max(1, Bounds.Height - 24) / _height))
             : _zoom;
 
+        private Point Origin => new((Bounds.Width - _width * EffectiveZoom) / 2 + _pan.X,
+            (Bounds.Height - _height * EffectiveZoom) / 2 + _pan.Y);
+
+        public void Dispose()
+        {
+            _disposed = true;
+            Interlocked.Increment(ref _loadVersion);
+            CancelGesture();
+            ClearLayers();
+            ClearHistory();
+            _bitmap?.Dispose();
+            _bitmap = null;
+            _pixels = null;
+        }
+
+        public event EventHandler? DraftChanged;
+        public event EventHandler? SelectionChanged;
+        public event EventHandler? ViewChanged;
+
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
@@ -89,16 +108,9 @@ namespace RitsukageGif.Desktop
             if (_fit && _width > 0 && _height > 0) ViewChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        private Point Origin => new((Bounds.Width - _width * EffectiveZoom) / 2 + _pan.X,
-            (Bounds.Height - _height * EffectiveZoom) / 2 + _pan.Y);
-
-        internal Point ToImage(Point point) =>
-            new((point.X - Origin.X) / EffectiveZoom, (point.Y - Origin.Y) / EffectiveZoom);
-
-        public void SetFrame(string path)
+        private Point ToImage(Point point)
         {
-            Interlocked.Increment(ref _loadVersion);
-            SetFrame(path, DecodeFrame(path));
+            return new((point.X - Origin.X) / EffectiveZoom, (point.Y - Origin.Y) / EffectiveZoom);
         }
 
         public async Task LoadFrameAsync(string path, CancellationToken token = default)
@@ -131,7 +143,7 @@ namespace RitsukageGif.Desktop
                 throw new InvalidOperationException(UiText.Get("AnimationEditorImageTooLarge"));
             image.Read(path);
             using var pixels = image.GetPixels();
-            return new AnimationEditorFrameData(checked((int)image.Width), checked((int)image.Height),
+            return new(checked((int)image.Width), checked((int)image.Height),
                 pixels.ToByteArray(PixelMapping.BGRA)!);
         }
 
@@ -140,7 +152,7 @@ namespace RitsukageGif.Desktop
             if (_disposed) return;
             WriteableBitmap? replacement = null;
             if (_bitmap?.PixelSize != new PixelSize(frame.Width, frame.Height))
-                replacement = new WriteableBitmap(new PixelSize(frame.Width, frame.Height), new Vector(96, 96),
+                replacement = new(new(frame.Width, frame.Height), new(96, 96),
                     PixelFormat.Bgra8888, AlphaFormat.Unpremul);
             CancelGesture();
             ClearLayers();
@@ -172,13 +184,10 @@ namespace RitsukageGif.Desktop
             ViewChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        public void ResetDraft()
+        public Task ResetDraftAsync(CancellationToken token = default)
         {
-            if (_path is { } path) SetFrame(path);
+            return _path is { } path ? LoadFrameAsync(path, token) : Task.CompletedTask;
         }
-
-        public Task ResetDraftAsync(CancellationToken token = default) =>
-            _path is { } path ? LoadFrameAsync(path, token) : Task.CompletedTask;
 
         private void Upload()
         {
@@ -201,27 +210,28 @@ namespace RitsukageGif.Desktop
 
         public override void Render(DrawingContext context)
         {
-            context.FillRectangle(CanvasBackground, new Rect(Bounds.Size));
+            context.FillRectangle(CanvasBackground, new(Bounds.Size));
             if (_bitmap is null) return;
-            using var clip = context.PushClip(new Rect(Bounds.Size));
+            using var clip = context.PushClip(new(Bounds.Size));
             var origin = Origin;
             var zoom = EffectiveZoom;
-            using var transform = context.PushTransform(new Matrix(zoom, 0, 0, zoom, origin.X, origin.Y));
+            using var transform = context.PushTransform(new(zoom, 0, 0, zoom, origin.X, origin.Y));
             var frame = new Rect(0, 0, _width, _height);
             using (context.PushClip(frame))
             {
                 // Tile in screen space so very large images never create millions of checker cells.
                 var tile = 12 / zoom;
                 var visible =
-                    frame.Intersect(new Rect(ToImage(default), ToImage(new Point(Bounds.Width, Bounds.Height))));
+                    frame.Intersect(new(ToImage(default), ToImage(new(Bounds.Width, Bounds.Height))));
                 for (var y = Math.Floor(visible.Y / tile); y < Math.Ceiling(visible.Bottom / tile); y++)
                 for (var x = Math.Floor(visible.X / tile); x < Math.Ceiling(visible.Right / tile); x++)
                     context.FillRectangle(((long)x + (long)y) % 2 == 0 ? Brushes.LightGray : Brushes.White,
-                        new Rect(x * tile, y * tile, tile, tile));
+                        new(x * tile, y * tile, tile, tile));
                 DrawContent(context);
                 if (Selection is { } selection)
                     context.DrawRectangle(null, new Pen(Brushes.DeepSkyBlue, 1 / zoom, DashStyle.Dash), selection);
-                if (_dragging && Tool is AnimationEditorTool.Line or AnimationEditorTool.Rectangle
+                if (_dragging && Tool is AnimationEditorTool.Line or AnimationEditorTool.Arrow
+                        or AnimationEditorTool.Rectangle
                         or AnimationEditorTool.Ellipse)
                     DrawShape(context, _start, _last);
             }
@@ -232,7 +242,7 @@ namespace RitsukageGif.Desktop
         private void DrawContent(DrawingContext context)
         {
             if (_bitmap is null) return;
-            context.DrawImage(_bitmap, new Rect(0, 0, _width, _height));
+            context.DrawImage(_bitmap, new(0, 0, _width, _height));
             foreach (var layer in _layers)
             {
                 using var opacity = context.PushOpacity(layer.Opacity);
@@ -244,21 +254,19 @@ namespace RitsukageGif.Desktop
         public byte[] ExportPng()
         {
             if (_bitmap is null) throw new InvalidOperationException();
-            using var target = new RenderTargetBitmap(new PixelSize(_width, _height), new Vector(96, 96));
+            using var target = new RenderTargetBitmap(new(_width, _height), new(96, 96));
             using (var context = target.CreateDrawingContext()) DrawContent(context);
             using var stream = new MemoryStream();
             target.Save(stream);
             return stream.ToArray();
         }
 
-        public void ExportFrame(string path) => File.WriteAllBytes(path, ExportPng());
-
         public void AddText(string text, double fontSize, Color color, string? fontFamily = null, bool bold = false,
             bool italic = false, double opacity = 1)
         {
             if (_bitmap is null) return;
             Remember();
-            var layer = new AnimationEditorLayer { Text = text, Bounds = new Rect(_width * .1, _height * .1, 1, 1) };
+            var layer = new AnimationEditorLayer { Text = text, Bounds = new(_width * .1, _height * .1, 1, 1) };
             _layers.Add(layer);
             _selected = layer;
             SetSelectedText(text, fontSize, color, fontFamily, bold, italic, opacity);
@@ -283,21 +291,15 @@ namespace RitsukageGif.Desktop
             layer.Italic = italic;
             layer.Color = color;
             layer.Opacity = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : 1;
-            layer.Formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                new Typeface(string.IsNullOrWhiteSpace(fontFamily) ? FontFamily.Default : new FontFamily(fontFamily),
+            layer.Formatted = new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                new(string.IsNullOrWhiteSpace(fontFamily) ? FontFamily.Default : new(fontFamily),
                     italic ? FontStyle.Italic : FontStyle.Normal,
-                    bold ? Avalonia.Media.FontWeight.Bold : Avalonia.Media.FontWeight.Normal), layer.FontSize,
+                    bold ? FontWeight.Bold : FontWeight.Normal), layer.FontSize,
                 new SolidColorBrush(color));
-            layer.Bounds = new Rect(layer.Bounds.Position,
+            layer.Bounds = new(layer.Bounds.Position,
                 new Size(Math.Max(1, layer.Formatted.WidthIncludingTrailingWhitespace),
                     Math.Max(1, layer.Formatted.Height)));
             Changed();
-        }
-
-        public void AddImage(string path, double opacity = 1)
-        {
-            if (_bitmap is null) return;
-            AddImage(new Bitmap(path), opacity);
         }
 
         public async Task AddImageAsync(string path, double opacity = 1, CancellationToken token = default)
@@ -339,9 +341,9 @@ namespace RitsukageGif.Desktop
             var layer = new AnimationEditorLayer
             {
                 Image = bitmap,
-                Bounds = new Rect(_width * .1, _height * .1, bitmap.PixelSize.Width * ratio,
+                Bounds = new(_width * .1, _height * .1, bitmap.PixelSize.Width * ratio,
                     bitmap.PixelSize.Height * ratio),
-                Opacity = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : 1
+                Opacity = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : 1,
             };
             _layers.Add(layer);
             _selected = layer;
@@ -353,7 +355,7 @@ namespace RitsukageGif.Desktop
             if (_selected is not { Image: not null } layer || !double.IsFinite(width) || !double.IsFinite(height) ||
                 !double.IsFinite(opacity)) return;
             Remember();
-            layer.Bounds = new Rect(layer.Bounds.Position,
+            layer.Bounds = new(layer.Bounds.Position,
                 new Size(Math.Clamp(width, 1, 65536), Math.Clamp(height, 1, 65536)));
             layer.Opacity = double.IsFinite(opacity) ? Math.Clamp(opacity, 0, 1) : 1;
             Changed();
@@ -372,18 +374,6 @@ namespace RitsukageGif.Desktop
         {
             _layers.Clear();
             _selected = null;
-        }
-
-        public void Dispose()
-        {
-            _disposed = true;
-            Interlocked.Increment(ref _loadVersion);
-            CancelGesture();
-            ClearLayers();
-            ClearHistory();
-            _bitmap?.Dispose();
-            _bitmap = null;
-            _pixels = null;
         }
     }
 }

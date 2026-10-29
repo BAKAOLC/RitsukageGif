@@ -1,30 +1,48 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.ComponentModel;
 using System.IO.Pipes;
 using System.Net;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Text;
+using System.Threading.Channels;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class InputChannelServer(ExternalInputHub hub) : IAsyncDisposable
     {
-        private readonly Lock _gate = new();
+        private static readonly UTF8Encoding StrictUtf8 = new(false, true);
         private readonly Dictionary<string, Channel> _channels = new(StringComparer.Ordinal);
+        private readonly Lock _gate = new();
         private bool _disposed;
         private long _incomingBytes;
-        private static readonly UTF8Encoding StrictUtf8 = new(false, true);
 
-        public InputChannelInfo Start(InputChannelOptions options)
+        public async ValueTask DisposeAsync()
+        {
+            Channel[] channels;
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                channels = [.. _channels.Values];
+                _channels.Clear();
+            }
+
+            await Task.WhenAll(channels.Select(BeginStop)).ConfigureAwait(false);
+            foreach (var channel in channels) hub.RemoveChannel(channel.Options.Name);
+        }
+
+        public void Start(InputChannelOptions options)
         {
             ArgumentNullException.ThrowIfNull(options);
             if (string.IsNullOrWhiteSpace(options.Name) || options.Name.Length > 128 || options.Name.Any(character =>
                     !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '-' or '_')) ||
                 options.Transport is not ("pipe" or "tcp") || options.Format is not ("framed" or "mpegts") ||
                 options.IdleTimeoutSeconds is < 1 or > 300 ||
-                options.Format == "mpegts" && (options.Width <= 0 || options.Height <= 0 || options.Width > 16384 ||
-                                               options.Height > 16384 ||
-                                               (long)options.Width * options.Height * 4 > 64L * 1024 * 1024))
+                (options.Format == "mpegts" && (options.Width <= 0 || options.Height <= 0 || options.Width > 16384 ||
+                                                options.Height > 16384 ||
+                                                (long)options.Width * options.Height * 4 > 64L * 1024 * 1024)))
                 throw new ArgumentException(UiText.Get("InvalidRecording"));
             if (options.Format == "mpegts" && FfmpegEncoder.FindExecutable() is null)
                 throw new FileNotFoundException(UiText.Get("FfmpegMissing"));
@@ -47,14 +65,13 @@ namespace RitsukageGif.Desktop
                     else
                     {
                         var endpoint = ParseEndpoint(options.Endpoint);
-                        channel.Listener = new TcpListener(endpoint);
+                        channel.Listener = new(endpoint);
                         channel.Listener.Start(1);
                         channel.Endpoint = channel.Listener.LocalEndpoint.ToString()!;
                     }
 
                     _channels.Add(options.Name, channel);
                     channel.Work = Task.Run(() => ListenAsync(channel));
-                    return channel.Info(hub.GetStatus(channel.Options.Name));
                 }
                 catch
                 {
@@ -69,15 +86,15 @@ namespace RitsukageGif.Desktop
         public IReadOnlyList<InputChannelInfo> List()
         {
             lock (_gate)
-                return _channels.Values.Select(channel => channel.Info(hub.GetStatus(channel.Options.Name))).ToArray();
+                return [.. _channels.Values.Select(channel => channel.Info(hub.GetStatus(channel.Options.Name)))];
         }
 
-        public async Task<bool> StopAsync(string name)
+        public async Task StopAsync(string name)
         {
             Channel? channel;
             lock (_gate)
                 if (!_channels.TryGetValue(name, out channel))
-                    return false;
+                    return;
             await BeginStop(channel).ConfigureAwait(false);
             lock (_gate)
                 if (_channels.TryGetValue(name, out var current) && ReferenceEquals(current, channel))
@@ -85,8 +102,6 @@ namespace RitsukageGif.Desktop
                     _channels.Remove(name);
                     hub.RemoveChannel(name);
                 }
-
-            return true;
         }
 
         private Task BeginStop(Channel channel)
@@ -98,49 +113,36 @@ namespace RitsukageGif.Desktop
         {
             await channel.Stop.CancelAsync().ConfigureAwait(false);
             channel.Listener?.Stop();
-            channel.Pipe?.Dispose();
+            if (channel.Pipe is { } pipe) await pipe.DisposeAsync().ConfigureAwait(false);
             await channel.Work.ConfigureAwait(false);
             channel.Stop.Dispose();
         }
 
-        public async ValueTask DisposeAsync()
+        private static NamedPipeServerStream CreatePipe(string name)
         {
-            Channel[] channels;
-            lock (_gate)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                channels = _channels.Values.ToArray();
-                _channels.Clear();
-            }
-
-            await Task.WhenAll(channels.Select(BeginStop)).ConfigureAwait(false);
-            foreach (var channel in channels) hub.RemoveChannel(channel.Options.Name);
+            return new(name, PipeDirection.InOut, 1,
+                PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 65536, 65536);
         }
-
-        private static NamedPipeServerStream CreatePipe(string name) => new(name, PipeDirection.InOut, 1,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly, 65536, 65536);
 
         private static IPEndPoint ParseEndpoint(string? text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return new IPEndPoint(IPAddress.Loopback, 0);
+            if (string.IsNullOrWhiteSpace(text)) return new(IPAddress.Loopback, 0);
             if (int.TryParse(text, out var port) && port is >= 0 and <= 65535)
-                return new IPEndPoint(IPAddress.Loopback, port);
+                return new(IPAddress.Loopback, port);
             if (IPEndPoint.TryParse(text, out var endpoint) && IPAddress.IsLoopback(endpoint.Address)) return endpoint;
-            throw new ArgumentException(nameof(text));
+            throw new ArgumentException("Only loopback TCP endpoints are supported.", nameof(text));
         }
 
         private async Task ListenAsync(Channel channel)
         {
             var token = channel.Stop.Token;
             while (!token.IsCancellationRequested)
-            {
                 try
                 {
                     if (channel.Options.Transport == "pipe")
                     {
                         channel.Pipe ??= CreatePipe(channel.Endpoint);
-                        using var pipe = channel.Pipe;
+                        await using var pipe = channel.Pipe;
                         await pipe.WaitForConnectionAsync(token).ConfigureAwait(false);
                         await ServeAsync(channel, pipe, token).ConfigureAwait(false);
                         channel.Pipe = null;
@@ -160,8 +162,8 @@ namespace RitsukageGif.Desktop
                                                   or ObjectDisposedException or
                                                   ArgumentException or InvalidOperationException or TimeoutException
                                                   or OperationCanceledException
-                                                  or System.Threading.Channels.ChannelClosedException
-                                                  or System.ComponentModel.Win32Exception)
+                                                  or ChannelClosedException
+                                                  or Win32Exception)
                 {
                     if (token.IsCancellationRequested) break;
                     channel.Error = error.Message;
@@ -171,16 +173,15 @@ namespace RitsukageGif.Desktop
                     channel.Connected = false;
                     if (channel.Options.Transport == "pipe")
                     {
-                        channel.Pipe?.Dispose();
+                        if (channel.Pipe is { } pipe) await pipe.DisposeAsync().ConfigureAwait(false);
                         channel.Pipe = null;
                     }
                 }
-            }
         }
 
         private async Task ServeAsync(Channel channel, Stream stream, CancellationToken token)
         {
-            using var close = token.Register(stream.Dispose);
+            await using var close = token.Register(stream.Dispose);
             using var publisher = hub.OpenPublisher(channel.Options.Name);
             channel.Connected = true;
             channel.Error = null;
@@ -210,9 +211,9 @@ namespace RitsukageGif.Desktop
                 var timestamp = BinaryPrimitives.ReadDoubleLittleEndian(header.AsSpan(24));
                 if (!double.IsFinite(timestamp) || timestamp < 0 || timestamp > ExternalInputHub.Now + 5 ||
                     count == 0 || count > 64 * 1024 * 1024 ||
-                    header[5] == 1 && (width == 0 || height == 0 || width > 16384 || height > 16384 ||
-                                       (long)width * height * 4 != count) ||
-                    header[5] == 2 && (count > 1024 * 1024 || width != 0 || height != 0))
+                    (header[5] == 1 && (width == 0 || height == 0 || width > 16384 || height > 16384 ||
+                                        (long)width * height * 4 != count)) ||
+                    (header[5] == 2 && (count > 1024 * 1024 || width != 0 || height != 0)))
                     throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
                 var payload = RentPayload((int)count);
                 try
@@ -239,7 +240,7 @@ namespace RitsukageGif.Desktop
 
         private byte[] RentPayload(int size)
         {
-            var reservation = (int)System.Numerics.BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, size));
+            var reservation = (int)BitOperations.RoundUpToPowerOf2((uint)Math.Max(16, size));
             if (Interlocked.Add(ref _incomingBytes, reservation) > 128L * 1024 * 1024)
             {
                 Interlocked.Add(ref _incomingBytes, -reservation);
@@ -288,20 +289,23 @@ namespace RitsukageGif.Desktop
         {
             public readonly InputChannelOptions Options = options;
             public readonly CancellationTokenSource Stop = new();
-            public string Endpoint = "";
-            public NamedPipeServerStream? Pipe;
-            public TcpListener? Listener;
-            public Task Work = Task.CompletedTask;
-            public Task? StopWork;
             public volatile bool Connected;
-            public long Packets;
-            public double Timestamp = double.NaN;
+            public string Endpoint = "";
             public string? Error;
+            public TcpListener? Listener;
+            public long Packets;
+            public NamedPipeServerStream? Pipe;
+            public Task? StopWork;
+            public double Timestamp = double.NaN;
+            public Task Work = Task.CompletedTask;
 
-            public InputChannelInfo Info(ExternalInputChannelStatus? status) => new(Options.Name, Options.Transport,
-                Endpoint, Options.Format,
-                Connected, Interlocked.Read(ref Packets),
-                double.IsFinite(Volatile.Read(ref Timestamp)) ? Volatile.Read(ref Timestamp) : null, Error, status);
+            public InputChannelInfo Info(ExternalInputChannelStatus? status)
+            {
+                return new(Options.Name, Options.Transport,
+                    Endpoint, Options.Format,
+                    Connected, Interlocked.Read(ref Packets),
+                    double.IsFinite(Volatile.Read(ref Timestamp)) ? Volatile.Read(ref Timestamp) : null, Error, status);
+            }
         }
     }
 }

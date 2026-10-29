@@ -6,18 +6,14 @@ namespace RitsukageGif.Desktop
     // Frames are immutable after decoding; callers must not mutate or dispose returned bitmaps.
     internal sealed class MediaFrameSource : IDisposable
     {
-        private readonly List<SKBitmap> _frames = [];
         private readonly List<double> _ends = [];
+        private readonly List<SKBitmap> _frames = [];
         private bool _disposed;
-        public int Width => _frames[0].Width;
-        public int Height => _frames[0].Height;
-        public double Duration => _ends[^1];
-        public long DecodedBytes { get; private set; }
 
-        public MediaFrameSource(string path, CancellationToken token = default,
-            long maxDecodedBytes = 512L * 1024 * 1024)
+        public MediaFrameSource(string path, long maxDecodedBytes = 512L * 1024 * 1024,
+            CancellationToken token = default)
         {
-            if (maxDecodedBytes < 0 || maxDecodedBytes > 512L * 1024 * 1024)
+            if (maxDecodedBytes is < 0 or > 512L * 1024 * 1024)
                 throw new ArgumentOutOfRangeException(nameof(maxDecodedBytes));
             using var codec = SKCodec.Create(path) ?? throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
             var bytesPerFrame = checked((long)codec.Info.Width * codec.Info.Height * 4);
@@ -29,7 +25,6 @@ namespace RitsukageGif.Desktop
             try
             {
                 foreach (var frame in PreviewDecoder.Read(path, token))
-                {
                     using (frame)
                     {
                         allocated = checked(allocated + (long)frame.Width * frame.Height * 4);
@@ -51,7 +46,6 @@ namespace RitsukageGif.Desktop
                         elapsed += frame.Delay / 1000.0;
                         _ends.Add(elapsed);
                     }
-                }
 
                 if (_frames.Count == 0) throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
             }
@@ -60,6 +54,20 @@ namespace RitsukageGif.Desktop
                 Dispose();
                 throw;
             }
+        }
+
+        public int Width => _frames[0].Width;
+        public int Height => _frames[0].Height;
+        private double Duration => _ends[^1];
+        public long DecodedBytes { get; private set; }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            foreach (var frame in _frames) frame.Dispose();
+            _frames.Clear();
+            DecodedBytes = 0;
         }
 
         public SKBitmap? FrameAt(double elapsedSeconds, bool loop = true, double speed = 1,
@@ -76,15 +84,6 @@ namespace RitsukageGif.Desktop
             var index = _ends.BinarySearch(time);
             index = index >= 0 ? index + 1 : ~index;
             return _frames[Math.Min(index, _frames.Count - 1)];
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            foreach (var frame in _frames) frame.Dispose();
-            _frames.Clear();
-            DecodedBytes = 0;
         }
     }
 }

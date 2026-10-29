@@ -6,13 +6,14 @@ namespace RitsukageGif.Desktop
     {
         private const string X11 = "libX11.so.6";
 
-        private static unsafe void RunX11((uint Modifiers, uint Key)[] keys, CancellationToken token,
-            Action<int> pressed, Action<string> error)
+        private static unsafe void RunX11((uint Modifiers, uint Key)[] keys,
+            Action<int> pressed, Action<string> error, Action ready, CancellationToken token)
         {
             X11ErrorTrap.Initialize();
             var display = XOpenDisplay(0);
             if (display == 0) throw new InvalidOperationException(UiText.Get("PlatformDisplayUnavailable"));
             var registered = new List<(int Index, int Key, uint Mask)>();
+            var failed = false;
             try
             {
                 X11ErrorTrap.Register(display);
@@ -24,6 +25,7 @@ namespace RitsukageGif.Desktop
                     var code = XKeysymToKeycode(display, XStringToKeysym(name));
                     if (code == 0)
                     {
+                        failed = true;
                         error(UiText.Get("HotkeySupported"));
                         continue;
                     }
@@ -39,6 +41,7 @@ namespace RitsukageGif.Desktop
                     {
                         foreach (var locks in new uint[] { 0, 2, 16, 18 })
                             _ = XUngrabKey(display, code, mask | locks, root);
+                        failed = true;
                         error(UiText.Get("HotkeyOccupied"));
                     }
                     else
@@ -47,6 +50,7 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
+                if (!failed && !token.IsCancellationRequested) ready();
                 var nativeEvent = stackalloc byte[192];
                 while (!token.IsCancellationRequested)
                 {

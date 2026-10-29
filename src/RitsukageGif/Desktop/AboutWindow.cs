@@ -1,9 +1,7 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
-using System.Diagnostics;
 
 namespace RitsukageGif.Desktop
 {
@@ -11,7 +9,7 @@ namespace RitsukageGif.Desktop
     {
         public AboutWindow(AppSettings settings, ApplicationHost? host = null)
         {
-            this.Bind(TitleProperty, LiveText.Resource("About"));
+            Bind(TitleProperty, LiveText.Resource("About"));
             Width = 560;
             Height = 680;
             MinWidth = 340;
@@ -23,37 +21,30 @@ namespace RitsukageGif.Desktop
             using var reader = new StreamReader(resource);
             var markdown = reader.ReadToEnd();
 
-            markdown = markdown.Replace("$Version$", typeof(AboutWindow).Assembly.GetName().Version!.ToString())
-                .Replace("$HotKey_RecordGif$", Shortcut(settings.RecordHotkey))
-                .Replace("$HotKey_SelectRegion$", Shortcut(settings.SelectHotkey));
+            markdown = markdown.Replace("$Version$", ApplicationVersion.Display)
+                .Replace("$HotKey_RecordGif$", Shortcut(settings.GetActionShortcut(GlobalActionKind.ToggleRecording)))
+                .Replace("$HotKey_SelectRegion$", Shortcut(settings.GetActionShortcut(GlobalActionKind.SelectRegion)));
             var content = MarkdownContent.Render(markdown);
-            content.Margin = new Thickness(24);
+            content.Margin = new(24);
             var close = new Button
             {
-                [!ContentControl.ContentProperty] = LiveText.Resource("Close"),
+                [!ContentProperty] = LiveText.Resource("Close"),
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(24, 10)
+                Margin = new(24, 10),
             };
             close.Click += (_, _) => Close();
             var cancellation = new CancellationTokenSource();
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Foreground = AppTheme.Muted };
             var check = new Button
-                { Name = "CheckUpdate", [!ContentControl.ContentProperty] = LiveText.Resource("CheckUpdate") };
+                { Name = "CheckUpdate", [!ContentProperty] = LiveText.Resource("CheckUpdate") };
             var download = new Button
             {
-                Name = "DownloadUpdate", [!ContentControl.ContentProperty] = LiveText.Resource("DownloadUpdate"),
+                Name = "DownloadUpdate", [!ContentProperty] = LiveText.Resource("DownloadUpdate"),
                 IsVisible = false,
             };
             download.Classes.Add("primary");
-            UpdateRelease? available = host?.AvailableUpdate;
+            var available = host?.AvailableUpdate;
             string? statusKey = null;
-
-            void RefreshUpdate()
-            {
-                download.IsVisible = available is not null;
-                status.Text = statusKey is not null ? UiText.Get(statusKey)
-                    : available is { } release ? UiText.Format("UpdateAvailable", release.Version) : "";
-            }
 
             RefreshUpdate();
             UiText.LanguageChanged += RefreshUpdate;
@@ -65,7 +56,7 @@ namespace RitsukageGif.Desktop
                 try
                 {
                     available = host is null
-                        ? await UpdateChecker.CheckAsync(cancellation.Token)
+                        ? await UpdateChecker.CheckChannelAsync(settings.System.UpdateChannel, cancellation.Token)
                         : await host.CheckForUpdatesAsync(cancellation.Token);
                     if (cancellation.IsCancellationRequested) return;
                     statusKey = available is null ? "UpdateCurrent" : null;
@@ -92,7 +83,7 @@ namespace RitsukageGif.Desktop
                 if (available is null) return;
                 try
                 {
-                    Process.Start(new ProcessStartInfo(available.DownloadUrl) { UseShellExecute = true });
+                    UpdateChecker.OpenDownload(available.DownloadUrl);
                 }
                 catch (Exception)
                 {
@@ -106,7 +97,7 @@ namespace RitsukageGif.Desktop
                 cancellation.Cancel();
                 cancellation.Dispose();
             };
-            close.Margin = new Thickness(8, 0, 0, 0);
+            close.Margin = new(8, 0, 0, 0);
             close.VerticalAlignment = VerticalAlignment.Bottom;
             var actions = new Grid { ColumnDefinitions = new("*,Auto") };
             actions.Children.Add(new WrapPanel
@@ -116,11 +107,11 @@ namespace RitsukageGif.Desktop
             });
             Grid.SetColumn(close, 1);
             actions.Children.Add(close);
-            check.Margin = download.Margin = new Thickness(0, 0, 6, 0);
+            check.Margin = download.Margin = new(0, 0, 6, 0);
             var footer = new Border
             {
                 Background = AppTheme.Surface, BorderBrush = AppTheme.Outline,
-                BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(24, 12),
+                BorderThickness = new(0, 1, 0, 0), Padding = new(24, 12),
                 Child = new StackPanel { Spacing = 6, Children = { status, actions } },
             };
             var root = new DockPanel { Background = Background };
@@ -129,8 +120,87 @@ namespace RitsukageGif.Desktop
             root.Children.Add(new ScrollViewer
                 { Content = content, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
             Content = root;
+            return;
+
+            void RefreshUpdate()
+            {
+                download.IsVisible = available is not null;
+                status.Text = statusKey is not null ? UiText.Get(statusKey)
+                    : available is { } release ? UiText.Format("UpdateAvailable", release.Version) : "";
+            }
         }
 
-        private static string Shortcut(string shortcut) => string.IsNullOrWhiteSpace(shortcut) ? "—" : shortcut;
+        internal static Control CreateContent(AppSettings settings)
+        {
+            using var stream = typeof(AboutWindow).Assembly.GetManifestResourceStream("RitsukageGif.About.md")!;
+            using var reader = new StreamReader(stream);
+            var markdown = reader.ReadToEnd().Replace("$Version$", ApplicationVersion.Display)
+                .Replace("$HotKey_RecordGif$", Shortcut(settings.GetActionShortcut(GlobalActionKind.ToggleRecording)))
+                .Replace("$HotKey_SelectRegion$", Shortcut(settings.GetActionShortcut(GlobalActionKind.SelectRegion)));
+            var check = new Button { Name = "CheckUpdate", [!ContentProperty] = LiveText.Resource("CheckUpdate") };
+            var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
+            var download = new Button
+            {
+                [!ContentProperty] = LiveText.Resource("DownloadUpdate"), IsVisible = false,
+            };
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 6, Children = { check, download },
+            };
+            var panel = new StackPanel { Spacing = 8, Margin = new(12) };
+            panel.Children.Add(MarkdownContent.Render(markdown));
+            panel.Children.Add(actions);
+            panel.Children.Add(message);
+            CancellationTokenSource? operation = null;
+            string? downloadUrl = null;
+            panel.DetachedFromVisualTree += (_, _) => operation?.Cancel();
+            check.Click += async (_, _) =>
+            {
+                using var cancellation = new CancellationTokenSource();
+                operation = cancellation;
+                check.IsEnabled = false;
+                download.IsVisible = false;
+                message.Text = UiText.Get("CheckingUpdate");
+                try
+                {
+                    var available =
+                        await UpdateChecker.CheckChannelAsync(settings.System.UpdateChannel, cancellation.Token);
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    message.Text = available is null ? UiText.Get("UpdateCurrent") : available.Version.ToString();
+                    downloadUrl = available?.DownloadUrl;
+                    download.IsVisible = available is not null;
+                }
+                catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+                {
+                }
+                catch (Exception)
+                {
+                    message.Text = UiText.Get("UpdateFailed");
+                }
+                finally
+                {
+                    operation = null;
+                    check.IsEnabled = true;
+                }
+            };
+            download.Click += (_, _) =>
+            {
+                if (downloadUrl is null) return;
+                try
+                {
+                    UpdateChecker.OpenDownload(downloadUrl);
+                }
+                catch (Exception)
+                {
+                    message.Text = UiText.Get("UpdateOpenFailed");
+                }
+            };
+            return panel;
+        }
+
+        private static string Shortcut(string shortcut)
+        {
+            return string.IsNullOrWhiteSpace(shortcut) ? "—" : shortcut;
+        }
     }
 }

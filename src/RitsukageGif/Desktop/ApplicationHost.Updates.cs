@@ -2,26 +2,39 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class ApplicationHost
     {
+        private static readonly ILogger UpdateLogger = LogHub.GetLogger("Desktop.Updates");
         private readonly CancellationTokenSource _updateCancellation = new();
-        private Task<UpdateRelease?>? _updateCheck;
         private bool _automaticUpdateChecked;
+        private Task<UpdateRelease?>? _updateCheck;
+        private UpdateChannel _updateCheckChannel;
 
         internal UpdateRelease? AvailableUpdate { get; private set; }
 
         internal Task<UpdateRelease?> CheckForUpdatesAsync(CancellationToken token = default)
         {
-            if (_closing) return Task.FromCanceled<UpdateRelease?>(new CancellationToken(true));
-            if (_updateCheck is not { IsCompleted: false }) _updateCheck = CheckUpdateCoreAsync();
+            if (IsClosing) return Task.FromCanceled<UpdateRelease?>(new(true));
+            var channel = Settings.System.UpdateChannel;
+            if (_updateCheck is not { IsCompleted: false } || _updateCheckChannel != channel)
+            {
+                _updateCheckChannel = channel;
+                _updateCheck = CheckUpdateCoreAsync(channel);
+            }
+
             return _updateCheck.WaitAsync(token);
         }
 
-        private async Task<UpdateRelease?> CheckUpdateCoreAsync()
+        private async Task<UpdateRelease?> CheckUpdateCoreAsync(UpdateChannel channel)
         {
-            var release = await UpdateChecker.CheckAsync(_updateCancellation.Token);
-            if (!_closing)
+            var release = await UpdateChecker.CheckChannelAsync(channel, _updateCancellation.Token);
+            if (!IsClosing && Settings.System.UpdateChannel == channel)
             {
                 AvailableUpdate = release;
                 Notify();
+                UpdateLogger.ZLogDebug($"Update availability state refreshed. UpdateAvailable={release is not null}");
+            }
+            else
+            {
+                UpdateLogger.ZLogDebug($"Update result discarded because the application state changed.");
             }
 
             return release;
@@ -29,7 +42,7 @@ namespace RitsukageGif.Desktop
 
         private async Task CheckAutomaticUpdateAsync()
         {
-            if (_automaticUpdateChecked || !_startServices || !_settings.CheckForUpdates) return;
+            if (_automaticUpdateChecked || !_startServices || !Settings.CheckForUpdates) return;
             _automaticUpdateChecked = true;
             try
             {

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security;
 using System.Text;
 using Avalonia.Input;
@@ -7,12 +8,12 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class ApplicationHost
     {
-        private IReadOnlyList<string> BuildOutputPaths(WindowPreset? preset, string extension, int sequence)
+        private List<string> BuildOutputPaths(WindowPreset? preset, string extension, int sequence)
         {
             var timestamp = DateTime.Now;
             var outputs = preset?.Outputs.Count > 0
                 ? preset.Outputs
-                : [new PresetOutput(_settings.OutputDirectory, "{timestamp}-{id}.{ext}")];
+                : [new(Settings.OutputDirectory, "{timestamp}-{id}.{ext}")];
             var result = new List<string>();
             foreach (var output in outputs)
             {
@@ -31,7 +32,8 @@ namespace RitsukageGif.Desktop
             return result;
         }
 
-        private async Task CopyOutputsAsync(string source, IReadOnlyList<string> outputs, CancellationToken token)
+        private static async Task CopyOutputsAsync(string source, IReadOnlyList<string> outputs,
+            CancellationToken token)
         {
             var completed = new List<string> { source };
             try
@@ -64,26 +66,24 @@ namespace RitsukageGif.Desktop
             catch
             {
                 foreach (var path in completed)
-                {
                     try
                     {
                         File.Delete(path);
                     }
                     catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                     {
-                        System.Diagnostics.Trace.TraceError("Could not remove incomplete output {0}: {1}", path,
+                        Trace.TraceError("Could not remove incomplete output {0}: {1}", path,
                             error.Message);
                     }
-                }
 
                 throw;
             }
         }
 
-        internal async Task CopyAsync()
+        private async Task CopyAsync()
         {
-            if (_lastPath == null) return;
-            await CopyFilesAsync([_lastPath]);
+            if (LastPath == null) return;
+            await CopyFilesAsync([LastPath]);
         }
 
         internal async Task CopyFilesAsync(IReadOnlyList<string> paths)

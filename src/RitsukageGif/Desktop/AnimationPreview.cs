@@ -12,18 +12,21 @@ namespace RitsukageGif.Desktop
     {
         private readonly Stopwatch _clock = new();
         private readonly Action<string> _error;
+        private readonly HdrPreviewHost _hdr;
         private readonly DispatcherTimer _timer = new();
         private readonly Image _view;
         private WriteableBitmap? _bitmap;
-        private long _nextDue;
-        private Playback? _playback;
         private bool _disposed;
+        private long _nextDue;
         private string? _path;
         private bool _paused;
+        private Playback? _playback;
 
-        public AnimationPreview(Image view, Action<string>? error = null)
+        public AnimationPreview(Image view, HdrPreviewHost hdr, Action<string>? error = null)
         {
             _view = view;
+            _hdr = hdr;
+            _view.SizeChanged += (_, _) => UpdateHdrBounds();
             _error = error ?? (_ => { });
             _timer.Tick += (_, _) => Tick();
         }
@@ -33,6 +36,7 @@ namespace RitsukageGif.Desktop
             if (_disposed) return;
             _disposed = true;
             Clear();
+            _hdr.Dispose();
         }
 
         public async Task LoadAsync(string path)
@@ -110,22 +114,22 @@ namespace RitsukageGif.Desktop
             {
                 _view.Source = null;
                 _bitmap?.Dispose();
-                _bitmap = new WriteableBitmap(new PixelSize(frame.Width, frame.Height), new Vector(96, 96),
+                _bitmap = new(new(frame.Width, frame.Height), new(96, 96),
                     PixelFormat.Bgra8888, AlphaFormat.Premul);
                 _view.Source = _bitmap;
             }
 
             using (var buffer = _bitmap.Lock())
-            {
                 if (buffer.RowBytes == frame.Width * 4)
                     Marshal.Copy(frame.Pixels, 0, buffer.Address, checked(frame.Width * frame.Height * 4));
                 else
                     for (var y = 0; y < frame.Height; y++)
                         Marshal.Copy(frame.Pixels, y * frame.Width * 4, buffer.Address + y * buffer.RowBytes,
                             frame.Width * 4);
-            }
 
             _view.InvalidateVisual();
+            UpdateHdrBounds();
+            _hdr.SetFrame(frame);
         }
 
         public void Pause()
@@ -137,9 +141,21 @@ namespace RitsukageGif.Desktop
             _paused = true;
         }
 
-        public Task ResumeAsync() => !_disposed && _paused && _path is { } path
-            ? LoadAsync(path)
-            : Task.CompletedTask;
+        public Task ResumeAsync()
+        {
+            return !_disposed && _paused && _path is { } path
+                ? LoadAsync(path)
+                : Task.CompletedTask;
+        }
+
+        private void UpdateHdrBounds()
+        {
+            if (_bitmap is null) return;
+            var scale = Math.Min(_view.Bounds.Width / _bitmap.PixelSize.Width,
+                _view.Bounds.Height / _bitmap.PixelSize.Height);
+            _hdr.Width = Math.Max(0, _bitmap.PixelSize.Width * scale);
+            _hdr.Height = Math.Max(0, _bitmap.PixelSize.Height * scale);
+        }
 
         private void Clear()
         {
@@ -148,6 +164,7 @@ namespace RitsukageGif.Desktop
             _playback?.Dispose();
             _playback = null;
             _view.Source = null;
+            _hdr.SetFrame(null);
             _bitmap?.Dispose();
             _bitmap = null;
         }

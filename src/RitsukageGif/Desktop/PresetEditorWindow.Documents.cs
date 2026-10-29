@@ -1,56 +1,56 @@
-﻿using Avalonia;
+using System.Collections.Concurrent;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
-using System.Collections.Concurrent;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class PresetEditorWindow
     {
+        private readonly TabControl _documentTabs = new()
+            { MinHeight = 36, FontSize = 13, Background = AppTheme.SurfaceTint };
+
         private readonly List<EditorDocument> _documents = [];
+
+        private readonly WrapPanel _fileChangeBar = new()
+            { Orientation = Orientation.Horizontal, Margin = new(8, 3), IsVisible = false };
+
+        private readonly TextBlock _fileChangeText = new() { VerticalAlignment = VerticalAlignment.Center };
+        private readonly DispatcherTimer _fileChanges = new() { Interval = TimeSpan.FromMilliseconds(200) };
+
+        private readonly EditorFileMonitor _fileMonitor = new();
 
         private readonly ConcurrentDictionary<string, string> _openSources =
             new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
-        private readonly TabControl _documentTabs = new()
-            { MinHeight = 36, FontSize = 13, Background = AppTheme.SurfaceTint };
-
-        private readonly EditorFileMonitor _fileMonitor = new();
-        private readonly DispatcherTimer _fileChanges = new() { Interval = TimeSpan.FromMilliseconds(200) };
-        private readonly TextBlock _fileChangeText = new() { VerticalAlignment = VerticalAlignment.Center };
-
-        private readonly WrapPanel _fileChangeBar = new()
-            { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 3), IsVisible = false };
-
         private EditorDocument? _currentDocument;
         private bool _switchingDocument, _checkingFiles, _checkAgain;
 
-        private Control CreateDocumentHeader()
+        private StackPanel CreateDocumentHeader()
         {
             var panel = new StackPanel();
             panel.Children.Add(new ScrollViewer
             {
                 Content = _documentTabs,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             });
             _fileChangeBar.Children.Add(_fileChangeText);
             var reload = new Button
-                { [!ContentControl.ContentProperty] = LiveText.Resource("EditorReload"), Margin = new Thickness(6, 0) };
+                { [!ContentProperty] = LiveText.Resource("EditorReload"), Margin = new(6, 0) };
             reload.Click += async (_, _) => await Guard(async () =>
             {
                 if (_currentDocument?.Path is not { } path) return;
                 var document = _currentDocument;
                 var text = await ReadEditorFileAsync(path);
-                if (!Active && !_allowClose) ReloadDocument(document, text);
+                if (!Active && !_preparingRun && !_allowClose) ReloadDocument(document, text);
             });
-            var keep = new Button { [!ContentControl.ContentProperty] = LiveText.Resource("EditorKeepLocal") };
+            var keep = new Button { [!ContentProperty] = LiveText.Resource("EditorKeepLocal") };
             keep.Click += (_, _) =>
             {
-                if (_currentDocument is not { } document || Active) return;
+                if (_currentDocument is not { } document || Active || _preparingRun) return;
                 document.SavedText = document.ObservedText ?? "";
                 document.Conflict = false;
                 _savedText = document.SavedText;
@@ -61,6 +61,15 @@ namespace RitsukageGif.Desktop
             panel.Children.Add(_fileChangeBar);
             _documentTabs.SelectionChanged += (_, _) =>
             {
+                if (_preparingRun && !_switchingDocument)
+                {
+                    _switchingDocument = true;
+                    _documentTabs.SelectedItem = _documentTabs.Items.OfType<TabItem>()
+                        .FirstOrDefault(item => ReferenceEquals(item.Tag, _currentDocument));
+                    _switchingDocument = false;
+                    return;
+                }
+
                 if (!_switchingDocument && _documentTabs.SelectedItem is TabItem { Tag: EditorDocument document })
                     SelectDocument(document);
             };
@@ -82,8 +91,9 @@ namespace RitsukageGif.Desktop
             return text;
         }
 
-        internal async Task OpenDocumentAsync(string path)
+        private async Task OpenDocumentAsync(string path)
         {
+            if (_preparingRun) return;
             path = Path.GetFullPath(path);
             var existing = _documents.FirstOrDefault(d => SameDiagnosticSource(d.Path, path));
             if (existing is not null)
@@ -92,8 +102,16 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            var text = await ReadEditorFileAsync(path);
-            if (!_allowClose) LoadText(path, text);
+            try
+            {
+                var text = await ReadEditorFileAsync(path);
+                if (!_allowClose) LoadText(path, text);
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(error, $"Script document open failed.");
+                throw;
+            }
         }
 
         internal Task OpenLocationAsync(string path)
@@ -119,15 +137,15 @@ namespace RitsukageGif.Desktop
                 if (document.Path is { } source) _openSources[source] = document.Buffer.Text;
             };
             _documents.Add(document);
-            var item = new TabItem { Tag = document, Padding = new Thickness(8, 3), MinHeight = 28, FontSize = 13 };
+            var item = new TabItem { Tag = document, Padding = new(8, 3), MinHeight = 28, FontSize = 13 };
             var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             header.Children.Add(new TextBlock
             {
                 VerticalAlignment = VerticalAlignment.Center,
-                MaxWidth = 180, TextTrimming = TextTrimming.CharacterEllipsis
+                MaxWidth = 180, TextTrimming = TextTrimming.CharacterEllipsis,
             });
             var close = new Button
-                { Content = ToolbarIcon("EditorCloseFile"), Padding = new Thickness(4), MinWidth = 24, MinHeight = 24 };
+                { Content = ToolbarIcon("EditorCloseFile"), Padding = new(4), MinWidth = 24, MinHeight = 24 };
             close.Classes.Add("icon-button");
             close.Bind(ToolTip.TipProperty, LiveText.Resource("EditorCloseFile"));
             close.Click += async (_, _) => await Guard(() => CloseDocumentAsync(document));
@@ -138,6 +156,7 @@ namespace RitsukageGif.Desktop
             _switchingDocument = false;
             SelectDocument(document);
             WatchDocuments();
+            Logger.ZLogInformation($"Script document opened. HasFile={path is not null}, Documents={_documents.Count}");
         }
 
         private void SelectDocument(EditorDocument document)
@@ -159,10 +178,10 @@ namespace RitsukageGif.Desktop
             _analysisDiagnostics = [];
             _breakpoints.Clear();
             _breakpoints.AddRange(document.Breakpoints);
-            Editor.Document = document.Buffer;
-            Editor.CaretOffset = Math.Min(document.Caret, document.Buffer.TextLength);
-            Editor.ScrollToHorizontalOffset(document.HorizontalOffset);
-            Editor.ScrollToVerticalOffset(document.VerticalOffset);
+            _editor.Document = document.Buffer;
+            _editor.CaretOffset = Math.Min(document.Caret, document.Buffer.TextLength);
+            _editor.ScrollToHorizontalOffset(document.HorizontalOffset);
+            _editor.ScrollToVerticalOffset(document.VerticalOffset);
             _switchingDocument = true;
             _documentTabs.SelectedItem =
                 _documentTabs.Items.OfType<TabItem>().Single(t => ReferenceEquals(t.Tag, document));
@@ -177,9 +196,9 @@ namespace RitsukageGif.Desktop
         private void StoreDocumentPosition()
         {
             if (_currentDocument is not { } document) return;
-            document.Caret = Editor.CaretOffset;
-            document.HorizontalOffset = Editor.HorizontalOffset;
-            document.VerticalOffset = Editor.VerticalOffset;
+            document.Caret = _editor.CaretOffset;
+            document.HorizontalOffset = _editor.HorizontalOffset;
+            document.VerticalOffset = _editor.VerticalOffset;
             document.Breakpoints.Clear();
             document.Breakpoints.AddRange(_breakpoints);
         }
@@ -193,17 +212,18 @@ namespace RitsukageGif.Desktop
                     (document.Path is null ? UiText.Get("EditorUntitled") : Path.GetFileName(document.Path)) +
                     (document.Dirty ? " *" : "") + (document.Conflict ? " !" : "");
                 ToolTip.SetTip(item, document.Path);
+                if (header.Children[1] is Button close) close.IsEnabled = !Active && !_preparingRun;
             }
 
             _fileChangeBar.IsVisible = _currentDocument?.Conflict == true;
-            _fileChangeBar.IsEnabled = !Active;
+            _fileChangeBar.IsEnabled = !Active && !_preparingRun;
             _fileChangeText.Text =
                 UiText.Get(_currentDocument?.ObservedText is null ? "EditorFileMissing" : "EditorExternalChangeNotice");
         }
 
         private async Task CloseDocumentAsync(EditorDocument document)
         {
-            if (Active) return;
+            if (Active || _preparingRun) return;
             SelectDocument(document);
             if (!await ConfirmDiscard()) return;
             _switchingDocument = true;
@@ -216,6 +236,7 @@ namespace RitsukageGif.Desktop
             if (_documents.Count == 0) AddDocument(null, "");
             else SelectDocument(_documents[^1]);
             WatchDocuments();
+            Logger.ZLogInformation($"Script document closed. Documents={_documents.Count}");
         }
 
         private async Task<bool> ConfirmAllDocumentsAsync()
@@ -232,18 +253,24 @@ namespace RitsukageGif.Desktop
             return true;
         }
 
-        private void WatchDocuments() => _fileMonitor.SetPaths(_documents.Select(d => d.Path).OfType<string>());
-
-        private void QueueFileCheck() => Dispatcher.UIThread.Post(() =>
+        private void WatchDocuments()
         {
-            if (_allowClose) return;
-            _fileChanges.Stop();
-            _fileChanges.Start();
-        });
+            _fileMonitor.SetPaths(_documents.Select(d => d.Path).OfType<string>());
+        }
+
+        private void QueueFileCheck()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_allowClose) return;
+                _fileChanges.Stop();
+                _fileChanges.Start();
+            });
+        }
 
         private async Task CheckExternalChangesAsync()
         {
-            if (_allowClose || Active) return;
+            if (_allowClose || Active || _preparingRun) return;
             if (_checkingFiles)
             {
                 _checkAgain = true;
@@ -271,7 +298,7 @@ namespace RitsukageGif.Desktop
                         continue;
                     }
 
-                    if (_allowClose || Active) return;
+                    if (_allowClose || Active || _preparingRun) return;
                     if (!_documents.Contains(document) || document.Path != path) continue;
                     document.ObservedText = text;
                     if (text == document.SavedText)
@@ -281,8 +308,16 @@ namespace RitsukageGif.Desktop
                     }
 
                     if (text is not null && (!document.Dirty || document.Buffer.Text == text))
+                    {
                         ReloadDocument(document, text);
-                    else document.Conflict = true;
+                    }
+                    else
+                    {
+                        if (!document.Conflict)
+                            Logger.ZLogWarning(
+                                $"Script document has an external file conflict. FileMissing={text is null}");
+                        document.Conflict = true;
+                    }
                 }
 
                 UpdateDocumentHeaders();
@@ -304,6 +339,7 @@ namespace RitsukageGif.Desktop
 
         private void ReloadDocument(EditorDocument document, string text)
         {
+            Logger.ZLogDebug($"Script document reloaded from disk. ActiveDocument={_currentDocument == document}");
             if (_currentDocument == document) StoreDocumentPosition();
             document.SavedText = text;
             document.ObservedText = text;
@@ -314,9 +350,9 @@ namespace RitsukageGif.Desktop
             if (_currentDocument == document)
             {
                 _savedText = text;
-                Editor.CaretOffset = Math.Min(document.Caret, document.Buffer.TextLength);
-                Editor.ScrollToHorizontalOffset(document.HorizontalOffset);
-                Editor.ScrollToVerticalOffset(document.VerticalOffset);
+                _editor.CaretOffset = Math.Min(document.Caret, document.Buffer.TextLength);
+                _editor.ScrollToHorizontalOffset(document.HorizontalOffset);
+                _editor.ScrollToVerticalOffset(document.VerticalOffset);
                 _revision++;
                 _semantic = null;
                 _analysis.Start();

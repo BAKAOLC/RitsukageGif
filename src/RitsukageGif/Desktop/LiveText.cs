@@ -1,8 +1,8 @@
+using System.Globalization;
 using Avalonia;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Threading;
 using Semi.Avalonia;
-using System.Globalization;
 
 namespace RitsukageGif.Desktop
 {
@@ -10,7 +10,10 @@ namespace RitsukageGif.Desktop
     {
         private const string Prefix = "LocalizedText.";
 
-        public static DynamicResourceExtension Resource(string key) => new(Prefix + key);
+        public static DynamicResourceExtension Resource(string key)
+        {
+            return new(Prefix + key);
+        }
 
         public static void ApplyLanguage(string language)
         {

@@ -7,75 +7,152 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class ApplicationHost
     {
-        private readonly IClassicDesktopStyleApplicationLifetime _desktop;
-        private readonly DesktopServices _services = new();
-        private readonly PresetController _presets;
+        private static readonly ILogger HostLogger = LogHub.GetLogger("Desktop.Host");
+        private static long _nextOperationId;
+        private readonly CaptureHistoryStore _captureHistory = new();
         private readonly CommandPipe? _commands;
-        private readonly ExternalInputHub _inputs = new();
+        private readonly IClassicDesktopStyleApplicationLifetime _desktop;
         private readonly InputChannelServer _inputServer;
-        private readonly bool _startServices;
-        private HotkeyService? _hotkeys;
-        private CaptureRegion? _captureRegion;
-        private string? _lastPath;
-        private RecordingProgress? _latestProgress;
-        private Task<RecordingOutcome>? _operation;
-        private bool _recording, _busy, _selecting, _closing, _configuring;
-        private bool _manualCaptureCompleted;
-        private PixelRect? _region;
-        private SelectionCoordinator? _selection;
-        private AppSettings _settings = AppSettings.Load();
-        private AppSettings? _recordSettings;
-        private WindowPreset? _manualPreset;
-        private PresetRecordingSettings? _startOverrides;
+        private readonly ExternalInputHub _inputs = new();
+        private readonly PinnedImageManager _pinnedImages = new();
+        private readonly PresetController _presets;
         private readonly Stopwatch _recordClock = new();
+        private readonly DesktopServices _services = new();
+        private readonly bool _startServices;
+        private CaptureRegion? _captureRegion;
+        private HotkeyService? _hotkeys;
+        private bool _manualCaptureCompleted;
+        private WindowPreset? _manualPreset;
+        private Task<RecordingOutcome>? _operation;
         private int _recordSequence;
-        private IReadOnlyList<string> _lastOutputs = [];
-        private CancellationTokenSource? _stop, _abort;
+        private AppSettings? _recordSettings;
+        private SelectionCoordinator? _selection;
         private Task? _shutdown;
+        private PresetRecordingSettings? _startOverrides;
         private string _status = UiText.Get("Ready");
         private string? _statusKey = "Ready";
-
-        public MainWindow? View { get; private set; }
-        public AppSettings Settings => _settings;
-        internal AppSettings EffectiveSettings => CanPrepareNextRecording ? _settings : _recordSettings ?? _settings;
-
-        public bool CanPrepareNextRecording => _busy && !_recording && !_closing &&
-                                               _manualCaptureCompleted && _presets.ActivePreset is null;
-
-        internal bool CanEditRecordingSettings => !_closing && !_recording && (!_busy || CanPrepareNextRecording);
-        public bool IsBusy => _busy;
-        public bool IsRecording => _recording;
-        public bool IsSelecting => _selecting;
-        public bool IsConfiguring => _configuring;
-        public bool IsClosing => _closing;
-        public PixelRect? Region => _region;
-        public string Status => _statusKey is { } key ? UiText.Get(key) : _status;
-        public string? LastPath => _lastPath;
-        public RecordingProgress? LatestProgress => _latestProgress;
-        public IReadOnlyList<string> LastOutputs => _lastOutputs;
-        public event Action? Changed;
-        private Screens Screens => _services.Screens;
+        private CancellationTokenSource? _stop, _abort;
 
         public ApplicationHost(IClassicDesktopStyleApplicationLifetime desktop) : this(desktop, true)
         {
         }
 
-        internal ApplicationHost(IClassicDesktopStyleApplicationLifetime desktop, bool startServices)
+        private ApplicationHost(IClassicDesktopStyleApplicationLifetime desktop, bool startServices)
         {
+            HostLogger.ZLogInformation($"Application host initialization started. ServicesEnabled={startServices}");
             _startServices = startServices;
+            _persistedStartWithWindows = Settings.System.StartWithWindows;
+            AppTheme.Apply(Settings.Appearance);
+            _pinnedImages.Preferences = Settings.PinnedImages;
+            _pinnedImages.AnnotationPreferences = Settings.Annotation;
+            _pinnedImages.RecognitionPreferencesProvider = () => Settings.Recognition;
+            _pinnedImages.AnnotationPreferencesChanged = PersistAnnotationPreferences;
+            _pinnedImages.SavePreferencesProvider = () => Settings.ScreenshotSave;
+            _pinnedImages.OutputColorModeProvider = () => Settings.CaptureColorMode;
+            _pinnedImages.ClipboardPreferencesProvider = () => Settings.ScreenshotClipboard;
+            _pinnedImages.OutputDirectoryProvider = () => Settings.OutputDirectory;
+            _pinnedImages.DialogStyleProvider = () => Settings.Appearance.SaveDialogStyle;
+            _pinnedImages.SavedPathChanged = PersistScreenshotExtension;
+            _pinnedImages.OutputNotification = ShowOutputNotification;
+            _pinnedImages.AutomaticSave = AutoSaveScreenshotAsync;
             _desktop = desktop;
-            _inputServer = new InputChannelServer(_inputs);
-            _presets = new PresetController(ApplyPresetActionAsync,
-                () => (_recording, _busy, _recordClock.Elapsed.TotalSeconds), SetStatus, () => _lastOutputs,
-                () => Volatile.Read(ref _streams), _inputs);
+            _pinnedImages.CanRestoreHidden = () => CanHideToTray;
+            _pinnedImages.CanRestoreNow = () => !IsSelecting && !IsClosing;
+            _pinnedImages.SessionError = error =>
+            {
+                if (!IsClosing) SetStatus(error.Message);
+            };
+            _inputServer = new(_inputs);
+            var textRecognition = new OcrRecognitionService();
+            var barcodeRecognition = new BarcodeRecognitionService();
+            _presets = new(ApplyPresetActionAsync,
+                () => (IsRecording, IsBusy, _recordClock.Elapsed.TotalSeconds), SetStatus, () => LastOutputs,
+                () => Volatile.Read(ref _streams), _inputs, this, this,
+                textRecognition, barcodeRecognition,
+                new PrivacyDetectionService([
+                    new OcrPrivacyCandidateProvider(textRecognition),
+                    new BarcodePrivacyCandidateProvider(barcodeRecognition),
+                ]));
             _services.DisplaysChanged += DisplayChanged;
+            var shortcutErrors = SelectionCommands.Configure(Settings.SelectionShortcuts);
+            if (shortcutErrors.Count > 0)
+            {
+                SelectionCommands.Configure(null);
+                _statusKey = null;
+                _status = string.Join(Environment.NewLine, shortcutErrors);
+                _inputStatusSource = InputConfigurationStatusSource.SelectionShortcuts;
+            }
+
+            var mouseErrors = MouseCommands.Configure(Settings.MouseShortcuts);
+            if (mouseErrors.Count > 0)
+            {
+                MouseCommands.Configure(null);
+                _statusKey = null;
+                _status = string.Join(Environment.NewLine, mouseErrors);
+                _inputStatusSource = InputConfigurationStatusSource.MouseShortcuts;
+            }
+
             if (startServices)
-                _commands = new CommandPipe(args => Dispatcher.UIThread.InvokeAsync(() => ExecuteCommandAsync(args)));
+                _commands = new(args => Dispatcher.UIThread.InvokeAsync(() => ExecuteCommandAsync(args)));
             RegisterHotkeys();
+            RegisterGlobalMouse();
+            if (startServices) GlobalInputCapture.Changed += GlobalInputCaptureChanged;
+            InitializeSessionShortcuts();
+            InitializeTray();
+            if (startServices) _pinStartup = InitializePinnedSessionAsync();
         }
+
+        private MainWindow? View { get; set; }
+        public AppSettings Settings { get; private set; } = AppSettings.Load();
+
+        internal AppSettings EffectiveSettings => CanPrepareNextRecording ? Settings : _recordSettings ?? Settings;
+
+        private bool CanPrepareNextRecording => IsBusy && !IsRecording && !IsClosing &&
+                                                _manualCaptureCompleted && _presets.ActivePreset is null;
+
+        internal bool CanEditRecordingSettings => !IsClosing && !IsRecording && (!IsBusy || CanPrepareNextRecording);
+
+        internal bool CanToggleRecording => !IsClosing && (IsRecording ||
+                                                           (!IsSelecting && !IsConfiguring && !IsBusy &&
+                                                            Region is not null));
+
+        public bool IsBusy { get; private set; }
+
+        public bool IsRecording { get; private set; }
+
+        public bool IsSelecting { get; private set; }
+
+        public bool IsConfiguring { get; private set; }
+
+        public bool IsClosing { get; private set; }
+
+        public PixelRect? Region { get; private set; }
+
+        public string Status => _statusKey is { } key ? UiText.Get(key) : _status;
+
+        public string? LastPath
+        {
+            get;
+            private set
+            {
+                field = value;
+                LastScreenshotOutput = null;
+            }
+        }
+
+        internal ScreenshotSavedOutput? LastScreenshotOutput { get; private set; }
+        internal string? LatestOutputPath => LastScreenshotOutput?.Paths[0] ?? LastPath;
+
+        public RecordingProgress? LatestProgress { get; private set; }
+
+        public IReadOnlyList<string> LastOutputs { get; private set; } = [];
+
+        private Screens Screens => _services.Screens;
+        public event Action? Changed;
 
         public void SetStatus(string message)
         {
+            _inputStatusSource = InputConfigurationStatusSource.None;
             _statusKey = null;
             _status = message;
             Notify();
@@ -83,26 +160,33 @@ namespace RitsukageGif.Desktop
 
         private void SetStatusKey(string key)
         {
+            _inputStatusSource = InputConfigurationStatusSource.None;
             _statusKey = key;
             Notify();
         }
 
-        private void Notify() => Changed?.Invoke();
+        private void Notify()
+        {
+            _pinnedImages.ResumeDeferred();
+            Changed?.Invoke();
+        }
 
         public void ShowMainWindow()
         {
-            if (_closing) return;
+            if (IsClosing) return;
             var created = View is null;
             if (View is null)
             {
-                View = new MainWindow(this);
+                View = new(this);
                 _desktop.MainWindow = View;
             }
 
+            View.RestoreFromTray();
             WindowActivation.Show(View);
             if (created) StartCleanup();
             if (created) _ = CheckAutomaticUpdateAsync();
-            if (created && _lastPath is { } path && !_busy) _ = View.LoadPreviewAsync(path);
+            if (created && LastPath is { } path && !IsBusy) _ = View.LoadPreviewAsync(path);
+            RefreshTray();
         }
 
         public void CancelRecording()
@@ -114,53 +198,106 @@ namespace RitsukageGif.Desktop
         public void SetCommon(int fps, int divisor, OutputFormat format, bool? cursor = null)
         {
             if (!CanEditRecordingSettings) return;
-            _settings.Fps = fps;
-            _settings.Divisor = divisor;
-            _settings.Format = format;
-            if (cursor is { } captureCursor) _settings.Cursor = captureCursor;
-            _settings.Save();
+            var settings = Settings with
+            {
+                Fps = fps, Divisor = divisor, Format = format, Cursor = cursor ?? Settings.Cursor,
+            };
+            QueueSettingsSave(settings);
+            Settings = settings;
+            Notify();
         }
 
         public bool BeginConfigure()
         {
-            if (!CanEditRecordingSettings || _selecting || _configuring) return false;
-            _configuring = true;
-            DeactivatePreset();
-            Volatile.Write(ref _captureRegion, null);
+            if (!CanEditRecordingSettings || IsSelecting || IsConfiguring) return false;
+            IsConfiguring = true;
             _hotkeys?.Dispose();
             _hotkeys = null;
+            _globalMouse?.Dispose();
+            _globalMouse = null;
             Notify();
             return true;
         }
 
         public void EndConfigure()
         {
-            _configuring = false;
-            if (!_closing) RegisterHotkeys();
+            IsConfiguring = false;
+            if (!IsClosing) RegisterHotkeys();
+            if (!IsClosing) RegisterGlobalMouse();
             Notify();
         }
 
         public void UpdateSettings(AppSettings settings)
         {
-            if (!CanEditRecordingSettings) return;
-            if (settings.CaptureSource != _settings.CaptureSource)
+            if (IsClosing) return;
+            if (Settings.ContentEquals(settings)) return;
+            settings = settings.Snapshot();
+            settings.System = settings.System.Normalize();
+            settings.Recognition = settings.Recognition.Normalize();
+            var previous = Settings;
+            var shortcutErrors = SelectionCommands.Validate(settings.SelectionShortcuts);
+            if (shortcutErrors.Count > 0 && !SameShortcuts(previous.SelectionShortcuts, settings.SelectionShortcuts))
+                throw new ArgumentException(string.Join(Environment.NewLine, shortcutErrors), nameof(settings));
+            var actionErrors = GlobalActions.Validate(settings.GlobalActions, ReservedActionShortcuts(settings),
+                settings.GlobalMouseBindings);
+            var actionsChanged = !SameActions(previous.GlobalActions, settings.GlobalActions) ||
+                                 !previous.PresetHotkeys.SequenceEqual(settings.PresetHotkeys) ||
+                                 !previous.GlobalMouseBindings.SequenceEqual(settings.GlobalMouseBindings);
+            if (actionErrors.Count > 0 && actionsChanged)
+                throw new ArgumentException(string.Join(Environment.NewLine, actionErrors), nameof(settings));
+            var mouseErrors = MouseCommands.Validate(settings.MouseShortcuts);
+            if (mouseErrors.Count > 0 && !SameShortcuts(previous.MouseShortcuts, settings.MouseShortcuts))
+                throw new ArgumentException(string.Join(Environment.NewLine, mouseErrors), nameof(settings));
+            var globalMouseErrors = GlobalMouseService.Validate(settings.GlobalMouseBindings, settings.GlobalActions);
+            if (globalMouseErrors.Count > 0 && actionsChanged)
+                throw new ArgumentException(string.Join(Environment.NewLine, globalMouseErrors), nameof(settings));
+            QueueSettingsSave(settings);
+            if (CanEditRecordingSettings && settings.CaptureSource != Settings.CaptureSource &&
+                _presets.ActivePreset is null)
             {
                 _manualPreset = null;
-                _region = null;
+                Region = null;
+                Volatile.Write(ref _captureRegion, null);
             }
 
-            _settings = settings;
-            LiveText.ApplyLanguage(settings.Language);
-            ResetCleanupCancellation();
-            QueueCleanup();
-            _settings.Save();
-            DeactivatePreset();
-            Volatile.Write(ref _captureRegion, null);
+            Settings = settings;
+            if (!SameShortcuts(previous.SelectionShortcuts, settings.SelectionShortcuts))
+                SelectionCommands.Configure(settings.SelectionShortcuts);
+            if (previous.Appearance != settings.Appearance) AppTheme.Apply(settings.Appearance);
+            if (previous.PinnedImages != settings.PinnedImages) _pinnedImages.Preferences = settings.PinnedImages;
+            _pinnedImages.AnnotationPreferences = settings.Annotation;
+            if (!SameShortcuts(previous.MouseShortcuts, settings.MouseShortcuts))
+                MouseCommands.Configure(settings.MouseShortcuts);
+            ClearValidatedInputConfigurationStatus(shortcutErrors.Count == 0, mouseErrors.Count == 0,
+                actionErrors.Count == 0);
+            if (previous.Language != settings.Language) LiveText.ApplyLanguage(settings.Language);
+            if (previous.CleanupEnabled != settings.CleanupEnabled ||
+                previous.CleanupMaxAgeDays != settings.CleanupMaxAgeDays ||
+                previous.CleanupMaxFiles != settings.CleanupMaxFiles ||
+                previous.CleanupMaxSizeMiB != settings.CleanupMaxSizeMiB)
+            {
+                ResetCleanupCancellation();
+                QueueCleanup();
+            }
+
+            if (!SameActions(previous.GlobalActions, settings.GlobalActions) ||
+                !previous.PresetHotkeys.SequenceEqual(settings.PresetHotkeys) ||
+                !previous.PresetFiles.SequenceEqual(settings.PresetFiles, StringComparer.Ordinal))
+                RebuildActionMenus();
+            if (!IsConfiguring && actionsChanged)
+            {
+                RegisterHotkeys();
+                RegisterGlobalMouse();
+            }
+
+            View?.RefreshSettingsPresentation(previous, settings);
             Notify();
         }
 
         public async Task ShutdownAsync()
         {
+            HostLogger.ZLogInformation(
+                $"Application shutdown requested. Closing={IsClosing} Recording={IsRecording} Selecting={IsSelecting}");
             if (_shutdown is { } pending)
             {
                 await pending;
@@ -172,81 +309,134 @@ namespace RitsukageGif.Desktop
             try
             {
                 await ShutdownCoreAsync();
+                HostLogger.ZLogInformation(
+                    $"Application shutdown completed. Closing={IsClosing} FatalFailure={_fatalFailure}");
                 completion.TrySetResult();
             }
             catch (Exception error)
             {
                 completion.TrySetException(error);
+                HostLogger.ZLogError(error, $"Application shutdown failed.");
                 throw;
             }
             finally
             {
-                if (!_closing) _shutdown = null;
+                if (!IsClosing) _shutdown = null;
             }
         }
 
         private async Task ShutdownCoreAsync()
         {
-            if (!_closing && _animationEditor is { } animationEditor &&
-                !await animationEditor.RequestCloseAsync()) return;
-            if (!_closing && _editor is { } editor && !await editor.RequestCloseAsync()) return;
-            _closing = true;
-            _cleanupTimer?.Stop();
-            _cleanupCancellation.Cancel();
-            await _cleanupTask;
-            _cleanupCancellation.Dispose();
-            await StopUpdateCheckAsync();
-            Notify();
-            _commands?.Dispose();
-            _hotkeys?.Dispose();
-            _hotkeys = null;
-            DeactivatePreset();
-            CancelSelection();
-            _stop?.Cancel();
-            _abort?.Cancel();
-            if (_selectionOperation is { } selectionOperation)
-                try
-                {
-                    await selectionOperation;
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceInformation("Selection stopped during shutdown: {0}", ex.Message);
-                }
+            _settingsWindow?.Close();
+            if (!IsClosing)
+            {
+                if (_animationEditor is { } animationEditor && !await animationEditor.RequestCloseAsync()) return;
+                if (_editor is { } editor && !await editor.RequestCloseAsync()) return;
+            }
 
-            if (_operation is not null) await _operation;
-            await _inputServer.DisposeAsync();
-            _inputs.Dispose();
-            await PlatformShell.StopSoundAsync();
+            IsClosing = true;
+            var selectionOperation = _selectionOperation;
+            var screenshotOperation = _screenshotOperation;
+            var recordingOperation = _operation;
+            var cleanupToken = _cleanupCancellation.Token;
+            var selectionToken = _selectionCancellation?.Token ?? CancellationToken.None;
+            var screenshotToken = _screenshotCancellation?.Token ?? CancellationToken.None;
+            var stopToken = _stop?.Token ?? CancellationToken.None;
+            var abortToken = _abort?.Token ?? CancellationToken.None;
+            if (_startServices) GlobalInputCapture.Changed -= GlobalInputCaptureChanged;
+            RunShutdownStage("session shortcuts", StopSessionShortcuts);
+            RunShutdownStage("output notification", CloseOutputNotification);
+            await RunShutdownStageAsync("pinned image startup cancellation", _pinStartupCancellation.CancelAsync,
+                CancellationToken.None);
+            RunShutdownStage("cleanup timer", () => _cleanupTimer?.Stop());
+            await RunShutdownStageAsync("cleanup cancellation", _cleanupCancellation.CancelAsync,
+                CancellationToken.None);
+            await RunShutdownStageAsync("recording cleanup", () => _cleanupTask, cleanupToken);
+            RunShutdownStage("cleanup cancellation source", _cleanupCancellation.Dispose);
+            await RunShutdownStageAsync("update check", StopUpdateCheckAsync, _updateCancellation.Token);
+            RunShutdownStage("closing notification", Notify);
+            RunShutdownStage("tray", DisposeTray);
+            RunShutdownStage("command server", () => _commands?.Dispose());
+            RunShutdownStage("global mouse", () => _globalMouse?.Dispose());
+            _globalMouse = null;
+            RunShutdownStage("global hotkeys", () => _hotkeys?.Dispose());
+            _hotkeys = null;
+            RunShutdownStage("preset", DeactivatePreset);
+            RunShutdownStage("selection cancellation", CancelSelection);
+            RunShutdownStage("screenshot cancellation", CancelScreenshot);
+            if (_stop is { } stop)
+                await RunShutdownStageAsync("recording stop", stop.CancelAsync, CancellationToken.None);
+            if (_abort is { } abort)
+                await RunShutdownStageAsync("recording abort", abort.CancelAsync, CancellationToken.None);
+            if (selectionOperation is not null)
+                await RunShutdownStageAsync("selection", () => selectionOperation, selectionToken);
+            if (screenshotOperation is not null)
+                await RunShutdownStageAsync("screenshot", () => screenshotOperation, screenshotToken);
+            await RunShutdownStageAsync("pinned image session", StopPinnedSessionAsync, CancellationToken.None);
+            if (recordingOperation is not null)
+                await RunShutdownStageAsync("recording", () => recordingOperation,
+                    abortToken.IsCancellationRequested ? abortToken : stopToken);
+            if (_settingsPersistence is { } persistence)
+                await RunShutdownStageAsync("final settings persistence", () => persistence.DisposeAsync().AsTask(),
+                    CancellationToken.None);
+            await RunShutdownStageAsync("input channels", () => _inputServer.DisposeAsync().AsTask(),
+                CancellationToken.None);
+            RunShutdownStage("external inputs", _inputs.Dispose);
+            await RunShutdownStageAsync("sound", PlatformShell.StopSoundAsync, CancellationToken.None);
             _services.DisplaysChanged -= DisplayChanged;
-            _services.Dispose();
-            DesktopCapture.CloseSharedSource();
-            View?.CloseForShutdown();
-            _desktop.Shutdown(_fatalFailure ? 1 : 0);
+            RunShutdownStage("desktop services", _services.Dispose);
+            RunShutdownStage("shared capture source", DesktopCapture.CloseSharedSource);
+            RunShutdownStage("video recorder window", CloseVideoRecorderForShutdown);
+            RunShutdownStage("main window", () => View?.CloseForShutdown());
+            RunShutdownStage("desktop lifetime", () => _desktop.Shutdown(_fatalFailure ? 1 : 0));
+        }
+
+        private List<(string Shortcut, Func<Task> Action)> BuildGlobalHotkeyBindings()
+        {
+            var bindings = new List<(string Shortcut, Func<Task> Action)>();
+            // Build bindings directly without allocating a LINQ iterator and closure for the list projection.
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+            foreach (var hotkey in Settings.PresetHotkeys)
+                bindings.Add((hotkey.Shortcut, () =>
+                {
+                    if (!IsBusy && !IsSelecting && !IsConfiguring && !IsClosing)
+                        ActivatePreset(PresetCatalog.Load(Settings.PresetFiles)
+                            .Single(p => p.Name == hotkey.Preset));
+                    return Task.CompletedTask;
+                }));
+            var actionErrors = GlobalActions.Validate(Settings.GlobalActions, ReservedActionShortcuts(),
+                Settings.GlobalMouseBindings);
+            if (actionErrors.Count != 0)
+                SetInputConfigurationStatus(InputConfigurationStatusSource.GlobalActions,
+                    string.Join(Environment.NewLine, actionErrors));
+            else
+                // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+                foreach (var action in Settings.GlobalActions)
+                    if (action.Enabled && !string.IsNullOrWhiteSpace(action.Shortcut))
+                        bindings.Add((action.Shortcut, () => ExecuteActionAsync(action)));
+            return bindings;
         }
 
         private void RegisterHotkeys()
         {
             _hotkeys?.Dispose();
             _hotkeys = null;
-            if (!_startServices || !HotkeyService.Supported) return;
+            if (!_startServices || !HotkeyService.Supported || IsClosing || IsConfiguring ||
+                GlobalInputCapture.Active) return;
             try
             {
-                var bindings = new List<(string Shortcut, Func<Task> Action)>
-                    { (_settings.RecordHotkey, ToggleRecordingAsync), (_settings.SelectHotkey, SelectAsync) };
-                foreach (var hotkey in _settings.PresetHotkeys)
-                    bindings.Add((hotkey.Shortcut, () =>
-                    {
-                        if (!_busy && !_selecting && !_configuring && !_closing)
-                            ActivatePreset(PresetCatalog.Load(_settings.PresetFiles)
-                                .Single(p => p.Name == hotkey.Preset));
-                        return Task.CompletedTask;
-                    }));
-                _hotkeys = new HotkeyService(bindings, SetStatus);
+                var bindings = BuildGlobalHotkeyBindings();
+                for (var index = 0; index < bindings.Count; index++)
+                    bindings[index] = (bindings[index].Shortcut,
+                        GuardGlobalInput(bindings[index].Action, bindings[index].Shortcut));
+                AddSessionShortcuts(bindings);
+                _hotkeys = new(bindings, SetStatus,
+                    message => SetInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys, message),
+                    () => ClearInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys));
             }
             catch (Exception ex)
             {
-                SetStatus(ex.Message);
+                SetInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys, ex.Message);
             }
         }
     }

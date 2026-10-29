@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Input;
@@ -8,8 +7,8 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PresetEditorWindow
     {
-        private IReadOnlyList<ScriptDiagnostic> _problemItems = [];
         private IReadOnlyList<ScriptDiagnostic> _analysisDiagnostics = [];
+        private ScriptDiagnostic[] _problemItems = [];
         private ScriptDiagnostic? _runtimeDiagnostic;
 
         private void ConfigureDiagnostics()
@@ -18,21 +17,21 @@ namespace RitsukageGif.Desktop
             {
                 if (diagnostic is null) return new TextBlock();
                 var panel = new Grid
-                    { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"), Margin = new Thickness(4, 2) };
+                    { ColumnDefinitions = new("Auto,Auto,*"), Margin = new(4, 2) };
                 var file = new TextBlock
                 {
                     Text = diagnostic.Source is null
                         ? UiText.Get("EditorUntitled")
                         : Path.GetFileName(diagnostic.Source),
                     TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 180,
-                    Margin = new Thickness(0, 0, 10, 0)
+                    Margin = new(0, 0, 10, 0),
                 };
                 ToolTip.SetTip(file, diagnostic.Source);
                 panel.Children.Add(file);
                 var position = new TextBlock
                 {
                     Text = UiText.Format("EditorPosition", diagnostic.Line, diagnostic.Column),
-                    Margin = new Thickness(0, 0, 10, 0)
+                    Margin = new(0, 0, 10, 0),
                 };
                 Grid.SetColumn(position, 1);
                 panel.Children.Add(position);
@@ -50,9 +49,12 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        private Task NavigateSelectedDiagnosticAsync() => _diagnostics.SelectedItem is ScriptDiagnostic diagnostic
-            ? NavigateDiagnosticAsync(diagnostic)
-            : Task.CompletedTask;
+        private Task NavigateSelectedDiagnosticAsync()
+        {
+            return _diagnostics.SelectedItem is ScriptDiagnostic diagnostic
+                ? NavigateDiagnosticAsync(diagnostic)
+                : Task.CompletedTask;
+        }
 
         private async Task NavigateDiagnosticAsync(ScriptDiagnostic diagnostic)
         {
@@ -69,9 +71,12 @@ namespace RitsukageGif.Desktop
 
         private void SetDiagnostics(IReadOnlyList<ScriptDiagnostic> diagnostics)
         {
-            _analysisDiagnostics = diagnostics.Select(diagnostic =>
-                diagnostic with { Source = DiagnosticSource(diagnostic.Source) ?? _path }).DistinctBy(diagnostic =>
-                (diagnostic.Source, diagnostic.Line, diagnostic.Column, diagnostic.Message)).ToArray();
+            _analysisDiagnostics =
+            [
+                .. diagnostics.Select(diagnostic =>
+                    diagnostic with { Source = DiagnosticSource(diagnostic.Source) ?? _path }).DistinctBy(diagnostic =>
+                    (diagnostic.Source, diagnostic.Line, diagnostic.Column, diagnostic.Message)),
+            ];
             RefreshDiagnostics();
         }
 
@@ -81,7 +86,7 @@ namespace RitsukageGif.Desktop
             {
                 PresetSyntaxException syntax => syntax.Diagnostic,
                 ScriptExecutionException execution => execution.Diagnostic,
-                _ => null
+                _ => null,
             };
             if (diagnostic is null) return;
             _runtimeDiagnostic = diagnostic with { Source = DiagnosticSource(diagnostic.Source) ?? _path };
@@ -101,12 +106,15 @@ namespace RitsukageGif.Desktop
 
         private void RefreshDiagnostics()
         {
-            _problemItems = ExpandDiagnostics(_runtimeDiagnostic is null
-                ? _analysisDiagnostics
-                : _analysisDiagnostics.Append(_runtimeDiagnostic)).ToArray();
+            _problemItems =
+            [
+                .. ExpandDiagnostics(_runtimeDiagnostic is null
+                    ? _analysisDiagnostics
+                    : _analysisDiagnostics.Append(_runtimeDiagnostic)),
+            ];
             _diagnostics.ItemsSource = _problemItems;
-            _colors.Diagnostics = _problemItems.Where(diagnostic => SameDiagnosticSource(diagnostic.Source, _path))
-                .ToArray();
+            _colors.Diagnostics =
+                [.. _problemItems.Where(diagnostic => SameDiagnosticSource(diagnostic.Source, _path))];
         }
 
         private IEnumerable<ScriptDiagnostic> ExpandDiagnostics(IEnumerable<ScriptDiagnostic> diagnostics)
@@ -128,13 +136,18 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private string? DiagnosticSource(string? source) => source is null
-            ? null
-            : Path.GetFullPath(source,
-                _path is null ? Environment.CurrentDirectory : Path.GetDirectoryName(Path.GetFullPath(_path))!);
+        private string? DiagnosticSource(string? source)
+        {
+            return source is null
+                ? null
+                : Path.GetFullPath(source,
+                    _path is null ? Environment.CurrentDirectory : Path.GetDirectoryName(Path.GetFullPath(_path))!);
+        }
 
-        private static bool SameDiagnosticSource(string? left, string? right) =>
-            string.Equals(left, right,
+        private static bool SameDiagnosticSource(string? left, string? right)
+        {
+            return string.Equals(left, right,
                 OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
     }
 }

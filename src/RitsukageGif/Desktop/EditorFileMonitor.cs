@@ -6,10 +6,23 @@ namespace RitsukageGif.Desktop
             ? StringComparer.OrdinalIgnoreCase
             : StringComparer.Ordinal;
 
-        private readonly object _gate = new();
+        private readonly Lock _gate = new();
+        private bool _disposed, _faulted;
         private HashSet<string> _paths = new(PathComparer);
         private List<FileSystemWatcher> _watchers = [];
-        private bool _disposed, _faulted;
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                foreach (var watcher in _watchers) watcher.Dispose();
+                _watchers.Clear();
+                _paths.Clear();
+                Changed = null;
+            }
+        }
 
         public event Action? Changed;
 
@@ -29,7 +42,7 @@ namespace RitsukageGif.Desktop
                         {
                             IncludeSubdirectories = false,
                             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size |
-                                           NotifyFilters.CreationTime
+                                           NotifyFilters.CreationTime,
                         };
                         replacements.Add(watcher);
                         watcher.Changed += FileChanged;
@@ -69,7 +82,7 @@ namespace RitsukageGif.Desktop
             lock (_gate)
             {
                 if (_disposed || sender is not FileSystemWatcher watcher || !_watchers.Contains(watcher) ||
-                    !_paths.Contains(args.FullPath) && !_paths.Contains(args.OldFullPath)) return;
+                    (!_paths.Contains(args.FullPath) && !_paths.Contains(args.OldFullPath))) return;
                 Changed?.Invoke();
             }
         }
@@ -81,19 +94,6 @@ namespace RitsukageGif.Desktop
                 if (_disposed || sender is not FileSystemWatcher watcher || !_watchers.Contains(watcher)) return;
                 _faulted = true;
                 Changed?.Invoke();
-            }
-        }
-
-        public void Dispose()
-        {
-            lock (_gate)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                foreach (var watcher in _watchers) watcher.Dispose();
-                _watchers.Clear();
-                _paths.Clear();
-                Changed = null;
             }
         }
     }

@@ -1,69 +1,81 @@
-using Avalonia.Platform.Storage;
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
+using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class AnimationEditorWindow
     {
-        private readonly CheckBox _keepRatio = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("AnimationKeepRatio"), IsChecked = true };
-
-        private readonly ComboBox _format = new()
-            { ItemsSource = new[] { "GIF", "WebP", "APNG", "PNG" }, SelectedIndex = 0, Width = 110 };
-
-        private readonly CompactNumberInput _exportQuality = Number(90, 1, 100);
-        private readonly CompactNumberInput _colors = Number(256, 2, 256);
-
-        private readonly CheckBox _lossless = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("AnimationLossless"), IsChecked = true };
-
-        private readonly CheckBox _dither = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("AnimationDither"), IsChecked = true };
-
-        private readonly TextBox _fontFamily = new() { Width = 140, Text = "sans-serif" };
+        private readonly Button _applyDraft = new();
 
         private readonly CheckBox _bold = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("AnimationBold") };
+            { [!ContentProperty] = LiveText.Resource("AnimationBold") };
 
-        private readonly CheckBox _italic = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("AnimationItalic") };
-
-        private readonly TextBox _text = new()
-            { [!TextBox.WatermarkProperty] = LiveText.Resource("AnimationText"), AcceptsReturn = true, Height = 60 };
+        private readonly CompactNumberInput _brightness = Number(0, -100, 100);
+        private readonly CompactNumberInput _brush = Number(6, 1, 512);
 
         private readonly TextBox _color = new() { Text = "#FFFFFFFF", Width = 110 };
-        private readonly CompactNumberInput _brush = Number(6, 1, 512);
-        private readonly CompactNumberInput _font = Number(28, 1, 512);
-        private readonly CompactNumberInput _opacity = Number(100, 0, 100);
-        private readonly CompactNumberInput _imageWidth = Number(100, 1, 16384);
-        private readonly CompactNumberInput _imageHeight = Number(100, 1, 16384);
+        private readonly CompactNumberInput _colors = Number(256, 2, 256);
+        private readonly CompactNumberInput _contrast = Number(100, 0, 800);
 
-        private readonly ContentControl _propertyContent = new();
-        private readonly TextBlock _propertyTitle = new() { FontWeight = FontWeight.SemiBold };
-        private readonly Button _applyDraft = new();
+        private readonly Button _discardDraft = new();
+
+        private readonly CheckBox _dither = new()
+            { [!ContentProperty] = LiveText.Resource("AnimationDither"), IsChecked = true };
+
         private readonly Border _draftFooter = new();
 
         private readonly ComboBox _draftScope = new()
         {
             ItemsSource = DraftScopes(),
-            SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new(6, 2)
+            SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch, Padding = new(6, 2),
         };
 
-        private readonly Button _discardDraft = new();
-        private readonly CompactNumberInput _layerX = Number(0, -16384, 16384);
-        private readonly CompactNumberInput _layerY = Number(0, -16384, 16384);
         private readonly CompactNumberInput _effectAmount = Number(8, 1, 256);
-        private readonly CompactNumberInput _brightness = Number(0, -100, 100);
-        private readonly CompactNumberInput _contrast = Number(100, 0, 800);
+
+        private readonly CompactNumberInput _exportQuality = Number(90, 1, 100);
 
         private readonly CheckBox _filled = new()
-            { [!ContentControl.ContentProperty] = LiveText.Resource("AnimationFilled") };
+            { [!ContentProperty] = LiveText.Resource("AnimationFilled") };
+
+        private readonly CompactNumberInput _font = Number(28, 1, 512);
+
+        private readonly TextBox _fontFamily = new() { Width = 140, Text = "sans-serif" };
+
+        private readonly ComboBox _format = new()
+            { ItemsSource = new[] { "GIF", "WebP", "APNG", "PNG" }, SelectedIndex = 0, Width = 110 };
+
+        private readonly CompactNumberInput _imageHeight = Number(100, 1, 16384);
+        private readonly CompactNumberInput _imageWidth = Number(100, 1, 16384);
+
+        private readonly CheckBox _italic = new()
+            { [!ContentProperty] = LiveText.Resource("AnimationItalic") };
+
+        private readonly CheckBox _keepRatio = new()
+            { [!ContentProperty] = LiveText.Resource("AnimationKeepRatio"), IsChecked = true };
+
+        private readonly CompactNumberInput _layerX = Number(0, -16384, 16384);
+        private readonly CompactNumberInput _layerY = Number(0, -16384, 16384);
+
+        private readonly CheckBox _lossless = new()
+            { [!ContentProperty] = LiveText.Resource("AnimationLossless"), IsChecked = true };
+
+        private readonly CompactNumberInput _opacity = Number(100, 0, 100);
+
+        private readonly ContentControl _propertyContent = new();
+        private readonly TextBlock _propertyTitle = new() { FontWeight = FontWeight.SemiBold };
+
+        private readonly TextBox _text = new()
+            { [!TextBox.WatermarkProperty] = LiveText.Resource("AnimationText"), AcceptsReturn = true, Height = 60 };
+
+        private Control? _exportQualityRow, _exportColorsRow;
 
         private bool _syncingProperties;
 
-        private Control BuildProperties()
+        private Border BuildProperties()
         {
             var root = new Grid
                 { Name = "AnimationProperties", RowDefinitions = new("Auto,*,Auto") };
@@ -76,11 +88,11 @@ namespace RitsukageGif.Desktop
             });
             close.Classes.Add("icon-button");
             close.Classes.Add("Secondary");
-            close.Content = new Avalonia.Controls.Shapes.Path
+            close.Content = new Path
             {
                 Data = Geometry.Parse("M2,2 L12,12 M12,2 L2,12"), Stroke = AppTheme.Muted,
                 StrokeThickness = 1.5,
-                Width = 14, Height = 14
+                Width = 14, Height = 14,
             };
             close.Bind(ToolTip.TipProperty, LiveText.Resource("AnimationCloseProperties"));
             DockPanel.SetDock(close, Dock.Right);
@@ -92,6 +104,7 @@ namespace RitsukageGif.Desktop
             root.Children.Add(scroll);
             var actions = new StackPanel { Margin = new(8), Spacing = 4 };
             actions.Children.Add(_draftScope);
+            _draftScope.IsVisible = !_imageMode;
             _draftScope.Name = "DraftApplyScope";
             _draftScope.Bind(ToolTip.TipProperty, LiveText.Resource("AnimationDraftScopeHint"));
             var buttons = new Grid { ColumnDefinitions = new("*,*") };
@@ -137,13 +150,13 @@ namespace RitsukageGif.Desktop
             _color.LostFocus += (_, _) => UpdateBrush();
             _brush.LostFocus += (_, _) => UpdateBrush();
             _filled.IsCheckedChanged += (_, _) => _canvas.Filled = _filled.IsChecked == true;
-            ShowProperties("AnimationFrames");
+            ShowProperties(_imageMode ? "AnimationSelect" : "AnimationFrames");
             UpdateDraftActions();
-            return new Border
+            return new()
             {
                 Background = AppTheme.Surface, BorderBrush = AppTheme.Outline,
                 BorderThickness = new(1), CornerRadius = new(6), ClipToBounds = true, Margin = new(8, 0, 0, 0),
-                Child = root
+                Child = root,
             };
         }
 
@@ -151,17 +164,25 @@ namespace RitsukageGif.Desktop
         {
             _draftFooter.IsVisible = _canvas.HasChanges || _propertyMode is
                 "AnimationText" or "AnimationImageProperties" or "AnimationSelect" or
-                "AnimationBrush" or "AnimationEraser" or "AnimationLine" or "AnimationRectangle" or "AnimationEllipse";
+                "AnimationBrush" or "AnimationEraser" or "AnimationLine" or "AnimationArrow" or "AnimationRectangle"
+                or "AnimationEllipse";
             _applyDraft.IsEnabled = _canvas.HasChanges;
-            _draftScope.IsEnabled = _canvas.HasOverlay && !_canvas.HasRasterChanges;
+            _draftScope.IsEnabled = _canvas is { HasOverlay: true, HasRasterChanges: false };
             if (!_draftScope.IsEnabled) _draftScope.SelectedIndex = 0;
             _discardDraft.IsEnabled = _canvas.HasChanges;
         }
 
         private static void Detach(Control control)
         {
-            if (control.Parent is Panel panel) panel.Children.Remove(control);
-            else if (control.Parent is ContentControl content) content.Content = null;
+            switch (control.Parent)
+            {
+                case Panel panel:
+                    panel.Children.Remove(control);
+                    break;
+                case ContentControl content:
+                    content.Content = null;
+                    break;
+            }
         }
 
         private static void AddControl(StackPanel panel, Control control)
@@ -212,23 +233,32 @@ namespace RitsukageGif.Desktop
                         var options = new MediaProcessOptions { Width = Value(_width), Height = Value(_height) };
                         return EditAsync((d, t) => d.Transform(options, t));
                     }));
-                    Hint(panel, "AnimationWholeAnimationHint");
+                    if (!_imageMode) Hint(panel, "AnimationWholeAnimationHint");
                     break;
                 case "AnimationCrop":
                 case "AnimationSelection":
                     _canvas.Tool = AnimationEditorTool.Selection;
                     Hint(panel, "AnimationSelectRegion");
                     panel.Children.Add(ActionButton("AnimationCrop", CropAsync));
-                    Hint(panel, "AnimationWholeAnimationHint");
+                    if (!_imageMode) Hint(panel, "AnimationWholeAnimationHint");
                     break;
                 case "AnimationExport":
                     panel.Children.Add(Row("AnimationFormat", _format));
-                    panel.Children.Add(Row("AnimationExportQuality", _exportQuality));
-                    panel.Children.Add(Row("AnimationColors", _colors));
+                    _exportQualityRow = Row("AnimationExportQuality", _exportQuality);
+                    panel.Children.Add(_exportQualityRow);
+                    if (_imageMode)
+                    {
+                        panel.Children.Add(ActionButton("ImageSaveAs", () => SaveImageAsync(true)));
+                        break;
+                    }
+
+                    _exportColorsRow = Row("AnimationColors", _colors);
+                    panel.Children.Add(_exportColorsRow);
                     AddControl(panel, _lossless);
                     AddControl(panel, _dither);
                     panel.Children.Add(ActionButton("AnimationExport", ExportAsync));
                     Hint(panel, "AnimationExportHint");
+                    UpdateExportOptions();
                     break;
                 case "AnimationText":
                     BuildTextProperties(panel);
@@ -243,12 +273,15 @@ namespace RitsukageGif.Desktop
                     var effects = new[]
                     {
                         ("AnimationMosaic", PixelEffectKind.Mosaic), ("AnimationBlur", PixelEffectKind.Blur),
-                        ("AnimationGrayscale", PixelEffectKind.Grayscale), ("AnimationInvert", PixelEffectKind.Invert)
+                        ("AnimationGrayscale", PixelEffectKind.Grayscale), ("AnimationInvert", PixelEffectKind.Invert),
                     };
                     foreach (var row in effects.Chunk(2))
-                        panel.Children.Add(ActionGroup(row.Select(effect => CompactAction(effect.Item1, effect.Item1,
-                            () => ApplyEffectAsync(new(effect.Item2, EffectRegion(), BlockSize: Value(_effectAmount),
-                                Radius: Value(_effectAmount))))).ToArray()));
+                        panel.Children.Add(ActionGroup([
+                            .. row.Select(effect => CompactAction(effect.Item1, effect.Item1,
+                                () => ApplyEffectAsync(new(effect.Item2, EffectRegion(),
+                                    BlockSize: Value(_effectAmount),
+                                    Radius: Value(_effectAmount))))),
+                        ]));
                     panel.Children.Add(FieldPair("AnimationBrightness", _brightness, "AnimationContrast", _contrast));
                     panel.Children.Add(ActionButton("AnimationApplyEffect",
                         () => ApplyEffectAsync(new(PixelEffectKind.BrightnessContrast, EffectRegion(),
@@ -264,8 +297,9 @@ namespace RitsukageGif.Desktop
                     {
                         "AnimationEraser" => AnimationEditorTool.Eraser,
                         "AnimationLine" => AnimationEditorTool.Line,
+                        "AnimationArrow" => AnimationEditorTool.Arrow,
                         "AnimationRectangle" => AnimationEditorTool.Rectangle,
-                        "AnimationEllipse" => AnimationEditorTool.Ellipse, _ => AnimationEditorTool.Brush
+                        "AnimationEllipse" => AnimationEditorTool.Ellipse, _ => AnimationEditorTool.Brush,
                     };
                     AddBrushControls(panel, mode);
                     break;
@@ -347,14 +381,17 @@ namespace RitsukageGif.Desktop
                 })));
         }
 
-        private static void Section(StackPanel panel, string key) => panel.Children.Add(new TextBlock
+        private static void Section(StackPanel panel, string key)
         {
-            [!TextBlock.TextProperty] = LiveText.Resource(key), Classes = { "editor-caption" },
-            FontWeight = FontWeight.SemiBold,
-            Foreground = AppTheme.Muted, Margin = new(0, panel.Children.Count == 0 ? 0 : 8, 0, 0)
-        });
+            panel.Children.Add(new TextBlock
+            {
+                [!TextBlock.TextProperty] = LiveText.Resource(key), Classes = { "editor-caption" },
+                FontWeight = FontWeight.SemiBold,
+                Foreground = AppTheme.Muted, Margin = new(0, panel.Children.Count == 0 ? 0 : 8, 0, 0),
+            });
+        }
 
-        private static Control FieldPair(string firstKey, Control first, string secondKey, Control second,
+        private static Grid FieldPair(string firstKey, Control first, string secondKey, Control second,
             string columns = "*,*")
         {
             var grid = new Grid { ColumnDefinitions = new(columns), RowDefinitions = new("Auto,Auto") };
@@ -370,7 +407,7 @@ namespace RitsukageGif.Desktop
                 {
                     [!TextBlock.TextProperty] = LiveText.Resource(key), Classes = { "editor-caption" },
                     TextWrapping = TextWrapping.Wrap,
-                    Margin = new(i == 0 ? 0 : 4, 0, i == 0 ? 4 : 0, 3)
+                    Margin = new(i == 0 ? 0 : 4, 0, i == 0 ? 4 : 0, 3),
                 };
                 Grid.SetColumn(label, i);
                 Grid.SetColumn(control, i);
@@ -398,13 +435,13 @@ namespace RitsukageGif.Desktop
                 "AnimationUpdateText" or "AnimationUpdateImage" => "M20,9 A9,9 0 1 0 20,17 M20,2 L20,9 13,9",
                 "AnimationBringFront" => "M3,8 L16,8 16,21 3,21 Z M8,3 L21,3 21,16 M8,3 L8,6 M18,16 L21,16",
                 "AnimationSendBack" => "M8,3 L21,3 21,16 8,16 Z M3,8 L6,8 M3,8 L3,21 16,21 16,18",
-                _ => RibbonIcon("AnimationDelete")
+                _ => RibbonIcon("AnimationDelete"),
             };
             return WithActionIcon(button, key, geometry,
                 key is "AnimationBringFront" or "AnimationSendBack" or "AnimationDeleteLayer" ? null : caption);
         }
 
-        private static Control ActionGroup(params Button[] buttons)
+        private static Grid ActionGroup(params Button[] buttons)
         {
             var grid = new Grid { ColumnDefinitions = new(string.Join(",", Enumerable.Repeat("*", buttons.Length))) };
             for (var i = 0; i < buttons.Length; i++)
@@ -428,13 +465,13 @@ namespace RitsukageGif.Desktop
                 foreach (var color in new[]
                          {
                              Colors.Black, Colors.White, Colors.Red, Colors.Orange, Colors.Yellow, Colors.Green,
-                             Colors.DeepSkyBlue, Colors.Purple
+                             Colors.DeepSkyBlue, Colors.Purple,
                          })
                 {
                     var swatch = new Button
                     {
                         Width = 22, Height = 22, MinHeight = 0, Padding = new(0), Margin = new(2),
-                        Background = new SolidColorBrush(color)
+                        Background = new SolidColorBrush(color),
                     };
                     ToolTip.SetTip(swatch, color.ToString());
                     swatch.Click += (_, _) =>
@@ -504,26 +541,38 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static void Hint(StackPanel panel, string key) => panel.Children.Add(new TextBlock
+        private static void Hint(StackPanel panel, string key)
         {
-            [!TextBlock.TextProperty] = LiveText.Resource(key), TextWrapping = TextWrapping.Wrap,
-            Classes = { "editor-caption" },
-            Foreground = AppTheme.Muted,
-            Margin = new(0, 8, 0, 0)
-        });
+            panel.Children.Add(new TextBlock
+            {
+                [!TextBlock.TextProperty] = LiveText.Resource(key), TextWrapping = TextWrapping.Wrap,
+                Classes = { "editor-caption" },
+                Foreground = AppTheme.Muted,
+                Margin = new(0, 8, 0, 0),
+            });
+        }
 
-        private static StackPanel Page() => new()
-            { Margin = new(10, 8, 10, 8), Spacing = 4, VerticalAlignment = VerticalAlignment.Top };
-
-        private static ScrollViewer Scroll(Control content) => new()
+        private static StackPanel Page()
         {
-            Content = content, VerticalContentAlignment = VerticalAlignment.Top,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
-        };
+            return new()
+                { Margin = new(10, 8, 10, 8), Spacing = 4, VerticalAlignment = VerticalAlignment.Top };
+        }
 
-        private PixelRect? EffectRegion() => _canvas.Selection is { } rect
-            ? new((int)rect.X, (int)rect.Y, Math.Max(1, (int)rect.Width), Math.Max(1, (int)rect.Height))
-            : null;
+        private static ScrollViewer Scroll(Control content)
+        {
+            return new()
+            {
+                Content = content, VerticalContentAlignment = VerticalAlignment.Top,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            };
+        }
+
+        private PixelRect? EffectRegion()
+        {
+            return _canvas.Selection is { } rect
+                ? new((int)rect.X, (int)rect.Y, Math.Max(1, (int)rect.Width), Math.Max(1, (int)rect.Height))
+                : null;
+        }
 
         private Task ApplyEffectAsync(PixelEffect effect)
         {
@@ -546,6 +595,17 @@ namespace RitsukageGif.Desktop
                     token));
         }
 
+        private void UpdateExportOptions()
+        {
+            if (_imageMode) return;
+            var gif = _format.SelectedIndex == 0;
+            var webp = _format.SelectedIndex == 1;
+            if (_exportQualityRow is { } quality) quality.IsVisible = webp;
+            if (_exportColorsRow is { } colors) colors.IsVisible = gif;
+            _lossless.IsVisible = webp;
+            _dither.IsVisible = gif;
+        }
+
         private async Task AddImageAsync()
         {
             var files = await StorageProvider.OpenFilePickerAsync(new()
@@ -556,14 +616,15 @@ namespace RitsukageGif.Desktop
 
         private async Task ApplyDrawingAsync()
         {
-            if (!_canvas.HasChanges) return;
+            if (!_canvas.IsEnabled || !_canvas.HasChanges) return;
             var index = CurrentFrame;
             await RunAsync(async token =>
             {
                 var bytes = _canvas.ExportPng();
                 await Task.Run(() => _document!.ReplaceFrames([index], bytes, token), token);
                 _dirty = true;
-                await _canvas.LoadFrameAsync(_document!.Frames[CurrentFrame].Path);
+                // The document mutation is committed; complete the visual refresh even if cancellation arrives now.
+                await _canvas.LoadFrameAsync(_document!.Frames[CurrentFrame].Path, CancellationToken.None);
                 _displayedPath = _document.Frames[CurrentFrame].Path;
                 _dirty = true;
                 Refresh();
@@ -572,7 +633,7 @@ namespace RitsukageGif.Desktop
 
         private async Task ApplyWatermarkAsync()
         {
-            if (!_canvas.HasOverlay) return;
+            if (!_canvas.IsEnabled || !_canvas.HasOverlay) return;
             if (_canvas.HasRasterChanges)
             {
                 SetStatus("AnimationApplyFirst");
@@ -584,13 +645,15 @@ namespace RitsukageGif.Desktop
             await RunAsync(async token =>
             {
                 var bytes = _canvas.ExportOverlayPng();
-                var path = Path.Combine(Path.GetTempPath(), $"ritsukage-watermark-{Guid.NewGuid():N}.png");
+                var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                    $"ritsukage-watermark-{Guid.NewGuid():N}.png");
                 try
                 {
                     await File.WriteAllBytesAsync(path, bytes, token);
                     await Task.Run(() => _document!.Overlay(frames, path, token: token), token);
                     _dirty = true;
-                    await _canvas.LoadFrameAsync(_document!.Frames[CurrentFrame].Path);
+                    // The document mutation is committed; complete the visual refresh even if cancellation arrives now.
+                    await _canvas.LoadFrameAsync(_document!.Frames[CurrentFrame].Path, CancellationToken.None);
                     _displayedPath = _document.Frames[CurrentFrame].Path;
                     _dirty = true;
                     Refresh();

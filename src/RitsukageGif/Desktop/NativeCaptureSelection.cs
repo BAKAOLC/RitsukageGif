@@ -8,6 +8,18 @@ namespace RitsukageGif.Desktop
 
         public CaptureSourceFrame Frame { get; } = frame;
 
+        public void Dispose()
+        {
+            NativeCaptureSession? candidate;
+            lock (_gate)
+            {
+                candidate = _session;
+                _session = null;
+            }
+
+            candidate?.Dispose();
+        }
+
         public void Commit(CancellationToken token = default)
         {
             NativeCaptureSession? previous;
@@ -19,18 +31,6 @@ namespace RitsukageGif.Desktop
             }
 
             previous?.Dispose();
-        }
-
-        public void Dispose()
-        {
-            NativeCaptureSession? candidate;
-            lock (_gate)
-            {
-                candidate = _session;
-                _session = null;
-            }
-
-            candidate?.Dispose();
         }
     }
 }

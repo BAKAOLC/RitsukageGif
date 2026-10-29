@@ -4,24 +4,17 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class PortableDesktopCapture : IFrameSource
     {
-        private readonly X11Capture? _x11;
-
-        private sealed class ScreenSource(PixelRect bounds)
-        {
-            public PixelRect Bounds { get; } = bounds;
-            public NativeCaptureLease? Session;
-            public long NextRetry;
-        }
+        private readonly Dictionary<int, SKBitmap> _bitmaps = [];
+        private readonly SKBitmap _canvas;
+        private readonly bool _cursor;
+        private readonly SKCanvas _drawing;
+        private readonly int _fps;
+        private readonly SKPaint _paint = new() { FilterQuality = SKFilterQuality.Medium, IsAntialias = true };
 
         private readonly List<ScreenSource> _screens = [];
-        private readonly bool _cursor;
-        private readonly int _fps;
-        private readonly SKBitmap _canvas;
-        private readonly SKCanvas _drawing;
-        private readonly SKPaint _paint = new() { FilterQuality = SKFilterQuality.Medium, IsAntialias = true };
-        private readonly Dictionary<int, SKBitmap> _bitmaps = [];
-        private PixelRect _region;
+        private readonly X11Capture? _x11;
         private bool _disposed;
+        private PixelRect _region;
 
         public PortableDesktopCapture(RecordingOptions options, PixelRect[] monitors, int width, int height)
         {
@@ -31,15 +24,15 @@ namespace RitsukageGif.Desktop
             _region = options.Region;
             _cursor = options.Cursor;
             _fps = options.Fps;
-            _canvas = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
-            _drawing = new SKCanvas(_canvas);
+            _canvas = new(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+            _drawing = new(_canvas);
             try
             {
                 if (OperatingSystem.IsLinux() && !DesktopCapture.UsesSourceSelection)
-                    _x11 = new X11Capture(0, options.Cursor);
+                    _x11 = new(0, options.Cursor);
                 else if (OperatingSystem.IsMacOS())
                     foreach (var monitor in monitors)
-                        _screens.Add(new ScreenSource(monitor));
+                        _screens.Add(new(monitor));
                 else if (!DesktopCapture.UsesSourceSelection)
                     throw new NotSupportedException(UiText.Get("CapturePlatformUnsupported"));
             }
@@ -50,14 +43,10 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public void Move(PixelRect region)
+        public byte[] Capture()
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            if (region.IsEmpty) throw new ArgumentException(UiText.Get("SelectionTooLarge"));
-            _region = region;
+            return Capture(CancellationToken.None);
         }
-
-        public byte[] Capture() => Capture(default);
 
         public byte[] Capture(CancellationToken token)
         {
@@ -76,10 +65,11 @@ namespace RitsukageGif.Desktop
             else if (DesktopCapture.UsesSourceSelection)
             {
                 NativeCaptureSession.UseSharedFrame((frame, pixels) => Draw(frame.Width, frame.Height, pixels,
-                    new PixelRect(0, 0, frame.Width, frame.Height), 0), token);
+                    new(0, 0, frame.Width, frame.Height), 0), token);
                 available = true;
             }
             else
+            {
                 for (var i = 0; i < _screens.Count; i++)
                 {
                     token.ThrowIfCancellationRequested();
@@ -102,6 +92,7 @@ namespace RitsukageGif.Desktop
                         source.NextRetry = Environment.TickCount64 + 500;
                     }
                 }
+            }
 
             token.ThrowIfCancellationRequested();
             if (!available) throw new CaptureSourceLostException();
@@ -120,21 +111,6 @@ namespace RitsukageGif.Desktop
             return result;
         }
 
-        private unsafe void Draw(int width, int height, ReadOnlySpan<byte> pixels, PixelRect bounds, int index)
-        {
-            var clipped = bounds.Intersect(_region);
-            if (clipped.IsEmpty) return;
-            if (!_bitmaps.TryGetValue(index, out var bitmap) || bitmap.Width != width || bitmap.Height != height)
-            {
-                bitmap?.Dispose();
-                _bitmaps[index] = bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
-            }
-
-            pixels.CopyTo(new Span<byte>((void*)bitmap.GetPixels(), checked(width * height * 4)));
-            bitmap.NotifyPixelsChanged();
-            CaptureFrameDrawing.Draw(_drawing, _paint, bitmap, bounds, _region, _canvas.Width, _canvas.Height);
-        }
-
         public void Dispose()
         {
             if (_disposed) return;
@@ -145,6 +121,35 @@ namespace RitsukageGif.Desktop
             _paint.Dispose();
             _drawing.Dispose();
             _canvas.Dispose();
+        }
+
+        public void Move(PixelRect region)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (region.IsEmpty) throw new ArgumentException(UiText.Get("SelectionTooLarge"));
+            _region = region;
+        }
+
+        private unsafe void Draw(int width, int height, ReadOnlySpan<byte> pixels, PixelRect bounds, int index)
+        {
+            var clipped = bounds.Intersect(_region);
+            if (clipped.IsEmpty) return;
+            if (!_bitmaps.TryGetValue(index, out var bitmap) || bitmap.Width != width || bitmap.Height != height)
+            {
+                bitmap?.Dispose();
+                _bitmaps[index] = bitmap = new(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+            }
+
+            pixels.CopyTo(new((void*)bitmap.GetPixels(), checked(width * height * 4)));
+            bitmap.NotifyPixelsChanged();
+            CaptureFrameDrawing.Draw(_drawing, _paint, bitmap, bounds, _region, _canvas.Width, _canvas.Height);
+        }
+
+        private sealed class ScreenSource(PixelRect bounds)
+        {
+            public long NextRetry;
+            public NativeCaptureLease? Session;
+            public PixelRect Bounds { get; } = bounds;
         }
     }
 }
