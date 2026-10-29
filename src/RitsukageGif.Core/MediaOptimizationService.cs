@@ -2,6 +2,8 @@ namespace RitsukageGif.Core
 {
     public sealed class MediaOptimizationService(IMediaProcessingService processing) : IMediaOptimizationService
     {
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.Media");
+
         public async Task<MediaOptimizationResult> OptimizeAsync(string input, string output,
             MediaOptimizationOptions options, CancellationToken token = default)
         {
@@ -19,6 +21,8 @@ namespace RitsukageGif.Core
             input = Path.GetFullPath(input);
             output = Path.GetFullPath(output);
             token.ThrowIfCancellationRequested();
+            Logger.ZLogInformation(
+                $"Media optimization started: targetBytes={options.TargetBytes}, maximumAttempts={options.MaximumAttempts}, minimumScale={options.MinimumScale}");
             if (!initial.Overwrite && File.Exists(output)) throw new IOException(output);
             var source = await processing.InspectAsync(input, token).ConfigureAwait(false);
             using var prepared = processing is MediaProcessingService
@@ -64,7 +68,7 @@ namespace RitsukageGif.Core
                         Colors = format == "gif"
                             ? (int)Math.Round(initial.Colors - (initial.Colors - minimumColors) * progress)
                             : initial.Colors,
-                        Overwrite = true
+                        Overwrite = true,
                     };
                     if (candidate == previous) continue;
                     previous = candidate;
@@ -73,6 +77,8 @@ namespace RitsukageGif.Core
                             : MediaProcessingService.ProcessPreparedAsync(prepared, temporary, candidate, token))
                         .ConfigureAwait(false);
                     attempts++;
+                    Logger.ZLogDebug(
+                        $"Media optimization attempt completed: attempt={attempts}, bytes={result.Bytes}, width={result.Width}, height={result.Height}, quality={candidate.Quality}, colors={candidate.Colors}");
                     var settings = candidate with { Overwrite = initial.Overwrite };
                     if (result.Bytes < smallest)
                     {
@@ -83,10 +89,25 @@ namespace RitsukageGif.Core
                     if (result.Bytes > options.TargetBytes) continue;
                     token.ThrowIfCancellationRequested();
                     File.Move(temporary, output, initial.Overwrite);
+                    Logger.ZLogInformation(
+                        $"Media optimization target reached: attempts={attempts}, bytes={result.Bytes}, targetBytes={options.TargetBytes}");
                     return new(true, result with { Path = output }, smallest, attempts, settings);
                 }
 
+                Logger.ZLogInformation(
+                    $"Media optimization attempts exhausted: attempts={attempts}, smallestBytes={smallest}, targetBytes={options.TargetBytes}");
                 return new(false, null, smallest, attempts, best);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Logger.ZLogDebug($"Media optimization canceled: attempts={attempts}");
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(error,
+                    $"Media optimization failed: attempts={attempts}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                throw;
             }
             finally
             {

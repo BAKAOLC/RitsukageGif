@@ -39,7 +39,7 @@
     <value>FFmpeg found</value>
   </data>
   <data name="CaptureCursor" xml:space="preserve">
-    <value>Capture mouse pointer</value>
+    <value>Show cursor</value>
   </data>
   <data name="AppearanceHeading" xml:space="preserve">
     <value>Appearance</value>
@@ -295,13 +295,6 @@
 {2}
 Drag to export; right-click to copy</value>
   </data>
-  <data name="SelectionHint" xml:space="preserve">
-    <value>Drag to select · Click to select a window
-Right-click / Enter to confirm · Delete to clear
-Esc clears selection; press again to exit
-Shift cycles snapping; hold to disable: {0}
-{1} × {2} pixels</value>
-  </data>
   <data name="NoInputFrames" xml:space="preserve">
     <value>No frames.</value>
   </data>
@@ -333,7 +326,7 @@ Shift cycles snapping; hold to disable: {0}
     <value>This action is unavailable. Select an area or wait for processing to finish.</value>
   </data>
   <data name="CommandHelp">
-    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window process [title] | windows | presets | preset activate name | preset run file [name] [--arg key=value] | preset params sessionId key=value [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name | editor [file] | animation-editor [file]</value>
+    <value>status | show | hide | start | stop | cancel | select [x y width height] | select-window process [title] | windows | presets | preset activate name | preset run file [name] [--arg key=value] | preset params sessionId key=value [...] | preset stop | input list | input listen name [--transport pipe|tcp] [--endpoint address] [--format framed|mpegts] [--width n --height n] [--idle-timeout seconds] | input stop name | editor [file] | animation-editor [file] | video-recorder | screenshot [screen|window] | pins show|hide | action id</value>
   </data>
   <data name="PresetsTitle">
     <value>Presets</value>
@@ -464,41 +457,111 @@ Shift cycles snapping; hold to disable: {0}
   <data name="RemoveTemplate">
     <value>Remove</value>
   </data>
-  <data name="GeneralHeading" xml:space="preserve"><value>General</value></data>
-  <data name="DslArguments" xml:space="preserve"><value>Invalid arguments: {0}</value></data>
-  <data name="DslAbsoluteScreen" xml:space="preserve"><value>Absolute areas require screen capture.</value></data>
-  <data name="DslAssertion" xml:space="preserve"><value>Assertion failed.</value></data>
-  <data name="DslScriptState" xml:space="preserve"><value>Use either script or states in a preset.</value></data>
-  <data name="ScriptReadOnly" xml:space="preserve"><value>Cannot assign to constant: {0}</value></data>
-  <data name="ScriptTypeError" xml:space="preserve"><value>Value type does not match this operation.</value></data>
-  <data name="ScriptIndex" xml:space="preserve"><value>Array index is out of range.</value></data>
-  <data name="ScriptImportCycle" xml:space="preserve"><value>Circular import or too many nested imports.</value></data>
-  <data name="EditorTitle" xml:space="preserve"><value>Preset editor</value></data>
-  <data name="EditorUntitled" xml:space="preserve"><value>Untitled</value></data>
-  <data name="EditorNew" xml:space="preserve"><value>New</value></data>
-  <data name="EditorOpen" xml:space="preserve"><value>Open</value></data>
-  <data name="EditorSave" xml:space="preserve"><value>Save</value></data>
-  <data name="EditorSaveAs" xml:space="preserve"><value>Save as</value></data>
-  <data name="EditorEdit" xml:space="preserve"><value>Edit</value></data>
-  <data name="EditorRun" xml:space="preserve"><value>Run</value></data>
-  <data name="EditorDebug" xml:space="preserve"><value>Debug</value></data>
-  <data name="EditorPause" xml:space="preserve"><value>Pause</value></data>
-  <data name="EditorContinue" xml:space="preserve"><value>Continue</value></data>
-  <data name="EditorStep" xml:space="preserve"><value>Step</value></data>
-  <data name="EditorStop" xml:space="preserve"><value>Stop</value></data>
-  <data name="EditorBreakpoint" xml:space="preserve"><value>Breakpoint</value></data>
-  <data name="EditorProblems" xml:space="preserve"><value>Problems</value></data>
-  <data name="EditorVariables" xml:space="preserve"><value>Variables</value></data>
-  <data name="EditorOutput" xml:space="preserve"><value>Output</value></data>
-  <data name="EditorPosition" xml:space="preserve"><value>Ln {0}, Col {1}</value></data>
-  <data name="EditorFinished" xml:space="preserve"><value>Finished — {0}</value></data>
-  <data name="EditorPaused" xml:space="preserve"><value>Script paused — {0}:{1}; capture continues</value></data>
-  <data name="EditorRunning" xml:space="preserve"><value>Running — {0}:{1}</value></data>
-  <data name="EditorFileChanged" xml:space="preserve"><value>The file changed on disk. Reopen it or save as another file.</value></data>
-  <data name="EditorUnsaved" xml:space="preserve"><value>Save changes before closing?</value></data>
-  <data name="EditorDiscard" xml:space="preserve"><value>Discard</value></data>
-  <data name="EditorCancel" xml:space="preserve"><value>Cancel</value></data>
-  <data name="EditorNoRuntime" xml:space="preserve"><value>Recording requires the application language service.</value></data>
+  <data name="GeneralHeading" xml:space="preserve">
+    <value>General</value>
+  </data>
+  <data name="DslArguments" xml:space="preserve">
+    <value>Invalid arguments: {0}</value>
+  </data>
+  <data name="DslAbsoluteScreen" xml:space="preserve">
+    <value>Absolute areas require screen capture.</value>
+  </data>
+  <data name="DslAssertion" xml:space="preserve">
+    <value>Assertion failed.</value>
+  </data>
+  <data name="DslScriptState" xml:space="preserve">
+    <value>Use either script or states in a preset.</value>
+  </data>
+  <data name="ScriptReadOnly" xml:space="preserve">
+    <value>Cannot assign to constant: {0}</value>
+  </data>
+  <data name="ScriptTypeError" xml:space="preserve">
+    <value>Value type does not match this operation.</value>
+  </data>
+  <data name="ScriptIndex" xml:space="preserve">
+    <value>Array index is out of range.</value>
+  </data>
+  <data name="ScriptImportCycle" xml:space="preserve">
+    <value>Circular import or too many nested imports.</value>
+  </data>
+  <data name="EditorTitle" xml:space="preserve">
+    <value>Preset editor</value>
+  </data>
+  <data name="EditorUntitled" xml:space="preserve">
+    <value>Untitled</value>
+  </data>
+  <data name="EditorNew" xml:space="preserve">
+    <value>New</value>
+  </data>
+  <data name="EditorOpen" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="EditorSave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="EditorSaveAs" xml:space="preserve">
+    <value>Save as</value>
+  </data>
+  <data name="EditorEdit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="EditorRun" xml:space="preserve">
+    <value>Run</value>
+  </data>
+  <data name="EditorDebug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="EditorPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="EditorContinue" xml:space="preserve">
+    <value>Continue</value>
+  </data>
+  <data name="EditorStep" xml:space="preserve">
+    <value>Step</value>
+  </data>
+  <data name="EditorStop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="EditorBreakpoint" xml:space="preserve">
+    <value>Breakpoint</value>
+  </data>
+  <data name="EditorProblems" xml:space="preserve">
+    <value>Problems</value>
+  </data>
+  <data name="EditorVariables" xml:space="preserve">
+    <value>Variables</value>
+  </data>
+  <data name="EditorOutput" xml:space="preserve">
+    <value>Output</value>
+  </data>
+  <data name="EditorPosition" xml:space="preserve">
+    <value>Ln {0}, Col {1}</value>
+  </data>
+  <data name="EditorFinished" xml:space="preserve">
+    <value>Finished — {0}</value>
+  </data>
+  <data name="EditorPaused" xml:space="preserve">
+    <value>Script paused — {0}:{1}; capture continues</value>
+  </data>
+  <data name="EditorRunning" xml:space="preserve">
+    <value>Running — {0}:{1}</value>
+  </data>
+  <data name="EditorFileChanged" xml:space="preserve">
+    <value>The file changed on disk. Reopen it or save as another file.</value>
+  </data>
+  <data name="EditorUnsaved" xml:space="preserve">
+    <value>Save changes before closing?</value>
+  </data>
+  <data name="EditorDiscard" xml:space="preserve">
+    <value>Discard</value>
+  </data>
+  <data name="EditorCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="EditorNoRuntime" xml:space="preserve">
+    <value>Recording requires the application language service.</value>
+  </data>
   <data name="PlatformUnsupported" xml:space="preserve">
     <value>This platform is not supported.</value>
   </data>
@@ -565,33 +628,53 @@ Shift cycles snapping; hold to disable: {0}
   <data name="RecordingProgressDetail" xml:space="preserve">
     <value>Capture {0:F1} fps · Encoded {1}/{2} · {3:F1}s</value>
   </data>
-  <data name="EditorOpenWorkspace" xml:space="preserve"><value>Open folder</value></data>
-  <data name="EditorWorkspace" xml:space="preserve"><value>Workspace</value></data>
-  <data name="EditorReload" xml:space="preserve"><value>Reload from disk</value></data>
-  <data name="EditorKeepLocal" xml:space="preserve"><value>Keep local edits</value></data>
-  <data name="EditorCloseFile" xml:space="preserve"><value>Close file</value></data>
-  <data name="EditorFileMissing" xml:space="preserve"><value>File moved or deleted. Local content is preserved.</value></data>
-  <data name="EditorFileAlreadyOpen" xml:space="preserve"><value>This file is already open in another tab.</value></data>
-  <data name="EditorRefreshWorkspace" xml:space="preserve"><value>Refresh workspace</value></data>
-  <data name="EditorExternalChangeNotice" xml:space="preserve"><value>File changed on disk.</value></data>
-  <data name="ServiceLimitExceeded" xml:space="preserve"><value>The operation exceeds the configured limit.</value></data>
-  <data name="ScriptParametersInvalid" xml:space="preserve"><value>Invalid parameters: use name=value, at most 256 entries, 128 characters per name and 4096 per text value.</value></data>
-  <data name="FfprobeMissing" xml:space="preserve"><value>FFprobe not found.</value></data>
-  <data name="OutputPreview" xml:space="preserve"><value>Preview output</value></data>
-  <data name="PresetName" xml:space="preserve"><value>Preset</value></data>
-  <data name="Shortcut" xml:space="preserve"><value>Shortcut</value></data>
-  <data name="EditorSettingsMode" xml:space="preserve"><value>Close settings to run or debug.</value></data>
-  <data name="SelectionControls" xml:space="preserve">
-    <value>Detect: Controls · Tab</value>
+  <data name="EditorOpenWorkspace" xml:space="preserve">
+    <value>Open folder</value>
   </data>
-  <data name="SelectionWindows" xml:space="preserve">
-    <value>Detect: Windows · Tab</value>
+  <data name="EditorWorkspace" xml:space="preserve">
+    <value>Workspace</value>
   </data>
-  <data name="SelectionWindowContent" xml:space="preserve">
-    <value>Capture: Window content · W</value>
+  <data name="EditorReload" xml:space="preserve">
+    <value>Reload from disk</value>
   </data>
-  <data name="SelectionScreenContent" xml:space="preserve">
-    <value>Capture: Screen · W</value>
+  <data name="EditorKeepLocal" xml:space="preserve">
+    <value>Keep local edits</value>
+  </data>
+  <data name="EditorCloseFile" xml:space="preserve">
+    <value>Close file</value>
+  </data>
+  <data name="EditorFileMissing" xml:space="preserve">
+    <value>File moved or deleted. Local content is preserved.</value>
+  </data>
+  <data name="EditorFileAlreadyOpen" xml:space="preserve">
+    <value>This file is already open in another tab.</value>
+  </data>
+  <data name="EditorRefreshWorkspace" xml:space="preserve">
+    <value>Refresh workspace</value>
+  </data>
+  <data name="EditorExternalChangeNotice" xml:space="preserve">
+    <value>File changed on disk.</value>
+  </data>
+  <data name="ServiceLimitExceeded" xml:space="preserve">
+    <value>The operation exceeds the configured limit.</value>
+  </data>
+  <data name="ScriptParametersInvalid" xml:space="preserve">
+    <value>Invalid parameters: use name=value, at most 256 entries, 128 characters per name and 4096 per text value.</value>
+  </data>
+  <data name="FfprobeMissing" xml:space="preserve">
+    <value>FFprobe not found.</value>
+  </data>
+  <data name="OutputPreview" xml:space="preserve">
+    <value>Preview output</value>
+  </data>
+  <data name="PresetName" xml:space="preserve">
+    <value>Preset</value>
+  </data>
+  <data name="Shortcut" xml:space="preserve">
+    <value>Shortcut</value>
+  </data>
+  <data name="EditorSettingsMode" xml:space="preserve">
+    <value>Close settings to run or debug.</value>
   </data>
   <data name="SelectScreenRegion" xml:space="preserve">
     <value>Select screen region</value>
@@ -599,116 +682,324 @@ Shift cycles snapping; hold to disable: {0}
   <data name="SelectWindowContent" xml:space="preserve">
     <value>Select window content</value>
   </data>
-  <data name="AutomaticUpdates" xml:space="preserve"><value>Check for updates automatically</value></data>
-  <data name="CheckingUpdate" xml:space="preserve"><value>Checking…</value></data>
-  <data name="CheckUpdate" xml:space="preserve"><value>Check for updates</value></data>
-  <data name="DownloadUpdate" xml:space="preserve"><value>Download update</value></data>
-  <data name="UpdateAvailable" xml:space="preserve"><value>Version {0} is available.</value></data>
-  <data name="UpdateCurrent" xml:space="preserve"><value>You are up to date.</value></data>
-  <data name="UpdateFailed" xml:space="preserve"><value>Could not check for updates.</value></data>
-  <data name="UpdateOpenFailed" xml:space="preserve"><value>Could not open the download link.</value></data>
-  <data name="CleanupHeading" xml:space="preserve"><value>Storage</value></data>
-  <data name="CleanupEnabled" xml:space="preserve"><value>Clean up recordings automatically</value></data>
-  <data name="CleanupMaxAgeDays" xml:space="preserve"><value>Maximum age (days)</value></data>
-  <data name="CleanupMaxFiles" xml:space="preserve"><value>Maximum file count</value></data>
-  <data name="CleanupMaxSizeMiB" xml:space="preserve"><value>Maximum total size (MiB)</value></data>
-  <data name="CleanupRulesHint" xml:space="preserve"><value>Enabled limits apply together. Oldest files are permanently deleted first.</value></data>
-  <data name="CleanupScopeHint" xml:space="preserve"><value>Only manual recordings saved from this version onward are managed. Files used by the preview or clipboard are kept temporarily, so limits may be exceeded.</value></data>
-  <data name="SoundPlaybackFailed" xml:space="preserve"><value>Could not play sound: {0}</value></data>
-  <data name="AudioDeviceUnavailable" xml:space="preserve"><value>Could not open the audio output device</value></data>
-  <data name="AllFiles" xml:space="preserve"><value>All files</value></data>
-  <data name="LegacySettingsInvalid" xml:space="preserve"><value>This is not a RitsukageGif settings file.</value></data>
-  <data name="ShowBackground" xml:space="preserve"><value>Show background image</value></data>
-  <data name="ImportLegacySettings" xml:space="preserve"><value>Import old settings</value></data>
-  <data name="FatalErrorTitle" xml:space="preserve"><value>Application error</value></data>
-  <data name="FatalErrorMessage" xml:space="preserve"><value>An unexpected error occurred. Closing this window will exit the application. Log: {0}</value></data>
-  <data name="FatalErrorLogUnavailable" xml:space="preserve"><value>An unexpected error occurred and the log could not be saved. Copy the error details below.</value></data>
-  <data name="UnsupportedMediaLocation" xml:space="preserve"><value>Enter a local path, file URI, or HTTP/HTTPS address</value></data>
+  <data name="AutomaticUpdates" xml:space="preserve">
+    <value>Check for updates automatically</value>
+  </data>
+  <data name="CheckingUpdate" xml:space="preserve">
+    <value>Checking…</value>
+  </data>
+  <data name="CheckUpdate" xml:space="preserve">
+    <value>Check for updates</value>
+  </data>
+  <data name="DownloadUpdate" xml:space="preserve">
+    <value>Download update</value>
+  </data>
+  <data name="UpdateAvailable" xml:space="preserve">
+    <value>Version {0} is available.</value>
+  </data>
+  <data name="UpdateCurrent" xml:space="preserve">
+    <value>You are up to date.</value>
+  </data>
+  <data name="UpdateFailed" xml:space="preserve">
+    <value>Could not check for updates.</value>
+  </data>
+  <data name="UpdateOpenFailed" xml:space="preserve">
+    <value>Could not open the download link.</value>
+  </data>
+  <data name="CleanupHeading" xml:space="preserve">
+    <value>Storage</value>
+  </data>
+  <data name="CleanupEnabled" xml:space="preserve">
+    <value>Clean up recordings automatically</value>
+  </data>
+  <data name="CleanupMaxAgeDays" xml:space="preserve">
+    <value>Maximum age (days)</value>
+  </data>
+  <data name="CleanupMaxFiles" xml:space="preserve">
+    <value>Maximum file count</value>
+  </data>
+  <data name="CleanupMaxSizeMiB" xml:space="preserve">
+    <value>Maximum total size (MiB)</value>
+  </data>
+  <data name="CleanupRulesHint" xml:space="preserve">
+    <value>Enabled limits apply together. Oldest files are permanently deleted first.</value>
+  </data>
+  <data name="CleanupScopeHint" xml:space="preserve">
+    <value>Only manual recordings saved from this version onward are managed. Files used by the preview or clipboard are kept temporarily, so limits may be exceeded.</value>
+  </data>
+  <data name="SoundPlaybackFailed" xml:space="preserve">
+    <value>Could not play sound: {0}</value>
+  </data>
+  <data name="AudioDeviceUnavailable" xml:space="preserve">
+    <value>Could not open the audio output device</value>
+  </data>
+  <data name="AllFiles" xml:space="preserve">
+    <value>All files</value>
+  </data>
+  <data name="ShowBackground" xml:space="preserve">
+    <value>Show background image</value>
+  </data>
+  <data name="FatalErrorTitle" xml:space="preserve">
+    <value>Application error</value>
+  </data>
+  <data name="FatalErrorMessage" xml:space="preserve">
+    <value>An unexpected error occurred. Closing this window will exit the application. Log: {0}</value>
+  </data>
+  <data name="FatalErrorLogUnavailable" xml:space="preserve">
+    <value>An unexpected error occurred and the log could not be saved. Copy the error details below.</value>
+  </data>
+  <data name="UnsupportedMediaLocation" xml:space="preserve">
+    <value>Enter a local path, file URI, or HTTP/HTTPS address</value>
+  </data>
   <data name="MediaDownloadTimedOut" xml:space="preserve">
     <value>Media download timed out.</value>
   </data>
-  <data name="AnimationEditorTitle" xml:space="preserve"><value>Animation editor</value></data>
-  <data name="AnimationEditorOpen" xml:space="preserve"><value>Editor</value></data>
-  <data name="AnimationAllFrames" xml:space="preserve"><value>All frames</value></data>
-  <data name="AnimationImport" xml:space="preserve"><value>Import as frames</value></data>
-  <data name="AnimationExport" xml:space="preserve"><value>Export</value></data>
-  <data name="AnimationUndo" xml:space="preserve"><value>Undo</value></data>
-  <data name="AnimationRedo" xml:space="preserve"><value>Redo</value></data>
-  <data name="AnimationPlay" xml:space="preserve"><value>Play / Stop</value></data>
-  <data name="AnimationAddFrame" xml:space="preserve"><value>Add blank</value></data>
-  <data name="AnimationDuplicate" xml:space="preserve"><value>Duplicate</value></data>
-  <data name="AnimationDelete" xml:space="preserve"><value>Delete</value></data>
-  <data name="AnimationPrevious" xml:space="preserve"><value>Move left</value></data>
-  <data name="AnimationNext" xml:space="preserve"><value>Move right</value></data>
-  <data name="AnimationFrameStatus" xml:space="preserve"><value>Frame {0}/{1} · {2} × {3}</value></data>
-  <data name="AnimationWorking" xml:space="preserve"><value>Processing…</value></data>
-  <data name="AnimationFiles" xml:space="preserve"><value>Animations and images</value></data>
-  <data name="AnimationApplyFirst" xml:space="preserve"><value>Apply or discard the drawing before continuing.</value></data>
-  <data name="AnimationExported" xml:space="preserve"><value>Exported: {0}</value></data>
-  <data name="AnimationUnsaved" xml:space="preserve"><value>Discard changes that have not been exported?</value></data>
-  <data name="AnimationText" xml:space="preserve"><value>Text / watermark</value></data>
-  <data name="AnimationDelay" xml:space="preserve"><value>Duration (ms)</value></data>
-  <data name="AnimationSetDelay" xml:space="preserve"><value>Set duration</value></data>
-  <data name="AnimationLoops" xml:space="preserve"><value>Loops (0 = infinite)</value></data>
-  <data name="AnimationSetLoops" xml:space="preserve"><value>Set loops</value></data>
-  <data name="AnimationWidth" xml:space="preserve"><value>Width (px)</value></data>
-  <data name="AnimationHeight" xml:space="preserve"><value>Height (px)</value></data>
-  <data name="AnimationResize" xml:space="preserve"><value>Resize all frames</value></data>
-  <data name="AnimationCrop" xml:space="preserve"><value>Crop to selection</value></data>
-  <data name="AnimationRotate" xml:space="preserve"><value>Rotate 90°</value></data>
-  <data name="AnimationFlipHorizontal" xml:space="preserve"><value>Flip horizontal</value></data>
-  <data name="AnimationFlipVertical" xml:space="preserve"><value>Flip vertical</value></data>
-  <data name="AnimationFormat" xml:space="preserve"><value>Format</value></data>
-  <data name="AnimationEffectSize" xml:space="preserve"><value>Radius / block (px)</value></data>
-  <data name="AnimationMosaic" xml:space="preserve"><value>Mosaic</value></data>
-  <data name="AnimationBlur" xml:space="preserve"><value>Blur</value></data>
-  <data name="AnimationGrayscale" xml:space="preserve"><value>Grayscale</value></data>
-  <data name="AnimationInvert" xml:space="preserve"><value>Invert</value></data>
-  <data name="AnimationBrightness" xml:space="preserve"><value>Brightness (%)</value></data>
-  <data name="AnimationContrast" xml:space="preserve"><value>Contrast (%)</value></data>
-  <data name="AnimationApplyEffect" xml:space="preserve"><value>Apply adjustment</value></data>
-  <data name="AnimationEffectHint" xml:space="preserve"><value>Effects apply to selected frames. Draw a selection to limit the affected area.</value></data>
-  <data name="AnimationFrames" xml:space="preserve"><value>Frames</value></data>
-  <data name="AnimationDrawing" xml:space="preserve"><value>Draw</value></data>
-  <data name="AnimationEffects" xml:space="preserve"><value>Effects</value></data>
-  <data name="AnimationSelect" xml:space="preserve"><value>Select layer</value></data>
-  <data name="AnimationPan" xml:space="preserve"><value>Pan</value></data>
-  <data name="AnimationBrush" xml:space="preserve"><value>Brush</value></data>
-  <data name="AnimationEraser" xml:space="preserve"><value>Eraser</value></data>
-  <data name="AnimationLine" xml:space="preserve"><value>Line</value></data>
-  <data name="AnimationRectangle" xml:space="preserve"><value>Rectangle</value></data>
-  <data name="AnimationEllipse" xml:space="preserve"><value>Ellipse</value></data>
-  <data name="AnimationSelection" xml:space="preserve"><value>Region selection</value></data>
-  <data name="AnimationTool" xml:space="preserve"><value>Tool</value></data>
-  <data name="AnimationColor" xml:space="preserve"><value>Color (#AARRGGBB)</value></data>
-  <data name="AnimationBrushSize" xml:space="preserve"><value>Brush size (px)</value></data>
-  <data name="AnimationFilled" xml:space="preserve"><value>Fill shapes</value></data>
-  <data name="AnimationSetBrush" xml:space="preserve"><value>Set brush</value></data>
-  <data name="AnimationFontSize" xml:space="preserve"><value>Font size (px)</value></data>
-  <data name="AnimationAddText" xml:space="preserve"><value>Insert text</value></data>
-  <data name="AnimationUpdateText" xml:space="preserve"><value>Update selected text</value></data>
-  <data name="AnimationAddImage" xml:space="preserve"><value>Insert image</value></data>
-  <data name="AnimationOpacity" xml:space="preserve"><value>Opacity (%)</value></data>
-  <data name="AnimationUpdateImage" xml:space="preserve"><value>Update selected image</value></data>
-  <data name="AnimationDeleteLayer" xml:space="preserve"><value>Delete selected layer</value></data>
-  <data name="AnimationApplyDrawing" xml:space="preserve"><value>Apply to current frame</value></data>
-  <data name="AnimationApplyWatermark" xml:space="preserve"><value>Apply watermark to selection</value></data>
-  <data name="AnimationResetDraft" xml:space="preserve"><value>Discard drawing</value></data>
-  <data name="AnimationFit" xml:space="preserve"><value>Fit canvas</value></data>
-  <data name="AnimationDrawingHint" xml:space="preserve"><value>Drag text and images to position them. Drawing edits the current frame; watermarks can apply to multiple frames.</value></data>
-  <data name="AnimationSelectRegion" xml:space="preserve"><value>Draw a region selection first.</value></data>
-  <data name="EditorKeepFrame" xml:space="preserve"><value>Keep at least one frame.</value></data>
-  <data name="AnimationKeepRatio" xml:space="preserve"><value>Keep aspect ratio</value></data>
-  <data name="AnimationLossless" xml:space="preserve"><value>Lossless WebP</value></data>
-  <data name="AnimationDither" xml:space="preserve"><value>GIF dithering</value></data>
-  <data name="AnimationExportQuality" xml:space="preserve"><value>WebP quality</value></data>
-  <data name="AnimationColors" xml:space="preserve"><value>GIF colors</value></data>
-  <data name="AnimationExportHint" xml:space="preserve"><value>PNG exports the current frame. GIF uses colors and dithering; WebP uses quality and lossless mode.</value></data>
-  <data name="AnimationEditorImageTooLarge" xml:space="preserve"><value>Image dimensions are too large.</value></data>
-  <data name="AnimationBold" xml:space="preserve"><value>Bold</value></data>
-  <data name="AnimationItalic" xml:space="preserve"><value>Italic</value></data>
-  <data name="AnimationFontFamily" xml:space="preserve"><value>Font family</value></data>
-  <data name="OpenRecordingDirectory" xml:space="preserve"><value>Open recording folder</value></data>
+  <data name="AnimationEditorTitle" xml:space="preserve">
+    <value>Animation editor</value>
+  </data>
+  <data name="AnimationEditorOpen" xml:space="preserve">
+    <value>Animation editor</value>
+  </data>
+  <data name="AnimationAllFrames" xml:space="preserve">
+    <value>All frames</value>
+  </data>
+  <data name="AnimationImport" xml:space="preserve">
+    <value>Import as frames</value>
+  </data>
+  <data name="AnimationExport" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="AnimationUndo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="AnimationRedo" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="AnimationPlay" xml:space="preserve">
+    <value>Play / Stop</value>
+  </data>
+  <data name="AnimationAddFrame" xml:space="preserve">
+    <value>Add blank</value>
+  </data>
+  <data name="AnimationDuplicate" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="AnimationDelete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="AnimationPrevious" xml:space="preserve">
+    <value>Move left</value>
+  </data>
+  <data name="AnimationNext" xml:space="preserve">
+    <value>Move right</value>
+  </data>
+  <data name="AnimationFrameStatus" xml:space="preserve">
+    <value>Frame {0}/{1} · {2} × {3}</value>
+  </data>
+  <data name="AnimationWorking" xml:space="preserve">
+    <value>Processing…</value>
+  </data>
+  <data name="AnimationFiles" xml:space="preserve">
+    <value>Animations and images</value>
+  </data>
+  <data name="AnimationApplyFirst" xml:space="preserve">
+    <value>Apply or discard the drawing before continuing.</value>
+  </data>
+  <data name="AnimationExported" xml:space="preserve">
+    <value>Exported: {0}</value>
+  </data>
+  <data name="AnimationUnsaved" xml:space="preserve">
+    <value>Discard changes that have not been exported?</value>
+  </data>
+  <data name="AnimationText" xml:space="preserve">
+    <value>Text / watermark</value>
+  </data>
+  <data name="AnimationDelay" xml:space="preserve">
+    <value>Duration (ms)</value>
+  </data>
+  <data name="AnimationSetDelay" xml:space="preserve">
+    <value>Set duration</value>
+  </data>
+  <data name="AnimationLoops" xml:space="preserve">
+    <value>Loops (0 = infinite)</value>
+  </data>
+  <data name="AnimationSetLoops" xml:space="preserve">
+    <value>Set loops</value>
+  </data>
+  <data name="AnimationWidth" xml:space="preserve">
+    <value>Width (px)</value>
+  </data>
+  <data name="AnimationHeight" xml:space="preserve">
+    <value>Height (px)</value>
+  </data>
+  <data name="AnimationResize" xml:space="preserve">
+    <value>Resize all frames</value>
+  </data>
+  <data name="AnimationCrop" xml:space="preserve">
+    <value>Crop to selection</value>
+  </data>
+  <data name="AnimationRotate" xml:space="preserve">
+    <value>Rotate 90°</value>
+  </data>
+  <data name="AnimationFlipHorizontal" xml:space="preserve">
+    <value>Flip horizontal</value>
+  </data>
+  <data name="AnimationFlipVertical" xml:space="preserve">
+    <value>Flip vertical</value>
+  </data>
+  <data name="AnimationFormat" xml:space="preserve">
+    <value>Format</value>
+  </data>
+  <data name="AnimationEffectSize" xml:space="preserve">
+    <value>Radius / block (px)</value>
+  </data>
+  <data name="AnimationMosaic" xml:space="preserve">
+    <value>Mosaic</value>
+  </data>
+  <data name="AnimationBlur" xml:space="preserve">
+    <value>Blur</value>
+  </data>
+  <data name="AnimationGrayscale" xml:space="preserve">
+    <value>Grayscale</value>
+  </data>
+  <data name="AnimationInvert" xml:space="preserve">
+    <value>Invert</value>
+  </data>
+  <data name="AnimationBrightness" xml:space="preserve">
+    <value>Brightness (%)</value>
+  </data>
+  <data name="AnimationContrast" xml:space="preserve">
+    <value>Contrast (%)</value>
+  </data>
+  <data name="AnimationApplyEffect" xml:space="preserve">
+    <value>Apply adjustment</value>
+  </data>
+  <data name="AnimationEffectHint" xml:space="preserve">
+    <value>Effects apply to selected frames. Draw a selection to limit the affected area.</value>
+  </data>
+  <data name="AnimationFrames" xml:space="preserve">
+    <value>Frames</value>
+  </data>
+  <data name="AnimationDrawing" xml:space="preserve">
+    <value>Draw</value>
+  </data>
+  <data name="AnimationEffects" xml:space="preserve">
+    <value>Effects</value>
+  </data>
+  <data name="AnimationSelect" xml:space="preserve">
+    <value>Select layer</value>
+  </data>
+  <data name="AnimationPan" xml:space="preserve">
+    <value>Pan</value>
+  </data>
+  <data name="AnimationBrush" xml:space="preserve">
+    <value>Brush</value>
+  </data>
+  <data name="AnimationEraser" xml:space="preserve">
+    <value>Eraser</value>
+  </data>
+  <data name="AnimationLine" xml:space="preserve">
+    <value>Line</value>
+  </data>
+  <data name="AnimationRectangle" xml:space="preserve">
+    <value>Rectangle</value>
+  </data>
+  <data name="AnimationEllipse" xml:space="preserve">
+    <value>Ellipse</value>
+  </data>
+  <data name="AnimationSelection" xml:space="preserve">
+    <value>Region selection</value>
+  </data>
+  <data name="AnimationTool" xml:space="preserve">
+    <value>Tool</value>
+  </data>
+  <data name="AnimationColor" xml:space="preserve">
+    <value>Color (#AARRGGBB)</value>
+  </data>
+  <data name="AnimationBrushSize" xml:space="preserve">
+    <value>Brush size (px)</value>
+  </data>
+  <data name="AnimationFilled" xml:space="preserve">
+    <value>Fill shapes</value>
+  </data>
+  <data name="AnimationSetBrush" xml:space="preserve">
+    <value>Set brush</value>
+  </data>
+  <data name="AnimationFontSize" xml:space="preserve">
+    <value>Font size (px)</value>
+  </data>
+  <data name="AnimationAddText" xml:space="preserve">
+    <value>Insert text</value>
+  </data>
+  <data name="AnimationUpdateText" xml:space="preserve">
+    <value>Update selected text</value>
+  </data>
+  <data name="AnimationAddImage" xml:space="preserve">
+    <value>Insert image</value>
+  </data>
+  <data name="AnimationOpacity" xml:space="preserve">
+    <value>Opacity (%)</value>
+  </data>
+  <data name="AnimationUpdateImage" xml:space="preserve">
+    <value>Update selected image</value>
+  </data>
+  <data name="AnimationDeleteLayer" xml:space="preserve">
+    <value>Delete selected layer</value>
+  </data>
+  <data name="AnimationApplyDrawing" xml:space="preserve">
+    <value>Apply to current frame</value>
+  </data>
+  <data name="AnimationApplyWatermark" xml:space="preserve">
+    <value>Apply watermark to selection</value>
+  </data>
+  <data name="AnimationResetDraft" xml:space="preserve">
+    <value>Discard drawing</value>
+  </data>
+  <data name="AnimationFit" xml:space="preserve">
+    <value>Fit canvas</value>
+  </data>
+  <data name="AnimationDrawingHint" xml:space="preserve">
+    <value>Drag text and images to position them. Drawing edits the current frame; watermarks can apply to multiple frames.</value>
+  </data>
+  <data name="AnimationSelectRegion" xml:space="preserve">
+    <value>Draw a region selection first.</value>
+  </data>
+  <data name="EditorKeepFrame" xml:space="preserve">
+    <value>Keep at least one frame.</value>
+  </data>
+  <data name="AnimationKeepRatio" xml:space="preserve">
+    <value>Keep aspect ratio</value>
+  </data>
+  <data name="AnimationLossless" xml:space="preserve">
+    <value>Lossless WebP</value>
+  </data>
+  <data name="AnimationDither" xml:space="preserve">
+    <value>GIF dithering</value>
+  </data>
+  <data name="AnimationExportQuality" xml:space="preserve">
+    <value>WebP quality</value>
+  </data>
+  <data name="AnimationColors" xml:space="preserve">
+    <value>GIF colors</value>
+  </data>
+  <data name="AnimationExportHint" xml:space="preserve">
+    <value>PNG exports the current frame. GIF uses colors and dithering; WebP uses quality and lossless mode.</value>
+  </data>
+  <data name="AnimationEditorImageTooLarge" xml:space="preserve">
+    <value>Image dimensions are too large.</value>
+  </data>
+  <data name="AnimationBold" xml:space="preserve">
+    <value>Bold</value>
+  </data>
+  <data name="AnimationItalic" xml:space="preserve">
+    <value>Italic</value>
+  </data>
+  <data name="AnimationFontFamily" xml:space="preserve">
+    <value>Font family</value>
+  </data>
+  <data name="OpenRecordingDirectory" xml:space="preserve">
+    <value>Open recording folder</value>
+  </data>
   <data name="AnimationFile" xml:space="preserve">
     <value>File</value>
   </data>
@@ -796,23 +1087,2114 @@ Shift cycles snapping; hold to disable: {0}
   <data name="AnimationImageInsertHint" xml:space="preserve">
     <value>Overlay on the current frame, or apply to selected frames.</value>
   </data>
-  <data name="AnimationCloseProperties" xml:space="preserve"><value>Hide</value></data>
-  <data name="AnimationApplyDraft" xml:space="preserve"><value>Apply</value></data>
-  <data name="AnimationDiscardDraft" xml:space="preserve"><value>Discard</value></data>
-  <data name="AnimationCurrentFrame" xml:space="preserve"><value>Current frame</value></data>
-  <data name="AnimationSelectedFrames" xml:space="preserve"><value>Selected frames</value></data>
-  <data name="AnimationDraftScopeHint" xml:space="preserve"><value>Drawing applies to the current frame. Image and text overlays can also be applied to selected frames.</value></data>
-  <data name="NumericIncrease" xml:space="preserve"><value>Increase</value></data>
-  <data name="NumericDecrease" xml:space="preserve"><value>Decrease</value></data>
-  <data name="AnimationTextContent" xml:space="preserve"><value>Text and style</value></data>
-  <data name="AnimationImageSize" xml:space="preserve"><value>Image size</value></data>
-  <data name="AnimationLayerPosition" xml:space="preserve"><value>Position</value></data>
-  <data name="AnimationLayerOrder" xml:space="preserve"><value>Layer order</value></data>
-  <data name="AnimationInsertShort" xml:space="preserve"><value>Insert</value></data>
-  <data name="AnimationUpdateShort" xml:space="preserve"><value>Update</value></data>
-  <data name="AnimationFrontShort" xml:space="preserve"><value>Front</value></data>
-  <data name="AnimationBackShort" xml:space="preserve"><value>Back</value></data>
-  <data name="AnimationDeleteShort" xml:space="preserve"><value>Delete</value></data>
-  <data name="AnimationSelectAllFrames" xml:space="preserve"><value>Select all frames</value></data>
-  <data name="AnimationSelectFrames" xml:space="preserve"><value>Select frames first.</value></data>
+  <data name="AnimationCloseProperties" xml:space="preserve">
+    <value>Hide</value>
+  </data>
+  <data name="AnimationApplyDraft" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="AnimationDiscardDraft" xml:space="preserve">
+    <value>Discard</value>
+  </data>
+  <data name="AnimationCurrentFrame" xml:space="preserve">
+    <value>Current frame</value>
+  </data>
+  <data name="AnimationSelectedFrames" xml:space="preserve">
+    <value>Selected frames</value>
+  </data>
+  <data name="AnimationDraftScopeHint" xml:space="preserve">
+    <value>Drawing applies to the current frame. Image and text overlays can also be applied to selected frames.</value>
+  </data>
+  <data name="NumericIncrease" xml:space="preserve">
+    <value>Increase</value>
+  </data>
+  <data name="NumericDecrease" xml:space="preserve">
+    <value>Decrease</value>
+  </data>
+  <data name="AnimationTextContent" xml:space="preserve">
+    <value>Text and style</value>
+  </data>
+  <data name="AnimationImageSize" xml:space="preserve">
+    <value>Image size</value>
+  </data>
+  <data name="AnimationLayerPosition" xml:space="preserve">
+    <value>Position</value>
+  </data>
+  <data name="AnimationLayerOrder" xml:space="preserve">
+    <value>Layer order</value>
+  </data>
+  <data name="AnimationInsertShort" xml:space="preserve">
+    <value>Insert</value>
+  </data>
+  <data name="AnimationUpdateShort" xml:space="preserve">
+    <value>Update</value>
+  </data>
+  <data name="AnimationFrontShort" xml:space="preserve">
+    <value>Front</value>
+  </data>
+  <data name="AnimationBackShort" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="AnimationDeleteShort" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="AnimationSelectAllFrames" xml:space="preserve">
+    <value>Select all frames</value>
+  </data>
+  <data name="AnimationSelectFrames" xml:space="preserve">
+    <value>Select frames first.</value>
+  </data>
+  <data name="AnimationArrow" xml:space="preserve">
+    <value>Arrow</value>
+  </data>
+  <data name="ImageCopied" xml:space="preserve">
+    <value>Image copied</value>
+  </data>
+  <data name="ImageCopy" xml:space="preserve">
+    <value>Copy image</value>
+  </data>
+  <data name="ImageEditorTitle" xml:space="preserve">
+    <value>Image editor</value>
+  </data>
+  <data name="ImageFrameStatus" xml:space="preserve">
+    <value>{0} × {1} pixels</value>
+  </data>
+  <data name="ImageSave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="ImageSaveAs" xml:space="preserve">
+    <value>Save as</value>
+  </data>
+  <data name="Screenshot" xml:space="preserve">
+    <value>Screenshot</value>
+  </data>
+  <data name="ScreenshotArrow" xml:space="preserve">
+    <value>Arrow</value>
+  </data>
+  <data name="ScreenshotCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="ScreenshotCursor" xml:space="preserve">
+    <value>Include cursor</value>
+  </data>
+  <data name="ScreenshotHeading" xml:space="preserve">
+    <value>Screenshots</value>
+  </data>
+  <data name="ScreenshotHighlight" xml:space="preserve">
+    <value>Highlight</value>
+  </data>
+  <data name="ScreenshotHotkey" xml:space="preserve">
+    <value>Screenshot shortcut</value>
+  </data>
+  <data name="ScreenshotSave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="ScreenshotScrollHorizontal" xml:space="preserve">
+    <value>Horizontal scrolling screenshot</value>
+  </data>
+  <data name="ScreenshotScrollVertical" xml:space="preserve">
+    <value>Vertical scrolling screenshot</value>
+  </data>
+  <data name="ScreenshotSource" xml:space="preserve">
+    <value>Screenshot source</value>
+  </data>
+  <data name="SelectionCandidate" xml:space="preserve">
+    <value>Candidate region</value>
+  </data>
+  <data name="SelectionConfirming" xml:space="preserve">
+    <value>Confirming</value>
+  </data>
+  <data name="SelectionCoordinates" xml:space="preserve">
+    <value>{2} × {3}
+X {0}, Y {1}</value>
+  </data>
+  <data name="SelectionDragging" xml:space="preserve">
+    <value>Drawing region</value>
+  </data>
+  <data name="SelectionFixedRegion" xml:space="preserve">
+    <value>Fixed screen region</value>
+  </data>
+  <data name="SelectionFixedWindowRegion" xml:space="preserve">
+    <value>Fixed window region</value>
+  </data>
+  <data name="SelectionFollowOnConfirm" xml:space="preserve">
+    <value>Follows window after confirmation</value>
+  </data>
+  <data name="SelectionPressed" xml:space="preserve">
+    <value>Selecting</value>
+  </data>
+  <data name="SelectionSelected" xml:space="preserve">
+    <value>Selected</value>
+  </data>
+  <data name="ScrollCaptureFinish" xml:space="preserve">
+    <value>Finish</value>
+  </data>
+  <data name="ScrollCaptureTitle" xml:space="preserve">
+    <value>Scrolling capture</value>
+  </data>
+  <data name="ScrollCaptureLimit" xml:space="preserve">
+    <value>Length or memory limit reached. Finish or undo.</value>
+  </data>
+  <data name="ScrollCaptureResume" xml:space="preserve">
+    <value>Resume</value>
+  </data>
+  <data name="ScrollCapturePause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="ScrollCaptureObstructed" xml:space="preserve">
+    <value>Move this panel outside the capture region to continue.</value>
+  </data>
+  <data name="ScrollCaptureMove" xml:space="preserve">
+    <value>Drag to move capture region</value>
+  </data>
+  <data name="ScrollCaptureUnmatched" xml:space="preserve">
+    <value>No overlap. Scroll back to the last matched content.</value>
+  </data>
+  <data name="ScrollCaptureUndo" xml:space="preserve">
+    <value>Undo stitch</value>
+  </data>
+  <data name="ScrollCaptureReady" xml:space="preserve">
+    <value>Scroll the content to stitch. Drag the handle to move the fixed-size region along the capture axis.</value>
+  </data>
+  <data name="StaticCaptureOutputMissing" xml:space="preserve">
+    <value>The requested capture output was not found.</value>
+  </data>
+  <data name="TrayShowMain" xml:space="preserve">
+    <value>Show main window</value>
+  </data>
+  <data name="TrayHideMain" xml:space="preserve">
+    <value>Hide main window</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="CloseToTray" xml:space="preserve">
+    <value>Hide to tray when closing the main window</value>
+  </data>
+  <data name="MinimizeToTray" xml:space="preserve">
+    <value>Hide to tray when minimized</value>
+  </data>
+  <data name="ScrollCaptureRightInset" xml:space="preserve">
+    <value>Exclude right (px)</value>
+  </data>
+  <data name="ScrollCaptureLeftInset" xml:space="preserve">
+    <value>Exclude left (px)</value>
+  </data>
+  <data name="ScrollCaptureTopInset" xml:space="preserve">
+    <value>Exclude top (px)</value>
+  </data>
+  <data name="ScrollCaptureInsetInvalid" xml:space="preserve">
+    <value>Keep at least 16 pixels along the capture axis.</value>
+  </data>
+  <data name="ScrollCaptureBottomInset" xml:space="preserve">
+    <value>Exclude bottom (px)</value>
+  </data>
+  <data name="ScrollCaptureStart" xml:space="preserve">
+    <value>Start</value>
+  </data>
+  <data name="ScrollCaptureAnnotationsPresent" xml:space="preserve">
+    <value>Undo annotations before starting a scrolling screenshot.</value>
+  </data>
+  <data name="SelectionCommandConfirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="SelectionCommandClear" xml:space="preserve">
+    <value>Clear selection</value>
+  </data>
+  <data name="SelectionCommandCancel" xml:space="preserve">
+    <value>Back or exit</value>
+  </data>
+  <data name="SelectionCommandControls" xml:space="preserve">
+    <value>Window / control</value>
+  </data>
+  <data name="SelectionCommandSource" xml:space="preserve">
+    <value>Change capture source</value>
+  </data>
+  <data name="SelectionCommandCursor" xml:space="preserve">
+    <value>Capture cursor</value>
+  </data>
+  <data name="SelectionCommandHints" xml:space="preserve">
+    <value>Change hints</value>
+  </data>
+  <data name="SelectionCommandSnapping" xml:space="preserve">
+    <value>Change snapping</value>
+  </data>
+  <data name="SelectionCommandMove" xml:space="preserve">
+    <value>Move selection</value>
+  </data>
+  <data name="SelectionCommandExpand" xml:space="preserve">
+    <value>Expand selection</value>
+  </data>
+  <data name="SelectionCommandShrink" xml:space="preserve">
+    <value>Shrink selection</value>
+  </data>
+  <data name="ScreenshotScrollUndoAnnotations" xml:space="preserve">
+    <value>Undo annotations before starting a scrolling screenshot.</value>
+  </data>
+  <data name="ScrollCaptureAreaTooSmall" xml:space="preserve">
+    <value>The region is too small to match scrolling content.</value>
+  </data>
+  <data name="OutputColorMode" xml:space="preserve">
+    <value>Color output</value>
+  </data>
+  <data name="ColorModeSdr" xml:space="preserve">
+    <value>SDR</value>
+  </data>
+  <data name="ColorModeHdr" xml:space="preserve">
+    <value>HDR</value>
+  </data>
+  <data name="ColorModeBoth" xml:space="preserve">
+    <value>SDR + HDR</value>
+  </data>
+  <data name="HdrRecordingFormat" xml:space="preserve">
+    <value>HDR is saved as 16-bit APNG. SDR uses the selected format.</value>
+  </data>
+  <data name="HdrCaptureUnavailable" xml:space="preserve">
+    <value>This source did not provide an HDR frame.</value>
+  </data>
+  <data name="HdrScreenshotScrollingUnsupported" xml:space="preserve">
+    <value>Scrolling capture does not support HDR yet.</value>
+  </data>
+  <data name="HdrScreenshotCursorUnsupported" xml:space="preserve">
+    <value>This cursor cannot be composited into HDR.</value>
+  </data>
+  <data name="HdrRecordingUnavailable" xml:space="preserve">
+    <value>This capture source does not provide HDR frames.</value>
+  </data>
+  <data name="HdrRecordingRequiresApng" xml:space="preserve">
+    <value>HDR recording uses APNG.</value>
+  </data>
+  <data name="HdrRecordingMemoryLimit" xml:space="preserve">
+    <value>The recording dimensions exceed the buffer memory limit.</value>
+  </data>
+  <data name="HdrRecordingTimestampInvalid" xml:space="preserve">
+    <value>The capture timestamp is invalid.</value>
+  </data>
+  <data name="HdrClipboardUnsupported" xml:space="preserve">
+    <value>The clipboard supports SDR only. Save to keep HDR.</value>
+  </data>
+  <data name="HdrOutputExists" xml:space="preserve">
+    <value>An output file already exists. Choose another name.</value>
+  </data>
+  <data name="HdrMultipleUnsupported" xml:space="preserve">
+    <value>HDR is not supported by this multi-output recording path.</value>
+  </data>
+  <data name="HdrToneMap" xml:space="preserve">
+    <value>HDR to SDR</value>
+  </data>
+  <data name="HdrToneMapHighlight" xml:space="preserve">
+    <value>Compress highlights</value>
+  </data>
+  <data name="HdrToneMapReference" xml:space="preserve">
+    <value>Reference white / clip highlights</value>
+  </data>
+  <data name="StaticCaptureOutputExists" xml:space="preserve">
+    <value>Output paths must be unique and must not already exist.</value>
+  </data>
+  <data name="StaticCaptureBatchOptionsInvalid" xml:space="preserve">
+    <value>Each output must select SDR or HDR and cannot overwrite files.</value>
+  </data>
+  <data name="StaticCaptureHdrUnavailable" xml:space="preserve">
+    <value>The capture source does not provide HDR data.</value>
+  </data>
+  <data name="HdrPairedPngRequired" xml:space="preserve">
+    <value>Paired image output requires PNG files.</value>
+  </data>
+  <data name="HdrRecordingExternalEncoderUnavailable" xml:space="preserve">
+    <value>Simultaneous SDR/HDR recording does not support FFmpeg yet. Select the built-in encoder.</value>
+  </data>
+  <data name="HdrSceneFrameUnavailable" xml:space="preserve">
+    <value>The HDR source did not provide an HDR frame.</value>
+  </data>
+  <data name="ScreenshotApplyText" xml:space="preserve">
+    <value>Apply text</value>
+  </data>
+  <data name="ScreenshotPin" xml:space="preserve">
+    <value>Pin image</value>
+  </data>
+  <data name="PinnedImage" xml:space="preserve">
+    <value>Pinned image</value>
+  </data>
+  <data name="PinnedImageHelp" xml:space="preserve">
+    <value>Drag to move · Wheel to zoom · Ctrl+wheel for opacity · Right-click for actions · Esc to hide or minimize</value>
+  </data>
+  <data name="PinnedImageActualSize" xml:space="preserve">
+    <value>Actual size</value>
+  </data>
+  <data name="PinnedImageHide" xml:space="preserve">
+    <value>Hide</value>
+  </data>
+  <data name="PinnedImagesShow" xml:space="preserve">
+    <value>Show all pinned images</value>
+  </data>
+  <data name="PinnedImagesHide" xml:space="preserve">
+    <value>Hide all pinned images</value>
+  </data>
+  <data name="GlobalHotkeysHeading" xml:space="preserve">
+    <value>Global shortcuts</value>
+  </data>
+  <data name="SelectionShortcutsHeading" xml:space="preserve">
+    <value>Selection shortcuts</value>
+  </data>
+  <data name="SelectionShortcutsHint" xml:space="preserve">
+    <value>Active while selecting or annotating screenshots. Select an action to edit its bindings.</value>
+  </data>
+  <data name="SelectionShortcutAll" xml:space="preserve">
+    <value>All categories</value>
+  </data>
+  <data name="SelectionShortcutSelection" xml:space="preserve">
+    <value>Selection</value>
+  </data>
+  <data name="SelectionShortcutAnnotation" xml:space="preserve">
+    <value>Annotation</value>
+  </data>
+  <data name="SelectionShortcutAdjustment" xml:space="preserve">
+    <value>Adjustment</value>
+  </data>
+  <data name="SelectionShortcutSearch" xml:space="preserve">
+    <value>Search actions or shortcuts</value>
+  </data>
+  <data name="SelectionShortcutAdd" xml:space="preserve">
+    <value>Add binding</value>
+  </data>
+  <data name="SelectionShortcutReset" xml:space="preserve">
+    <value>Reset to defaults</value>
+  </data>
+  <data name="SelectionShortcutNoMatch" xml:space="preserve">
+    <value>No matching actions</value>
+  </data>
+  <data name="SelectionShortcutDisabled" xml:space="preserve">
+    <value>No shortcuts assigned</value>
+  </data>
+  <data name="SelectionShortcutRecord" xml:space="preserve">
+    <value>Record</value>
+  </data>
+  <data name="SelectionShortcutRemove" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="SelectionShortcutPressKey" xml:space="preserve">
+    <value>Press a shortcut…</value>
+  </data>
+  <data name="SelectionShortcutLeft" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="SelectionShortcutRight" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="SelectionShortcutUp" xml:space="preserve">
+    <value>Up</value>
+  </data>
+  <data name="SelectionShortcutDown" xml:space="preserve">
+    <value>Down</value>
+  </data>
+  <data name="SelectionShortcutInvalid" xml:space="preserve">
+    <value>Invalid shortcut</value>
+  </data>
+  <data name="SelectionShortcutConflict" xml:space="preserve">
+    <value>Shortcut conflict</value>
+  </data>
+  <data name="ScreenshotScrollRequiresSdr" xml:space="preserve">
+    <value>Select SDR output before starting a scrolling screenshot.</value>
+  </data>
+  <data name="PinnedImageMinimize" xml:space="preserve">
+    <value>Minimize</value>
+  </data>
+  <data name="MouseShortcutInvalid" xml:space="preserve">
+    <value>Invalid mouse gesture</value>
+  </data>
+  <data name="MouseShortcutConflict" xml:space="preserve">
+    <value>Mouse gesture conflict</value>
+  </data>
+  <data name="MouseActionMoveWindow" xml:space="preserve">
+    <value>Move window</value>
+  </data>
+  <data name="MouseActionMenu" xml:space="preserve">
+    <value>Show menu</value>
+  </data>
+  <data name="MouseActionZoomIn" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="MouseActionZoomOut" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="MouseActionOpacityUp" xml:space="preserve">
+    <value>Increase opacity</value>
+  </data>
+  <data name="MouseActionOpacityDown" xml:space="preserve">
+    <value>Decrease opacity</value>
+  </data>
+  <data name="VideoRecorder" xml:space="preserve">
+    <value>Video recorder</value>
+  </data>
+  <data name="VideoRecorderTitle" xml:space="preserve">
+    <value>Video recorder</value>
+  </data>
+  <data name="VideoSelectScreen" xml:space="preserve">
+    <value>Screen region</value>
+  </data>
+  <data name="VideoSelectWindow" xml:space="preserve">
+    <value>Window content</value>
+  </data>
+  <data name="VideoTarget" xml:space="preserve">
+    <value>Capture region</value>
+  </data>
+  <data name="VideoNoRegion" xml:space="preserve">
+    <value>No region selected</value>
+  </data>
+  <data name="VideoFormat" xml:space="preserve">
+    <value>Video format</value>
+  </data>
+  <data name="VideoFps" xml:space="preserve">
+    <value>Frame rate</value>
+  </data>
+  <data name="VideoScale" xml:space="preserve">
+    <value>Scale divisor</value>
+  </data>
+  <data name="VideoQuality" xml:space="preserve">
+    <value>Quality</value>
+  </data>
+  <data name="VideoQualityHigh" xml:space="preserve">
+    <value>High quality</value>
+  </data>
+  <data name="VideoQualityBalanced" xml:space="preserve">
+    <value>Balanced</value>
+  </data>
+  <data name="VideoQualitySmall" xml:space="preserve">
+    <value>Smaller file</value>
+  </data>
+  <data name="VideoSystemAudio" xml:space="preserve">
+    <value>System audio</value>
+  </data>
+  <data name="VideoMicrophone" xml:space="preserve">
+    <value>Microphone</value>
+  </data>
+  <data name="VideoDefaultDevice" xml:space="preserve">
+    <value>Default device</value>
+  </data>
+  <data name="VideoAudioUnavailable" xml:space="preserve">
+    <value>Audio capture is unavailable on this platform</value>
+  </data>
+  <data name="VideoOutputDirectory" xml:space="preserve">
+    <value>Output folder</value>
+  </data>
+  <data name="VideoStart" xml:space="preserve">
+    <value>Start recording</value>
+  </data>
+  <data name="VideoStop" xml:space="preserve">
+    <value>Stop and save</value>
+  </data>
+  <data name="VideoCancel" xml:space="preserve">
+    <value>Cancel recording</value>
+  </data>
+  <data name="VideoOpenOutput" xml:space="preserve">
+    <value>Open file</value>
+  </data>
+  <data name="VideoProgress" xml:space="preserve">
+    <value>{0:F1} s · {1} frames · {2:F1} fps</value>
+  </data>
+  <data name="VideoSaved" xml:space="preserve">
+    <value>Saved: {0}</value>
+  </data>
+  <data name="VideoBrowse" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="GlobalActionsHeading" xml:space="preserve">
+    <value>Actions</value>
+  </data>
+  <data name="GlobalActionsHint" xml:space="preserve">
+    <value>Assign shortcuts, mouse gestures, or tray entries to actions. Add multiple actions with different settings.</value>
+  </data>
+  <data name="GlobalActionAdd" xml:space="preserve">
+    <value>Add action</value>
+  </data>
+  <data name="GlobalActionEnabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="GlobalActionShowInTray" xml:space="preserve">
+    <value>Tray menu</value>
+  </data>
+  <data name="GlobalActionName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="GlobalActionKind" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="GlobalActionFile" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="GlobalActionPresetName" xml:space="preserve">
+    <value>Preset name</value>
+  </data>
+  <data name="GlobalActionPresetNameHint" xml:space="preserve">
+    <value>Optional if the file contains one preset</value>
+  </data>
+  <data name="GlobalActionArguments" xml:space="preserve">
+    <value>Preset arguments</value>
+  </data>
+  <data name="GlobalActionAddArgument" xml:space="preserve">
+    <value>Add argument</value>
+  </data>
+  <data name="GlobalActionArgumentName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="GlobalActionArgumentValue" xml:space="preserve">
+    <value>Value</value>
+  </data>
+  <data name="GlobalActionCurrentSource" xml:space="preserve">
+    <value>Use current setting</value>
+  </data>
+  <data name="GlobalActionInvalidIdentity" xml:space="preserve">
+    <value>Action identifier is missing or duplicated</value>
+  </data>
+  <data name="GlobalActionInvalidKind" xml:space="preserve">
+    <value>Unsupported action</value>
+  </data>
+  <data name="GlobalActionNameRequired" xml:space="preserve">
+    <value>Enter a name</value>
+  </data>
+  <data name="GlobalActionTriggerRequired" xml:space="preserve">
+    <value>Assign a shortcut, mouse binding, or tray entry</value>
+  </data>
+  <data name="GlobalActionFileRequired" xml:space="preserve">
+    <value>Select a preset file</value>
+  </data>
+  <data name="GlobalActionInvalidSource" xml:space="preserve">
+    <value>Invalid capture source</value>
+  </data>
+  <data name="RestorePinnedImages" xml:space="preserve">
+    <value>Restore open pinned images on startup</value>
+  </data>
+  <data name="GlobalActionSelectRegion" xml:space="preserve">
+    <value>Select region</value>
+  </data>
+  <data name="GlobalActionToggleRecording" xml:space="preserve">
+    <value>Start or stop recording</value>
+  </data>
+  <data name="GlobalActionStartRecording" xml:space="preserve">
+    <value>Start recording</value>
+  </data>
+  <data name="GlobalActionStopRecording" xml:space="preserve">
+    <value>Stop recording</value>
+  </data>
+  <data name="GlobalActionScreenshot" xml:space="preserve">
+    <value>Screenshot</value>
+  </data>
+  <data name="GlobalActionRunPreset" xml:space="preserve">
+    <value>Run preset</value>
+  </data>
+  <data name="GlobalActionOpenScriptEditor" xml:space="preserve">
+    <value>Open script editor</value>
+  </data>
+  <data name="GlobalActionOpenImageEditor" xml:space="preserve">
+    <value>Open image editor</value>
+  </data>
+  <data name="GlobalActionOpenVideoRecorder" xml:space="preserve">
+    <value>Open video recorder</value>
+  </data>
+  <data name="GlobalActionOpenOutputDirectory" xml:space="preserve">
+    <value>Open output folder</value>
+  </data>
+  <data name="GlobalActionShowMainWindow" xml:space="preserve">
+    <value>Show main window</value>
+  </data>
+  <data name="GlobalActionHideMainWindow" xml:space="preserve">
+    <value>Hide main window</value>
+  </data>
+  <data name="GlobalActionShowPinnedImages" xml:space="preserve">
+    <value>Show pinned images</value>
+  </data>
+  <data name="GlobalActionHidePinnedImages" xml:space="preserve">
+    <value>Hide pinned images</value>
+  </data>
+  <data name="VideoAudioEnded" xml:space="preserve">
+    <value>The audio capture ended unexpectedly.</value>
+  </data>
+  <data name="PinnedImageLock" xml:space="preserve">
+    <value>Lock position and size</value>
+  </data>
+  <data name="PinnedImageMouseThrough" xml:space="preserve">
+    <value>Mouse passthrough</value>
+  </data>
+  <data name="PinnedImageGroup" xml:space="preserve">
+    <value>Groups</value>
+  </data>
+  <data name="PinnedImageUngrouped" xml:space="preserve">
+    <value>Ungrouped</value>
+  </data>
+  <data name="PinnedImageNewGroup" xml:space="preserve">
+    <value>New group</value>
+  </data>
+  <data name="PinnedImageHideGroup" xml:space="preserve">
+    <value>Hide this group</value>
+  </data>
+  <data name="PinnedImageShowGroup" xml:space="preserve">
+    <value>Show this group</value>
+  </data>
+  <data name="PinnedImageCloseGroup" xml:space="preserve">
+    <value>Close this group</value>
+  </data>
+  <data name="PinnedImageRestoreRequired" xml:space="preserve">
+    <value>A system tray is required to restore mouse interaction.</value>
+  </data>
+  <data name="PinnedImageRestoreSession" xml:space="preserve">
+    <value>Restore previous pinned images</value>
+  </data>
+  <data name="PinnedImageRestoreInteraction" xml:space="preserve">
+    <value>Unlock all pinned images</value>
+  </data>
+  <data name="MouseShortcutsHeading" xml:space="preserve">
+    <value>Mouse actions</value>
+  </data>
+  <data name="MouseShortcutsHint" xml:space="preserve">
+    <value>Configure mouse actions by context. The same gesture may be reused in different contexts.</value>
+  </data>
+  <data name="MouseContextSelection" xml:space="preserve">
+    <value>Recording selection</value>
+  </data>
+  <data name="MouseContextScreenshot" xml:space="preserve">
+    <value>Screenshot selection</value>
+  </data>
+  <data name="MouseContextAnnotation" xml:space="preserve">
+    <value>Annotation</value>
+  </data>
+  <data name="MouseContextPinned" xml:space="preserve">
+    <value>Pinned images</value>
+  </data>
+  <data name="MouseGestureLeftClick" xml:space="preserve">
+    <value>Left click</value>
+  </data>
+  <data name="MouseGestureRightClick" xml:space="preserve">
+    <value>Right click</value>
+  </data>
+  <data name="MouseGestureMiddleClick" xml:space="preserve">
+    <value>Middle click</value>
+  </data>
+  <data name="MouseGestureLeftDoubleClick" xml:space="preserve">
+    <value>Left double-click</value>
+  </data>
+  <data name="MouseGestureRightDoubleClick" xml:space="preserve">
+    <value>Right double-click</value>
+  </data>
+  <data name="MouseGestureMiddleDoubleClick" xml:space="preserve">
+    <value>Middle double-click</value>
+  </data>
+  <data name="MouseGestureLeftDrag" xml:space="preserve">
+    <value>Left drag</value>
+  </data>
+  <data name="MouseGestureRightDrag" xml:space="preserve">
+    <value>Right drag</value>
+  </data>
+  <data name="MouseGestureMiddleDrag" xml:space="preserve">
+    <value>Middle drag</value>
+  </data>
+  <data name="MouseGestureWheelUp" xml:space="preserve">
+    <value>Wheel up</value>
+  </data>
+  <data name="MouseGestureWheelDown" xml:space="preserve">
+    <value>Wheel down</value>
+  </data>
+  <data name="MouseGestureWheelLeft" xml:space="preserve">
+    <value>Wheel left</value>
+  </data>
+  <data name="MouseGestureWheelRight" xml:space="preserve">
+    <value>Wheel right</value>
+  </data>
+  <data name="VideoEncoderUnavailable" xml:space="preserve">
+    <value>No supported video encoder was found</value>
+  </data>
+  <data name="VideoChecking" xml:space="preserve">
+    <value>Checking video encoders…</value>
+  </data>
+  <data name="VideoDeviceUnavailable" xml:space="preserve">
+    <value>Previously selected device is unavailable</value>
+  </data>
+  <data name="VideoAudioDevicesFailed" xml:space="preserve">
+    <value>Could not list audio devices: {0}</value>
+  </data>
+  <data name="VideoRefresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="GlobalMouseHeading" xml:space="preserve">
+    <value>Global mouse</value>
+  </data>
+  <data name="GlobalMouseHint" xml:space="preserve">
+    <value>Bind mouse gestures to actions using at least one modifier. Gestures do not block input in other applications.</value>
+  </data>
+  <data name="GlobalMouseAdd" xml:space="preserve">
+    <value>Add mouse binding</value>
+  </data>
+  <data name="GlobalMouseEmpty" xml:space="preserve">
+    <value>No global mouse bindings. Add one, then choose an action, modifiers, and gesture.</value>
+  </data>
+  <data name="GlobalMouseGesture" xml:space="preserve">
+    <value>Gesture</value>
+  </data>
+  <data name="GlobalMouseModifiers" xml:space="preserve">
+    <value>Modifiers</value>
+  </data>
+  <data name="GlobalMouseInvalidBinding" xml:space="preserve">
+    <value>Invalid mouse gesture</value>
+  </data>
+  <data name="GlobalMouseModifierRequired" xml:space="preserve">
+    <value>Select at least one modifier key</value>
+  </data>
+  <data name="GlobalMouseConflict" xml:space="preserve">
+    <value>Conflicting mouse gestures</value>
+  </data>
+  <data name="GlobalMouseActionMissing" xml:space="preserve">
+    <value>Select a valid action.</value>
+  </data>
+  <data name="GlobalMouseUnsupported" xml:space="preserve">
+    <value>Global mouse gestures are unavailable on this platform</value>
+  </data>
+  <data name="VideoAudioDeviceMissing" xml:space="preserve">
+    <value>The audio device was not found.</value>
+  </data>
+  <data name="VideoAudioDeviceBusy" xml:space="preserve">
+    <value>The audio device is busy.</value>
+  </data>
+  <data name="VideoAudioPermissionDenied" xml:space="preserve">
+    <value>Audio device access was denied.</value>
+  </data>
+  <data name="VideoAudioDeviceLost" xml:space="preserve">
+    <value>The audio device was disconnected.</value>
+  </data>
+  <data name="SaveSettingsAndOpenVideo" xml:space="preserve">
+    <value>Save settings and open video recorder</value>
+  </data>
+  <data name="VideoHandleInvalid" xml:space="preserve">
+    <value>This video recording handle is no longer valid.</value>
+  </data>
+  <data name="PinnedImagesSkipped" xml:space="preserve">
+    <value>Skipped {0} pinned images that could not be restored.</value>
+  </data>
+  <data name="SettingsGroupCapture" xml:space="preserve">
+    <value>Capture</value>
+  </data>
+  <data name="SettingsSelectionHeading" xml:space="preserve">
+    <value>Region detection</value>
+  </data>
+  <data name="SettingsStorageHeading" xml:space="preserve">
+    <value>Output and cleanup</value>
+  </data>
+  <data name="SettingsLocalInput" xml:space="preserve">
+    <value>Built-in shortcuts</value>
+  </data>
+  <data name="MainSourceScreen" xml:space="preserve">
+    <value>Screen area</value>
+  </data>
+  <data name="MainSourceWindow" xml:space="preserve">
+    <value>Window</value>
+  </data>
+  <data name="MainSourceMenu" xml:space="preserve">
+    <value>Recording source and presets</value>
+  </data>
+  <data name="MainStopHint" xml:space="preserve">
+    <value>Stop recording and save</value>
+  </data>
+  <data name="MainCancelHint" xml:space="preserve">
+    <value>Cancel processing and discard unfinished output</value>
+  </data>
+  <data name="SettingsNoModifier" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="MainSourceLayout" xml:space="preserve">
+    <value>Layout</value>
+  </data>
+  <data name="MainPresetsMenu" xml:space="preserve">
+    <value>Presets</value>
+  </data>
+  <data name="MainNoPresets" xml:space="preserve">
+    <value>No presets configured</value>
+  </data>
+  <data name="SelectionDetectControls" xml:space="preserve">
+    <value>Detect controls</value>
+  </data>
+  <data name="MouseGestureX2Click" xml:space="preserve">
+    <value>Forward button click</value>
+  </data>
+  <data name="MouseBindingReady" xml:space="preserve">
+    <value>Binding available</value>
+  </data>
+  <data name="MouseGestureX1Drag" xml:space="preserve">
+    <value>Back button drag</value>
+  </data>
+  <data name="MouseActionCopyAndClose" xml:space="preserve">
+    <value>Copy and close</value>
+  </data>
+  <data name="MouseActionZoom" xml:space="preserve">
+    <value>Zoom</value>
+  </data>
+  <data name="MouseGestureX1Click" xml:space="preserve">
+    <value>Back button click</value>
+  </data>
+  <data name="MouseActionAdjustWindow" xml:space="preserve">
+    <value>Adjust position and size</value>
+  </data>
+  <data name="MouseBindingNotSet" xml:space="preserve">
+    <value>Not set</value>
+  </data>
+  <data name="MouseActionReset" xml:space="preserve">
+    <value>Reset</value>
+  </data>
+  <data name="MouseGestureWheel" xml:space="preserve">
+    <value>Mouse wheel</value>
+  </data>
+  <data name="MouseGestureX2Drag" xml:space="preserve">
+    <value>Forward button drag</value>
+  </data>
+  <data name="MouseGestureX1DoubleClick" xml:space="preserve">
+    <value>Back button double-click</value>
+  </data>
+  <data name="MouseActionOpacity" xml:space="preserve">
+    <value>Adjust opacity</value>
+  </data>
+  <data name="MouseGestureNone" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="MouseActionFineZoom" xml:space="preserve">
+    <value>Fine zoom</value>
+  </data>
+  <data name="MouseGestureX2DoubleClick" xml:space="preserve">
+    <value>Forward button double-click</value>
+  </data>
+  <data name="BuiltinShortcutScreenshotContext" xml:space="preserve">
+    <value>Screenshot</value>
+  </data>
+  <data name="BuiltinShortcutLongshotContext" xml:space="preserve">
+    <value>Scrolling capture</value>
+  </data>
+  <data name="BuiltinShortcutResetAll" xml:space="preserve">
+    <value>Restore built-in shortcuts</value>
+  </data>
+  <data name="BuiltinShortcutPinnedContext" xml:space="preserve">
+    <value>Pinned image</value>
+  </data>
+  <data name="BuiltinShortcutSelectionContext" xml:space="preserve">
+    <value>Selection</value>
+  </data>
+  <data name="EditorNoPreset" xml:space="preserve">
+    <value>No runnable preset in this file.</value>
+  </data>
+  <data name="RecognitionUnavailable" xml:space="preserve">
+    <value>Text recognition unavailable</value>
+  </data>
+  <data name="RecognitionCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="RecognitionEmpty" xml:space="preserve">
+    <value>No content recognized</value>
+  </data>
+  <data name="RecognizeBarcode" xml:space="preserve">
+    <value>Recognize QR / barcode</value>
+  </data>
+  <data name="ScreenshotAnnotationLimit" xml:space="preserve">
+    <value>Annotation limit reached.</value>
+  </data>
+  <data name="RecognitionAutomatic" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="ScrollCaptureCursorUnavailable" xml:space="preserve">
+    <value>Cursor capture is unavailable for scrolling capture on this platform. Turn off cursor capture to continue.</value>
+  </data>
+  <data name="RecognizeText" xml:space="preserve">
+    <value>Recognize text</value>
+  </data>
+  <data name="RecognitionRetry" xml:space="preserve">
+    <value>Recognize again</value>
+  </data>
+  <data name="RecognitionLanguage" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="RecognitionWorking" xml:space="preserve">
+    <value>Recognizing…</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SelectionSnapBoth" xml:space="preserve">
+    <value>Horizontal and vertical edges</value>
+  </data>
+  <data name="SelectionHintsCompact" xml:space="preserve">
+    <value>Compact</value>
+  </data>
+  <data name="SelectionSnapHorizontal" xml:space="preserve">
+    <value>Horizontal edges</value>
+  </data>
+  <data name="SelectionHints" xml:space="preserve">
+    <value>Selection hints</value>
+  </data>
+  <data name="SelectionSnapping" xml:space="preserve">
+    <value>Snap to</value>
+  </data>
+  <data name="SelectionSnapNone" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="SelectionSnapVertical" xml:space="preserve">
+    <value>Vertical edges</value>
+  </data>
+  <data name="SelectionHintsFull" xml:space="preserve">
+    <value>Full</value>
+  </data>
+  <data name="SelectionHintsHidden" xml:space="preserve">
+    <value>Hidden</value>
+  </data>
+  <data name="MouseLeftClickReserved" xml:space="preserve">
+    <value>Left click is reserved for selecting and moving the image.</value>
+  </data>
+  <data name="SelectionCopyColor" xml:space="preserve">
+    <value>Copy color</value>
+  </data>
+  <data name="SelectionColorFormat" xml:space="preserve">
+    <value>Switch color format</value>
+  </data>
+  <data name="RecognizeTextAndCopy" xml:space="preserve">
+    <value>Recognize text and copy</value>
+  </data>
+  <data name="BuiltinShortcutDirectionalOperation" xml:space="preserve">
+    <value>{1} {0}</value>
+  </data>
+  <data name="SelectionCaptureWindow" xml:space="preserve"><value>Capture window content</value></data>
+  <data name="SelectionCaptureScreen" xml:space="preserve"><value>Capture screen pixels</value></data>
+  <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>Capture window content, following its position</value></data>
+  <data name="ScrollCaptureInsets" xml:space="preserve"><value>Fixed content crop</value></data>
+  <data name="ScrollCaptureCollecting" xml:space="preserve"><value>Scroll to extend the capture</value></data>
+  <data name="ScrollCapturePaused" xml:space="preserve"><value>Paused</value></data>
+  <data name="ScrollCaptureReturn" xml:space="preserve"><value>Back to selection</value></data>
+  <data name="ScrollCaptureMoveVertical" xml:space="preserve"><value>Move region vertically</value></data>
+  <data name="ScrollCaptureMoveHorizontal" xml:space="preserve"><value>Move region horizontally</value></data>
+  <data name="ScrollCapturePreview" xml:space="preserve"><value>Stitched preview</value></data>
+  <data name="ScrollCaptureDirectionReset" xml:space="preserve"><value>Direction changed. Start a new capture.</value></data>
+  <data name="GlobalActionDisabledState" xml:space="preserve"><value>Disabled</value></data>
+  <data name="GlobalActionEdit" xml:space="preserve"><value>Edit action</value></data>
+  <data name="GlobalActionApply" xml:space="preserve"><value>Apply</value></data>
+  <data name="GlobalActionSelectPreset" xml:space="preserve"><value>Choose preset</value></data>
+  <data name="CaptureHideFailed" xml:space="preserve"><value>The window could not be hidden before capture.</value></data>
+  <data name="ScreenshotClipboardHeading" xml:space="preserve"><value>Clipboard</value></data>
+  <data name="ScreenshotClipboardCopyAs" xml:space="preserve"><value>Copy as</value></data>
+  <data name="ScreenshotClipboardImage" xml:space="preserve"><value>PNG image</value></data>
+  <data name="ScreenshotClipboardFile" xml:space="preserve"><value>Image file</value></data>
+  <data name="ScreenshotClipboardFileFormat" xml:space="preserve"><value>File format</value></data>
+  <data name="ScreenshotSaveFormat" xml:space="preserve"><value>Default format</value></data>
+  <data name="ScreenshotSaveQuality" xml:space="preserve"><value>Image quality</value></data>
+  <data name="ScreenshotSaveQualityHint" xml:space="preserve"><value>JPEG and WebP use this quality; PNG and BMP are lossless.</value></data>
+  <data name="ScreenshotNameTemplate" xml:space="preserve"><value>File name template</value></data>
+  <data name="ScreenshotNameTemplateHint" xml:space="preserve"><value>Variables: {timestamp}, {date}, {time}, {title}, {process}, {width}, {height}, {uuid}</value></data>
+  <data name="ScreenshotConflictPolicy" xml:space="preserve"><value>Existing file</value></data>
+  <data name="ScreenshotConflictRename" xml:space="preserve"><value>Rename automatically</value></data>
+  <data name="ScreenshotConflictOverwrite" xml:space="preserve"><value>Overwrite</value></data>
+  <data name="ScreenshotConflictFail" xml:space="preserve"><value>Keep and report error</value></data>
+  <data name="ScreenshotSaveScopeHint" xml:space="preserve"><value>Shared by screenshots and pinned images.</value></data>
+  <data name="AnnotationColor" xml:space="preserve"><value>Default color</value></data>
+  <data name="AnnotationThickness" xml:space="preserve"><value>Stroke width</value></data>
+  <data name="AnnotationFontSize" xml:space="preserve"><value>Font size</value></data>
+  <data name="AnnotationMosaicSize" xml:space="preserve"><value>Pixelation block size</value></data>
+  <data name="AnnotationRememberTool" xml:space="preserve"><value>Remember the last screenshot annotation tool</value></data>
+  <data name="AnnotationRememberStyle" xml:space="preserve"><value>Remember last style</value></data>
+  <data name="AnnotationLimitSelection" xml:space="preserve"><value>Limit annotations to selection</value></data>
+  <data name="PinnedImageCopyFile" xml:space="preserve"><value>Copy as file</value></data>
+  <data name="PinnedImageAnnotate" xml:space="preserve"><value>Annotate</value></data>
+  <data name="PinnedImageTopmost" xml:space="preserve"><value>Always on top</value></data>
+  <data name="PinnedImageOpen" xml:space="preserve"><value>Open image as pin</value></data>
+  <data name="PinnedImageDefaultTopmost" xml:space="preserve"><value>New pins stay on top</value></data>
+  <data name="PinnedImageAutoFit" xml:space="preserve"><value>Fit large images to screen</value></data>
+  <data name="PinnedImageDefaultOpacity" xml:space="preserve"><value>Default opacity (%)</value></data>
+  <data name="PinnedImageZoomStep" xml:space="preserve"><value>Zoom step (%)</value></data>
+  <data name="PinnedImageFineZoomStep" xml:space="preserve"><value>Fine zoom step (%)</value></data>
+  <data name="PinnedImageOpacityStep" xml:space="preserve"><value>Opacity step (%)</value></data>
+  <data name="PinnedImageThroughOpacity" xml:space="preserve"><value>Opacity limit while click-through (%)</value></data>
+  <data name="ScreenshotMore" xml:space="preserve"><value>More</value></data>
+  <data name="ScreenshotScroll" xml:space="preserve"><value>Scrolling capture</value></data>
+  <data name="AboutTitle" xml:space="preserve"><value>About</value></data>
+  <data name="SettingsAnnotationHeading" xml:space="preserve"><value>Annotations</value></data>
+  <data name="SettingsPinsHeading" xml:space="preserve"><value>Pins</value></data>
+  <data name="SettingsTransferHeading" xml:space="preserve"><value>Import / export</value></data>
+  <data name="ScreenshotSaveHeading" xml:space="preserve"><value>Save</value></data>
+  <data name="SettingsTransferImport" xml:space="preserve"><value>Import settings</value></data>
+  <data name="SettingsTransferExport" xml:space="preserve"><value>Export settings</value></data>
+  <data name="SettingsTransferExported" xml:space="preserve"><value>Settings exported</value></data>
+  <data name="SettingsTransferInvalid" xml:space="preserve"><value>Invalid settings</value></data>
+  <data name="SettingsTransferTooLarge" xml:space="preserve"><value>Settings files must not exceed 4 MiB</value></data>
+  <data name="SettingsTransferLocalFileRequired" xml:space="preserve"><value>Choose a local file</value></data>
+  <data name="VideoHdrOutputUnavailable" xml:space="preserve"><value>This FFmpeg does not support 10-bit HDR encoding for this format.</value></data>
+  <data name="TrayScreenshotCopy" xml:space="preserve"><value>Capture and copy</value></data>
+  <data name="TrayPinClipboard" xml:space="preserve"><value>Pin image</value></data>
+  <data name="PinnedImageRestoreClosed" xml:space="preserve"><value>Restore last closed image</value></data>
+  <data name="PinnedImagesCloseAll" xml:space="preserve"><value>Close all pinned images</value></data>
+  <data name="TrayPinnedImagesCount" xml:space="preserve"><value>Pinned images ({0})</value></data>
+  <data name="PinnedImageSessionTooLarge" xml:space="preserve"><value>Pinned session data is too large; existing records were kept</value></data>
+  <data name="ScreenshotDeleteAnnotation" xml:space="preserve"><value>Delete annotation</value></data>
+  <data name="ScreenshotSelectAnnotation" xml:space="preserve"><value>Select annotation</value></data>
+  <data name="GlobalActionScreenshotAndCopy" xml:space="preserve"><value>Screenshot and copy</value></data>
+  <data name="GlobalActionCaptureOutput" xml:space="preserve"><value>After capture</value></data>
+  <data name="GlobalActionScreenshotAndSave" xml:space="preserve"><value>Screenshot and save as</value></data>
+  <data name="GlobalActionRestoreLastPinnedImage" xml:space="preserve"><value>Restore last closed pin</value></data>
+  <data name="BuiltinShortcutToggleAxis" xml:space="preserve"><value>Switch scrolling capture axis</value></data>
+  <data name="GlobalActionCaptureActiveWindow" xml:space="preserve"><value>Capture active window</value></data>
+  <data name="GlobalActionInvalidOutput" xml:space="preserve"><value>Invalid screenshot output options</value></data>
+  <data name="BuiltinShortcutTogglePause" xml:space="preserve"><value>Pause / resume scrolling capture</value></data>
+  <data name="GlobalActionScreenshotQuickSave" xml:space="preserve"><value>Screenshot and quick save</value></data>
+  <data name="GlobalActionCurrentOutputDirectory" xml:space="preserve"><value>Use output folder</value></data>
+  <data name="GlobalActionPinClipboard" xml:space="preserve"><value>Pin clipboard image</value></data>
+  <data name="GlobalActionScreenshotAndPin" xml:space="preserve"><value>Screenshot and pin</value></data>
+  <data name="ScreenshotQuickSave" xml:space="preserve"><value>Quick save</value></data>
+  <data name="GlobalActionCaptureLastRegion" xml:space="preserve"><value>Capture last region</value></data>
+  <data name="GlobalActionClipboardEmpty" xml:space="preserve"><value>Clipboard has no usable image or image file</value></data>
+  <data name="GlobalActionActiveWindowUnavailable" xml:space="preserve"><value>Active-window capture is unavailable on this platform</value></data>
+  <data name="GlobalActionLastRegionMissing" xml:space="preserve"><value>No previous screenshot region</value></data>
+  <data name="GlobalActionDirectCaptureUnavailable" xml:space="preserve"><value>Direct region capture is unavailable with this capture backend</value></data>
+  <data name="PinnedImageSdrPreview" xml:space="preserve"><value>SDR preview</value></data>
+  <data name="HdrClipboardRequiresPng" xml:space="preserve"><value>HDR file copy requires PNG.</value></data>
+  <data name="PinnedImageHdrEditing" xml:space="preserve"><value>SDR editing preview</value></data>
+  <data name="PinnedImageHdrPreview" xml:space="preserve"><value>HDR preview</value></data>
+  <data name="PinnedImageHdrUnsupported" xml:space="preserve"><value>Unsupported HDR color encoding</value></data>
+  <data name="SettingsDirectoryAbsolute" xml:space="preserve"><value>The data directory must be an absolute path.</value></data>
+  <data name="SelectionOptionCursor" xml:space="preserve"><value>Cursor</value></data>
+  <data name="SelectionOptionScreen" xml:space="preserve"><value>Screen</value></data>
+  <data name="SelectionOptionControls" xml:space="preserve"><value>Controls</value></data>
+  <data name="SelectionOptionWindow" xml:space="preserve"><value>Window</value></data>
+  <data name="SettingsColorHeading" xml:space="preserve"><value>Color</value></data>
+  <data name="GlobalHotkeyValid" xml:space="preserve"><value>Valid binding; takes effect after saving.</value></data>
+  <data name="CaptureDetection" xml:space="preserve">
+    <value>UI detection</value>
+  </data>
+  <data name="CaptureDetectionNone" xml:space="preserve">
+    <value>No detection</value>
+  </data>
+  <data name="CaptureDetectionWindows" xml:space="preserve">
+    <value>Windows only</value>
+  </data>
+  <data name="CaptureDetectionControls" xml:space="preserve">
+    <value>Detect controls</value>
+  </data>
+  <data name="CaptureElementMargin" xml:space="preserve">
+    <value>Element detection margin (px)</value>
+  </data>
+  <data name="CaptureExpandOutside" xml:space="preserve">
+    <value>Expand selection when clicking outside</value>
+  </data>
+  <data name="CaptureCursorHidden" xml:space="preserve">
+    <value>Hidden by default</value>
+  </data>
+  <data name="CaptureCursorVisible" xml:space="preserve">
+    <value>Shown by default</value>
+  </data>
+  <data name="CaptureAuxiliaryTiming" xml:space="preserve">
+    <value>Show guides</value>
+  </data>
+  <data name="CaptureAuxiliaryHidden" xml:space="preserve">
+    <value>Do not show</value>
+  </data>
+  <data name="CaptureAuxiliaryAlt" xml:space="preserve">
+    <value>Show while holding Alt</value>
+  </data>
+  <data name="CaptureAuxiliaryContents" xml:space="preserve">
+    <value>Guides</value>
+  </data>
+  <data name="CaptureGuideCursor" xml:space="preserve">
+    <value>Cursor guides</value>
+  </data>
+  <data name="CaptureGuideCenter" xml:space="preserve">
+    <value>Selection center</value>
+  </data>
+  <data name="CaptureGuideBorder" xml:space="preserve">
+    <value>Selection border</value>
+  </data>
+  <data name="CaptureGuideThirds" xml:space="preserve">
+    <value>Rule-of-thirds grid</value>
+  </data>
+  <data name="CaptureInformation" xml:space="preserve">
+    <value>Show information</value>
+  </data>
+  <data name="CaptureMagnifier" xml:space="preserve">
+    <value>Show magnifier</value>
+  </data>
+  <data name="CaptureMagnifierContents" xml:space="preserve">
+    <value>Magnifier contents</value>
+  </data>
+  <data name="CaptureMagnifierGrid" xml:space="preserve">
+    <value>Grid lines</value>
+  </data>
+  <data name="CaptureMagnifierCrosshair" xml:space="preserve">
+    <value>Crosshair</value>
+  </data>
+  <data name="CaptureMagnifierCenter" xml:space="preserve">
+    <value>Center pixel</value>
+  </data>
+  <data name="CaptureMagnifierHandles" xml:space="preserve">
+    <value>Selection handles</value>
+  </data>
+  <data name="CaptureMagnifierCoordinates" xml:space="preserve">
+    <value>Pointer coordinates</value>
+  </data>
+  <data name="CaptureMagnification" xml:space="preserve">
+    <value>Magnification</value>
+  </data>
+  <data name="CaptureMagnifierShortcuts" xml:space="preserve">
+    <value>Show shortcuts in magnifier</value>
+  </data>
+  <data name="CaptureMagnifierGridColor" xml:space="preserve">
+    <value>Magnifier grid color</value>
+  </data>
+  <data name="CaptureMagnifierColorFormat" xml:space="preserve">
+    <value>Magnifier color format</value>
+  </data>
+  <data name="CaptureColorRgb" xml:space="preserve">
+    <value>RGB</value>
+  </data>
+  <data name="CaptureColorHex" xml:space="preserve">
+    <value>HEX</value>
+  </data>
+  <data name="CaptureColorHsv" xml:space="preserve">
+    <value>HSV</value>
+  </data>
+  <data name="CaptureColorHsl" xml:space="preserve">
+    <value>HSL</value>
+  </data>
+  <data name="CaptureMagnifierSmooth" xml:space="preserve">
+    <value>Smooth magnifier scaling</value>
+  </data>
+  <data name="CaptureShortcutHints" xml:space="preserve">
+    <value>Show shortcut hints</value>
+  </data>
+  <data name="CaptureContentsNone" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="AnnotationToolLine" xml:space="preserve">
+    <value>Line</value>
+  </data>
+  <data name="AnnotationToolPolyline" xml:space="preserve">
+    <value>Polyline</value>
+  </data>
+  <data name="AnnotationToolNumber" xml:space="preserve">
+    <value>Number</value>
+  </data>
+  <data name="AnnotationToolEraser" xml:space="preserve">
+    <value>Eraser (restore background)</value>
+  </data>
+  <data name="AnnotationToolStrokeEraser" xml:space="preserve">
+    <value>Stroke eraser</value>
+  </data>
+  <data name="AnnotationToolSpotlight" xml:space="preserve">
+    <value>Spotlight</value>
+  </data>
+  <data name="AnnotationToolMagnifier" xml:space="preserve">
+    <value>Magnifier</value>
+  </data>
+  <data name="AnnotationToolWatermark" xml:space="preserve">
+    <value>Watermark</value>
+  </data>
+  <data name="AnnotationEffects" xml:space="preserve">
+    <value>More annotation tools</value>
+  </data>
+  <data name="AnnotationFilled" xml:space="preserve">
+    <value>Filled</value>
+  </data>
+  <data name="AnnotationDashed" xml:space="preserve">
+    <value>Dashed</value>
+  </data>
+  <data name="AnnotationStrikeThrough" xml:space="preserve">
+    <value>Strikethrough</value>
+  </data>
+  <data name="AnnotationTiled" xml:space="preserve">
+    <value>Tile watermark</value>
+  </data>
+  <data name="AnnotationTextPadding" xml:space="preserve">
+    <value>Text padding</value>
+  </data>
+  <data name="AnnotationWrapWidth" xml:space="preserve">
+    <value>Text wrap width (0 = unlimited)</value>
+  </data>
+  <data name="AnnotationOutlineWidth" xml:space="preserve">
+    <value>Text outline width</value>
+  </data>
+  <data name="AnnotationOpacity" xml:space="preserve">
+    <value>Opacity (%)</value>
+  </data>
+  <data name="AnnotationMagnification" xml:space="preserve">
+    <value>Magnification</value>
+  </data>
+  <data name="AnnotationNextNumber" xml:space="preserve">
+    <value>Starting number</value>
+  </data>
+  <data name="AnnotationTextBackground" xml:space="preserve">
+    <value>Text background</value>
+  </data>
+  <data name="AnnotationTextOutline" xml:space="preserve">
+    <value>Text outline color</value>
+  </data>
+  <data name="AnnotationFinishPolyline" xml:space="preserve">
+    <value>Finish polyline</value>
+  </data>
+  <data name="AnnotationToggleVisibility" xml:space="preserve">
+    <value>Show / hide annotations</value>
+  </data>
+  <data name="AnnotationClearAll" xml:space="preserve">
+    <value>Clear all annotations</value>
+  </data>
+  <data name="AnnotationRenumber" xml:space="preserve">
+    <value>Renumber annotations</value>
+  </data>
+  <data name="AnnotationSharedColor" xml:space="preserve">
+    <value>Share color across tools</value>
+  </data>
+  <data name="AnnotationNineGrid" xml:space="preserve">
+    <value>Nine-grid position</value>
+  </data>
+  <data name="AnnotationWatermarkWidth" xml:space="preserve">
+    <value>Image watermark width</value>
+  </data>
+  <data name="AnnotationWatermarkImage" xml:space="preserve">
+    <value>Choose watermark image…</value>
+  </data>
+  <data name="AnnotationWatermarkText" xml:space="preserve">
+    <value>Use text watermark</value>
+  </data>
+  <data name="AnnotationWatermarkTooLarge" xml:space="preserve">
+    <value>Watermark images cannot exceed 16 MiB.</value>
+  </data>
+  <data name="AnnotationWatermarkAnchor" xml:space="preserve">
+    <value>Watermark position</value>
+  </data>
+  <data name="PinnedImageDestroy" xml:space="preserve">
+    <value>Destroy</value>
+  </data>
+  <data name="PinnedImageSelectThumbnailRegion" xml:space="preserve">
+    <value>Select thumbnail region</value>
+  </data>
+  <data name="PinnedImageThumbnail" xml:space="preserve">
+    <value>Thumbnail</value>
+  </data>
+  <data name="PinnedImageMoveThumbnailRegion" xml:space="preserve">
+    <value>Move thumbnail region</value>
+  </data>
+  <data name="PinnedImageCopyText" xml:space="preserve">
+    <value>Copy recognized text</value>
+  </data>
+  <data name="PinnedImageAnnotationToolbar" xml:space="preserve">
+    <value>Annotation toolbar</value>
+  </data>
+  <data name="PinnedImageMoveIgnoringText" xml:space="preserve">
+    <value>Move ignoring text</value>
+  </data>
+  <data name="PinnedImageDragContent" xml:space="preserve">
+    <value>Drag out content</value>
+  </data>
+  <data name="PinnedImageMultiSelect" xml:space="preserve">
+    <value>Select multiple</value>
+  </data>
+  <data name="PinnedImageDisplay" xml:space="preserve">
+    <value>Display</value>
+  </data>
+  <data name="PinnedImageBehavior" xml:space="preserve">
+    <value>Interaction</value>
+  </data>
+  <data name="PinnedImageZoom" xml:space="preserve">
+    <value>Zoom and opacity</value>
+  </data>
+  <data name="PinnedImageHistory" xml:space="preserve">
+    <value>History</value>
+  </data>
+  <data name="PinnedImageTaskbarWhenNotTopmost" xml:space="preserve">
+    <value>Show taskbar icon when not on top</value>
+  </data>
+  <data name="PinnedImageBorderResize" xml:space="preserve">
+    <value>Resize from image edges</value>
+  </data>
+  <data name="PinnedImageLockHint" xml:space="preserve">
+    <value>Show lock indicator</value>
+  </data>
+  <data name="PinnedImageMenuShortcuts" xml:space="preserve">
+    <value>Show menu shortcuts</value>
+  </data>
+  <data name="PinnedImageCopyVisibleRegion" xml:space="preserve">
+    <value>Save and copy visible thumbnail region</value>
+  </data>
+  <data name="PinnedImageThumbnailWheelZoom" xml:space="preserve">
+    <value>Allow wheel zoom in thumbnail mode</value>
+  </data>
+  <data name="PinnedImageWheelAnchor" xml:space="preserve">
+    <value>Wheel zoom anchor</value>
+  </data>
+  <data name="PinnedImageResetAnchor" xml:space="preserve">
+    <value>Reset zoom anchor</value>
+  </data>
+  <data name="PinnedImageAnchorTopLeft" xml:space="preserve">
+    <value>Top left</value>
+  </data>
+  <data name="PinnedImageAnchorPointer" xml:space="preserve">
+    <value>Pointer</value>
+  </data>
+  <data name="PinnedImageAnchorCenter" xml:space="preserve">
+    <value>Center</value>
+  </data>
+  <data name="PinnedImageHistoryLimit" xml:space="preserve">
+    <value>Retained closed images</value>
+  </data>
+  <data name="PinnedImageDuplicateBehavior" xml:space="preserve">
+    <value>Duplicate image</value>
+  </data>
+  <data name="PinnedImageDuplicateFocus" xml:space="preserve">
+    <value>Show existing image</value>
+  </data>
+  <data name="PinnedImageDuplicateIgnore" xml:space="preserve">
+    <value>Ignore</value>
+  </data>
+  <data name="PinnedImageDuplicateRestore" xml:space="preserve">
+    <value>Restore last closed image</value>
+  </data>
+  <data name="PinnedImageDuplicateCreate" xml:space="preserve">
+    <value>Create another image</value>
+  </data>
+  <data name="PinnedImageRestoreOrder" xml:space="preserve">
+    <value>Restore order</value>
+  </data>
+  <data name="PinnedImageOrderClosed" xml:space="preserve">
+    <value>Most recently closed</value>
+  </data>
+  <data name="PinnedImageOrderCreated" xml:space="preserve">
+    <value>Most recently created</value>
+  </data>
+  <data name="AppearanceThemeMode" xml:space="preserve">
+    <value>Theme mode</value>
+  </data>
+  <data name="AppearanceLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="AppearanceDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="AppearanceFont" xml:space="preserve">
+    <value>Theme font</value>
+  </data>
+  <data name="AppearanceAccent" xml:space="preserve">
+    <value>Theme color</value>
+  </data>
+  <data name="AppearanceLockedWindow" xml:space="preserve">
+    <value>Locked window color</value>
+  </data>
+  <data name="AppearanceSelectionMask" xml:space="preserve">
+    <value>Unselected area color</value>
+  </data>
+  <data name="AppearanceClickThroughShade" xml:space="preserve">
+    <value>Click-through shade</value>
+  </data>
+  <data name="AppearanceTrayIcon" xml:space="preserve">
+    <value>Tray icon</value>
+  </data>
+  <data name="AppearanceAutomatic" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="AppearanceOriginalIcon" xml:space="preserve">
+    <value>Original icon</value>
+  </data>
+  <data name="AppearanceMonochromeIcon" xml:space="preserve">
+    <value>Monochrome</value>
+  </data>
+  <data name="AppearanceHidden" xml:space="preserve">
+    <value>Hidden</value>
+  </data>
+  <data name="AppearanceTrayIconColor" xml:space="preserve">
+    <value>Tray icon color</value>
+  </data>
+  <data name="AppearanceToolbarIconSize" xml:space="preserve">
+    <value>Toolbar icon size</value>
+  </data>
+  <data name="AppearanceSmall" xml:space="preserve">
+    <value>Small</value>
+  </data>
+  <data name="AppearanceMedium" xml:space="preserve">
+    <value>Medium</value>
+  </data>
+  <data name="AppearanceLarge" xml:space="preserve">
+    <value>Large</value>
+  </data>
+  <data name="AppearanceColorDialog" xml:space="preserve">
+    <value>Color picker style</value>
+  </data>
+  <data name="AppearanceSaveDialog" xml:space="preserve">
+    <value>Save dialog style</value>
+  </data>
+  <data name="AppearanceModern" xml:space="preserve">
+    <value>Modern</value>
+  </data>
+  <data name="AppearanceSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="AppearanceSelectionBorderWidth" xml:space="preserve">
+    <value>Selection border width</value>
+  </data>
+  <data name="AppearanceSelectionBorderColor" xml:space="preserve">
+    <value>Selection border color</value>
+  </data>
+  <data name="AppearanceFollowTheme" xml:space="preserve">
+    <value>Follow theme</value>
+  </data>
+  <data name="AppearanceAnchors" xml:space="preserve">
+    <value>Anchor display</value>
+  </data>
+  <data name="AppearanceFourAnchors" xml:space="preserve">
+    <value>Four directions</value>
+  </data>
+  <data name="AppearanceEightAnchors" xml:space="preserve">
+    <value>Eight directions</value>
+  </data>
+  <data name="AppearanceSelectionAnimation" xml:space="preserve">
+    <value>Animate selection changes</value>
+  </data>
+  <data name="AppearanceOpacity" xml:space="preserve">
+    <value>Opacity (%)</value>
+  </data>
+  <data name="AppearanceColorDialogFailed" xml:space="preserve">
+    <value>Unable to open the system color picker.</value>
+  </data>
+  <data name="AppearanceSystemColorWindowsOnly" xml:space="preserve">
+    <value>The system color picker is available on Windows only.</value>
+  </data>
+  <data name="GlobalActionClearAll" xml:space="preserve">
+    <value>Clear all actions</value>
+  </data>
+  <data name="GlobalActionClearShortcuts" xml:space="preserve">
+    <value>Clear all shortcuts</value>
+  </data>
+  <data name="HotkeyIgnoredPrograms" xml:space="preserve">
+    <value>Ignored programs ({0})</value>
+  </data>
+  <data name="HotkeyDisableInFullscreen" xml:space="preserve">
+    <value>Disable shortcuts in fullscreen games</value>
+  </data>
+  <data name="HotkeyIgnoredProgramsTitle" xml:space="preserve">
+    <value>Ignored programs</value>
+  </data>
+  <data name="HotkeyIgnoredProgramsHint" xml:space="preserve">
+    <value>Program name or full path</value>
+  </data>
+  <data name="HotkeyIgnoredProgramInvalid" xml:space="preserve">
+    <value>Enter a valid program name or path</value>
+  </data>
+  <data name="HotkeyIgnoredProgramAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="HotkeyPolicyUnavailable" xml:space="preserve">
+    <value>Foreground program filtering is unavailable on this platform</value>
+  </data>
+  <data name="ScreenshotRememberExtension" xml:space="preserve">
+    <value>Remember the last file extension</value>
+  </data>
+  <data name="ScreenshotManualSave" xml:space="preserve">
+    <value>Manual save</value>
+  </data>
+  <data name="ScreenshotAutomaticSave" xml:space="preserve">
+    <value>Automatic save</value>
+  </data>
+  <data name="ScreenshotAutoTriggers" xml:space="preserve">
+    <value>Save after</value>
+  </data>
+  <data name="ScreenshotAutoCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="ScreenshotAutoPin" xml:space="preserve">
+    <value>Pin</value>
+  </data>
+  <data name="ScreenshotAutoRecognize" xml:space="preserve">
+    <value>Text recognition</value>
+  </data>
+  <data name="ScreenshotAutoSave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="ScreenshotAutoScrolling" xml:space="preserve">
+    <value>Scrolling capture</value>
+  </data>
+  <data name="ScrollCaptureAutomatic" xml:space="preserve">
+    <value>Auto scroll</value>
+  </data>
+  <data name="ScrollCaptureAxisVertical" xml:space="preserve">
+    <value>Vertical</value>
+  </data>
+  <data name="ScrollCaptureAxisHorizontal" xml:space="preserve">
+    <value>Horizontal</value>
+  </data>
+  <data name="PinnedImageThumbnailSelectableText" xml:space="preserve">
+    <value>Allow text selection in thumbnail mode</value>
+  </data>
+  <data name="PinnedImageWindowShadow" xml:space="preserve">
+    <value>Show window shadow</value>
+  </data>
+  <data name="ScreenshotSaveNotify" xml:space="preserve">
+    <value>Show a message after saving</value>
+  </data>
+  <data name="ScreenshotNamePreview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="ScreenshotAfterSave" xml:space="preserve">
+    <value>After saving</value>
+  </data>
+  <data name="ScreenshotAfterNone" xml:space="preserve">
+    <value>Do nothing</value>
+  </data>
+  <data name="ScreenshotAfterCopyImage" xml:space="preserve">
+    <value>Copy image</value>
+  </data>
+  <data name="ScreenshotAfterCopyFile" xml:space="preserve">
+    <value>Copy file</value>
+  </data>
+  <data name="ScreenshotAfterCopyPath" xml:space="preserve">
+    <value>Copy path</value>
+  </data>
+  <data name="ScreenshotAfterOpenFolder" xml:space="preserve">
+    <value>Show in folder</value>
+  </data>
+  <data name="ScreenshotFileNameInvalid" xml:space="preserve">
+    <value>Invalid file name</value>
+  </data>
+  <data name="ScreenshotExistingOverwrite" xml:space="preserve">
+    <value>Saving will replace the existing file</value>
+  </data>
+  <data name="ScreenshotExistingRename" xml:space="preserve">
+    <value>A number will be added if the file name already exists</value>
+  </data>
+  <data name="ScreenshotExistingFail" xml:space="preserve">
+    <value>The file already exists. Choose another name.</value>
+  </data>
+  <data name="SelectionScreenOrAll" xml:space="preserve">
+    <value>Select current screen / all screens</value>
+  </data>
+  <data name="SelectionPreviousRegion" xml:space="preserve">
+    <value>Previous capture region</value>
+  </data>
+  <data name="SelectionNextRegion" xml:space="preserve">
+    <value>Next capture region</value>
+  </data>
+  <data name="SelectionPreviousScreenshot" xml:space="preserve">
+    <value>Previous screenshot</value>
+  </data>
+  <data name="SelectionNextScreenshot" xml:space="preserve">
+    <value>Next screenshot</value>
+  </data>
+  <data name="SelectionRefreshScreenshot" xml:space="preserve">
+    <value>Refresh screenshot</value>
+  </data>
+  <data name="SelectionMovePointer" xml:space="preserve">
+    <value>Move pointer</value>
+  </data>
+  <data name="CaptureHistoryHasAnnotations" xml:space="preserve">
+    <value>Undo annotations before switching screenshots.</value>
+  </data>
+  <data name="FollowSystem" xml:space="preserve">
+    <value>Follow system</value>
+  </data>
+  <data name="ScreenshotSettings" xml:space="preserve">
+    <value>Screenshots</value>
+  </data>
+  <data name="CaptureScrollShortcuts" xml:space="preserve">
+    <value>Respond to shortcuts</value>
+  </data>
+  <data name="CaptureScrollVertical" xml:space="preserve">
+    <value>Vertical scrolling capture</value>
+  </data>
+  <data name="CaptureScrollHorizontal" xml:space="preserve">
+    <value>Horizontal scrolling capture</value>
+  </data>
+  <data name="CaptureScrollInitialAxis" xml:space="preserve">
+    <value>When starting scrolling capture</value>
+  </data>
+  <data name="PinnedImageLockMove" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="PinnedImageLockResize" xml:space="preserve">
+    <value>Resize</value>
+  </data>
+  <data name="PinnedImageLockClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="PinnedImageLockShortcuts" xml:space="preserve">
+    <value>Shortcuts</value>
+  </data>
+  <data name="PinnedImageLockAnnotation" xml:space="preserve">
+    <value>Annotation</value>
+  </data>
+  <data name="PinnedImageLockedOperations" xml:space="preserve">
+    <value>While locked, disable</value>
+  </data>
+  <data name="CaptureGuideMagnifier" xml:space="preserve">
+    <value>Magnifier</value>
+  </data>
+  <data name="CaptureRegionHistoryCapacity" xml:space="preserve">
+    <value>Region history limit (0 disables)</value>
+  </data>
+  <data name="CaptureScreenshotHistoryCapacity" xml:space="preserve">
+    <value>Screenshot history limit (0 disables)</value>
+  </data>
+  <data name="CaptureScreenshotHistoryMemory" xml:space="preserve">
+    <value>Screenshot history memory (MiB; 0 disables)</value>
+  </data>
+  <data name="PinnedImageSelectableText" xml:space="preserve">
+    <value>Select text in images</value>
+  </data>
+  <data name="SelectionGeometry" xml:space="preserve">
+    <value>Geometry</value>
+  </data>
+  <data name="SelectionGeometryWidth" xml:space="preserve">
+    <value>Width</value>
+  </data>
+  <data name="SelectionGeometryHeight" xml:space="preserve">
+    <value>Height</value>
+  </data>
+  <data name="SelectionGeometryLockRatio" xml:space="preserve">
+    <value>Lock aspect ratio</value>
+  </data>
+  <data name="SelectionGeometryFixedSize" xml:space="preserve">
+    <value>Fixed size</value>
+  </data>
+  <data name="SelectionGeometrySwap" xml:space="preserve">
+    <value>Swap width and height</value>
+  </data>
+  <data name="SelectionCandidateHierarchy" xml:space="preserve">
+    <value>Scroll to select parent or child</value>
+  </data>
+  <data name="SystemStartWithWindows" xml:space="preserve">
+    <value>Start with Windows</value>
+  </data>
+  <data name="SystemRunAsAdministrator" xml:space="preserve">
+    <value>Run as administrator</value>
+  </data>
+  <data name="SystemWindowsOnly" xml:space="preserve">
+    <value>Available on Windows only</value>
+  </data>
+  <data name="SystemAdministratorNextLaunch" xml:space="preserve">
+    <value>Request administrator permission at the next launch</value>
+  </data>
+  <data name="SystemTrayHeading" xml:space="preserve">
+    <value>System tray</value>
+  </data>
+  <data name="SystemTraySingleClick" xml:space="preserve">
+    <value>Single-click action</value>
+  </data>
+  <data name="SystemTrayDoubleClick" xml:space="preserve">
+    <value>Double-click action</value>
+  </data>
+  <data name="SystemTrayMiddleClick" xml:space="preserve">
+    <value>Middle-click action</value>
+  </data>
+  <data name="SystemTrayActionNone" xml:space="preserve">
+    <value>No action</value>
+  </data>
+  <data name="SystemTrayActionShowMainWindow" xml:space="preserve">
+    <value>Show main window</value>
+  </data>
+  <data name="SystemTrayActionScreenshot" xml:space="preserve">
+    <value>Screenshot</value>
+  </data>
+  <data name="SystemTrayActionPinClipboard" xml:space="preserve">
+    <value>Pin clipboard</value>
+  </data>
+  <data name="SystemTrayActionToggleRecording" xml:space="preserve">
+    <value>Start / stop recording</value>
+  </data>
+  <data name="SystemTrayActionOpenSettings" xml:space="preserve">
+    <value>Open settings</value>
+  </data>
+  <data name="SystemOcrLayout" xml:space="preserve">
+    <value>Text layout</value>
+  </data>
+  <data name="SystemOcrLayoutAuto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="SystemOcrLayoutSingle" xml:space="preserve">
+    <value>Single line</value>
+  </data>
+  <data name="SystemOcrLayoutMulti" xml:space="preserve">
+    <value>Multiple lines</value>
+  </data>
+  <data name="SystemOcrDialogWhen" xml:space="preserve">
+    <value>Show dialog when</value>
+  </data>
+  <data name="SystemOcrDialogNever" xml:space="preserve">
+    <value>Never</value>
+  </data>
+  <data name="SystemOcrDialogRecognition" xml:space="preserve">
+    <value>Recognize screenshot text</value>
+  </data>
+  <data name="SystemOcrDialogCopyAll" xml:space="preserve">
+    <value>Copy all text</value>
+  </data>
+  <data name="SystemOcrDialogBoth" xml:space="preserve">
+    <value>Recognize text and copy all text</value>
+  </data>
+  <data name="SystemOcrPunctuation" xml:space="preserve">
+    <value>Punctuation processing</value>
+  </data>
+  <data name="SystemOcrPunctuationNone" xml:space="preserve">
+    <value>No action</value>
+  </data>
+  <data name="SystemOcrPunctuationHalf" xml:space="preserve">
+    <value>Convert to half-width</value>
+  </data>
+  <data name="SystemOcrPunctuationFull" xml:space="preserve">
+    <value>Convert to full-width</value>
+  </data>
+  <data name="SystemOcrFollowApplication" xml:space="preserve">
+    <value>Follow application</value>
+  </data>
+  <data name="SystemUpdateChannel" xml:space="preserve">
+    <value>Update channel</value>
+  </data>
+  <data name="SystemUpdateStable" xml:space="preserve">
+    <value>Stable</value>
+  </data>
+  <data name="SystemUpdatePreview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="SystemUpdatesHeading" xml:space="preserve">
+    <value>Updates</value>
+  </data>
+  <data name="CaptureCursorToggleLabel" xml:space="preserve">
+    <value>Show cursor (press {0} to toggle)</value>
+  </data>
+  <data name="AnnotationEditPalette" xml:space="preserve">
+    <value>Edit palette</value>
+  </data>
+  <data name="AnnotationPaletteAdd" xml:space="preserve">
+    <value>Add color</value>
+  </data>
+  <data name="AnnotationSecondaryEditing" xml:space="preserve">
+    <value>Edit existing annotations</value>
+  </data>
+  <data name="AnnotationQuickSettings" xml:space="preserve">
+    <value>Quick annotation settings</value>
+  </data>
+  <data name="AnnotationQuickMarkMargin" xml:space="preserve">
+    <value>Quick annotation margin</value>
+  </data>
+  <data name="AnnotationEnabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="AnnotationDisabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="AnnotationPencilCursor" xml:space="preserve">
+    <value>Pencil cursor</value>
+  </data>
+  <data name="AnnotationCursorCrosshairRing" xml:space="preserve">
+    <value>Crosshair and ring</value>
+  </data>
+  <data name="AnnotationCursorCrosshair" xml:space="preserve">
+    <value>Crosshair</value>
+  </data>
+  <data name="AnnotationCursorRing" xml:space="preserve">
+    <value>Ring</value>
+  </data>
+  <data name="AnnotationMaximumBrushThickness" xml:space="preserve">
+    <value>Maximum pencil width</value>
+  </data>
+  <data name="AnnotationRememberPinnedTool" xml:space="preserve">
+    <value>Remember the last pin annotation tool</value>
+  </data>
+  <data name="AnnotationDisableWheelAdjustment" xml:space="preserve">
+    <value>Disable wheel adjustment of annotation tools</value>
+  </data>
+  <data name="AnnotationGeometryBehavior" xml:space="preserve">
+    <value>Geometric shapes</value>
+  </data>
+  <data name="AnnotationControlPointVisibility" xml:space="preserve">
+    <value>Control point display</value>
+  </data>
+  <data name="AnnotationControlPointsHover" xml:space="preserve">
+    <value>Show on hover</value>
+  </data>
+  <data name="AnnotationControlPointsAlways" xml:space="preserve">
+    <value>Always show</value>
+  </data>
+  <data name="AnnotationControlPointsHidden" xml:space="preserve">
+    <value>Hidden</value>
+  </data>
+  <data name="AnnotationNumberBehavior" xml:space="preserve">
+    <value>Numbering</value>
+  </data>
+  <data name="AnnotationRenumberOnDelete" xml:space="preserve">
+    <value>Renumber remaining items after deletion</value>
+  </data>
+  <data name="AnnotationNumberStartsAtZero" xml:space="preserve">
+    <value>Start numbering at zero</value>
+  </data>
+  <data name="AnnotationGlobalNumberCounter" xml:space="preserve">
+    <value>Use a global number counter</value>
+  </data>
+  <data name="AnnotationPencilBehavior" xml:space="preserve">
+    <value>Pencil</value>
+  </data>
+  <data name="AnnotationPencilShiftMode" xml:space="preserve">
+    <value>Pencil drawing mode while holding Shift</value>
+  </data>
+  <data name="AnnotationShiftFreeAngle" xml:space="preserve">
+    <value>Free-angle straight line</value>
+  </data>
+  <data name="AnnotationShiftSnapAngle" xml:space="preserve">
+    <value>Snapped-angle straight line</value>
+  </data>
+  <data name="AnnotationSmoothBrush" xml:space="preserve">
+    <value>Smooth strokes</value>
+  </data>
+  <data name="AnnotationPolylineJoin" xml:space="preserve">
+    <value>Polyline join style</value>
+  </data>
+  <data name="AnnotationPolylineCap" xml:space="preserve">
+    <value>Polyline end cap</value>
+  </data>
+  <data name="AnnotationJoinRound" xml:space="preserve">
+    <value>Round</value>
+  </data>
+  <data name="AnnotationJoinBevel" xml:space="preserve">
+    <value>Bevel</value>
+  </data>
+  <data name="AnnotationJoinMiter" xml:space="preserve">
+    <value>Miter</value>
+  </data>
+  <data name="AnnotationCapRound" xml:space="preserve">
+    <value>Round cap</value>
+  </data>
+  <data name="AnnotationCapFlat" xml:space="preserve">
+    <value>Flat cap</value>
+  </data>
+  <data name="AnnotationCapSquare" xml:space="preserve">
+    <value>Square cap</value>
+  </data>
+  <data name="AnnotationTextBehavior" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="AnnotationTextWrapMode" xml:space="preserve">
+    <value>Text wrapping mode</value>
+  </data>
+  <data name="AnnotationWrapWordOrCharacter" xml:space="preserve">
+    <value>Wrap at word boundaries or characters</value>
+  </data>
+  <data name="AnnotationWrapNone" xml:space="preserve">
+    <value>No automatic wrapping</value>
+  </data>
+  <data name="AnnotationEraserSecondaryEditing" xml:space="preserve">
+    <value>Allow editing eraser strokes</value>
+  </data>
+  <data name="PinnedImageRestoreRegion" xml:space="preserve">
+    <value>Restore full image</value>
+  </data>
+  <data name="AnnotationArrowSuppressComment" xml:space="preserve">
+    <value>Do not open comments on arrow double-click</value>
+  </data>
+  <data name="AnnotationArrowHideCurveControls" xml:space="preserve">
+    <value>Hide arrow curve control points</value>
+  </data>
+  <data name="AnnotationAutoMosaic" xml:space="preserve">
+    <value>Detect private regions</value>
+  </data>
+  <data name="AnnotationAutoPrivacy" xml:space="preserve">
+    <value>Select privacy candidates automatically</value>
+  </data>
+  <data name="AnnotationPrivacyDetecting" xml:space="preserve">
+    <value>Detecting candidates…</value>
+  </data>
+  <data name="AnnotationPrivacyCandidates" xml:space="preserve">
+    <value>Selected {0} of {1} · Click a region to toggle</value>
+  </data>
+  <data name="AnnotationPrivacyApply" xml:space="preserve">
+    <value>Apply masks</value>
+  </data>
+  <data name="PinnedImageTransform" xml:space="preserve">
+    <value>Transform image</value>
+  </data>
+  <data name="PinnedImageRotateClockwise" xml:space="preserve">
+    <value>Rotate 90° clockwise</value>
+  </data>
+  <data name="PinnedImageRotate180" xml:space="preserve">
+    <value>Rotate 180°</value>
+  </data>
+  <data name="ScrollCaptureAutomaticUnavailable" xml:space="preserve">
+    <value>Automatic scrolling is unavailable for this platform or region</value>
+  </data>
+  <data name="ScrollCaptureAutomaticRunning" xml:space="preserve">
+    <value>Scrolling automatically</value>
+  </data>
+  <data name="ScrollCaptureAutomaticAtEnd" xml:space="preserve">
+    <value>Reached the end</value>
+  </data>
+  <data name="ScrollCaptureAutomaticNoChange" xml:space="preserve">
+    <value>No image change; automatic scrolling stopped</value>
+  </data>
+  <data name="ScrollCaptureAutomaticFailed" xml:space="preserve">
+    <value>Cannot scroll the target window</value>
+  </data>
+  <data name="ScrollCaptureAutomaticUnmatched" xml:space="preserve">
+    <value>Cannot match the image; automatic scrolling stopped</value>
+  </data>
+  <data name="SettingsResetAll" xml:space="preserve">
+    <value>Reset all defaults</value>
+  </data>
+  <data name="SettingsResetCurrent" xml:space="preserve">
+    <value>Reset page defaults</value>
+  </data>
+  <data name="SettingsResetAllHint" xml:space="preserve">
+    <value>Reset all settings and clear custom actions, shortcuts and preset links. Templates, recordings and pinned images are not deleted.</value>
+  </data>
+  <data name="SettingsResetCurrentHint" xml:space="preserve">
+    <value>Reset this page and keep unsaved changes on other pages.</value>
+  </data>
+  <data name="SettingsResetActionsHint" xml:space="preserve">
+    <value>Reset basic shortcuts and hotkey policy. Custom actions and their bindings are kept.</value>
+  </data>
+  <data name="GlobalActionScreenshotAndCopyText" xml:space="preserve">
+    <value>Screenshot and copy text</value>
+  </data>
+  <data name="GlobalActionScreenshotAndScroll" xml:space="preserve">
+    <value>Scrolling screenshot</value>
+  </data>
+  <data name="GlobalActionClosePinnedImages" xml:space="preserve">
+    <value>Close all pinned images</value>
+  </data>
+  <data name="GlobalActionTogglePinnedImages" xml:space="preserve">
+    <value>Hide/show all pinned images</value>
+  </data>
+  <data name="GlobalActionToggleGlobalShortcuts" xml:space="preserve">
+    <value>Suspend other global shortcuts</value>
+  </data>
+  <data name="GlobalActionDelay" xml:space="preserve">
+    <value>Delay (seconds)</value>
+  </data>
+  <data name="GlobalActionInvalidDelay" xml:space="preserve">
+    <value>Delay must be between 0 and 86400 seconds</value>
+  </data>
+  <data name="ScreenshotOutputSize" xml:space="preserve">
+    <value>Output size</value>
+  </data>
+  <data name="ScreenshotSizeOriginal" xml:space="preserve">
+    <value>Original size</value>
+  </data>
+  <data name="ScreenshotSizePercent" xml:space="preserve">
+    <value>Scale</value>
+  </data>
+  <data name="ScreenshotSizeFit" xml:space="preserve">
+    <value>Fit within</value>
+  </data>
+  <data name="ScreenshotSizeExact" xml:space="preserve">
+    <value>Exact size</value>
+  </data>
+  <data name="ScreenshotHdpiNoReduction" xml:space="preserve">
+    <value>No reduction</value>
+  </data>
+  <data name="ScreenshotHdpiReduction" xml:space="preserve">
+    <value>Reduce high DPI copies to</value>
+  </data>
+  <data name="ScreenshotPasteAfterCopy" xml:space="preserve">
+    <value>Paste copied screenshots into the original input</value>
+  </data>
+  <data name="PinnedSelectionAlignLeft" xml:space="preserve">
+    <value>Align left</value>
+  </data>
+  <data name="PinnedSelectionAlignCenter" xml:space="preserve">
+    <value>Align horizontal centers</value>
+  </data>
+  <data name="PinnedSelectionAlignRight" xml:space="preserve">
+    <value>Align right</value>
+  </data>
+  <data name="PinnedSelectionAlignTop" xml:space="preserve">
+    <value>Align top</value>
+  </data>
+  <data name="PinnedSelectionAlignMiddle" xml:space="preserve">
+    <value>Align vertical centers</value>
+  </data>
+  <data name="PinnedSelectionAlignBottom" xml:space="preserve">
+    <value>Align bottom</value>
+  </data>
+  <data name="PinnedSelectionDistributeHorizontal" xml:space="preserve">
+    <value>Distribute horizontally</value>
+  </data>
+  <data name="PinnedSelectionDistributeVertical" xml:space="preserve">
+    <value>Distribute vertically</value>
+  </data>
+  <data name="PinnedSelectionCompactHorizontal" xml:space="preserve">
+    <value>Arrange in a row</value>
+  </data>
+  <data name="PinnedSelectionCompactVertical" xml:space="preserve">
+    <value>Arrange in a column</value>
+  </data>
+  <data name="PinnedSelectionCompact" xml:space="preserve">
+    <value>Compact arrangement</value>
+  </data>
+  <data name="PinnedSelectionAlign" xml:space="preserve">
+    <value>Align</value>
+  </data>
+  <data name="PinnedSelectionDistribute" xml:space="preserve">
+    <value>Distribute</value>
+  </data>
+  <data name="PinnedSelectionCount" xml:space="preserve">
+    <value>{0} pinned images selected</value>
+  </data>
+  <data name="PinnedSelectionSave" xml:space="preserve">
+    <value>Save selected images</value>
+  </data>
+  <data name="PinnedSelectionSaveProgress" xml:space="preserve">
+    <value>Saving {0}/{1}</value>
+  </data>
+  <data name="ScreenshotPastePlatformUnavailable" xml:space="preserve">
+    <value>Automatic pasting is unavailable on this platform</value>
+  </data>
+  <data name="AnnotationBlurRadius" xml:space="preserve"><value>Blur radius</value></data>
+  <data name="SelectionFrameRounded" xml:space="preserve"><value>Rounded corners</value></data>
+  <data name="SelectionFrameRatio" xml:space="preserve"><value>Keep aspect ratio</value></data>
+  <data name="SelectionFrameDecoration" xml:space="preserve"><value>Shadow or border</value></data>
+  <data name="SelectionFrameRefresh" xml:space="preserve"><value>Refresh screenshot</value></data>
+  <data name="SelectionFrameCornerRadius" xml:space="preserve"><value>Corner radius</value></data>
+  <data name="SelectionFrameShadow" xml:space="preserve"><value>Shadow</value></data>
+  <data name="SelectionFrameBorder" xml:space="preserve"><value>Border</value></data>
+  <data name="SelectionFrameRemember" xml:space="preserve"><value>Enable for every screenshot</value></data>
+  <data name="SelectionFrameStrength" xml:space="preserve"><value>Strength</value></data>
+  <data name="ToolbarActionsTitle" xml:space="preserve">
+    <value>Customize action buttons</value>
+  </data>
+  <data name="ToolbarToolsTitle" xml:space="preserve">
+    <value>Customize annotation buttons</value>
+  </data>
+  <data name="ToolbarActionsDragHint" xml:space="preserve">
+    <value>Drag items to reorder. Choose where each action appears.</value>
+  </data>
+  <data name="ToolbarToolsDragHint" xml:space="preserve">
+    <value>Drag tools to reorder or group them. Tools outside the toolbar remain available in More.</value>
+  </data>
+  <data name="ToolbarRestoreDefaults" xml:space="preserve">
+    <value>Restore defaults</value>
+  </data>
+  <data name="ToolbarVisibilityToolbar" xml:space="preserve">
+    <value>Show on toolbar</value>
+  </data>
+  <data name="ToolbarVisibilityMoreMenu" xml:space="preserve">
+    <value>Show in More</value>
+  </data>
+  <data name="ToolbarVisibilityHidden" xml:space="preserve">
+    <value>Always hide</value>
+  </data>
+  <data name="ToolbarDragAction" xml:space="preserve">
+    <value>Drag to reorder action</value>
+  </data>
+  <data name="ToolbarDragColumn" xml:space="preserve">
+    <value>Drag to reorder group</value>
+  </data>
+  <data name="ToolbarToolsOutside" xml:space="preserve">
+    <value>Not on toolbar</value>
+  </data>
+  <data name="ToolbarNewColumn" xml:space="preserve">
+    <value>New group</value>
+  </data>
+  <data name="ToolbarNewColumnHint" xml:space="preserve">
+    <value>Drop a tool here to create a group</value>
+  </data>
+  <data name="ToolbarPrimaryToolHint" xml:space="preserve">
+    <value>The first tool is the default group icon</value>
+  </data>
+  <data name="ToolbarEditButtons" xml:space="preserve">
+    <value>Edit buttons</value>
+  </data>
+  <data name="ToolbarMove" xml:space="preserve">
+    <value>Move toolbar</value>
+  </data>
+  <data name="ToolbarMoveHint" xml:space="preserve">
+    <value>Drag toolbar; double-click to restore automatic placement</value>
+  </data>
 </root>

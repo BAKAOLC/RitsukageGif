@@ -28,7 +28,10 @@ namespace RitsukageGif.Core
                 image.AnimationIterations = images[0].AnimationIterations;
                 image.GifDisposeMethod = GifDisposeMethod.Background;
                 complete.Add(image);
-                if (previous is not null) canvas.Composite(previous, CompositeOperator.Src);
+                if (previous is not null)
+                {
+                    canvas.Composite(previous, CompositeOperator.Src);
+                }
                 else if (frame.GifDisposeMethod == GifDisposeMethod.Background)
                 {
                     using var empty =
@@ -126,7 +129,7 @@ namespace RitsukageGif.Core
 
             if (!ended || width == 0 || height == 0 || (animated && frames != declaredFrames))
                 throw new InvalidDataException();
-            return new MediaInfo(path, stream.Length, width, height, Math.Max(1, frames), duration,
+            return new(path, stream.Length, width, height, Math.Max(1, frames), duration,
                 animated ? "apng" : "png");
         }
 
@@ -148,43 +151,51 @@ namespace RitsukageGif.Core
                 using var png = new MemoryStream(image.ToByteArray(MagickFormat.Png32));
                 png.Position = 8;
                 foreach (var (type, data) in ReadChunks(png, false))
-                    if (type == "IHDR")
+                    switch (type)
                     {
-                        if (index == 0)
+                        case "IHDR":
                         {
-                            WriteChunk(stream, type, data);
-                            var animation = new byte[8];
-                            Put(animation, 0, (uint)frames);
-                            Put(animation, 4, image.AnimationIterations);
-                            WriteChunk(stream, "acTL", animation);
-                        }
+                            if (index == 0)
+                            {
+                                WriteChunk(stream, type, data);
+                                var animation = new byte[8];
+                                Put(animation, 0, (uint)frames);
+                                Put(animation, 4, image.AnimationIterations);
+                                WriteChunk(stream, "acTL", animation);
+                            }
 
-                        var control = new byte[26];
-                        Put(control, 0, sequence++);
-                        Put(control, 4, image.Width);
-                        Put(control, 8, image.Height);
-                        var numerator = image.AnimationDelay;
-                        var denominator =
-                            (uint)(image.AnimationTicksPerSecond == 0 ? 100 : image.AnimationTicksPerSecond);
-                        var divisor = Gcd(numerator, denominator);
-                        numerator /= divisor;
-                        denominator /= divisor;
-                        if (numerator > ushort.MaxValue || denominator > ushort.MaxValue)
-                            throw new InvalidDataException();
-                        BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(20), (ushort)numerator);
-                        BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(22), (ushort)denominator);
-                        WriteChunk(stream, "fcTL", control);
-                    }
-                    else if (type == "IDAT")
-                    {
-                        if (index == 0) WriteChunk(stream, type, data);
-                        else
-                        {
-                            var frameData = new byte[data.Length + 4];
-                            Put(frameData, 0, sequence++);
-                            data.CopyTo(frameData, 4);
-                            WriteChunk(stream, "fdAT", frameData);
+                            var control = new byte[26];
+                            Put(control, 0, sequence++);
+                            Put(control, 4, image.Width);
+                            Put(control, 8, image.Height);
+                            var numerator = image.AnimationDelay;
+                            var denominator =
+                                (uint)(image.AnimationTicksPerSecond == 0 ? 100 : image.AnimationTicksPerSecond);
+                            var divisor = Gcd(numerator, denominator);
+                            numerator /= divisor;
+                            denominator /= divisor;
+                            if (numerator > ushort.MaxValue || denominator > ushort.MaxValue)
+                                throw new InvalidDataException();
+                            BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(20), (ushort)numerator);
+                            BinaryPrimitives.WriteUInt16BigEndian(control.AsSpan(22), (ushort)denominator);
+                            WriteChunk(stream, "fcTL", control);
+                            break;
                         }
+                        case "IDAT":
+                        {
+                            if (index == 0)
+                            {
+                                WriteChunk(stream, type, data);
+                            }
+                            else
+                            {
+                                var frameData = new byte[data.Length + 4];
+                                Put(frameData, 0, sequence++);
+                                data.CopyTo(frameData, 4);
+                                WriteChunk(stream, "fdAT", frameData);
+                            }
+                        }
+                            break;
                     }
 
                 index++;
@@ -203,12 +214,13 @@ namespace RitsukageGif.Core
                 var length = checked((int)Read(prefix, 0));
                 if (length > stream.Length - stream.Position - 4) throw new InvalidDataException();
                 var type = Encoding.ASCII.GetString(prefix, 4, 4);
-                if (type == "IEND" && length != 0) throw new InvalidDataException();
-                if (metadataOnly && type is not ("IHDR" or "fcTL" or "acTL"))
+                switch (type)
                 {
-                    stream.Position += length + 4;
-                    yield return (type, []);
-                    continue;
+                    case "IEND" when length != 0: throw new InvalidDataException();
+                    case not ("IHDR" or "fcTL" or "acTL") when metadataOnly:
+                        stream.Position += length + 4;
+                        yield return (type, []);
+                        continue;
                 }
 
                 if (metadataOnly && length > 26) throw new InvalidDataException();

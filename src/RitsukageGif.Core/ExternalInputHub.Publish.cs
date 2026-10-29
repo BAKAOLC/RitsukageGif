@@ -36,7 +36,9 @@ namespace RitsukageGif.Core
                 _bytes += owned.Length;
                 channel.FrameTimestamp = timestamp;
                 channel.FrameVersion = frame.Version;
-                channel.Published++;
+                if (channel.Published++ == 0)
+                    Logger.ZLogInformation(
+                        $"External input publisher produced its first frame: lease={channel.Lease}, width={width}, height={height}, bytes={owned.Length}");
                 return true;
             }
         }
@@ -46,16 +48,16 @@ namespace RitsukageGif.Core
             ArgumentNullException.ThrowIfNull(json);
             ValidateTimestamp(timestamp);
             if (json.Length > MaximumJsonBytes || Utf8.GetByteCount(json) > MaximumJsonBytes)
-                throw new ArgumentException(nameof(json));
+                throw new ArgumentException(null, nameof(json));
             try
             {
-                using var document = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 64 });
+                using var document = JsonDocument.Parse(json, new() { MaxDepth = 64 });
                 var remaining = 100000;
                 ValidateJson(document.RootElement, ref remaining);
             }
             catch (JsonException ex)
             {
-                throw new ArgumentException(nameof(json), ex);
+                throw new ArgumentException(null, nameof(json), ex);
             }
 
             lock (_gate)
@@ -99,6 +101,10 @@ namespace RitsukageGif.Core
                     }
 
                     break;
+                case JsonValueKind.Null or JsonValueKind.True or JsonValueKind.False:
+                    break;
+                default:
+                    throw new ArgumentException(UiText.Get("ScriptTypeError"));
             }
         }
 

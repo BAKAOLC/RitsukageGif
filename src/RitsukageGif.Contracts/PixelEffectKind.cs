@@ -7,6 +7,6 @@ namespace RitsukageGif.Contracts
         Fill,
         Grayscale,
         Invert,
-        BrightnessContrast
+        BrightnessContrast,
     }
 }

@@ -8,39 +8,49 @@ namespace RitsukageGif.Core
 {
     internal sealed class StreamingPngWriter : IDisposable
     {
-        private readonly Stream _stream;
-        private readonly int _width;
-        private readonly CancellationToken _token;
-        private readonly byte[] _row;
-        private readonly byte[] _lastControl = new byte[26];
         private readonly long _animationPosition;
+        private readonly bool _hdr;
         private readonly uint _iterations;
+        private readonly byte[] _lastControl = new byte[26];
+        private readonly byte[] _row;
+        private readonly Stream _stream;
+        private readonly CancellationToken _token;
+        private readonly int _width;
         private long _controlPosition;
-        private uint _sequence, _frames;
         private int _lastDelay;
+        private uint _sequence, _frames;
 
-        public StreamingPngWriter(Stream stream, int width, int height, CancellationToken token, uint iterations = 0)
+        public StreamingPngWriter(Stream stream, int width, int height, CancellationToken token, uint iterations = 0,
+            bool hdr = false)
         {
             _stream = stream;
             _width = width;
             _token = token;
             _iterations = iterations;
+            _hdr = hdr;
             stream.Write([137, 80, 78, 71, 13, 10, 26, 10]);
             Span<byte> header = stackalloc byte[13];
             header.Clear();
             BinaryPrimitives.WriteUInt32BigEndian(header, (uint)width);
             BinaryPrimitives.WriteUInt32BigEndian(header[4..], (uint)height);
-            header[8] = 8;
+            header[8] = hdr ? (byte)16 : (byte)8;
             header[9] = 6;
             WriteChunk("IHDR"u8, header);
+            if (hdr) WriteChunk("cICP"u8, [9, 16, 0, 1]);
             _animationPosition = stream.Position;
             Span<byte> animation = stackalloc byte[8];
             animation.Clear();
             WriteChunk("acTL"u8, animation);
-            _row = ArrayPool<byte>.Shared.Rent(checked(width * 4 + 1));
+            _row = ArrayPool<byte>.Shared.Rent(checked(width * (hdr ? 8 : 4) + 1));
         }
 
-        public void Add(byte[] pixels, PixelRect bounds, int delay)
+        public void Dispose()
+        {
+            ArrayPool<byte>.Shared.Return(_row);
+        }
+
+        public void Add(byte[] pixels, PixelRect bounds, int delay,
+            CaptureAlphaMode alphaMode = CaptureAlphaMode.Straight)
         {
             if (bounds.IsEmpty)
             {
@@ -56,22 +66,22 @@ namespace RitsukageGif.Core
                     _stream.Position = end;
                 }
 
-                bounds = new PixelRect(0, 0, 1, 1);
+                bounds = new(0, 0, 1, 1);
             }
 
             while (delay > 0)
             {
                 _token.ThrowIfCancellationRequested();
                 var part = Math.Min(delay, ushort.MaxValue);
-                WriteFrame(pixels, bounds, part);
+                WriteFrame(pixels, bounds, part, alphaMode);
                 delay -= part;
-                bounds = new PixelRect(0, 0, 1, 1);
+                bounds = new(0, 0, 1, 1);
             }
 
             _stream.Flush();
         }
 
-        private void WriteFrame(byte[] pixels, PixelRect bounds, int delay)
+        private void WriteFrame(byte[] pixels, PixelRect bounds, int delay, CaptureAlphaMode alphaMode)
         {
             _lastControl.AsSpan().Clear();
             BinaryPrimitives.WriteUInt32BigEndian(_lastControl, NextSequence());
@@ -88,18 +98,27 @@ namespace RitsukageGif.Core
             WriteChunk("fcTL"u8, _lastControl);
             using (var chunks = new PngDataChunkStream(this, _frames == 0, _token))
             using (var compressed = new ZLibStream(chunks, CompressionLevel.Optimal, true))
-            {
                 for (var y = 0; y < bounds.Height; y++)
                 {
                     _token.ThrowIfCancellationRequested();
-                    var row = _row.AsSpan(0, bounds.Width * 4 + 1);
+                    var bytesPerPixel = _hdr ? 8 : 4;
+                    var row = _row.AsSpan(0, bounds.Width * bytesPerPixel + 1);
                     row[0] = 1; // PNG Sub filter: cheap and effective on gradients and UI rows.
-                    var input = pixels.AsSpan(((bounds.Y + y) * _width + bounds.X) * 4, bounds.Width * 4);
-                    FilterRow(input, row[1..]);
+                    var input = pixels.AsSpan(((bounds.Y + y) * _width + bounds.X) * bytesPerPixel,
+                        bounds.Width * bytesPerPixel);
+                    if (_hdr)
+                    {
+                        HdrPngColor.EncodeRow(input, row[1..], alphaMode);
+                        for (var offset = row.Length - 1; offset > bytesPerPixel; offset--)
+                            row[offset] = unchecked((byte)(row[offset] - row[offset - bytesPerPixel]));
+                    }
+                    else
+                    {
+                        FilterRow(input, row[1..]);
+                    }
 
                     compressed.Write(row);
                 }
-            }
 
             _frames = checked(_frames + 1);
         }
@@ -135,7 +154,10 @@ namespace RitsukageGif.Core
 
         internal void WriteData(bool first, ReadOnlySpan<byte> data)
         {
-            if (first) WriteChunk("IDAT"u8, data);
+            if (first)
+            {
+                WriteChunk("IDAT"u8, data);
+            }
             else
             {
                 Span<byte> sequence = stackalloc byte[4];
@@ -181,7 +203,5 @@ namespace RitsukageGif.Core
             BinaryPrimitives.WriteUInt32BigEndian(checksum, ~crc);
             _stream.Write(checksum);
         }
-
-        public void Dispose() => ArrayPool<byte>.Shared.Return(_row);
     }
 }

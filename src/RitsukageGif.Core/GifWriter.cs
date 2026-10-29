@@ -4,10 +4,10 @@ namespace RitsukageGif.Core
 {
     internal sealed class GifWriter : IDisposable
     {
+        private readonly bool _clearCanvas;
         private readonly Stream _stream;
         private int _delay;
         private long _delayOffset;
-        private readonly bool _clearCanvas;
 
         public GifWriter(Stream stream, int width, int height, bool clearCanvas = false, uint iterations = 0)
         {
@@ -16,7 +16,7 @@ namespace RitsukageGif.Core
             _stream.Write("GIF89a"u8);
             WriteWord(width);
             WriteWord(height);
-            _stream.Write([0x70, 0, 0]);
+            _stream.Write("p\0\0"u8);
             if (iterations != 1)
             {
                 _stream.Write([0x21, 0xff, 11]);

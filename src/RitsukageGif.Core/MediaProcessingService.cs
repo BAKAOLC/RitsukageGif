@@ -4,28 +4,52 @@ namespace RitsukageGif.Core
 {
     public sealed partial class MediaProcessingService : IMediaProcessingService, IMediaOptimizationService
     {
-        public Task<MediaOptimizationResult> OptimizeAsync(string input, string output,
-            MediaOptimizationOptions options, CancellationToken token = default) =>
-            new MediaOptimizationService(this).OptimizeAsync(input, output, options, token);
-
         private const long PixelBudget = 512L * 1024 * 1024;
+
+        public Task<MediaOptimizationResult> OptimizeAsync(string input, string output,
+            MediaOptimizationOptions options, CancellationToken token = default)
+        {
+            return new MediaOptimizationService(this).OptimizeAsync(input, output, options, token);
+        }
 
         public Task<MediaInfo> InspectAsync(string path, CancellationToken token = default)
         {
-            return Task.Run(() => Inspect(Path.GetFullPath(path), token), token);
+            return Task.Run(() =>
+            {
+                Logger.ZLogDebug($"Media inspection started");
+                try
+                {
+                    var result = Inspect(Path.GetFullPath(path), token);
+                    Logger.ZLogDebug(
+                        $"Media inspection completed: format={result.Format}, width={result.Width}, height={result.Height}, frames={result.Frames}, bytes={result.Bytes}");
+                    return result;
+                }
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
+                {
+                    Logger.ZLogDebug($"Media inspection canceled");
+                    throw;
+                }
+                catch (Exception error)
+                {
+                    Logger.ZLogWarning(error,
+                        $"Media inspection failed: exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                    throw;
+                }
+            }, token);
         }
 
         public Task<MediaInfo> ProcessAsync(string input, string output, MediaProcessOptions options,
             CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(options);
-            return Task.Run(() => Process(Path.GetFullPath(input), Path.GetFullPath(output), options, token), token);
+            return Task.Run(
+                () => ProcessWithDiagnostics(Path.GetFullPath(input), Path.GetFullPath(output), options, token), token);
         }
 
         internal static Task<MediaInfo> ProcessPreparedAsync(PreparedMediaInput input, string output,
             MediaProcessOptions options, CancellationToken token)
         {
-            return Task.Run(() => Process(input.Info.Path, output, options, token, input), token);
+            return Task.Run(() => ProcessWithDiagnostics(input.Info.Path, output, options, token, input), token);
         }
 
         internal static MagickImageCollection Decode(string input, MediaInfo info, CancellationToken token)
@@ -35,7 +59,7 @@ namespace RitsukageGif.Core
             token.ThrowIfCancellationRequested();
             var images = info.Format is "png" or "apng"
                 ? MediaPngCodec.ReadImages(input, token)
-                : new MagickImageCollection();
+                : new();
             try
             {
                 if (info.Format is not ("png" or "apng"))
@@ -49,9 +73,13 @@ namespace RitsukageGif.Core
                 if (info.Format == "apng") images[0].AnimationIterations = MediaPngCodec.ReadIterations(input);
                 foreach (var image in images)
                     image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
-                if (info.Format == "apng") MediaPngCodec.Coalesce(images, token);
-                else if (info.Format == "webp") MediaWebpCodec.Coalesce(input, images, info.Width, info.Height, token);
-                else images.Coalesce();
+                switch (info.Format)
+                {
+                    case "apng": MediaPngCodec.Coalesce(images, token); break;
+                    case "webp": MediaWebpCodec.Coalesce(input, images, info.Width, info.Height, token); break;
+                    default: images.Coalesce(); break;
+                }
+
                 token.ThrowIfCancellationRequested();
                 return images;
             }
@@ -72,7 +100,7 @@ namespace RitsukageGif.Core
             if (images.Count == 0) throw new InvalidDataException();
             var width = images.Max(image => Math.Max(image.Width, image.Page.Width));
             var height = images.Max(image => Math.Max(image.Height, image.Page.Height));
-            return new MediaInfo(path, new FileInfo(path).Length, checked((int)width), checked((int)height),
+            return new(path, new FileInfo(path).Length, checked((int)width), checked((int)height),
                 images.Count, images.Sum(image =>
                     image.AnimationDelay /
                     (double)(image.AnimationTicksPerSecond == 0 ? 100 : image.AnimationTicksPerSecond)),
@@ -96,25 +124,21 @@ namespace RitsukageGif.Core
             var outputEffects = options.Effects?.Where(effect => effect.Space == PixelEffectSpace.Output).ToArray();
             var info = prepared?.Info ?? Inspect(input, token);
             var format = (options.Format ?? Path.GetExtension(output).TrimStart('.')).ToLowerInvariant();
-            if (format is not ("gif" or "webp" or "png" or "apng"))
-                throw new ArgumentOutOfRangeException(nameof(options.Format));
-            if (options.FrameIndex is < 0 || options.FrameIndex >= info.Frames)
-                throw new ArgumentOutOfRangeException(nameof(options.FrameIndex));
+            if (format is not ("gif" or "webp" or "png" or "apng") ||
+                options.FrameIndex is < 0 || options.FrameIndex >= info.Frames)
+                throw new ArgumentOutOfRangeException(nameof(options));
             if (format == "png" && info.Frames > 1 && !options.FrameIndex.HasValue)
-                throw new ArgumentException(nameof(options.Format));
-            if (options.Colors is < 2 or > 256) throw new ArgumentOutOfRangeException(nameof(options.Colors));
-            if (options.Quality is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(options.Quality));
-            if (options.Width is <= 0 || options.Height is <= 0)
-                throw new ArgumentOutOfRangeException(nameof(options.Width));
-            if (options.Rotation is not (0 or 90 or 180 or 270))
-                throw new ArgumentOutOfRangeException(nameof(options.Rotation));
+                throw new ArgumentException(null, nameof(options));
+            if (options is { Colors: < 2 or > 256 } or { Quality: < 1 or > 100 } or
+                { Width: <= 0 } or { Height: <= 0 } or { Rotation: not (0 or 90 or 180 or 270) })
+                throw new ArgumentOutOfRangeException(nameof(options));
             var crop = options.CropX.HasValue || options.CropY.HasValue || options.CropWidth.HasValue ||
                        options.CropHeight.HasValue;
             if (crop && (options.CropX is null or < 0 || options.CropY is null or < 0 ||
                          options.CropWidth is null or <= 0 || options.CropHeight is null or <= 0 ||
                          (long)options.CropX + options.CropWidth > info.Width ||
                          (long)options.CropY + options.CropHeight > info.Height))
-                throw new ArgumentOutOfRangeException(nameof(options.CropWidth));
+                throw new ArgumentOutOfRangeException(nameof(options));
             var width = options.CropWidth ?? info.Width;
             var height = options.CropHeight ?? info.Height;
             if (options.Rotation is 90 or 270) (width, height) = (height, width);
@@ -140,9 +164,11 @@ namespace RitsukageGif.Core
             try
             {
                 if (streamApng)
+                {
                     MediaPngCodec.Write(TransformFrames(MediaPngCodec.ReadCoalescedFrames(input, info, token),
                             options, crop, targetWidth, targetHeight, sourceEffects, outputEffects, token),
                         info.Frames, temporary, token);
+                }
                 else
                 {
                     using var images = prepared is null
@@ -154,7 +180,6 @@ namespace RitsukageGif.Core
                     if (options.FrameIndex is { } frameIndex)
                     {
                         if (prepared is null && !singleApngFrame)
-                        {
                             // Remove unwanted frames in place; extracting one frame requires no pixel clone.
                             for (var index = images.Count - 1; index >= 0; index--)
                                 if (index != frameIndex)
@@ -162,7 +187,6 @@ namespace RitsukageGif.Core
                                     images[index].Dispose();
                                     images.RemoveAt(index);
                                 }
-                        }
 
                         images[0].AnimationDelay = 0;
                     }
@@ -176,7 +200,7 @@ namespace RitsukageGif.Core
                     else
                         images.Write(temporary, format switch
                         {
-                            "gif" => MagickFormat.Gif, "webp" => MagickFormat.WebP, _ => MagickFormat.Png
+                            "gif" => MagickFormat.Gif, "webp" => MagickFormat.WebP, _ => MagickFormat.Png,
                         });
                 }
 
@@ -218,13 +242,19 @@ namespace RitsukageGif.Core
             image.ResetPage();
             ApplyEffects(image, outputEffects, token);
             image.Quality = (uint)options.Quality;
-            if (format == "gif")
-                image.Quantize(new QuantizeSettings
-                {
-                    Colors = (uint)options.Colors,
-                    DitherMethod = options.Dither ? DitherMethod.FloydSteinberg : DitherMethod.No
-                });
-            if (format == "webp") image.Settings.SetDefine(MagickFormat.WebP, "lossless", options.Lossless);
+            switch (format)
+            {
+                case "gif":
+                    image.Quantize(new QuantizeSettings
+                    {
+                        Colors = (uint)options.Colors,
+                        DitherMethod = options.Dither ? DitherMethod.FloydSteinberg : DitherMethod.No,
+                    });
+                    break;
+                case "webp":
+                    image.Settings.SetDefine(MagickFormat.WebP, "lossless", options.Lossless);
+                    break;
+            }
         }
 
         private static IEnumerable<IMagickImage<byte>> TransformFrames(IEnumerable<IMagickImage<byte>> frames,
@@ -268,7 +298,8 @@ namespace RitsukageGif.Core
             if (effects is not { Count: > 0 }) return;
             byte[] pixels;
             using (var collection = image.GetPixels()) pixels = collection.ToByteArray(PixelMapping.BGRA)!;
-            PixelEffectProcessor.Apply(pixels, checked((int)image.Width), checked((int)image.Height), effects, token);
+            PixelEffectProcessor.Apply(pixels, checked((int)image.Width), checked((int)image.Height), effects,
+                token: token);
             var delay = image.AnimationDelay;
             var ticks = image.AnimationTicksPerSecond;
             var iterations = image.AnimationIterations;

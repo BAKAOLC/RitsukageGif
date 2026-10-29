@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 
 namespace RitsukageGif.Core
@@ -8,24 +9,27 @@ namespace RitsukageGif.Core
         {
             private const long MemoryLimit = 64L * 1024 * 1024;
             private const long BacklogDiskLimit = 4L * 1024 * 1024 * 1024;
+            private readonly CancellationTokenSource _abort;
+            private readonly string _directory;
+            private readonly bool _live;
+            private readonly long _outputId = Interlocked.Increment(ref _nextOutputId);
+
+            private readonly IProgress<MultiRecordingProgress>? _progress;
 
             private readonly Channel<QueuedFrame> _queue = Channel.CreateBounded<QueuedFrame>(
                 new BoundedChannelOptions(100000)
                     { SingleReader = true, SingleWriter = true, FullMode = BoundedChannelFullMode.Wait });
 
-            private readonly IProgress<MultiRecordingProgress>? _progress;
-            private readonly CancellationTokenSource _abort;
-            private readonly string _directory;
             private readonly string _staging;
-            private readonly bool _live;
-            private long _memory;
-            private long _disk;
             private int _captured;
-            private int _encoded;
-            private double _last;
-            private double _end;
             private int _completed;
+            private long _disk;
+            private int _encoded;
+            private double _end;
             private Exception? _failure;
+            private double _last;
+            private long _memory;
+            private long _nextLogAt = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 5;
 
             public OutputState(MultiRecordingOutput output, IProgress<MultiRecordingProgress>? progress,
                 CancellationToken cancel)
@@ -40,13 +44,9 @@ namespace RitsukageGif.Core
                                                                              "." + output.Options.Format.ToString()
                                                                                  .ToLowerInvariant());
                 _live = !(output.Options.UseFfmpeg && FfmpegEncoder.FindExecutable() is not null);
+                Logger.ZLogDebug(
+                    $"Multi-output recording stream initialized: streamId={_outputId}, width={output.Options.Width}, height={output.Options.Height}, fps={output.Options.Fps}, format={output.Options.Format.ToString()}");
                 Next = 1000.0 / output.Options.Fps;
-            }
-
-            public void Prepare()
-            {
-                Directory.CreateDirectory(_directory);
-                Directory.CreateDirectory(Path.GetDirectoryName(_staging)!);
             }
 
             public MultiRecordingOutput Output { get; }
@@ -55,6 +55,76 @@ namespace RitsukageGif.Core
             public Task EnqueueWorker { get; private set; } = Task.CompletedTask;
             public double Next { get; set; }
             public Exception? Failure => Volatile.Read(ref _failure);
+
+            public void Dispose()
+            {
+                try
+                {
+                    Source?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Logger.ZLogWarning(ex,
+                        $"Multi-output capture disposal failed: exceptionType={ex.GetType().Name}, hResult={ex.HResult}");
+                }
+
+                _abort.Dispose();
+                while (_queue.Reader.TryRead(out _))
+                {
+                }
+
+                try
+                {
+                    File.Delete(_staging);
+                }
+                catch (DirectoryNotFoundException)
+                {
+                }
+                catch (IOException error)
+                {
+                    Logger.ZLogWarning(error,
+                        $"Multi-output staging cleanup deferred: staging={_staging}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                }
+                catch (UnauthorizedAccessException error)
+                {
+                    Logger.ZLogWarning(error,
+                        $"Multi-output staging cleanup denied: staging={_staging}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                }
+
+                try
+                {
+                    Directory.Delete(_directory, true);
+                }
+                catch (DirectoryNotFoundException)
+                {
+                }
+                catch (IOException error)
+                {
+                    Logger.ZLogWarning(error,
+                        $"Multi-output temporary storage cleanup deferred: directory={_directory}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                }
+                catch (UnauthorizedAccessException error)
+                {
+                    Logger.ZLogWarning(error,
+                        $"Multi-output temporary storage cleanup denied: directory={_directory}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                }
+            }
+
+            public void Report(RecordingProgress value)
+            {
+                if (value.Stage != RecordingStage.Recording)
+                    value = value with
+                    {
+                        Stage = Volatile.Read(ref _completed) == 0 ? RecordingStage.Live : RecordingStage.Encoding,
+                    };
+                ReportProgress(value);
+            }
+
+            public void Prepare()
+            {
+                Directory.CreateDirectory(_directory);
+                Directory.CreateDirectory(Path.GetDirectoryName(_staging)!);
+            }
 
             public void Enqueue(byte[] pixels, double time)
             {
@@ -81,20 +151,24 @@ namespace RitsukageGif.Core
                     throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
                 QueuedFrame frame;
                 if (Interlocked.Add(ref _memory, pixels.Length) <= MemoryLimit)
-                    frame = new QueuedFrame(pixels, null, time);
+                {
+                    frame = new(pixels, null, time);
+                }
                 else
                 {
                     Interlocked.Add(ref _memory, -pixels.Length);
                     ReserveBacklogDisk(pixels.Length);
                     var path = Path.Combine(_directory, $"raw-{_captured:D8}.bgra");
                     await File.WriteAllBytesAsync(path, pixels, token);
-                    frame = new QueuedFrame(null, path, time);
+                    frame = new(null, path, time);
                 }
 
                 Volatile.Write(ref _last, time);
-                Interlocked.Increment(ref _captured);
+                if (Interlocked.Increment(ref _captured) == 1)
+                    Logger.ZLogInformation(
+                        $"Multi-output capture produced its first frame: streamId={_outputId}, width={Output.Options.Width}, height={Output.Options.Height}, format={Output.Options.Format.ToString()}");
                 if (!_queue.Writer.TryWrite(frame)) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
-                Report(new RecordingProgress(RecordingStage.Recording, 0, Volatile.Read(ref _encoded)));
+                Report(new(RecordingStage.Recording, 0, Volatile.Read(ref _encoded)));
             }
 
             private void ReserveBacklogDisk(long bytes)
@@ -119,28 +193,40 @@ namespace RitsukageGif.Core
                 _abort.Cancel();
                 _queue.Writer.TryComplete();
                 if (!first) return;
+                if (error is OperationCanceledException)
+                    Logger.ZLogDebug(
+                        $"Multi-output stream canceled: streamId={_outputId}, captured={Volatile.Read(ref _captured)}, encoded={Volatile.Read(ref _encoded)}");
+                else
+                    Logger.ZLogError(error,
+                        $"Multi-output stream failed: streamId={_outputId}, format={Output.Options.Format.ToString()}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
                 try
                 {
-                    _progress?.Report(new MultiRecordingProgress(Output.Name,
-                        new RecordingProgress(RecordingStage.Recording, Volatile.Read(ref _captured),
+                    _progress?.Report(new(Output.Name,
+                        new(RecordingStage.Recording, Volatile.Read(ref _captured),
                             Volatile.Read(ref _encoded), ElapsedSeconds: Volatile.Read(ref _last) / 1000),
                         error.Message));
                 }
                 catch (Exception reportError)
                 {
-                    System.Diagnostics.Trace.TraceInformation("Progress reporting failed: {0}", reportError.Message);
+                    Logger.ZLogWarning(reportError,
+                        $"Multi-output progress callback failed: exceptionType={reportError.GetType().Name}, hResult={reportError.HResult}");
                 }
             }
 
-            public Task EncodeAsync() => Task.Run(EncodeCoreAsync);
+            public Task EncodeAsync()
+            {
+                return Task.Run(EncodeCoreAsync);
+            }
 
             private async Task EncodeCoreAsync()
             {
                 try
                 {
                     if (_live)
+                    {
                         await StreamingAnimationEncoder.EncodeAsync(ReadFrames(), _staging, Output.Options, this,
                             _abort.Token);
+                    }
                     else
                     {
                         var frames = new List<StoredFrame>();
@@ -150,7 +236,7 @@ namespace RitsukageGif.Core
                             var path = Path.Combine(_directory, $"frame-{frames.Count:D8}.bmp");
                             await BitmapSpool.WriteAsync(path, raw.Pixels, Output.Options.Width, Output.Options.Height,
                                 _abort.Token);
-                            frames.Add(new StoredFrame(path, raw.DelayMs));
+                            frames.Add(new(path, raw.DelayMs));
                         }
 
                         await AnimationEncoder.EncodeAsync(frames, _staging, Output.Options, this, _abort.Token);
@@ -184,15 +270,18 @@ namespace RitsukageGif.Core
                 await foreach (var frame in _queue.Reader.ReadAllAsync(_abort.Token))
                 {
                     if (pending is { } previous)
-                        yield return new RawFrame(await LoadAsync(previous), Delay(previous.Time, frame.Time));
+                        yield return new(await LoadAsync(previous), Delay(previous.Time, frame.Time));
                     pending = frame;
                 }
 
                 if (pending is { } last)
-                    yield return new RawFrame(await LoadAsync(last), Delay(last.Time, _end));
+                    yield return new(await LoadAsync(last), Delay(last.Time, _end));
             }
 
-            private static int Delay(double from, double to) => Math.Max(1, (int)(Math.Round(to) - Math.Round(from)));
+            private static int Delay(double from, double to)
+            {
+                return Math.Max(1, (int)(Math.Round(to) - Math.Round(from)));
+            }
 
             private async Task<byte[]> LoadAsync(QueuedFrame frame)
             {
@@ -208,17 +297,10 @@ namespace RitsukageGif.Core
                 return data;
             }
 
-            private void ReportComplete() => ReportProgress(new RecordingProgress(RecordingStage.Complete, 0,
-                Volatile.Read(ref _encoded)));
-
-            public void Report(RecordingProgress value)
+            private void ReportComplete()
             {
-                if (value.Stage != RecordingStage.Recording)
-                    value = value with
-                    {
-                        Stage = Volatile.Read(ref _completed) == 0 ? RecordingStage.Live : RecordingStage.Encoding
-                    };
-                ReportProgress(value);
+                ReportProgress(new(RecordingStage.Complete, 0,
+                    Volatile.Read(ref _encoded)));
             }
 
             private void ReportProgress(RecordingProgress value)
@@ -226,55 +308,27 @@ namespace RitsukageGif.Core
                 if (value.Stage != RecordingStage.Recording) Volatile.Write(ref _encoded, value.Encoded);
                 var count = Volatile.Read(ref _captured);
                 var last = Volatile.Read(ref _last);
-                _progress?.Report(new MultiRecordingProgress(Output.Name, value with
+                if (Logger.IsEnabled(LogLevel.Debug) && Stopwatch.GetTimestamp() >= Volatile.Read(ref _nextLogAt))
+                {
+                    var now = Stopwatch.GetTimestamp();
+                    if (Interlocked.Exchange(ref _nextLogAt, now + Stopwatch.Frequency * 5) <= now)
+                        Logger.ZLogDebug(
+                            $"Multi-output recording progress: streamId={_outputId}, stage={value.Stage.ToString()}, captured={count}, encoded={Volatile.Read(ref _encoded)}, memoryBacklogBytes={Interlocked.Read(ref _memory)}, diskBacklogBytes={Interlocked.Read(ref _disk)}");
+                }
+
+                _progress?.Report(new(Output.Name, value with
                 {
                     Captured = count,
                     Encoded = Volatile.Read(ref _encoded),
                     CapturedFps = last > 0 ? (count - 1) * 1000 / last : 0,
-                    ElapsedSeconds = (Volatile.Read(ref _completed) == 0 ? last : _end) / 1000
+                    ElapsedSeconds = (Volatile.Read(ref _completed) == 0 ? last : _end) / 1000,
                 }));
             }
 
-            public MultiRecordingResult Result() => new(Output.Name, Output.Path, _captured, _encoded,
-                _end / 1000, Failure?.Message);
-
-            public void Dispose()
+            public MultiRecordingResult Result()
             {
-                try
-                {
-                    Source?.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Trace.TraceInformation("Capture disposal failed: {0}", ex.Message);
-                }
-
-                _abort.Dispose();
-                while (_queue.Reader.TryRead(out _))
-                {
-                }
-
-                try
-                {
-                    File.Delete(_staging);
-                }
-                catch (IOException)
-                {
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
-
-                try
-                {
-                    Directory.Delete(_directory, true);
-                }
-                catch (IOException)
-                {
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
+                return new(Output.Name, Output.Path, _captured, _encoded,
+                    _end / 1000, Failure?.Message);
             }
         }
 

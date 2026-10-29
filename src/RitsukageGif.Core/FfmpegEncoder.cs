@@ -7,6 +7,9 @@ namespace RitsukageGif.Core
 {
     public static class FfmpegEncoder
     {
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.Encoding");
+        private static readonly string[] CommonArguments = ["-hide_banner", "-loglevel", "error", "-nostdin", "-y"];
+
         public static string? FindExecutable()
         {
             foreach (var directory in new[] { AppContext.BaseDirectory }.Concat(
@@ -67,21 +70,21 @@ namespace RitsukageGif.Core
                         [
                             .. input, "-vf",
                             "palettegen=stats_mode=diff:reserve_transparent=" + (options.Transparent ? "1" : "0"),
-                            "-frames:v", "1", palette
+                            "-frames:v", "1", palette,
                         ],
                         token);
                     var dither = options.Quality switch
                     {
                         GifQuality.Fast => "bayer:bayer_scale=3",
                         GifQuality.Best => "sierra2_4a",
-                        _ => "floyd_steinberg"
+                        _ => "floyd_steinberg",
                     };
                     await RunAsync(executable, [
                         .. input, "-i", palette, "-lavfi",
                         "paletteuse=dither=" + dither + ":diff_mode=rectangle", "-fps_mode", "vfr",
                         "-frames:v", frames.Count.ToString(CultureInfo.InvariantCulture), "-final_delay",
                         (frames[^1].DelayMs / 10).ToString(CultureInfo.InvariantCulture),
-                        "-loop", "0", "-f", "gif", output
+                        "-loop", "0", "-f", "gif", output,
                     ], token);
                 }
                 else
@@ -91,7 +94,7 @@ namespace RitsukageGif.Core
                         :
                         [
                             "-frames:v", frames.Count.ToString(CultureInfo.InvariantCulture), "-final_delay",
-                            $"{frames[^1].DelayMs}/1000", "-plays", "0", "-f", "apng"
+                            $"{frames[^1].DelayMs}/1000", "-plays", "0", "-f", "apng",
                         ];
                     await RunAsync(executable, [.. input, "-fps_mode", "vfr", .. encoding, output], token);
                     if (options.Format == OutputFormat.WebP)
@@ -149,19 +152,32 @@ namespace RitsukageGif.Core
         private static async Task RunAsync(string executable, IEnumerable<string> arguments, CancellationToken token)
         {
             using var process = new Process();
-            process.StartInfo = new ProcessStartInfo(executable)
+            process.StartInfo = new(executable)
                 { UseShellExecute = false, CreateNoWindow = true, RedirectStandardError = true };
-            foreach (var argument in new[] { "-hide_banner", "-loglevel", "error", "-nostdin", "-y" }.Concat(arguments))
+            foreach (var argument in CommonArguments.Concat(arguments))
                 process.StartInfo.ArgumentList.Add(argument);
             token.ThrowIfCancellationRequested();
             process.Start();
+            Logger.ZLogDebug($"FFmpeg encoding process started: processId={process.Id}");
             var errors = process.StandardError.ReadToEndAsync(token);
             try
             {
                 await process.WaitForExitAsync(token);
                 var error = await errors;
+                Logger.ZLogDebug($"FFmpeg encoding process exited: exitCode={process.ExitCode}");
                 if (process.ExitCode != 0)
                     throw new InvalidOperationException(UiText.Format("FfmpegFailed", process.ExitCode, error));
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Logger.ZLogDebug($"FFmpeg encoding canceled");
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(
+                    $"FFmpeg encoding failed: exceptionType={error.GetType().Name}, hResult={error.HResult}, stackTrace={error.StackTrace}");
+                throw;
             }
             finally
             {

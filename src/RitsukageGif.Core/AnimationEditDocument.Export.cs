@@ -6,27 +6,33 @@ namespace RitsukageGif.Core
     // ReSharper disable once ClassCannotBeInstantiated
     public sealed partial class AnimationEditDocument
     {
+        // ReSharper disable once UnusedMember.Global
         public Task ExportAsync(string path, OutputFormat format, GifQuality quality = GifQuality.Balanced,
-            CancellationToken token = default) => ExportAsync(path, new MediaProcessOptions
+            CancellationToken token = default)
         {
-            Format = format switch
+            return ExportAsync(path, new()
             {
-                OutputFormat.Gif => "gif", OutputFormat.WebP => "webp", OutputFormat.APng => "apng",
-                _ => throw new ArgumentOutOfRangeException(nameof(format))
-            },
-            Dither = quality != GifQuality.Fast,
-            Quality = quality == GifQuality.Fast ? 75 : 95,
-            Overwrite = true
-        }, token);
+                Format = format switch
+                {
+                    OutputFormat.Gif => "gif", OutputFormat.WebP => "webp", OutputFormat.APng => "apng",
+                    _ => throw new ArgumentOutOfRangeException(nameof(format)),
+                },
+                Dither = quality != GifQuality.Fast,
+                Quality = quality == GifQuality.Fast ? 75 : 95,
+                Overwrite = true,
+            }, token);
+        }
 
         public async Task ExportAsync(string path, MediaProcessOptions options, CancellationToken token = default)
         {
             ThrowIfDisposed();
             ArgumentNullException.ThrowIfNull(options);
             var format = (options.Format ?? Path.GetExtension(path).TrimStart('.')).ToLowerInvariant();
-            if (format is not ("gif" or "webp" or "apng")) throw new ArgumentOutOfRangeException(nameof(options));
-            if (options.Quality is < 1 or > 100 || options.Colors is < 2 or > 256)
+            if (format is not ("gif" or "webp" or "apng") || options.Quality is < 1 or > 100 ||
+                options.Colors is < 2 or > 256)
                 throw new ArgumentOutOfRangeException(nameof(options));
+            Logger.ZLogInformation(
+                $"Animation document export started: format={format}, width={Width}, height={Height}, frames={Frames.Count}");
             var destination = Path.GetFullPath(path);
             if (!options.Overwrite && File.Exists(destination)) throw new IOException(destination);
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -36,11 +42,24 @@ namespace RitsukageGif.Core
                 await Task.Run(() => WriteFrames(temporary, format, options, token), token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
                 File.Move(temporary, destination, options.Overwrite);
+                Logger.ZLogInformation($"Animation document export completed: format={format}, frames={Frames.Count}");
             }
             catch (Exception error) when (token.IsCancellationRequested &&
                                           error is MagickException or ObjectDisposedException)
             {
+                Logger.ZLogDebug($"Animation document export canceled during native encoding");
                 throw new OperationCanceledException(token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Logger.ZLogDebug($"Animation document export canceled");
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(error,
+                    $"Animation document export failed: exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                throw;
             }
             finally
             {
@@ -87,7 +106,7 @@ namespace RitsukageGif.Core
                     image.Quantize(new QuantizeSettings
                     {
                         Colors = (uint)options.Colors,
-                        DitherMethod = options.Dither ? DitherMethod.FloydSteinberg : DitherMethod.No
+                        DitherMethod = options.Dither ? DitherMethod.FloydSteinberg : DitherMethod.No,
                     });
                     elapsedMs += frame.DelayMs;
                     // GIF stores hundredths of a second; retain every edited frame and quantize cumulative time.

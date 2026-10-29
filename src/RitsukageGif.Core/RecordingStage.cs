@@ -5,6 +5,6 @@ namespace RitsukageGif.Core
         Recording,
         Live,
         Encoding,
-        Complete
+        Complete,
     }
 }

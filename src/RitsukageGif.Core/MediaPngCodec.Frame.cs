@@ -44,7 +44,7 @@ namespace RitsukageGif.Core
                                 selected.AnimationIterations = iterations;
                                 selected.GifDisposeMethod = GifDisposeMethod.Background;
                                 selected.ResetPage();
-                                return new MagickImageCollection { selected };
+                                return new() { selected };
                             }
                             catch
                             {
@@ -53,7 +53,10 @@ namespace RitsukageGif.Core
                             }
                         }
 
-                        if (previous is not null) canvas.Composite(previous, CompositeOperator.Src);
+                        if (previous is not null)
+                        {
+                            canvas.Composite(previous, CompositeOperator.Src);
+                        }
                         else if (frame.GifDisposeMethod == GifDisposeMethod.Background)
                         {
                             using var empty = new MagickImage(MagickColors.Transparent, frame.Width, frame.Height);
@@ -78,9 +81,12 @@ namespace RitsukageGif.Core
             foreach (var (type, _) in ReadChunks(stream, true))
             {
                 token.ThrowIfCancellationRequested();
-                if (type == "acTL") animated = true;
-                else if (type == "fcTL") return false;
-                else if (type == "IDAT") return animated;
+                switch (type)
+                {
+                    case "acTL": animated = true; break;
+                    case "fcTL": return false;
+                    case "IDAT": return animated;
+                }
             }
 
             return false;

@@ -4,6 +4,6 @@ namespace RitsukageGif.Contracts
     {
         Gif,
         WebP,
-        APng
+        APng,
     }
 }

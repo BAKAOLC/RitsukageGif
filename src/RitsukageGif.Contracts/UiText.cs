@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Globalization;
 using System.Resources;
 
@@ -6,10 +7,11 @@ namespace RitsukageGif.Contracts
     public static class UiText
     {
         private static CultureInfo _culture = CultureInfo.CurrentUICulture;
-        public static event Action? LanguageChanged;
 
         private static readonly ResourceManager Resources = new("RitsukageGif.Contracts.Resources.Strings",
             typeof(UiText).Assembly);
+
+        public static event Action? LanguageChanged;
 
         public static string Get(string key)
         {
@@ -28,7 +30,7 @@ namespace RitsukageGif.Contracts
             {
                 "zh-Hans" => "zh-Hans",
                 "en" => "en",
-                _ => CultureInfo.InstalledUICulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en"
+                _ => CultureInfo.InstalledUICulture.TwoLetterISOLanguageName == "zh" ? "zh-Hans" : "en",
             };
             var culture = CultureInfo.GetCultureInfo(name);
             CultureInfo.DefaultThreadCurrentUICulture = culture;
@@ -42,7 +44,7 @@ namespace RitsukageGif.Contracts
             var strings = new Dictionary<string, string>(StringComparer.Ordinal);
             var defaults = Resources.GetResourceSet(CultureInfo.InvariantCulture, true, true)
                            ?? throw new MissingManifestResourceException();
-            foreach (System.Collections.DictionaryEntry entry in defaults)
+            foreach (DictionaryEntry entry in defaults)
                 if (entry.Key is string key)
                     strings.Add(key, Get(key));
             return strings;

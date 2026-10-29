@@ -37,7 +37,10 @@ namespace RitsukageGif.Core
                     yield return complete;
 
                     token.ThrowIfCancellationRequested();
-                    if (previous is not null) canvas.Composite(previous, CompositeOperator.Src);
+                    if (previous is not null)
+                    {
+                        canvas.Composite(previous, CompositeOperator.Src);
+                    }
                     else if (frame.GifDisposeMethod == GifDisposeMethod.Background)
                     {
                         using var empty = new MagickImage(MagickColors.Transparent, frame.Width, frame.Height);

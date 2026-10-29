@@ -15,12 +15,13 @@ namespace RitsukageGif.Core
             {
                 ArgumentNullException.ThrowIfNull(output);
                 ArgumentNullException.ThrowIfNull(output.Options);
-                if (!paths.Add(Path.GetFullPath(output.Path))) throw new ArgumentException(nameof(outputs));
+                if (!paths.Add(Path.GetFullPath(output.Path))) throw new ArgumentException(null, nameof(outputs));
             }
 
-            return Task.Run(() =>
+            return Task.Run<IReadOnlyList<MediaProcessResult>>(() =>
             {
                 token.ThrowIfCancellationRequested();
+                Logger.ZLogInformation($"Batch media processing started: outputs={snapshot.Length}");
                 var results = new MediaProcessResult[snapshot.Length];
                 if (snapshot.Length == 0) return results;
                 var path = Path.GetFullPath(input);
@@ -40,8 +41,10 @@ namespace RitsukageGif.Core
                 }
                 catch (Exception error) when (error is not OperationCanceledException)
                 {
+                    Logger.ZLogError(error,
+                        $"Batch media source inspection failed: outputs={snapshot.Length}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
                     token.ThrowIfCancellationRequested();
-                    Array.Fill(results, new MediaProcessResult(null, error));
+                    Array.Fill(results, new(null, error));
                     return results;
                 }
 
@@ -53,8 +56,10 @@ namespace RitsukageGif.Core
                     }
                     catch (Exception error) when (error is not OperationCanceledException)
                     {
+                        Logger.ZLogError(error,
+                            $"Batch media source decoding failed: outputs={snapshot.Length}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
                         token.ThrowIfCancellationRequested();
-                        Array.Fill(results, new MediaProcessResult(null, error));
+                        Array.Fill(results, new(null, error));
                         return results;
                     }
 
@@ -66,7 +71,8 @@ namespace RitsukageGif.Core
                         var output = snapshot[index];
                         try
                         {
-                            results[index] = new(Process(path, Path.GetFullPath(output.Path), output.Options,
+                            results[index] = new(ProcessWithDiagnostics(path, Path.GetFullPath(output.Path),
+                                output.Options,
                                 token, prepared), null);
                         }
                         catch (Exception error) when (error is not OperationCanceledException)
@@ -77,6 +83,8 @@ namespace RitsukageGif.Core
                     }
                 }
 
+                Logger.ZLogInformation(
+                    $"Batch media processing finished: outputs={results.Length}, failed={results.Count(result => result.Error is not null)}");
                 return results;
             }, token);
         }

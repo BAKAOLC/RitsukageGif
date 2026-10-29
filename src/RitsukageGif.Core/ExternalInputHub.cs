@@ -4,20 +4,31 @@ namespace RitsukageGif.Core
 {
     public sealed partial class ExternalInputHub : IInputChannelReader, IDisposable
     {
+        // ReSharper disable once MemberCanBePrivate.Global
         public const int MaximumChannels = 16;
+
+        // ReSharper disable once MemberCanBePrivate.Global
         public const int MaximumFramesPerChannel = 120;
+
+        // ReSharper disable once MemberCanBePrivate.Global
         public const long MaximumChannelBytes = 64L * 1024 * 1024;
+
+        // ReSharper disable once MemberCanBePrivate.Global
         public const long MaximumTotalBytes = 256L * 1024 * 1024;
+
+        // ReSharper disable once MemberCanBePrivate.Global
         public const int MaximumJsonBytes = 1024 * 1024;
-        private readonly object _gate = new();
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.MediaInput");
         private readonly Dictionary<string, ChannelState> _channels = new(StringComparer.Ordinal);
+        private readonly Lock _gate = new();
         private long _bytes;
-        private long _revision;
-        private bool _disposed;
         private TaskCompletionSource<bool> _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _disposed;
+        private long _revision;
 
         public static double Now => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
 
+        // ReSharper disable once UnusedMember.Global
         public long BufferedBytes
         {
             get
@@ -26,12 +37,32 @@ namespace RitsukageGif.Core
             }
         }
 
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _disposed = true;
+                Logger.ZLogDebug($"External input hub disposed: channels={_channels.Count}, bufferedBytes={_bytes}");
+                _channels.Clear();
+                _bytes = 0;
+                Signal();
+            }
+        }
+
         public IReadOnlyList<string> Names
         {
             get
             {
-                lock (_gate) return _channels.Keys.Order(StringComparer.Ordinal).ToArray();
+                lock (_gate) return [.. _channels.Keys.Order(StringComparer.Ordinal)];
             }
+        }
+
+        public InputChannelData? Read(string name)
+        {
+            lock (_gate)
+                return _channels.TryGetValue(name, out var channel)
+                    ? new InputChannelData(channel.Json, channel.DataVersion, channel.DataTimestamp, channel.Connected)
+                    : null;
         }
 
         public ExternalInputPublisher OpenPublisher(string name)
@@ -42,7 +73,10 @@ namespace RitsukageGif.Core
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 if (_channels.TryGetValue(name, out var current) && current.Connected)
                     throw new InvalidOperationException(name);
-                if (current is not null) Remove(current);
+                if (current is not null)
+                {
+                    Remove(current);
+                }
                 else if (_channels.Count >= MaximumChannels)
                 {
                     var oldest = _channels.Values.Where(channel => !channel.Connected)
@@ -53,17 +87,11 @@ namespace RitsukageGif.Core
 
                 var channel = new ChannelState(name, Guid.NewGuid(), ++_revision, Now);
                 _channels.Add(name, channel);
+                Logger.ZLogInformation(
+                    $"External input publisher connected: lease={channel.Lease}, channels={_channels.Count}");
                 Signal();
-                return new ExternalInputPublisher(this, name, channel.Lease);
+                return new(this, name, channel.Lease);
             }
-        }
-
-        public InputChannelData? Read(string name)
-        {
-            lock (_gate)
-                return _channels.TryGetValue(name, out var channel)
-                    ? new InputChannelData(channel.Json, channel.DataVersion, channel.DataTimestamp, channel.Connected)
-                    : null;
         }
 
         public ExternalInputFrame? ReadFrame(string name, double targetTimestamp, double staleAfter = 1,
@@ -98,6 +126,7 @@ namespace RitsukageGif.Core
                     : null;
         }
 
+        // ReSharper disable once UnusedMethodReturnValue.Global
         public bool RemoveChannel(string name)
         {
             lock (_gate)
@@ -114,6 +143,8 @@ namespace RitsukageGif.Core
             {
                 if (!TryLease(name, lease, out var channel)) return;
                 channel.Connected = false;
+                Logger.ZLogInformation(
+                    $"External input publisher disconnected: lease={channel.Lease}, publishedFrames={channel.Published}, droppedFrames={channel.Dropped}, bufferedFrames={channel.Frames.Count}");
                 channel.DataVersion = ++_revision;
                 Signal();
             }
@@ -124,7 +155,7 @@ namespace RitsukageGif.Core
             ArgumentException.ThrowIfNullOrWhiteSpace(name);
             if (name.Length > 128 || name.Any(character =>
                     !char.IsAsciiLetterOrDigit(character) && character is not ('_' or '-' or '.')))
-                throw new ArgumentException(nameof(name));
+                throw new ArgumentException(null, nameof(name));
         }
 
         private bool TryLease(string name, Guid lease, out ChannelState channel)
@@ -140,33 +171,22 @@ namespace RitsukageGif.Core
             Signal();
         }
 
-        public void Dispose()
-        {
-            lock (_gate)
-            {
-                _disposed = true;
-                _channels.Clear();
-                _bytes = 0;
-                Signal();
-            }
-        }
-
         private sealed class ChannelState(string name, Guid lease, long version, double timestamp)
         {
-            public readonly string Name = name;
-            public readonly Guid Lease = lease;
             public readonly LinkedList<ExternalInputFrame> Frames = new();
+            public readonly Guid Lease = lease;
+            public readonly string Name = name;
             public bool Connected = true;
-            public long DataVersion = version;
             public double DataTimestamp = timestamp;
-            public double JsonTimestamp = double.NegativeInfinity;
+            public long DataVersion = version;
+            public long Dropped;
+            public long FrameBytes;
             public double FrameTimestamp = double.NegativeInfinity;
             public long FrameVersion;
             public string? Json;
             public long JsonBytes;
-            public long FrameBytes;
+            public double JsonTimestamp = double.NegativeInfinity;
             public long Published;
-            public long Dropped;
         }
     }
 }

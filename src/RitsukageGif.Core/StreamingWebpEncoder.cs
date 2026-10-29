@@ -13,7 +13,7 @@ namespace RitsukageGif.Core
                 options.Validate();
                 if (options.Width > 16383 || options.Height > 16383)
                     throw new ArgumentException(UiText.Get("RecordingTooLarge"));
-                using var stream = new FileStream(output, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
+                await using var stream = new FileStream(output, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
                 var writer = new WebpAnimationWriter(stream, options.Width, options.Height);
                 byte[]? previous = null;
                 byte[]? encoded = null;
@@ -57,13 +57,13 @@ namespace RitsukageGif.Core
 
                     previous = frame.Pixels;
                     count++;
-                    progress?.Report(new RecordingProgress(RecordingStage.Live, count, count));
+                    progress?.Report(new(RecordingStage.Live, count, count));
                 }
 
                 token.ThrowIfCancellationRequested();
                 if (count == 0) throw new InvalidOperationException(UiText.Get("NoFrames"));
                 writer.Complete();
-                progress?.Report(new RecordingProgress(RecordingStage.Complete, count, count));
+                progress?.Report(new(RecordingStage.Complete, count, count));
             }, token);
         }
 
@@ -72,7 +72,7 @@ namespace RitsukageGif.Core
         {
             if (current.Length != checked(width * height * 4))
                 throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
-            if (previous is null) return new PixelRect(0, 0, width, height);
+            if (previous is null) return new(0, 0, width, height);
             var before = MemoryMarshal.Cast<byte, uint>(previous);
             var after = MemoryMarshal.Cast<byte, uint>(current);
             var left = width;
@@ -107,7 +107,7 @@ namespace RitsukageGif.Core
             // ANMF stores offsets in units of two pixels. Expand toward the upper left.
             left &= ~1;
             top &= ~1;
-            return new PixelRect(left, top, right - left + 1, bottom - top + 1);
+            return new(left, top, right - left + 1, bottom - top + 1);
         }
 
         private static bool IsSparseDelta(byte[] current, byte[]? previous, int width, PixelRect bounds,
@@ -125,10 +125,8 @@ namespace RitsukageGif.Core
                 var a = before.Slice(offset, bounds.Width);
                 var b = after.Slice(offset, bounds.Width);
                 for (var x = 0; x < b.Length; x++)
-                {
                     if (a[x] == b[x]) unchanged++;
                     else if (current[(offset + x) * 4 + 3] != 255) return false;
-                }
             }
 
             return unchanged >= bounds.Width * bounds.Height / 4;
@@ -149,7 +147,10 @@ namespace RitsukageGif.Core
                 var offset = (y + bounds.Y) * width + bounds.X;
                 var row = after.Slice(offset, bounds.Width);
                 var target = output.Slice(y * bounds.Width, bounds.Width);
-                if (previous is null) row.CopyTo(target);
+                if (previous is null)
+                {
+                    row.CopyTo(target);
+                }
                 else
                 {
                     var old = before.Slice(offset, bounds.Width);

@@ -6,8 +6,8 @@ namespace RitsukageGif.Core
     {
         private const int MaximumDelay = 0xffffff;
         private readonly Stream _stream;
-        private long _delayOffset;
         private int _delay;
+        private long _delayOffset;
 
         public WebpAnimationWriter(Stream stream, int width, int height, uint iterations = 0)
         {
@@ -21,7 +21,7 @@ namespace RitsukageGif.Core
             WriteUInt24(height - 1);
             stream.Write("ANIM"u8);
             WriteUInt32(6);
-            stream.Write([0, 0, 0, 0]);
+            stream.Write("\0\0\0\0"u8);
             Span<byte> loop = stackalloc byte[2];
             BinaryPrimitives.WriteUInt16LittleEndian(loop, checked((ushort)iterations));
             stream.Write(loop);

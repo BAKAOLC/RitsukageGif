@@ -1,22 +1,25 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 namespace RitsukageGif.Core
 {
     public sealed class FfmpegInputSource : IDisposable
     {
-        private readonly Lock _gate = new();
-        private readonly CancellationTokenSource _stop = new();
-        private readonly TaskCompletionSource _firstFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly FfmpegInputOptions _options;
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.MediaInput");
         private readonly string _executable;
+        private readonly TaskCompletionSource _firstFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Lock _gate = new();
+        private readonly FfmpegInputOptions _options;
         private readonly Task _reader;
+        private readonly CancellationTokenSource _stop = new();
+        private bool _completed;
+        private int _disposed;
+        private bool _failed;
         private byte[]? _latest;
         private long _updated;
-        private bool _completed;
-        private bool _failed;
-        private int _disposed;
 
         private FfmpegInputSource(string executable, FfmpegInputOptions options, int width, int height)
         {
@@ -38,6 +41,17 @@ namespace RitsukageGif.Core
             }
         }
 
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            Logger.ZLogDebug($"FFmpeg input disposal requested: width={Width}, height={Height}, live={_options.Live}");
+            _stop.Cancel();
+            // The worker owns its process. Dispose only after cancellation callbacks and reads finish.
+            _ = _reader.ContinueWith(_ => _stop.Dispose(), CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            lock (_gate) _latest = null;
+        }
+
         public static async Task<FfmpegInputSource> CreateAsync(FfmpegInputOptions options,
             CancellationToken token = default)
         {
@@ -57,13 +71,21 @@ namespace RitsukageGif.Core
             if (width is <= 0 or > 16384 || height is <= 0 or > 16384 || (long)width * height > 33554432)
                 throw new ArgumentOutOfRangeException(nameof(options));
             var source = new FfmpegInputSource(executable, options, width, height);
+            Logger.ZLogInformation($"FFmpeg input opening: width={width}, height={height}, live={options.Live}");
             try
             {
                 await source._firstFrame.Task.WaitAsync(TimeSpan.FromSeconds(15), token);
+                Logger.ZLogInformation(
+                    $"FFmpeg input produced its first frame: width={width}, height={height}, live={options.Live}");
                 return source;
             }
-            catch
+            catch (Exception error)
             {
+                if (error is OperationCanceledException && token.IsCancellationRequested)
+                    Logger.ZLogDebug($"FFmpeg input opening canceled");
+                else
+                    Logger.ZLogWarning(
+                        $"FFmpeg input opening failed: exceptionType={error.GetType().Name}, hResult={error.HResult}, stackTrace={error.StackTrace}");
                 source.Dispose();
                 throw;
             }
@@ -95,6 +117,8 @@ namespace RitsukageGif.Core
                     catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException)
                     {
                         if (!_options.Live || attempt >= 3) throw;
+                        Logger.ZLogWarning(
+                            $"FFmpeg live input reconnect scheduled: attempt={attempt + 1}, exceptionType={error.GetType().Name}, hResult={error.HResult}, stackTrace={error.StackTrace}");
                     }
 
                     if (attempt >= 3) break;
@@ -102,13 +126,17 @@ namespace RitsukageGif.Core
                 }
 
                 _firstFrame.TrySetException(new EndOfStreamException());
+                Logger.ZLogDebug($"FFmpeg input reached end of stream: live={_options.Live}");
             }
             catch (OperationCanceledException)
             {
+                Logger.ZLogDebug($"FFmpeg input reader canceled");
                 _firstFrame.TrySetCanceled();
             }
             catch (Exception error)
             {
+                Logger.ZLogError(
+                    $"FFmpeg input reader failed: exceptionType={error.GetType().Name}, hResult={error.HResult}, stackTrace={error.StackTrace}");
                 lock (_gate) _failed = true;
                 _firstFrame.TrySetException(error);
             }
@@ -145,7 +173,7 @@ namespace RitsukageGif.Core
                      {
                          "-i", _options.Input, "-map", "0:v:0", "-an", "-sn", "-dn",
                          "-vf", $"scale={Width}:{Height}", "-fps_mode", "passthrough", "-pix_fmt", "bgra",
-                         "-f", "rawvideo", "pipe:1"
+                         "-f", "rawvideo", "pipe:1",
                      }) args.Add(argument);
             token.ThrowIfCancellationRequested();
             process.Start();
@@ -207,7 +235,7 @@ namespace RitsukageGif.Core
             foreach (var argument in new[]
                      {
                          "-v", "error", "-select_streams", "v:0", "-show_entries",
-                         "stream=width,height", "-of", "json", "-i", input
+                         "stream=width,height", "-of", "json", "-i", input,
                      }) process.StartInfo.ArgumentList.Add(argument);
             process.Start();
             await using var registration = timeout.Token.Register(static state => Kill((Process)state!), process);
@@ -236,15 +264,19 @@ namespace RitsukageGif.Core
             }
         }
 
-        internal static ProcessStartInfo StartInfo(string executable) => new(executable)
+        internal static ProcessStartInfo StartInfo(string executable)
         {
-            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
-        };
+            return new(executable)
+            {
+                UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+        }
 
         internal static async Task<string> DrainAsync(StreamReader reader, CancellationToken token)
         {
             var buffer = new char[1024];
-            var result = new System.Text.StringBuilder();
+            var result = new StringBuilder();
             int count;
             while ((count = await reader.ReadAsync(buffer.AsMemory(), token)) > 0)
             {
@@ -264,19 +296,9 @@ namespace RitsukageGif.Core
             catch (InvalidOperationException)
             {
             }
-            catch (System.ComponentModel.Win32Exception)
+            catch (Win32Exception)
             {
             }
-        }
-
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _stop.Cancel();
-            // The worker owns its process. Dispose only after cancellation callbacks and reads finish.
-            _ = _reader.ContinueWith(_ => _stop.Dispose(), CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            lock (_gate) _latest = null;
         }
     }
 }

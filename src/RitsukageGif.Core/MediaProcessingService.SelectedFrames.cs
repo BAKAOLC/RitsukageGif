@@ -2,7 +2,7 @@ namespace RitsukageGif.Core
 {
     public sealed partial class MediaProcessingService
     {
-        private static IReadOnlyList<MediaProcessResult> ProcessSelectedFrames(MediaInfo info,
+        private static MediaProcessResult[] ProcessSelectedFrames(MediaInfo info,
             MediaProcessOutput[] outputs, CancellationToken token)
         {
             var results = new MediaProcessResult[outputs.Length];
@@ -16,11 +16,12 @@ namespace RitsukageGif.Core
             foreach (var index in ordered)
                 if (outputs[index].Options.FrameIndex < 0 || outputs[index].Options.FrameIndex >= info.Frames)
                 {
-                    results[index] = new(null, new ArgumentOutOfRangeException(nameof(MediaProcessOptions.FrameIndex)));
+                    results[index] = new(null, new ArgumentOutOfRangeException(nameof(outputs)));
                     completed |= 1 << index;
                 }
 
-            ordered = ordered.Where(index => (completed & (1 << index)) == 0).ToArray();
+            var rejected = completed;
+            ordered = [.. ordered.Where(index => (rejected & (1 << index)) == 0)];
             if (ordered.Length == 0) return results;
 
             try
@@ -39,7 +40,8 @@ namespace RitsukageGif.Core
                             var output = outputs[index];
                             try
                             {
-                                results[index] = new(Process(info.Path, Path.GetFullPath(output.Path), output.Options,
+                                results[index] = new(ProcessWithDiagnostics(info.Path, Path.GetFullPath(output.Path),
+                                    output.Options,
                                     token, prepared), null);
                             }
                             catch (Exception error) when (error is not OperationCanceledException)
@@ -61,6 +63,8 @@ namespace RitsukageGif.Core
             }
             catch (Exception error) when (error is not OperationCanceledException)
             {
+                Logger.ZLogError(error,
+                    $"Selected-frame batch decoding failed: outputs={outputs.Length}, exceptionType={error.GetType().Name}, hResult={error.HResult}");
                 token.ThrowIfCancellationRequested();
                 foreach (var index in ordered)
                     if ((completed & (1 << index)) == 0)

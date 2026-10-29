@@ -96,15 +96,12 @@ namespace RitsukageGif.Core
                     });
                     if ((long)area.Width * area.Height >= 4L * 1024 * 1024 &&
                         area.Width / 64 >= parallel.MaxDegreeOfParallelism)
-                    {
                         // Process neighboring columns together so each intermediate and output row stays local
                         // in cache. Strips own disjoint output pixels and retain the original strength blending.
                         Rows((area.Width + 63) / 64, (long)area.Height * 64, parallel, strip =>
                             BlurVerticalStrip(buffer, pixels, stride, area, effect, premultiplied, strip * 64,
                                 parallel.CancellationToken));
-                    }
                     else
-                    {
                         // Columns are independent; the original buffer is retained for strength blending.
                         Rows(area.Width, area.Height, parallel, column =>
                         {
@@ -133,7 +130,6 @@ namespace RitsukageGif.Core
                                         ref a);
                             }
                         });
-                    }
                 }
             }
             finally

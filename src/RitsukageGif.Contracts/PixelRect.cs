@@ -13,14 +13,14 @@ namespace RitsukageGif.Contracts
 
         public static PixelRect Between(PixelPoint a, PixelPoint b)
         {
-            return new PixelRect(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
+            return new(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
         }
 
         public PixelRect Intersect(PixelRect other)
         {
             var x = Math.Max(X, other.X);
             var y = Math.Max(Y, other.Y);
-            return new PixelRect(x, y, Math.Max(0, Math.Min(Right, other.Right) - x),
+            return new(x, y, Math.Max(0, Math.Min(Right, other.Right) - x),
                 Math.Max(0, Math.Min(Bottom, other.Bottom) - y));
         }
 

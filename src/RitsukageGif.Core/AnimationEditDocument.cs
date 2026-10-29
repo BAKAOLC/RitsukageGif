@@ -6,22 +6,58 @@ namespace RitsukageGif.Core
     public sealed partial class AnimationEditDocument : IDisposable
     {
         private const int HistoryLimit = 32;
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.AnimationEditor");
 
         private readonly string _directory = Path.Combine(Path.GetTempPath(),
             "RitsukageGif-edit-" + Guid.NewGuid().ToString("N"));
 
-        private readonly List<AnimationEditSnapshot> _undo = [];
         private readonly List<AnimationEditSnapshot> _redo = [];
+
+        private readonly List<AnimationEditSnapshot> _undo = [];
         private AnimationEditSnapshot _current = new([], 0);
         private bool _disposed;
 
-        private AnimationEditDocument() => Directory.CreateDirectory(_directory);
+        private AnimationEditDocument()
+        {
+            Directory.CreateDirectory(_directory);
+        }
+
         public IReadOnlyList<AnimationEditFrame> Frames => _current.Frames;
         public int Width => Frames[0].Width;
         public int Height => Frames[0].Height;
         public uint Iterations => _current.Iterations;
+
+        // ReSharper disable once MemberCanBePrivate.Global
         public bool CanUndo => _undo.Count > 0;
+
+        // ReSharper disable once MemberCanBePrivate.Global
         public bool CanRedo => _redo.Count > 0;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _undo.Clear();
+            _redo.Clear();
+            _current = new([], 0);
+            try
+            {
+                Directory.Delete(_directory, true);
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+            catch (IOException error)
+            {
+                Logger.ZLogWarning(error,
+                    $"Animation document temporary storage cleanup deferred: exceptionType={error.GetType().Name}, hResult={error.HResult}");
+            }
+            catch (UnauthorizedAccessException error)
+            {
+                Logger.ZLogWarning(error,
+                    $"Animation document temporary storage cleanup denied: exceptionType={error.GetType().Name}, hResult={error.HResult}");
+            }
+        }
 
         public static AnimationEditDocument Create(int width, int height, int delayMs = 100)
         {
@@ -31,7 +67,9 @@ namespace RitsukageGif.Core
             try
             {
                 using var image = new MagickImage(MagickColors.Transparent, (uint)width, (uint)height);
-                document._current = new(Array.AsReadOnly(new[] { document.Store(image, delayMs, default) }), 0);
+                document._current = new(Array.AsReadOnly([document.Store(image, delayMs, CancellationToken.None)]), 0);
+                Logger.ZLogDebug(
+                    $"Animation document created: width={width}, height={height}, delayMilliseconds={delayMs}");
                 return document;
             }
             catch
@@ -43,22 +81,34 @@ namespace RitsukageGif.Core
 
         public static AnimationEditDocument Open(string path, CancellationToken token = default)
         {
+            Logger.ZLogDebug($"Animation document import started");
             var document = new AnimationEditDocument();
             try
             {
                 var frames = document.Read(path, false, token, out var iterations);
                 token.ThrowIfCancellationRequested();
                 document._current = new(frames.AsReadOnly(), iterations);
+                Logger.ZLogInformation(
+                    $"Animation document import completed: width={document.Width}, height={document.Height}, frames={frames.Count}");
                 return document;
             }
             catch (Exception error) when (token.IsCancellationRequested &&
                                           error is MagickException or ObjectDisposedException)
             {
+                Logger.ZLogDebug($"Animation document import canceled during native decoding");
                 document.Dispose();
                 throw new OperationCanceledException(token);
             }
-            catch
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
+                Logger.ZLogDebug($"Animation document import canceled");
+                document.Dispose();
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogWarning(error,
+                    $"Animation document import failed: exceptionType={error.GetType().Name}, hResult={error.HResult}");
                 document.Dispose();
                 throw;
             }
@@ -74,7 +124,7 @@ namespace RitsukageGif.Core
 
         public void SetIterations(uint iterations)
         {
-            if (iterations > ushort.MaxValue) throw new ArgumentOutOfRangeException(nameof(iterations));
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(iterations, ushort.MaxValue);
             Commit(Frames, iterations);
         }
 
@@ -95,9 +145,10 @@ namespace RitsukageGif.Core
         {
             var selected = Select(indices).ToHashSet();
             if (selected.Count == Frames.Count) throw new InvalidOperationException(UiText.Get("EditorKeepFrame"));
-            Commit(Frames.Where((_, index) => !selected.Contains(index)).ToArray());
+            Commit([.. Frames.Where((_, index) => !selected.Contains(index))]);
         }
 
+        // ReSharper disable once UnusedMember.Global
         public void Move(int from, int to)
         {
             Select([from, to]);
@@ -113,22 +164,18 @@ namespace RitsukageGif.Core
             if (direction is not (-1 or 1)) throw new ArgumentOutOfRangeException(nameof(direction));
             var selected = Select(indices);
             // Treat all selected blocks as one move: a boundary stops the complete selection.
-            if (direction < 0 && selected[0] == 0 || direction > 0 && selected[^1] == Frames.Count - 1)
+            if ((direction < 0 && selected[0] == 0) || (direction > 0 && selected[^1] == Frames.Count - 1))
                 return selected;
             var frames = Frames.ToArray();
             if (direction < 0)
-            {
                 foreach (var index in selected)
                     (frames[index - 1], frames[index]) = (frames[index], frames[index - 1]);
-            }
             else
-            {
                 for (var position = selected.Length - 1; position >= 0; position--)
                 {
                     var index = selected[position];
                     (frames[index], frames[index + 1]) = (frames[index + 1], frames[index]);
                 }
-            }
 
             Commit(frames);
             for (var position = 0; position < selected.Length; position++) selected[position] += direction;
@@ -141,7 +188,7 @@ namespace RitsukageGif.Core
             ValidateDelay(delayMs);
             using var image = new MagickImage(new MagickColor(color), (uint)Width, (uint)Height);
             var frames = Frames.ToList();
-            frames.Insert(insertIndex, Store(image, delayMs, default));
+            frames.Insert(insertIndex, Store(image, delayMs, CancellationToken.None));
             Commit(frames);
         }
 
@@ -188,7 +235,7 @@ namespace RitsukageGif.Core
         private void Commit(IEnumerable<AnimationEditFrame> frames, uint? iterations = null)
         {
             ThrowIfDisposed();
-            var snapshot = new AnimationEditSnapshot(Array.AsReadOnly(frames.ToArray()), iterations ?? Iterations);
+            var snapshot = new AnimationEditSnapshot(Array.AsReadOnly([.. frames]), iterations ?? Iterations);
             _undo.Add(_current);
             if (_undo.Count > HistoryLimit) _undo.RemoveAt(0);
             _redo.Clear();
@@ -222,10 +269,14 @@ namespace RitsukageGif.Core
             if (delayMs is < 1 or > 86400000) throw new ArgumentOutOfRangeException(nameof(delayMs));
         }
 
-        private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+        private void ThrowIfDisposed()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+        }
 
         private void Prune()
         {
+            var deferred = 0;
             var used = _undo.Concat(_redo).Append(_current).SelectMany(snapshot => snapshot.Frames)
                 .Select(frame => frame.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var path in Directory.EnumerateFiles(_directory))
@@ -236,29 +287,15 @@ namespace RitsukageGif.Core
                     }
                     catch (IOException)
                     {
+                        deferred++;
                     }
                     catch (UnauthorizedAccessException)
                     {
+                        deferred++;
                     }
-        }
 
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            _undo.Clear();
-            _redo.Clear();
-            _current = new([], 0);
-            try
-            {
-                Directory.Delete(_directory, true);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            if (deferred > 0)
+                Logger.ZLogWarning($"Animation document snapshot cleanup deferred: files={deferred}");
         }
     }
 }

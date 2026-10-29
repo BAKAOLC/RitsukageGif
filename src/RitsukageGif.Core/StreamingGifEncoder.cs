@@ -10,7 +10,7 @@ namespace RitsukageGif.Core
         {
             return Task.Run(async () =>
             {
-                using var stream = File.Create(output);
+                await using var stream = File.Create(output);
                 using var writer = new GifWriter(stream, options.Width, options.Height, options.Transparent);
                 byte[]? previous = null;
                 byte[]? lastEncoded = null;
@@ -24,13 +24,13 @@ namespace RitsukageGif.Core
                     count++;
                     if (delay == 0)
                     {
-                        progress?.Report(new RecordingProgress(RecordingStage.Live, count, count));
+                        progress?.Report(new(RecordingStage.Live, count, count));
                         continue;
                     }
 
                     var bounds = ChangedBounds(previous, frame.Pixels, options.Width, options.Height);
                     if (options.Transparent && !bounds.IsEmpty)
-                        bounds = new PixelRect(0, 0, options.Width, options.Height);
+                        bounds = new(0, 0, options.Width, options.Height);
                     if (bounds.IsEmpty && lastEncoded is not null)
                     {
                         writer.Extend(lastEncoded, lastBounds, delay);
@@ -51,7 +51,7 @@ namespace RitsukageGif.Core
                                 Colors = 256,
                                 DitherMethod = options.Quality == GifQuality.Fast
                                     ? DitherMethod.No
-                                    : DitherMethod.FloydSteinberg
+                                    : DitherMethod.FloydSteinberg,
                             });
                             token.ThrowIfCancellationRequested();
                             lastEncoded = image.ToByteArray(MagickFormat.Gif);
@@ -68,12 +68,12 @@ namespace RitsukageGif.Core
                     }
 
                     previous = frame.Pixels;
-                    progress?.Report(new RecordingProgress(RecordingStage.Live, count, count));
+                    progress?.Report(new(RecordingStage.Live, count, count));
                 }
 
                 if (count == 0) throw new InvalidOperationException(UiText.Get("NoFrames"));
                 token.ThrowIfCancellationRequested();
-                progress?.Report(new RecordingProgress(RecordingStage.Complete, count, count));
+                progress?.Report(new(RecordingStage.Complete, count, count));
             }, token);
         }
 
@@ -81,7 +81,7 @@ namespace RitsukageGif.Core
         {
             if (current.Length != checked(width * height * 4))
                 throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
-            if (previous is null) return new PixelRect(0, 0, width, height);
+            if (previous is null) return new(0, 0, width, height);
             var before = MemoryMarshal.Cast<byte, uint>(previous);
             var after = MemoryMarshal.Cast<byte, uint>(current);
             var left = width;

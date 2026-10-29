@@ -6,16 +6,19 @@ namespace RitsukageGif.Core
     {
         private const long PixelBudget = 256L * 1024 * 1024;
         private static readonly SemaphoreSlim Gate = new(2);
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.Image");
         private readonly MediaProcessingService _media = new();
 
         public Task<MediaInfo> ComposeAsync(string output, ImageCompositionOptions options,
             CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(options);
+            Logger.ZLogInformation(
+                $"Image composition requested: width={options.Width}, height={options.Height}, layers={options.Layers.Count}");
             return Run(async () =>
             {
                 Budget(options.Width, options.Height);
-                if (options.Layers.Count > 128) throw new ArgumentOutOfRangeException(nameof(options.Layers));
+                if (options.Layers.Count > 128) throw new ArgumentOutOfRangeException(nameof(options));
                 using var canvas = new MagickImage(new MagickColor(options.Background), (uint)options.Width,
                     (uint)options.Height);
                 foreach (var layer in options.Layers)
@@ -23,10 +26,10 @@ namespace RitsukageGif.Core
                     token.ThrowIfCancellationRequested();
                     if (!double.IsFinite(layer.Opacity) || layer.Opacity is < 0 or > 1 ||
                         layer.Rotation is not (0 or 90 or 180 or 270))
-                        throw new ArgumentOutOfRangeException(nameof(options.Layers));
+                        throw new ArgumentOutOfRangeException(nameof(options));
                     using var images = await Read(layer.Path, token);
                     if (layer.FrameIndex < 0 || layer.FrameIndex >= images.Count)
-                        throw new ArgumentOutOfRangeException(nameof(layer.FrameIndex));
+                        throw new ArgumentOutOfRangeException(nameof(options));
                     using var image = images[layer.FrameIndex].Clone();
                     var crop = layer.CropX.HasValue || layer.CropY.HasValue || layer.CropWidth.HasValue ||
                                layer.CropHeight.HasValue;
@@ -36,7 +39,7 @@ namespace RitsukageGif.Core
                             layer.CropWidth is null or <= 0 || layer.CropHeight is null or <= 0 ||
                             (long)layer.CropX + layer.CropWidth > image.Width ||
                             (long)layer.CropY + layer.CropHeight > image.Height)
-                            throw new ArgumentOutOfRangeException(nameof(layer.CropWidth));
+                            throw new ArgumentOutOfRangeException(nameof(options));
                         image.Crop(new MagickGeometry(layer.CropX.Value, layer.CropY.Value,
                             (uint)layer.CropWidth.Value, (uint)layer.CropHeight.Value));
                         image.ResetPage();
@@ -68,6 +71,8 @@ namespace RitsukageGif.Core
             CancellationToken token = default)
         {
             ArgumentNullException.ThrowIfNull(options);
+            Logger.ZLogInformation(
+                $"Contact sheet requested: columns={options.Columns}, maximumFrames={options.MaxFrames}, thumbnailWidth={options.ThumbnailWidth}, thumbnailHeight={options.ThumbnailHeight}");
             return Run(async () =>
             {
                 if (options.Columns is < 1 or > 128 || options.MaxFrames is < 1 or > 1024 ||
@@ -76,12 +81,12 @@ namespace RitsukageGif.Core
                 Budget(options.ThumbnailWidth, options.ThumbnailHeight);
                 using var images = await Read(input, token);
                 if (options.FirstFrame >= images.Count)
-                    throw new ArgumentOutOfRangeException(nameof(options.FirstFrame));
+                    throw new ArgumentOutOfRangeException(nameof(options));
                 var count = (int)Math.Min(options.MaxFrames,
                     ((long)images.Count - 1 - options.FirstFrame) / options.FrameStep + 1);
                 var columns = Math.Min(count, options.Columns);
                 var width = checked(columns * options.ThumbnailWidth);
-                var height = checked(((count + columns - 1) / columns) * options.ThumbnailHeight);
+                var height = checked((count + columns - 1) / columns * options.ThumbnailHeight);
                 Budget(width, height);
                 using var canvas = new MagickImage(new MagickColor(options.Background), (uint)width, (uint)height);
                 for (var index = 0; index < count; index++)
@@ -104,13 +109,28 @@ namespace RitsukageGif.Core
             await Gate.WaitAsync(token);
             try
             {
-                return await Task.Run(action, token);
+                var result = await Task.Run(action, token);
+                Logger.ZLogInformation(
+                    $"Image composition completed: output={result.Path}, width={result.Width}, height={result.Height}, frames={result.Frames}, bytes={result.Bytes}");
+                return result;
             }
             // A cancelled native transform can invalidate its image instead of throwing MagickException.
             catch (Exception exception) when (token.IsCancellationRequested &&
                                               exception is MagickException or ObjectDisposedException)
             {
+                Logger.ZLogDebug($"Image composition canceled during native processing");
                 throw new OperationCanceledException(token);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Logger.ZLogDebug($"Image composition canceled");
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(error,
+                    $"Image composition failed: exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                throw;
             }
             finally
             {
@@ -124,8 +144,8 @@ namespace RitsukageGif.Core
             Budget(info.Width, info.Height, info.Frames);
             if (info.Bytes > PixelBudget) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
             var images = info.Format is "png" or "apng"
-                ? MediaPngCodec.ReadImages(path)
-                : new MagickImageCollection(path);
+                ? MediaPngCodec.ReadImages(path, token)
+                : new(path);
             try
             {
                 token.ThrowIfCancellationRequested();
@@ -135,9 +155,13 @@ namespace RitsukageGif.Core
                     throw new InvalidDataException();
                 foreach (var image in images)
                     image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
-                if (info.Format == "apng") MediaPngCodec.Coalesce(images, token);
-                else if (info.Format == "webp") MediaWebpCodec.Coalesce(path, images, info.Width, info.Height, token);
-                else images.Coalesce();
+                switch (info.Format)
+                {
+                    case "apng": MediaPngCodec.Coalesce(images, token); break;
+                    case "webp": MediaWebpCodec.Coalesce(path, images, info.Width, info.Height, token); break;
+                    default: images.Coalesce(); break;
+                }
+
                 token.ThrowIfCancellationRequested();
                 return images;
             }
@@ -157,7 +181,7 @@ namespace RitsukageGif.Core
             var target = format switch
             {
                 "png" => MagickFormat.Png, "webp" => MagickFormat.WebP, "gif" => MagickFormat.Gif,
-                _ => throw new ArgumentOutOfRangeException(nameof(format))
+                _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
             if (!overwrite && File.Exists(output)) throw new IOException(output);
             var directory = Path.GetDirectoryName(output)!;
@@ -169,7 +193,7 @@ namespace RitsukageGif.Core
                 canvas.Quality = (uint)quality;
                 canvas.Settings.SetDefine(MagickFormat.WebP, "lossless", lossless);
                 token.ThrowIfCancellationRequested();
-                canvas.Write(temporary, target);
+                await canvas.WriteAsync(temporary, target, token);
                 var result = await _media.InspectAsync(temporary, token);
                 token.ThrowIfCancellationRequested();
                 File.Move(temporary, output, overwrite);
@@ -196,7 +220,8 @@ namespace RitsukageGif.Core
             if (selected.Length == 0) return;
             byte[] pixels;
             using (var source = image.GetPixels()) pixels = source.ToByteArray(PixelMapping.BGRA)!;
-            PixelEffectProcessor.Apply(pixels, checked((int)image.Width), checked((int)image.Height), selected, token);
+            PixelEffectProcessor.Apply(pixels, checked((int)image.Width), checked((int)image.Height), selected,
+                token: token);
             image.ReadPixels(pixels,
                 new PixelReadSettings(image.Width, image.Height, StorageType.Char, PixelMapping.BGRA));
         }

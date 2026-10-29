@@ -4,6 +4,6 @@ namespace RitsukageGif.Contracts
     {
         Fast,
         Balanced,
-        Best
+        Best,
     }
 }

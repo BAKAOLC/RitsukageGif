@@ -13,7 +13,7 @@
     <SelfContained>true</SelfContained>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup><ProjectReference Include="../RitsukageGif.Diagnostics/RitsukageGif.Diagnostics.csproj" />
     <Compile Include="Desktop/**/*.cs" />
     <PackageReference Include="JAJ.Packages.MiniAudioEx" Version="3.3.7" />
     <ProjectReference Include="../RitsukageGif.Scripting/RitsukageGif.Scripting.csproj" />

@@ -11,7 +11,7 @@ namespace RitsukageGif.Core
             return Task.Run(async () =>
             {
                 token.ThrowIfCancellationRequested();
-                using var stream = File.Create(output);
+                await using var stream = File.Create(output);
                 using var writer = new StreamingPngWriter(stream, options.Width, options.Height, token);
                 byte[]? previous = null;
                 var count = 0;
@@ -24,20 +24,20 @@ namespace RitsukageGif.Core
                     writer.Add(frame.Pixels, bounds, frame.DelayMs);
                     previous = frame.Pixels;
                     count++;
-                    progress?.Report(new RecordingProgress(RecordingStage.Live, count, count));
+                    progress?.Report(new(RecordingStage.Live, count, count));
                 }
 
                 if (count == 0) throw new InvalidOperationException(UiText.Get("NoFrames"));
                 token.ThrowIfCancellationRequested();
                 writer.Complete();
-                progress?.Report(new RecordingProgress(RecordingStage.Complete, count, count));
+                progress?.Report(new(RecordingStage.Complete, count, count));
             }, token);
         }
 
         private static PixelRect ChangedBounds(byte[]? previous, byte[] current, int width, int height,
             CancellationToken token)
         {
-            if (previous is null) return new PixelRect(0, 0, width, height);
+            if (previous is null) return new(0, 0, width, height);
             var before = MemoryMarshal.Cast<byte, uint>(previous);
             var after = MemoryMarshal.Cast<byte, uint>(current);
             var left = width;

@@ -1,3 +1,5 @@
+using SkiaSharp;
+
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class SceneCapture
@@ -17,13 +19,13 @@ namespace RitsukageGif.Desktop
 
             layer.Drawing.Flush();
             PixelEffectProcessor.Apply(bitmap.GetPixels(), bitmap.Width, bitmap.Height, bitmap.RowBytes,
-                layer.MappedEffects, token, premultiplied: true);
+                layer.MappedEffects, token: token, premultiplied: true);
             bitmap.NotifyPixelsChanged();
             layer.Drawing.Save();
             try
             {
-                layer.Drawing.ClipPath(layer.Mask, SkiaSharp.SKClipOperation.Difference, true);
-                layer.Drawing.Clear(SkiaSharp.SKColors.Transparent);
+                layer.Drawing.ClipPath(layer.Mask, SKClipOperation.Difference, true);
+                layer.Drawing.Clear(SKColors.Transparent);
             }
             finally
             {
@@ -31,7 +33,7 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        internal static PixelEffect[] MapEffects(IReadOnlyList<PixelEffect> effects, int sourceWidth,
+        private static PixelEffect[] MapEffects(IReadOnlyList<PixelEffect> effects, int sourceWidth,
             int sourceHeight, int outputWidth, int outputHeight, int width, int height)
         {
             var mapped = new List<PixelEffect>(effects.Count);
@@ -57,11 +59,11 @@ namespace RitsukageGif.Desktop
                 {
                     Region = region,
                     BlockSize = (int)Math.Clamp(Math.Round(effect.BlockSize * scale), 1, 4096),
-                    Radius = (int)Math.Clamp(Math.Round(effect.Radius * scale), 1, 256)
+                    Radius = (int)Math.Clamp(Math.Round(effect.Radius * scale), 1, 256),
                 });
             }
 
-            return mapped.ToArray();
+            return [.. mapped];
         }
     }
 }

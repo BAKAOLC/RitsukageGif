@@ -13,6 +13,20 @@ namespace RitsukageGif.Core
             var frames = new List<AnimationEditFrame>();
             uint loops = 0;
 
+            if (info.Format == "apng")
+            {
+                foreach (var image in MediaPngCodec.ReadCoalescedFrames(path, info, token)) Add(image);
+            }
+            else
+            {
+                using var images = MediaProcessingService.Decode(path, info, token);
+                foreach (var image in images) Add(image);
+            }
+
+            if (frames.Count == 0) throw new InvalidDataException();
+            iterations = loops;
+            return frames;
+
             void Add(IMagickImage<byte> image)
             {
                 token.ThrowIfCancellationRequested();
@@ -29,20 +43,6 @@ namespace RitsukageGif.Core
 
                 frames.Add(Store(image, delay, token));
             }
-
-            if (info.Format == "apng")
-            {
-                foreach (var image in MediaPngCodec.ReadCoalescedFrames(path, info, token)) Add(image);
-            }
-            else
-            {
-                using var images = MediaProcessingService.Decode(path, info, token);
-                foreach (var image in images) Add(image);
-            }
-
-            if (frames.Count == 0) throw new InvalidDataException();
-            iterations = loops;
-            return frames;
         }
 
         private AnimationEditFrame Store(IMagickImage<byte> image, int delayMs, CancellationToken token)
@@ -52,7 +52,7 @@ namespace RitsukageGif.Core
             image.ResetPage();
             image.Write(path, MagickFormat.Png32);
             token.ThrowIfCancellationRequested();
-            return new AnimationEditFrame(path, checked((int)image.Width), checked((int)image.Height), delayMs);
+            return new(path, checked((int)image.Width), checked((int)image.Height), delayMs);
         }
 
         private void Edit(IEnumerable<int> indices, Action<MagickImage> edit, CancellationToken token)
@@ -90,12 +90,12 @@ namespace RitsukageGif.Core
             ArgumentNullException.ThrowIfNull(options);
             var crop = options.CropX.HasValue || options.CropY.HasValue || options.CropWidth.HasValue ||
                        options.CropHeight.HasValue;
-            if (crop && (options.CropX is null or < 0 || options.CropY is null or < 0 ||
-                         options.CropWidth is null or <= 0 || options.CropHeight is null or <= 0 ||
-                         (long)options.CropX + options.CropWidth > Width ||
-                         (long)options.CropY + options.CropHeight > Height))
+            if ((crop && (options.CropX is null or < 0 || options.CropY is null or < 0 ||
+                          options.CropWidth is null or <= 0 || options.CropHeight is null or <= 0 ||
+                          (long)options.CropX + options.CropWidth > Width ||
+                          (long)options.CropY + options.CropHeight > Height)) ||
+                options.Rotation is not (0 or 90 or 180 or 270))
                 throw new ArgumentOutOfRangeException(nameof(options));
-            if (options.Rotation is not (0 or 90 or 180 or 270)) throw new ArgumentOutOfRangeException(nameof(options));
             var width = options.CropWidth ?? Width;
             var height = options.CropHeight ?? Height;
             if (options.Rotation is 90 or 270) (width, height) = (height, width);
@@ -132,7 +132,8 @@ namespace RitsukageGif.Core
         {
             byte[] pixels;
             using (var collection = image.GetPixels()) pixels = collection.ToByteArray(PixelMapping.BGRA)!;
-            PixelEffectProcessor.Apply(pixels, checked((int)image.Width), checked((int)image.Height), effects, token);
+            PixelEffectProcessor.Apply(pixels, checked((int)image.Width), checked((int)image.Height), effects,
+                token: token);
             image.ReadPixels(pixels,
                 new PixelReadSettings(image.Width, image.Height, StorageType.Char, PixelMapping.BGRA));
         }
@@ -150,7 +151,8 @@ namespace RitsukageGif.Core
         {
             ThrowIfDisposed();
             using var replacement = new MagickImage(png);
-            if (replacement.Width != Width || replacement.Height != Height) throw new ArgumentException(nameof(png));
+            if (replacement.Width != Width || replacement.Height != Height)
+                throw new ArgumentException(null, nameof(png));
             // Edit invokes the callback synchronously before the replacement is disposed.
             // ReSharper disable once AccessToDisposedClosure
             Edit(indices, image => image.Composite(replacement, CompositeOperator.Src), token);

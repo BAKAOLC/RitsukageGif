@@ -6,7 +6,7 @@ namespace RitsukageGif.Core
             CancellationToken token = default)
         {
             ValidateName(name);
-            if (afterVersion < -1) throw new ArgumentOutOfRangeException(nameof(afterVersion));
+            ArgumentOutOfRangeException.ThrowIfLessThan(afterVersion, -1);
             if (!double.IsFinite(timeoutSeconds) || timeoutSeconds is < 0 or > 86400)
                 throw new ArgumentOutOfRangeException(nameof(timeoutSeconds));
             var deadline = Now + timeoutSeconds;
@@ -18,7 +18,7 @@ namespace RitsukageGif.Core
                 {
                     if (_disposed) return null;
                     if (_channels.TryGetValue(name, out var channel) && channel.DataVersion > afterVersion)
-                        return new InputChannelData(channel.Json, channel.DataVersion, channel.DataTimestamp,
+                        return new(channel.Json, channel.DataVersion, channel.DataTimestamp,
                             channel.Connected);
                     changed = _changed.Task;
                 }
@@ -41,7 +41,7 @@ namespace RitsukageGif.Core
         private void Signal()
         {
             var previous = _changed;
-            _changed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _changed = new(TaskCreationOptions.RunContinuationsAsynchronously);
             previous.TrySetResult(true);
         }
     }

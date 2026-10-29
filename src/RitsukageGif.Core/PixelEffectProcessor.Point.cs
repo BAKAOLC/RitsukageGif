@@ -7,6 +7,7 @@ namespace RitsukageGif.Core
             for (var x = 0; x < width; x++, pixel += 4)
             {
                 Read(pixel, premultiplied, out var b, out var g, out var r, out var a);
+                // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
                 switch (effect.Kind)
                 {
                     case PixelEffectKind.Fill:
@@ -28,6 +29,7 @@ namespace RitsukageGif.Core
                         g = Adjust(g, effect);
                         r = Adjust(r, effect);
                         break;
+                    default: throw new ArgumentOutOfRangeException(nameof(effect));
                 }
 
                 Write(pixel, b, g, r, a, effect.Amount, premultiplied);
@@ -54,7 +56,7 @@ namespace RitsukageGif.Core
                     }
 
                 for (var x = 0; x < area.Width; x++, pixel += 4)
-                {
+                    // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
                     switch (effect.Kind)
                     {
                         case PixelEffectKind.Grayscale:
@@ -74,8 +76,8 @@ namespace RitsukageGif.Core
                             pixel[1] = table[pixel[1]];
                             pixel[2] = table[pixel[2]];
                             break;
+                        default: throw new ArgumentOutOfRangeException(nameof(effect));
                     }
-                }
             });
         }
     }

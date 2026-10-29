@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 
@@ -8,23 +9,23 @@ namespace RitsukageGif.Core
     // A pull-driven file timeline. Backpressure bounds decoded memory independently of file duration.
     public sealed class FfmpegFileSource : IDisposable
     {
-        private readonly string _executable;
-        private readonly string _input;
-        private readonly double _fallbackDuration;
-        private readonly double _startTime;
-        private readonly double _seekBase;
-        private readonly double _estimatedDuration;
-        private double _decodeStart;
-        private readonly CancellationTokenSource _lifetime = new();
         private readonly SemaphoreSlim _access = new(1);
-        private CancellationTokenSource _decoderStop = null!;
-        private Channel<FfmpegVideoFrame> _frames = null!;
-        private Task _reader = Task.CompletedTask;
+        private readonly double _estimatedDuration;
+        private readonly string _executable;
+        private readonly double _fallbackDuration;
+        private readonly string _input;
+        private readonly CancellationTokenSource _lifetime = new();
+        private readonly double _seekBase;
+        private readonly double _startTime;
         private FfmpegVideoFrame? _current;
-        private FfmpegVideoFrame? _next;
-        private bool _ended;
-        private double _duration;
+        private double _decodeStart;
+        private CancellationTokenSource _decoderStop = null!;
         private int _disposed;
+        private double _duration;
+        private bool _ended;
+        private Channel<FfmpegVideoFrame> _frames = null!;
+        private FfmpegVideoFrame? _next;
+        private Task _reader = Task.CompletedTask;
 
         private FfmpegFileSource(string executable, string input, int width, int height, double fallbackDuration,
             double startTime, double seekBase, double estimatedDuration)
@@ -43,6 +44,17 @@ namespace RitsukageGif.Core
         public int Width { get; }
         public int Height { get; }
 
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _lifetime.Cancel();
+            _access.Wait();
+            _reader.GetAwaiter().GetResult();
+            _decoderStop.Dispose();
+            _lifetime.Dispose();
+            _access.Dispose();
+        }
+
         public static async Task<FfmpegFileSource> CreateAsync(FfmpegInputOptions options,
             CancellationToken token = default)
         {
@@ -59,7 +71,7 @@ namespace RitsukageGif.Core
                      {
                          "-v", "error", "-select_streams", "v:0", "-show_entries",
                          "stream=width,height,avg_frame_rate,start_time,duration:format=start_time,duration", "-of",
-                         "json", "-i", options.Input
+                         "json", "-i", options.Input,
                      }) process.StartInfo.ArgumentList.Add(argument);
             process.Start();
             await using var registration =
@@ -95,7 +107,7 @@ namespace RitsukageGif.Core
                 var seekBase = startTime - JsonNumber(format, "start_time");
                 var duration = JsonNumber(stream, "duration");
                 if (duration <= 0) duration = Math.Max(0, JsonNumber(format, "duration") - Math.Max(0, startTime));
-                return new FfmpegFileSource(executable, options.Input, width, height, fallback, startTime, seekBase,
+                return new(executable, options.Input, width, height, fallback, startTime, seekBase,
                     duration);
             }
             finally
@@ -121,9 +133,13 @@ namespace RitsukageGif.Core
             await _access.WaitAsync(timeout.Token).ConfigureAwait(false);
             try
             {
-                if (loop && _duration > 0) position %= _duration;
-                if (!loop && _ended && position >= _duration)
-                    return holdLast && _current is not null ? (byte[])_current.Pixels.Clone() : null;
+                switch (loop)
+                {
+                    case true when _duration > 0: position %= _duration; break;
+                    case false when _ended && position >= _duration:
+                        return holdLast && _current is not null ? (byte[])_current.Pixels.Clone() : null;
+                }
+
                 if ((_current is not null && position < _current.Time)
                     || position - (_current?.Time ?? 0) > 5)
                 {
@@ -213,7 +229,7 @@ namespace RitsukageGif.Core
                          Math.Max(0, position + _seekBase).ToString("R", CultureInfo.InvariantCulture), "-i", _input,
                          "-map", "0:v:0", "-an", "-sn", "-dn", "-vf",
                          $"scale={Width}:{Height},setpts=PTS-({_startTime.ToString("R", CultureInfo.InvariantCulture)})/TB,showinfo=checksum=0",
-                         "-fps_mode", "passthrough", "-pix_fmt", "bgra", "-f", "rawvideo", "pipe:1"
+                         "-fps_mode", "passthrough", "-pix_fmt", "bgra", "-f", "rawvideo", "pipe:1",
                      })
                 process.StartInfo.ArgumentList.Add(argument);
             using var parsingStop = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -240,7 +256,7 @@ namespace RitsukageGif.Core
                     if (read == 0) break;
                     if (read != pixels.Length) throw new EndOfStreamException();
                     var timing = await times.Reader.ReadAsync(token).ConfigureAwait(false);
-                    await frames.WriteAsync(new FfmpegVideoFrame(timing.Time, timing.Duration, pixels), token)
+                    await frames.WriteAsync(new(timing.Time, timing.Duration, pixels), token)
                         .ConfigureAwait(false);
                 }
 
@@ -272,12 +288,12 @@ namespace RitsukageGif.Core
         private static async Task<string> ReadTimesAsync(StreamReader reader,
             ChannelWriter<(double Time, double Duration)> times, CancellationToken token)
         {
-            var detail = new System.Text.StringBuilder();
+            var detail = new StringBuilder();
             try
             {
                 var state = (Frame: 0, TimeBase: 0d);
                 var buffer = new char[1024];
-                var line = new System.Text.StringBuilder();
+                var line = new StringBuilder();
                 int count;
                 while ((count = await reader.ReadAsync(buffer.AsMemory(), token).ConfigureAwait(false)) > 0)
                     for (var index = 0; index < count; index++)
@@ -308,7 +324,7 @@ namespace RitsukageGif.Core
         private static async Task<(int Frame, double TimeBase)> ParseLineAsync(string line,
             (int Frame, double TimeBase) state,
             ChannelWriter<(double Time, double Duration)> times,
-            System.Text.StringBuilder detail, CancellationToken token)
+            StringBuilder detail, CancellationToken token)
         {
             const string timeBaseKey = "config in time_base: ";
             var timeBaseIndex = line.IndexOf(timeBaseKey, StringComparison.Ordinal);
@@ -381,17 +397,6 @@ namespace RitsukageGif.Core
             if (end >= 0) text = text[..end];
             return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) &&
                    double.IsFinite(value);
-        }
-
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _lifetime.Cancel();
-            _access.Wait();
-            _reader.GetAwaiter().GetResult();
-            _decoderStop.Dispose();
-            _lifetime.Dispose();
-            _access.Dispose();
         }
     }
 }

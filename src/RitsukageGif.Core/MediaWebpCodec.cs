@@ -30,7 +30,7 @@ namespace RitsukageGif.Core
                 {
                     if (length != 6 || iterations.HasValue) throw new InvalidDataException();
                     stream.ReadExactly(header[..6]);
-                    background = new MagickColor(header[2], header[1], header[0], header[3]);
+                    background = new(header[2], header[1], header[0], header[3]);
                     iterations = BinaryPrimitives.ReadUInt16LittleEndian(header[4..]);
                 }
                 else if (header[..4].SequenceEqual("ANMF"u8))
@@ -71,6 +71,9 @@ namespace RitsukageGif.Core
             MediaPngCodec.Coalesce(images, token, background);
         }
 
-        private static int Read24(ReadOnlySpan<byte> value) => value[0] | (value[1] << 8) | (value[2] << 16);
+        private static int Read24(ReadOnlySpan<byte> value)
+        {
+            return value[0] | (value[1] << 8) | (value[2] << 16);
+        }
     }
 }

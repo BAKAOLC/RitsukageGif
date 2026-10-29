@@ -1,28 +1,31 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace RitsukageGif.Core
 {
     public sealed partial class MultiRecordingSession
     {
-        private sealed class StopTimestamp(Stopwatch clock)
-        {
-            private long _ticks = -1;
-            public long Ticks => Interlocked.Read(ref _ticks);
-            public void Record() => Interlocked.CompareExchange(ref _ticks, clock.ElapsedTicks, -1);
-        }
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.Capture");
+        private static long _nextOutputId;
 
+        [SuppressMessage("Performance", "CA1822")]
+        // ReSharper disable once MemberCanBeMadeStatic.Global
         public Task<IReadOnlyList<MultiRecordingResult>> RunAsync(
             IReadOnlyList<MultiRecordingOutput> outputs, Func<MultiRecordingOutput, IFrameSource> sourceFactory,
             IProgress<MultiRecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
-            Action<double>? beginTick = null) =>
-            Task.Run(() => RunCoreAsync(outputs, sourceFactory, progress, stop, cancel, beginTick));
+            Action<double>? beginTick = null)
+        {
+            return Task.Run(() => RunCoreAsync(outputs, sourceFactory, progress, beginTick, stop, cancel),
+                CancellationToken.None);
+        }
 
         private static async Task<IReadOnlyList<MultiRecordingResult>> RunCoreAsync(
             IReadOnlyList<MultiRecordingOutput> outputs, Func<MultiRecordingOutput, IFrameSource> sourceFactory,
-            IProgress<MultiRecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
-            Action<double>? beginTick)
+            IProgress<MultiRecordingProgress>? progress, Action<double>? beginTick, CancellationToken stop,
+            CancellationToken cancel)
         {
             if (outputs.Count is < 1 or > 8) throw new ArgumentException(UiText.Get("InvalidRecording"));
+            Logger.ZLogInformation($"Multi-output animation recording started: outputs={outputs.Count}");
             var paths = new HashSet<string>(OperatingSystem.IsWindows()
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal);
@@ -40,11 +43,11 @@ namespace RitsukageGif.Core
             using var captureStop = CancellationTokenSource.CreateLinkedTokenSource(stop, cancel);
             var clock = new Stopwatch();
             var stopTime = new StopTimestamp(clock);
-            using var registration = stop.Register(stopTime.Record);
+            await using var registration = stop.Register(stopTime.Record);
             try
             {
                 foreach (var output in outputs)
-                    states.Add(new OutputState(output, progress, cancel));
+                    states.Add(new(output, progress, cancel));
                 beginTick?.Invoke(0);
                 foreach (var state in states)
                 {
@@ -73,13 +76,13 @@ namespace RitsukageGif.Core
                 while (!captureStop.IsCancellationRequested)
                 {
                     var due = double.PositiveInfinity;
+                    // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                     foreach (var state in states)
                         if (state.Failure is null)
                             due = Math.Min(due, state.Next);
                     if (double.IsPositiveInfinity(due)) break;
                     var delay = due - clock.Elapsed.TotalMilliseconds;
                     if (delay > 0)
-                    {
                         try
                         {
                             await Task.Delay(TimeSpan.FromMilliseconds(delay), captureStop.Token);
@@ -88,7 +91,6 @@ namespace RitsukageGif.Core
                         {
                             break;
                         }
-                    }
 
                     if (captureStop.IsCancellationRequested) break;
                     var now = clock.Elapsed.TotalMilliseconds;
@@ -105,6 +107,7 @@ namespace RitsukageGif.Core
                             {
                                 var pixels = state.Source!.Capture(captureStop.Token);
                                 if (captureStop.IsCancellationRequested) break;
+                                // ReSharper disable once MethodHasAsyncOverloadWithCancellation
                                 state.Enqueue(pixels, clock.Elapsed.TotalMilliseconds);
                             }
 
@@ -125,6 +128,8 @@ namespace RitsukageGif.Core
                 }
 
                 var ticks = stopTime.Ticks;
+                Logger.ZLogInformation(
+                    $"Multi-output capture stopped; draining encoders: outputs={states.Count}, elapsedMilliseconds={clock.ElapsedMilliseconds}");
                 var end = ticks < 0 ? clock.Elapsed.TotalMilliseconds : ticks * 1000.0 / Stopwatch.Frequency;
                 foreach (var state in states) await state.EnqueueWorker;
                 foreach (var state in states) state.Complete(end);
@@ -133,10 +138,17 @@ namespace RitsukageGif.Core
                 // Cancellation is accepted until this commit barrier. Publication is a short synchronous
                 // batch; once it begins, return committed per-output results even if cancellation arrives.
                 foreach (var state in states) state.Publish();
-                return states.Select(state => state.Result()).ToArray();
+                Logger.ZLogInformation(
+                    $"Multi-output animation recording finished: outputs={states.Count}, failed={states.Count(state => state.Failure is not null)}, elapsedMilliseconds={clock.ElapsedMilliseconds}");
+                return [.. states.Select(state => state.Result())];
             }
             catch (Exception ex)
             {
+                if (ex is OperationCanceledException && cancel.IsCancellationRequested)
+                    Logger.ZLogInformation($"Multi-output animation recording canceled: outputs={states.Count}");
+                else
+                    Logger.ZLogError(ex,
+                        $"Multi-output animation recording failed: exceptionType={ex.GetType().Name}, hResult={ex.HResult}");
                 foreach (var state in states) state.Fail(ex);
                 throw;
             }
@@ -147,6 +159,17 @@ namespace RitsukageGif.Core
                 foreach (var state in states) state.Complete(clock.Elapsed.TotalMilliseconds);
                 await Task.WhenAll(states.Select(state => state.Worker));
                 foreach (var state in states) state.Dispose();
+            }
+        }
+
+        private sealed class StopTimestamp(Stopwatch clock)
+        {
+            private long _ticks = -1;
+            public long Ticks => Interlocked.Read(ref _ticks);
+
+            public void Record()
+            {
+                Interlocked.CompareExchange(ref _ticks, clock.ElapsedTicks, -1);
             }
         }
     }

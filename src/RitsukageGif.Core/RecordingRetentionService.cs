@@ -4,6 +4,7 @@ namespace RitsukageGif.Core
 {
     public sealed class RecordingRetentionService(string indexPath)
     {
+        private static readonly ILogger Logger = LogHub.GetLogger("Core.Storage");
         private readonly SemaphoreSlim _gate = new(1, 1);
 
         private static StringComparer PathComparer => OperatingSystem.IsWindows()
@@ -15,10 +16,23 @@ namespace RitsukageGif.Core
             CancellationToken token = default)
         {
             await _gate.WaitAsync(token).ConfigureAwait(false);
+            Logger.ZLogDebug(
+                $"Recording retention pass started: rulesEnabled={policy.HasRules}, newFiles={newFiles.Count}, protectedFiles={protectedPaths.Count}");
             try
             {
                 await Task.Run(() => Apply(policy, newFiles, protectedPaths, clipboardPaths, token), token)
                     .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Logger.ZLogDebug($"Recording retention pass canceled");
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogError(error,
+                    $"Recording retention pass failed: exceptionType={error.GetType().Name}, hResult={error.HResult}");
+                throw;
             }
             finally
             {
@@ -33,7 +47,7 @@ namespace RitsukageGif.Core
             var index = File.Exists(indexPath)
                 ? JsonSerializer.Deserialize(File.ReadAllText(indexPath),
                     RecordingRetentionJsonContext.Default.RecordingRetentionIndex) ?? throw new InvalidDataException()
-                : new RecordingRetentionIndex();
+                : new();
             if (index.Files is null || index.ClipboardPaths is null) throw new InvalidDataException();
             // JSON can contain null collection elements despite the C# annotation.
             // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
@@ -48,15 +62,16 @@ namespace RitsukageGif.Core
                 var file = new FileInfo(fullPath);
                 if (!file.Exists) continue;
                 index.Files.RemoveAll(entry => PathComparer.Equals(entry.Path, fullPath));
-                index.Files.Add(new RetainedRecording(fullPath, now, file.Length, file.LastWriteTimeUtc,
+                index.Files.Add(new(fullPath, now, file.Length, file.LastWriteTimeUtc,
                     file.CreationTimeUtc));
             }
 
-            if (clipboardPaths is not null) index.ClipboardPaths = clipboardPaths.Select(Path.GetFullPath).ToArray();
+            if (clipboardPaths is not null) index.ClipboardPaths = [.. clipboardPaths.Select(Path.GetFullPath)];
             var protect = new HashSet<string>(protectedPaths.Select(Path.GetFullPath), PathComparer);
             protect.UnionWith(index.ClipboardPaths);
             // Never adopt arbitrary files from the output directory. Changed or replaced files stop being managed.
             var files = new List<RetainedRecording>();
+            var inaccessible = 0;
             foreach (var entry in index.Files.DistinctBy(entry => entry.Path, PathComparer))
             {
                 token.ThrowIfCancellationRequested();
@@ -67,14 +82,25 @@ namespace RitsukageGif.Core
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
                     files.Add(entry); // Retry inaccessible files later, without treating them as deletion candidates.
+                    inaccessible++;
                 }
             }
 
             index.Files.Clear();
             index.Files.AddRange(files.OrderBy(entry => entry.SavedUtc).ThenBy(entry => entry.Path, PathComparer));
             Save(index); // Persist ownership and clipboard protection before removing any file.
-            if (!policy.HasRules) return;
+            if (!policy.HasRules)
+            {
+                Logger.ZLogDebug(
+                    $"Recording retention ownership updated without deletion rules: trackedFiles={index.Files.Count}, inaccessibleFiles={inaccessible}");
+                return;
+            }
+
             var count = index.Files.Count;
+            var originalCount = count;
+            var deferred = 0;
+            Exception? deferredError = null;
+            string? deferredPath = null;
             var total = index.Files.Sum(entry => (decimal)entry.Length);
             var maxBytes = policy.MaxSizeMiB is > 0 ? (decimal)policy.MaxSizeMiB.Value * 1024 * 1024 : decimal.MaxValue;
             var cutoff = policy.MaxAgeDays is > 0
@@ -97,11 +123,21 @@ namespace RitsukageGif.Core
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
                 {
-                    System.Diagnostics.Trace.TraceInformation("Recording cleanup deferred: {0}", error.Message);
+                    deferred++;
+                    if (deferredError is null)
+                    {
+                        deferredError = error;
+                        deferredPath = entry.Path;
+                    }
                 }
             }
 
             Save(index);
+            if (deferredError is not null)
+                Logger.ZLogWarning(deferredError,
+                    $"Recording file deletion deferred: files={deferred}, firstPath={deferredPath}");
+            Logger.ZLogInformation(
+                $"Recording retention pass completed: deletedFiles={originalCount - count}, remainingFiles={count}, deferredFiles={deferred}, inaccessibleFiles={inaccessible}");
         }
 
         private void Save(RecordingRetentionIndex index)
@@ -131,7 +167,9 @@ namespace RitsukageGif.Core
 
         private static bool SafeFile(string path)
         {
-            if (Path.GetExtension(path).ToLowerInvariant() is not (".gif" or ".webp" or ".png")) return false;
+            if (Path.GetExtension(path).ToLowerInvariant() is not (".gif" or ".webp" or ".png" or ".jpg" or ".jpeg"
+                or ".bmp" or ".exr" or ".mp4" or ".webm"))
+                return false;
             for (var current = path; current is not null; current = Path.GetDirectoryName(current))
             {
                 // Cloud placeholders are reparse points too; reject links and junctions, not cloud storage.
