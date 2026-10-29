@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -198,7 +198,7 @@ namespace RitsukageGif.Desktop
                 var summary = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
                 var content = new Grid { ColumnDefinitions = new("*,16"), ColumnSpacing = 8 };
                 content.Children.Add(summary);
-                var arrow = ToolbarIcon.Create(button, "M5,9 L12,16 19,9");
+                var arrow = DropDownChevron.Create(button);
                 Grid.SetColumn(arrow, 1);
                 content.Children.Add(arrow);
                 button.Content = content;

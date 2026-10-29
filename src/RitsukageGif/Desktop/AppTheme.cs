@@ -24,6 +24,8 @@ namespace RitsukageGif.Desktop
 
         public AppTheme()
         {
+            AddDropDowns();
+            Resources["DropDownChevronBrush"] = Muted;
             Resources["ApplicationFont"] = new FontFamily(DefaultFontFamily);
             Resources["ApplicationThemeVariant"] = ThemeVariant.Light;
             Resources.ThemeDictionaries[ThemeVariant.Light] = new ResourceDictionary
@@ -204,6 +206,7 @@ namespace RitsukageGif.Desktop
                     new Setter(TemplatedControl.ForegroundProperty, Brush("#303640")),
                     new Setter(TemplatedControl.BackgroundProperty, Brush("#FFFFFF")),
                 },
+                Resources = { ["DropDownChevronBrush"] = Brush("#7D8188") },
             });
             Add(new Style(s => s.OfType<Window>().Class("main-window").Descendant().OfType<Button>())
             {

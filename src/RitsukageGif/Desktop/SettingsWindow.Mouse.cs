@@ -119,12 +119,26 @@ namespace RitsukageGif.Desktop
         private static void SetMouseBindingStatus(ContentControl control, string? error, bool active)
         {
             var description = error ?? UiText.Get(active ? "MouseBindingReady" : "MouseBindingNotSet");
-            control.Content = new Path
+            control.HorizontalContentAlignment = HorizontalAlignment.Center;
+            control.VerticalContentAlignment = VerticalAlignment.Center;
+            control.Content = new Viewbox
             {
-                Data = Geometry.Parse(error is not null ? "M5,5 L19,19 M19,5 L5,19" :
-                    active ? "M4,12 L10,18 21,5" : "M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M6,12 L18,12"),
-                Width = 18, Height = 18, StrokeThickness = 2, Stretch = Stretch.Uniform,
-                Stroke = error is not null ? AppTheme.Error : active ? AppTheme.Success : AppTheme.Muted,
+                Width = 18, Height = 18, Stretch = Stretch.Uniform,
+                Child = new Canvas
+                {
+                    Width = 24, Height = 24,
+                    Children =
+                    {
+                        new Path
+                        {
+                            Data = Geometry.Parse(error is not null ? "M5,5 L19,19 M19,5 L5,19" :
+                                active ? "M4,12 L10,18 21,5" :
+                                "M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M6,12 L18,12"),
+                            Width = 24, Height = 24, StrokeThickness = 2, Stretch = Stretch.None,
+                            Stroke = error is not null ? AppTheme.Error : active ? AppTheme.Success : AppTheme.Muted,
+                        },
+                    },
+                },
             };
             ToolTip.SetTip(control, description);
             AutomationProperties.SetName(control, description);
