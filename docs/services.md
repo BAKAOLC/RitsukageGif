@@ -91,6 +91,56 @@ if (outcome.isOk) {
 
 直接使用 `media.process` 将 APNG 处理为 APNG 时，逐帧解码、变换和编码，保留原有帧数、精确延时及循环次数，不需要将整段动画保留在内存中。这些流式路径不限制输入文件总字节数，但单帧像素工作区和压缩数据仍有内存限制；每帧压缩数据最多 256 MiB。转换到 GIF 或 WebP 仍使用完整解码流程。
 
+## 保存静态截图
+
+`capture.save(path, options)` 保存当前捕获目标的一帧，返回 `Result<MediaInfo,ServiceError>`。它不启动动画录制。
+
+```rgscript
+const shot = capture.save('./snapshot.png', {
+    format: StaticImageFormat.Png,
+    includeCursor: false,
+    overwrite: true
+})?;
+print(shot.path, shot.width, shot.height, shot.bytes);
+```
+
+| 字段 | 含义与默认值 |
+| --- | --- |
+| `format` | `StaticImageFormat.Png`、`Jpeg` 或 `Bmp`；省略时按 `.png`、`.jpg`、`.jpeg`、`.bmp` 扩展名判断 |
+| `quality` | JPEG 质量，`1`～`100`，默认 `90`；PNG、BMP 保持无损 |
+| `background` | JPEG、BMP 的透明区域底色，默认 `#ffffff`，必须是不透明颜色；PNG 保留透明度 |
+| `overwrite` | 是否覆盖目标，默认 `false` |
+| `includeCursor` | 是否包含鼠标；省略时使用当前捕获设置 |
+| `scalePercent` | 缩放百分比，`1`～`100`；省略时使用当前捕获设置 |
+| `outputName` | 当前多路预设中的输出名称；省略时使用当前捕获目标 |
+| `toneMap` | HDR 转 SDR 的映射方式：`HdrToneMapMode.HighlightCompression` 或 `ReferenceWhite`；省略时使用截图设置 |
+
+文件写入成功后才替换目标；失败或取消不会留下部分文件。JPEG 使用完整色度采样，减少彩色文字边缘的失真；BMP 使用常见的 24 位格式。返回值的 `frames` 为 `1`，`duration` 为 `0`。
+
+### 同一帧保存 SDR 和 HDR
+
+`capture.saveOutputs(outputs, options)` 只捕获一次，并将这一帧分别保存到多个目标，返回 `Result<MediaInfo[],ServiceError>`。可以同时保存普通 PNG、JPEG、BMP、静态 WebP，以及保留 HDR 数据的 PNG 或 EXR。
+
+```rgscript
+const outputs = capture.saveOutputs([
+    { path: './snapshot-sdr.png', color: OutputColorMode.Sdr,
+      format: StaticImageFormat.Png },
+    { path: './snapshot-hdr.exr', color: OutputColorMode.Hdr,
+      hdrFormat: HdrImageFormat.Exr }
+], {
+    includeCursor: false,
+    scalePercent: 100,
+    toneMap: HdrToneMapMode.HighlightCompression
+})?;
+for (const output of outputs) print(output.path, output.bytes);
+```
+
+每个目标独立选择 `OutputColorMode.Sdr` 或 `Hdr`，不能用 `Both` 代替两个目标。SDR 目标使用 `format`、`quality` 和 `background`；HDR 目标使用 `hdrFormat`，支持 `HdrImageFormat.Png`、`Exr`。格式省略时按文件扩展名识别。`toneMap` 只影响 SDR 输出，不修改 HDR 原始亮度。
+
+第二个参数支持 `includeCursor`、`scalePercent`、`outputName`、`toneMap`，含义同 `capture.save`。一个调用最多 16 个目标。目标路径必须各不相同且不存在，不支持覆盖；已有文件需要覆盖时，可继续使用单文件 `capture.save` 保存 SDR 图像。
+
+所有目标先完成临时编码，然后发布到目标位置；编码失败或取消会删除本次临时文件，发布失败会回滚本次已发布的文件。文件系统不能保证多个目录中的文件在同一瞬间出现；回滚遇到权限或设备故障时会返回清理错误。未提供浮点 HDR 数据的捕获来源会在输出前返回错误，不会把普通 SDR 像素伪装成 HDR。
+
 ## 一份输入，多个输出
 
 ```rgscript
@@ -150,3 +200,19 @@ if (result.achieved) {
 每次都从原始输入开始，避免把上一次有损输出再次量化。候选文件复用同一路径，原文件不变；未达到目标时返回失败结果并保留最后一次候选。该策略保持尺寸和播放时序，降低颜色数会影响渐变、文字边缘和图像细节，处理后应检查输出效果。
 
 [media-processing.rgpreset](../examples/media-processing.rgpreset) 使用范例图片演示 PNG 缩略图、GIF、WebP 输出和文件大小查询。
+
+## 检测隐私区域
+
+`privacy.detect(image, language?)` 接受图片路径或 `Bytes`，返回 `Result<PrivacyDetectionResult,ServiceError>`：
+
+```rgscript
+const detected = privacy.detect('./capture.png', 'zh-Hans')?;
+for (const item of detected.candidates) {
+    if (item.isSensitive) print(item.kind, item.bounds);
+}
+for (const failure of detected.failures) print(failure.provider, failure.message);
+```
+
+候选包含 `provider`、`kind`、`text`、`bounds`、`isSensitive` 和 `boundsApproximate`。`kind` 使用 `PrivacyCandidateKind` 枚举，支持普通文本、邮箱、电话、身份证校验号、支付卡校验号和二维码。普通文本不会自动视为隐私；检测结果仍需检查。
+
+坐标对应图片按 EXIF 方向调整后的首帧像素。二维码边界为保守估计，`boundsApproximate` 为 `true`；不根据一维码的两个端点猜测完整范围。服务只返回候选，不修改图片。路径相对脚本目录解析，输入上限为 64 MiB、16 × 1024 × 1024 像素。某个检测服务不可用时，其错误放在 `failures`，其他服务的结果保留；读图或解码失败返回错误，取消向上传播。

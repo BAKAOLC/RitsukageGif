@@ -11,7 +11,7 @@ $hostPlatform = if ($IsWindows) { 'win' } elseif ($IsMacOS) { 'osx' } else { 'li
 if (!$RuntimeIdentifier) { $RuntimeIdentifier = "$hostPlatform-$architecture" }
 if ($RuntimeIdentifier -ne "$hostPlatform-$architecture") { throw 'Native AOT packaging requires a matching host OS and architecture.' }
 $target = $RuntimeIdentifier.Replace('win-', 'win32-').Replace('osx-', 'darwin-')
-if (!$Output) { $Output = "artifacts/packages/rgscript-$($versions.Extension)-$target.vsix" }
+if (!$Output) { $Output = "artifacts/packages/rgscript-$($versions.ExtensionPackage)-$target.vsix" }
 $outputPath = [IO.Path]::GetFullPath($Output, $root)
 $artifacts = Join-Path $root 'artifacts'
 $staging = [IO.Path]::GetFullPath((Join-Path $artifacts 'vscode-package'))
@@ -25,7 +25,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Language server publish failed.' }
 @('server/**/*.pdb', 'server/**/*.xml', 'server/**/*.dbg', 'server/**/*.dSYM/**') | Set-Content -LiteralPath (Join-Path $staging '.vscodeignore')
 Push-Location $staging
 try {
-    & npx --yes '@vscode/vsce@4.0.0' package --no-dependencies --allow-missing-repository --target $target --out $outputPath
+    $preRelease = @(if ($versions.Development) { '--pre-release' })
+    & npx --yes '@vscode/vsce@4.0.0' package --no-dependencies --allow-missing-repository --target $target --out $outputPath @preRelease
     if ($LASTEXITCODE -ne 0) { throw 'Extension packaging failed.' }
 }
 finally { Pop-Location }
