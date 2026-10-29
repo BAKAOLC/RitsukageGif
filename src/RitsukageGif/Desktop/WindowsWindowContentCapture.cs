@@ -6,6 +6,7 @@ namespace RitsukageGif.Desktop
     // Direct WinRT/D3D11 ABI calls keep window capture usable in Native AOT without runtime COM wrappers.
     internal sealed unsafe partial class WindowsWindowContentCapture : IColorFrameSource
     {
+        private static readonly ILogger Logger = LogHub.GetLogger("Desktop.Capture.Window");
         private readonly bool _closedSubscribed;
         private readonly long _closedToken;
         private readonly bool _frameSubscribed;
@@ -213,12 +214,7 @@ namespace RitsukageGif.Desktop
                 if (size.Width != _size.Width || size.Height != _size.Height)
                 {
                     Close(ref frame);
-                    _pixels = null;
-                    _colorFrame = null;
-                    _size = size;
-                    Release(ref _staging);
-                    Check(((delegate* unmanaged[Stdcall]<nint, nint, int, int, Size, int>)Vtable(_pool)[6])(_pool,
-                        _winrtDevice, _format, 2, size));
+                    RecreatePool(size);
                     return null;
                 }
 
@@ -230,6 +226,19 @@ namespace RitsukageGif.Desktop
                 TextureDescription description;
                 ((delegate* unmanaged[Stdcall]<nint, TextureDescription*, void>)Vtable(texture)[10])(texture,
                     &description);
+                if (description.Width < size.Width || description.Height < size.Height ||
+                    description.Format != _format)
+                {
+                    Logger.ZLogDebug(
+                        $"Window capture discarded a transitional surface: contentWidth={size.Width}, contentHeight={size.Height}, textureWidth={description.Width}, textureHeight={description.Height}, textureFormat={description.Format}, expectedFormat={_format}");
+                    Release(ref texture);
+                    Release(ref access);
+                    Release(ref surface);
+                    Close(ref frame);
+                    RecreatePool(size);
+                    return null;
+                }
+
                 if (_staging == 0 || description.Width != _description.Width ||
                     description.Height != _description.Height)
                 {
@@ -254,6 +263,9 @@ namespace RitsukageGif.Desktop
                         _context)[14])(_context, _staging, 0, 1, 0, &map));
                 try
                 {
+                    var rowBytes = checked(size.Width * (_format == 10 ? 8 : 4));
+                    if (map.Data == 0 || map.RowPitch < rowBytes)
+                        throw new InvalidOperationException(UiText.Get("InvalidFrameBuffer"));
                     if (_preserveHdr) _pixels = new byte[checked(size.Width * size.Height * 4)];
                     else _pixels ??= new byte[checked(size.Width * size.Height * 4)];
                     if (_format == 10)

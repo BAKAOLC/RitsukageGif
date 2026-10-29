@@ -341,13 +341,18 @@ namespace RitsukageGif.Desktop
 
         private unsafe void DrawPixels(Layer layer, ReadOnlySpan<byte> pixels, int width, int height, SKRect? source)
         {
+            if (width <= 0 || height <= 0 || pixels.Length != checked(width * height * 4))
+                throw new InvalidOperationException(UiText.Get("InvalidFrameBuffer"));
             if (layer.SourceBitmap is null || layer.SourceBitmap.Width != width || layer.SourceBitmap.Height != height)
             {
                 layer.SourceBitmap?.Dispose();
                 layer.SourceBitmap = new(width, height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
             }
 
-            pixels.CopyTo(new((void*)layer.SourceBitmap.GetPixels(), pixels.Length));
+            var destination = layer.SourceBitmap.GetPixels();
+            if (destination == 0 || layer.SourceBitmap.ByteCount != pixels.Length)
+                throw new InvalidOperationException(UiText.Get("InvalidFrameBuffer"));
+            pixels.CopyTo(new((void*)destination, layer.SourceBitmap.ByteCount));
             layer.SourceBitmap.NotifyPixelsChanged();
             layer.Drawing.DrawBitmap(layer.SourceBitmap, source ?? new SKRect(0, 0, width, height),
                 new(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
