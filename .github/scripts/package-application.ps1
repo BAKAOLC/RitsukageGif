@@ -22,13 +22,15 @@ if ($IsMacOS) { $env:MACOSX_DEPLOYMENT_TARGET = '13.0' }
 & dotnet publish (Join-Path $root 'src/RitsukageGif') -c Release -r $RuntimeIdentifier -o $publish
 if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
 $executable = Join-Path $publish $(if ($IsWindows) { 'RitsukageGif.exe' } else { 'RitsukageGif' })
-$smoke = & $executable --help | Out-String
+$smoke = & $executable --version | Out-String
 if ($LASTEXITCODE -ne 0) { throw 'Published application could not start.' }
-if (!(($smoke -join "`n") | ConvertFrom-Json).Success) { throw 'Published application command check failed.' }
+$smokeReply = ($smoke -join "`n") | ConvertFrom-Json
+if (!$smokeReply.Success -or $smokeReply.State -ne 'version' -or $smokeReply.Message -ne $versions.Application) { throw 'Published application command check failed.' }
 Get-ChildItem -LiteralPath $publish -File | Where-Object { $_.Extension -in '.pdb', '.xml', '.dbg' } | Remove-Item -Force
 $packageName = "RitsukageGif-$($versions.Application)-$RuntimeIdentifier"
 if ($IsWindows) {
-    if ((Get-Item -LiteralPath (Join-Path $publish 'RitsukageGif.exe')).VersionInfo.FileVersion -ne $versions.Application) { throw 'Unexpected file version.' }
+    $fileVersion = (Get-Item -LiteralPath (Join-Path $publish 'RitsukageGif.exe')).VersionInfo
+    if ($fileVersion.FileVersion -ne $versions.NumericVersion -or $fileVersion.ProductVersion -ne $versions.Application) { throw 'Unexpected file version.' }
     Compress-Archive -Path (Join-Path $publish '*') -DestinationPath (Join-Path $outputPath "$packageName.zip") -Force
 }
 elseif ($IsMacOS) {
@@ -47,7 +49,7 @@ elseif ($IsMacOS) {
     Copy-Item -LiteralPath (Join-Path $root 'native/macos/Info.plist') -Destination $contents
     & /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $($versions.ShortVersion)" (Join-Path $contents 'Info.plist')
     if ($LASTEXITCODE -ne 0) { throw 'Application short version could not be set.' }
-    & /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $($versions.Application)" (Join-Path $contents 'Info.plist')
+    & /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $($versions.NumericVersion)" (Join-Path $contents 'Info.plist')
     if ($LASTEXITCODE -ne 0) { throw 'Application bundle version could not be set.' }
     foreach ($language in 'en', 'zh-Hans') {
         $localized = Join-Path $resources "$language.lproj"
@@ -79,7 +81,7 @@ else {
     $debArchitecture = if ($architecture -eq 'arm64') { 'arm64' } else { 'amd64' }
     @"
 Package: ritsukagegif
-Version: $($versions.Application)
+Version: $($versions.DebianVersion)
 Architecture: $debArchitecture
 Maintainer: OLC
 Section: graphics

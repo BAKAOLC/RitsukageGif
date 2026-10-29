@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       application: ${{ steps.version.outputs.application }}
+      commit: ${{ steps.version.outputs.commit }}
+      build: ${{ steps.version.outputs.build }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -39,11 +41,22 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_type == 'tag' && github.ref_name || '' }}
         run: |
-          $versions = ./.github/scripts/get-package-version.ps1 -Tag $env:RELEASE_TAG
+          $commit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve build commit.' }
+          $versions = ./.github/scripts/get-package-version.ps1 -Tag $env:RELEASE_TAG -Development:(!$env:RELEASE_TAG) -Commit $commit
           "application=$($versions.Application)" >> $env:GITHUB_OUTPUT
+          "commit=$commit" >> $env:GITHUB_OUTPUT
+          $build = $true
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -eq 'refs/heads/main') {
+            $build = !(./.github/scripts/test-tagged-commit.ps1 -Tag "v$($versions.NumericVersion)" -Commit $commit)
+          }
+          "build=$($build.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 
   build:
     needs: version
+    if: needs.version.outputs.build == 'true'
+    env:
+      RG_BUILD_VERSION: ${{ needs.version.outputs.application }}
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -70,7 +83,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.ref }}
+          ref: ${{ needs.version.outputs.commit }}
           persist-credentials: false
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
