@@ -1,12 +1,15 @@
-﻿namespace RitsukageGif.Scripting
+namespace RitsukageGif.Scripting
 {
     public sealed partial class ScriptEngine
     {
         private static readonly object Missing = new();
 
-        private static ScriptNode NamePattern(string name) => new("binding-name", name, null, [], 1, 1);
-
         private int _bindingDepth;
+
+        private static ScriptNode NamePattern(string name)
+        {
+            return new("binding-name", name, null, [], 1, 1);
+        }
 
         private async ValueTask<Evaluation> BindAsync(ScriptNode pattern, object? value, Scope scope, bool declare,
             bool readOnly,
@@ -20,7 +23,7 @@
 
             try
             {
-                return await BindCoreAsync(pattern, value, scope, declare, readOnly, token, typeName);
+                return await BindCoreAsync(pattern, value, scope, declare, readOnly, typeName, token);
             }
             finally
             {
@@ -30,21 +33,22 @@
 
         private async ValueTask<Evaluation> BindCoreAsync(ScriptNode pattern, object? value, Scope scope, bool declare,
             bool readOnly,
-            CancellationToken token, string? typeName)
+            string? typeName, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            if (pattern.Kind == "binding-hole") return default;
-            if (pattern.Kind == "binding-default")
+            switch (pattern.Kind)
             {
-                if (ReferenceEquals(value, Missing))
-                {
-                    var fallback = await EvalAsync(pattern.Children[1], scope, token);
-                    if (fallback.IsReturn) return fallback;
-                    value = fallback.Value;
-                }
+                case "binding-hole": return default;
+                case "binding-default":
+                    if (ReferenceEquals(value, Missing))
+                    {
+                        var fallback = await EvalAsync(pattern.Children[1], scope, token);
+                        if (fallback.IsReturn) return fallback;
+                        value = fallback.Value;
+                    }
 
-                return await BindAsync(pattern.Children[0], value, scope, declare, readOnly, token,
-                    typeName ?? pattern.TypeName);
+                    return await BindAsync(pattern.Children[0], value, scope, declare, readOnly, token,
+                        typeName ?? pattern.TypeName);
             }
 
             if (ReferenceEquals(value, Missing)) throw new InvalidOperationException(UiText.Get("ScriptTypeError"));
@@ -79,14 +83,16 @@
                     {
                         Evaluation binding;
                         if (child.Kind == "binding-rest")
+                        {
                             binding = await BindAsync(child,
                                 map.Where(p => !consumed.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value), scope,
                                 declare, readOnly, token);
+                        }
                         else
                         {
                             consumed.Add(child.Text);
                             binding = await BindAsync(child.Children[0],
-                                map.TryGetValue(child.Text, out var field) ? field : Missing, scope, declare, readOnly,
+                                map.GetValueOrDefault(child.Text, Missing), scope, declare, readOnly,
                                 token);
                         }
 
@@ -99,7 +105,7 @@
                     var container = await EvalAsync(target.Children[0], scope, token);
                     if (container.IsReturn) return container;
                     var key = target.Kind == "member"
-                        ? new Evaluation(target.Text)
+                        ? new(target.Text)
                         : await EvalAsync(target.Children[1], scope, token);
                     if (key.IsReturn) return key;
                     Set(container.Value, key.Value, value);
@@ -110,12 +116,15 @@
             return default;
         }
 
-        private static List<object?> Sequence(object? value) => value switch
+        private static List<object?> Sequence(object? value)
         {
-            List<object?> list => list,
-            string text => text.Select(c => (object?)c.ToString()).ToList(),
-            _ => throw TypeError()
-        };
+            return value switch
+            {
+                List<object?> list => list,
+                string text => [.. text.Select(object? (c) => c.ToString())],
+                _ => throw TypeError(),
+            };
+        }
 
         private async ValueTask<Evaluation> AppendAsync(List<object?> values, ScriptNode node, Scope scope,
             CancellationToken token)
@@ -131,8 +140,8 @@
         {
             var source = await EvalAsync(node.Children[0], scope, token, true);
             if (source.IsReturn) return source;
-            if (ReferenceEquals(source.Value, NullChain) || source.Value is null && node.Kind == "optionalSlice")
-                return new Evaluation(NullChain);
+            if (ReferenceEquals(source.Value, NullChain) || (source.Value is null && node.Kind == "optionalSlice"))
+                return new(NullChain);
             var text = source.Value as string;
             var values = source.Value as List<object?>;
             if (text is null && values is null) throw TypeError();
@@ -155,8 +164,8 @@
             token.ThrowIfCancellationRequested();
             if (text is not null)
             {
-                if (step == 1) return new Evaluation(text.Substring(start, length));
-                return new Evaluation(string.Create(length, (text, start, step, token), static (span, state) =>
+                if (step == 1) return new(text.Substring(start, length));
+                return new(string.Create(length, (text, start, step, token), static (span, state) =>
                 {
                     long index = state.start;
                     for (var i = 0; i < span.Length; i++, index += state.step)
@@ -167,7 +176,7 @@
                 }));
             }
 
-            if (step == 1) return new Evaluation(values!.GetRange(start, length));
+            if (step == 1) return new(values!.GetRange(start, length));
             var result = new List<object?>(length);
             for (long i = start; step > 0 ? i < end : i > end; i += step)
             {
@@ -175,7 +184,7 @@
                 result.Add(values![(int)i]);
             }
 
-            return new Evaluation(result);
+            return new(result);
 
             int Normalize(int index)
             {
@@ -187,7 +196,7 @@
         private static int SliceIndex(object value)
         {
             var number = Number(value);
-            return number.Equals(Math.Truncate(number)) && number >= int.MinValue && number <= int.MaxValue
+            return number.Equals(Math.Truncate(number)) && number is >= int.MinValue and <= int.MaxValue
                 ? (int)number
                 : throw TypeError();
         }

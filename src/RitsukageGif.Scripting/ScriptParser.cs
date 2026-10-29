@@ -2,18 +2,21 @@ namespace RitsukageGif.Scripting
 {
     internal sealed partial class ScriptParser(IReadOnlyList<PresetToken> tokens, int start = 0, bool analysis = false)
     {
-        public int Position { get; private set; } = start;
         private int _depth, _loops, _statementDepth;
         private int _tokenOffset;
+        public int Position { get; private set; } = start;
 
         private PresetToken Current => _tokenOffset == 0
             ? tokens[Position]
             : tokens[Position] with
             {
-                Text = tokens[Position].Text[_tokenOffset..], Column = tokens[Position].Column + _tokenOffset
+                Text = tokens[Position].Text[_tokenOffset..], Column = tokens[Position].Column + _tokenOffset,
             };
 
-        private bool Is(string value) => !Current.Quoted && Current.Text == value;
+        private bool Is(string value)
+        {
+            return !Current.Quoted && Current.Text == value;
+        }
 
         private bool Take(string value)
         {
@@ -23,8 +26,11 @@ namespace RitsukageGif.Scripting
             return true;
         }
 
-        private PresetSyntaxException Error(string expected) => new(Current.Line, Current.Column,
-            UiText.Format("DslExpected", expected, Current.Text));
+        private PresetSyntaxException Error(string expected)
+        {
+            return new(Current.Line, Current.Column,
+                UiText.Format("DslExpected", expected, Current.Text));
+        }
 
         private void Need(string value)
         {
@@ -76,19 +82,26 @@ namespace RitsukageGif.Scripting
         }
 
         private static ScriptNode Node(string kind, PresetToken token, IReadOnlyList<ScriptNode>? children = null,
-            string? text = null, object? value = null) =>
-            new(kind, text ?? token.Text, value, children ?? [], token.Line, token.Column);
+            string? text = null, object? value = null)
+        {
+            return new(kind, text ?? token.Text, value, children ?? [], token.Line, token.Column);
+        }
 
-        public static ScriptNode Parse(string text) => new ScriptParser(PresetLexer.Scan(text)).Document();
+        public static ScriptNode Parse(string text)
+        {
+            return new ScriptParser(PresetLexer.Scan(text)).Document();
+        }
 
         public static ScriptNode ParseForAnalysis(string text)
         {
-            var tokens = PresetLexer.Scan(text, tolerant: true);
+            var tokens = PresetLexer.Scan(text, true);
             return new ScriptParser(tokens, analysis: true).Document();
         }
 
-        public static ScriptNode ParseExpressionForAnalysis(string text) =>
-            ValidateTree(new ScriptParser(PresetLexer.Scan(text, tolerant: true), analysis: true).Expression());
+        public static ScriptNode ParseExpressionForAnalysis(string text)
+        {
+            return ValidateTree(new ScriptParser(PresetLexer.Scan(text, true), analysis: true).Expression());
+        }
 
         private ScriptNode ReadStatement()
         {
@@ -160,7 +173,7 @@ namespace RitsukageGif.Scripting
                     token.Text == "const")
                 with
                 {
-                    Binding = binding, TypeName = type
+                    Binding = binding, TypeName = type,
                 };
         }
 
@@ -249,7 +262,7 @@ namespace RitsukageGif.Scripting
                                 binding.Kind == "binding-name" ? binding.Text : "", readOnly)
                             with
                             {
-                                Binding = binding
+                                Binding = binding,
                             };
                     }
 
@@ -315,12 +328,16 @@ namespace RitsukageGif.Scripting
             return Node("expression", token, [expression]);
         }
 
-        private static int Priority(string op) => op switch
+        private static int Priority(string op)
         {
-            "=" or "+=" or "-=" or "*=" or "/=" or "%=" => 1, "?" => 2, "??" => 3, "||" or "or" => 4,
-            "&&" or "and" => 5,
-            "==" or "!=" => 6, "<" or ">" or "<=" or ">=" or "~" => 7, "+" or "-" => 8, "*" or "/" or "%" => 9, _ => 0
-        };
+            return op switch
+            {
+                "=" or "+=" or "-=" or "*=" or "/=" or "%=" => 1, "?" => 2, "??" => 3, "||" or "or" => 4,
+                "&&" or "and" => 5,
+                "==" or "!=" => 6, "<" or ">" or "<=" or ">=" or "~" => 7, "+" or "-" => 8, "*" or "/" or "%" => 9,
+                _ => 0,
+            };
+        }
 
         private ScriptNode Expression(int minimum = 1)
         {
@@ -333,7 +350,9 @@ namespace RitsukageGif.Scripting
                 left = Node("literal", token, value: token.Text);
             }
             else if (Take("true") || Take("false") || Take("null"))
+            {
                 left = Node("literal", token, value: token.Text == "null" ? null : token.Text == "true");
+            }
             else if (Take("("))
             {
                 var parameterStart = Position;
@@ -352,7 +371,10 @@ namespace RitsukageGif.Scripting
                     parameters = null;
                 }
 
-                if (parameters is not null) left = ArrowBody(token, parameters, returnType);
+                if (parameters is not null)
+                {
+                    left = ArrowBody(token, parameters, returnType);
+                }
                 else
                 {
                     Position = parameterStart;
@@ -362,8 +384,14 @@ namespace RitsukageGif.Scripting
                     Need(")");
                 }
             }
-            else if (Take("!") || Take("not") || Take("-") || Take("+")) left = Node("unary", token, [Expression(10)]);
-            else if (Take("fn") || Take("function")) left = Function(token);
+            else if (Take("!") || Take("not") || Take("-") || Take("+"))
+            {
+                left = Node("unary", token, [Expression(10)]);
+            }
+            else if (Take("fn") || Take("function"))
+            {
+                left = Function(token);
+            }
             else if (Take("["))
             {
                 var items = new List<ScriptNode>();
@@ -403,7 +431,10 @@ namespace RitsukageGif.Scripting
 
                         var name = Current.Quoted ? tokens[Position++].Text : Name();
                         ScriptNode value;
-                        if (Take(":")) value = Expression();
+                        if (Take(":"))
+                        {
+                            value = Expression();
+                        }
                         else
                         {
                             if (key.Quoted) throw Error(":");

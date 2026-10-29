@@ -1,24 +1,9 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 
 namespace RitsukageGif.Scripting
 {
     public sealed partial class ScriptBindingRegistry
     {
-        private sealed class ArrayContract
-        {
-            public string[] ElementTypes = [];
-        }
-
-        private readonly record struct PendingArrayContract(
-            ScriptBindingRegistry Registry,
-            List<object?> Array,
-            string ElementType);
-
-        private sealed class ValidationTransaction
-        {
-            public readonly List<PendingArrayContract> Pending = [];
-        }
-
         [ThreadStatic] private static ValidationTransaction? _validationTransaction;
         [ThreadStatic] private static ValidationTransaction? _spareValidationTransaction;
         private readonly ConditionalWeakTable<List<object?>, ArrayContract> _arrayContracts = new();
@@ -47,7 +32,7 @@ namespace RitsukageGif.Scripting
                 foreach (var pending in transaction.Pending)
                 {
                     var contract =
-                        pending.Registry._arrayContracts.GetValue(pending.Array, static _ => new ArrayContract());
+                        pending.Registry._arrayContracts.GetValue(pending.Array, static _ => new());
                     lock (contract)
                         if (!contract.ElementTypes.Contains(pending.ElementType, StringComparer.Ordinal))
                             contract.ElementTypes = [.. contract.ElementTypes, pending.ElementType];
@@ -75,8 +60,8 @@ namespace RitsukageGif.Scripting
             var transaction = _validationTransaction!;
             if (!ReferenceEquals(original, normalized))
                 foreach (var existing in GetArrayElementContracts(original))
-                    transaction.Pending.Add(new PendingArrayContract(this, normalized, existing));
-            transaction.Pending.Add(new PendingArrayContract(this, normalized, elementType));
+                    transaction.Pending.Add(new(this, normalized, existing));
+            transaction.Pending.Add(new(this, normalized, elementType));
         }
 
         internal object? NormalizePattern(object? value, string typeName)
@@ -127,7 +112,7 @@ namespace RitsukageGif.Scripting
                     var value = values[index];
                     foreach (var type in contracts) value = ValidateCore(value, type, 0);
                     if (Equals(value, values[index])) continue;
-                    normalized ??= values.ToList();
+                    normalized ??= [.. values];
                     normalized[index] = value;
                 }
 
@@ -138,6 +123,21 @@ namespace RitsukageGif.Scripting
             {
                 EndValidation(transaction, ownsTransaction, checkpoint, success);
             }
+        }
+
+        private sealed class ArrayContract
+        {
+            public string[] ElementTypes = [];
+        }
+
+        private readonly record struct PendingArrayContract(
+            ScriptBindingRegistry Registry,
+            List<object?> Array,
+            string ElementType);
+
+        private sealed class ValidationTransaction
+        {
+            public readonly List<PendingArrayContract> Pending = [];
         }
     }
 }

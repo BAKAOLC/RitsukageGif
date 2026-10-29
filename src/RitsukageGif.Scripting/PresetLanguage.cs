@@ -6,7 +6,7 @@ namespace RitsukageGif.Scripting
         [
             "let", "const", "fn", "function", "if", "else", "for", "in", "while", "break", "continue", "return",
             "import", "export", "from", "default", "as", "try", "catch", "finally", "throw", "and", "or", "not", "true",
-            "false", "null", "switch", "is", "var", "when"
+            "false", "null", "switch", "is", "var", "when",
         ];
 
         internal static readonly string[] DeclarationWords =
@@ -19,7 +19,7 @@ namespace RitsukageGif.Scripting
             "wait", "await", "timeout", "goto", "start", "stop", "cancel", "select", "show", "hide", "finish",
             "emit", "log", "assert", "breakpoint", "move", "visible", "opacity", "off",
             "exists", "recording", "busy", "idle", "width", "height", "elapsed",
-            "found", "lost", "closed", "moved", "resized", "stopped", "saved", "cancelled", "error"
+            "found", "lost", "closed", "moved", "resized", "stopped", "saved", "cancelled", "error",
         ];
 
         public static IReadOnlyList<ScriptSpan> Scan(string text)
@@ -29,16 +29,6 @@ namespace RitsukageGif.Scripting
             var presetDocument = false;
             var firstWord = true;
             var pendingScript = false;
-
-            void Advance()
-            {
-                if (text[at++] == '\n')
-                {
-                    line++;
-                    column = 1;
-                }
-                else column++;
-            }
 
             while (at < text.Length)
             {
@@ -52,97 +42,127 @@ namespace RitsukageGif.Scripting
                 var row = line;
                 var col = column;
                 var kind = "operator";
-                if (text[at] == '/' && at + 1 < text.Length && text[at + 1] == '*')
+                switch (text[at])
                 {
-                    kind = "comment";
-                    Advance();
-                    Advance();
-                    while (at < text.Length)
+                    case '/' when at + 1 < text.Length && text[at + 1] == '*':
                     {
-                        if (text[at] == '*' && at + 1 < text.Length && text[at + 1] == '/')
+                        kind = "comment";
+                        Advance();
+                        Advance();
+                        while (at < text.Length)
                         {
+                            if (text[at] == '*' && at + 1 < text.Length && text[at + 1] == '/')
+                            {
+                                Advance();
+                                Advance();
+                                break;
+                            }
+
                             Advance();
-                            Advance();
-                            break;
                         }
 
-                        Advance();
+                        break;
                     }
-                }
-                else if (text[at] == '#' || text[at] == '/' && at + 1 < text.Length && text[at + 1] == '/')
-                {
-                    kind = "comment";
-                    while (at < text.Length && text[at] != '\n') Advance();
-                }
-                else if (text[at] is '"' or '\'')
-                {
-                    kind = "string";
-                    var quote = text[at];
-                    Advance();
-                    while (at < text.Length)
+                    case '#':
+                    case '/' when at + 1 < text.Length && text[at + 1] == '/':
                     {
-                        var c = text[at];
-                        Advance();
-                        if (c == '\\' && at < text.Length) Advance();
-                        else if (c == quote) break;
+                        kind = "comment";
+                        while (at < text.Length && text[at] != '\n') Advance();
+                        break;
                     }
-                }
-                else if (char.IsLetter(text[at]) || text[at] == '_')
-                {
-                    while (at < text.Length && (char.IsLetterOrDigit(text[at]) || text[at] == '_')) Advance();
-                    var word = text[start..at];
-                    if (firstWord)
+                    case '"' or '\'':
                     {
-                        presetDocument = word == "preset";
-                        firstWord = false;
-                    }
-
-                    var declaration = presetDocument && scriptDepth < 0;
-                    var next = at;
-                    while (next < text.Length && char.IsWhiteSpace(text[next])) next++;
-                    var previous = spans.LastOrDefault()?.Text;
-                    var member = previous is "." or "?." ||
-                                 next < text.Length && text[next] == ':' && previous is "{" or ",";
-                    kind = !member && (Keywords.Contains(word) || declaration && DeclarationWords.Contains(word))
-                        ? "keyword"
-                        : next < text.Length && text[next] == '('
-                            ? "function"
-                            : "identifier";
-                    if (declaration && word == "script") pendingScript = true;
-                }
-                else if (char.IsAsciiDigit(text[at]))
-                {
-                    kind = "number";
-                    while (at < text.Length && (char.IsAsciiLetterOrDigit(text[at]) || text[at] is '.' or '%' or '_' ||
-                                                text[at] is '+' or '-' && at > start && text[at - 1] is 'e' or 'E'))
+                        kind = "string";
+                        var quote = text[at];
                         Advance();
-                }
-                else
-                {
-                    if (text[at] == '{')
-                    {
-                        depth++;
-                        if (pendingScript)
+                        while (at < text.Length)
                         {
-                            scriptDepth = depth;
-                            pendingScript = false;
+                            var c = text[at];
+                            Advance();
+                            if (c == '\\' && at < text.Length) Advance();
+                            else if (c == quote) break;
                         }
-                    }
-                    else if (text[at] == '}')
-                    {
-                        depth--;
-                        if (depth < scriptDepth) scriptDepth = -1;
-                    }
 
-                    var optionalOperator = text[at] == '?' && at + 1 < text.Length && text[at + 1] is '?' or '.';
-                    Advance();
-                    if (optionalOperator) Advance();
+                        break;
+                    }
+                    case var character when char.IsLetter(character) || character == '_':
+                    {
+                        while (at < text.Length && (char.IsLetterOrDigit(text[at]) || text[at] == '_')) Advance();
+                        var word = text[start..at];
+                        if (firstWord)
+                        {
+                            presetDocument = word == "preset";
+                            firstWord = false;
+                        }
+
+                        var declaration = presetDocument && scriptDepth < 0;
+                        var next = at;
+                        while (next < text.Length && char.IsWhiteSpace(text[next])) next++;
+                        var previous = spans.LastOrDefault()?.Text;
+                        var member = previous is "." or "?." ||
+                                     (next < text.Length && text[next] == ':' && previous is "{" or ",");
+                        kind = !member && (Keywords.Contains(word) || (declaration && DeclarationWords.Contains(word)))
+                            ? "keyword"
+                            : next < text.Length && text[next] == '('
+                                ? "function"
+                                : "identifier";
+                        if (declaration && word == "script") pendingScript = true;
+                        break;
+                    }
+                    case var character when char.IsAsciiDigit(character):
+                    {
+                        kind = "number";
+                        while (at < text.Length &&
+                               (char.IsAsciiLetterOrDigit(text[at]) || text[at] is '.' or '%' or '_' ||
+                                (text[at] is '+' or '-' && at > start && text[at - 1] is 'e' or 'E')))
+                            Advance();
+                        break;
+                    }
+                    default:
+                    {
+                        switch (text[at])
+                        {
+                            case '{':
+                            {
+                                depth++;
+                                if (pendingScript)
+                                {
+                                    scriptDepth = depth;
+                                    pendingScript = false;
+                                }
+
+                                break;
+                            }
+                            case '}':
+                                depth--;
+                                if (depth < scriptDepth) scriptDepth = -1;
+                                break;
+                        }
+
+                        var optionalOperator = text[at] == '?' && at + 1 < text.Length && text[at + 1] is '?' or '.';
+                        Advance();
+                        if (optionalOperator) Advance();
+                        break;
+                    }
                 }
 
-                spans.Add(new ScriptSpan(start, at - start, kind, text[start..at], row, col));
+                spans.Add(new(start, at - start, kind, text[start..at], row, col));
             }
 
             return spans;
+
+            void Advance()
+            {
+                if (text[at++] == '\n')
+                {
+                    line++;
+                    column = 1;
+                }
+                else
+                {
+                    column++;
+                }
+            }
         }
 
         public static IReadOnlyList<ScriptDiagnostic> Diagnose(string text, ScriptBindingRegistry? bindings = null,
@@ -157,21 +177,31 @@ namespace RitsukageGif.Scripting
             }
             catch (PresetSyntaxException e)
             {
-                return [new ScriptDiagnostic(e.Line, e.Column, e.RawMessage, file ?? e.SourceFile)];
+                return [new(e.Line, e.Column, e.RawMessage, file ?? e.SourceFile)];
             }
             catch (Exception e) when (e is FormatException or ArgumentException or InvalidOperationException)
             {
-                return [new ScriptDiagnostic(1, 1, e.Message, file)];
+                return [new(1, 1, e.Message, file)];
             }
         }
 
         public static ScriptSemanticModel Analyze(string text, ScriptBindingRegistry? bindings = null,
-            string? file = null, ScriptSourceResolver? sources = null) => new(text, bindings, file, sources);
+            string? file = null, ScriptSourceResolver? sources = null)
+        {
+            return new(text, bindings, file, sources);
+        }
 
-        public static IReadOnlyList<ScriptSymbol> Symbols(string text) => Analyze(text).Symbols;
+        // ReSharper disable once UnusedMember.Global
+        public static IReadOnlyList<ScriptSymbol> Symbols(string text)
+        {
+            return Analyze(text).Symbols;
+        }
 
-        public static IReadOnlyList<ScriptCompletion> Complete(string text, int offset) =>
-            Analyze(text).Complete(offset);
+        // ReSharper disable once UnusedMember.Global
+        public static IReadOnlyList<ScriptCompletion> Complete(string text, int offset)
+        {
+            return Analyze(text).Complete(offset);
+        }
 
         internal static bool IsScriptContext(IReadOnlyList<ScriptSpan> spans)
         {
@@ -181,29 +211,37 @@ namespace RitsukageGif.Scripting
             var pending = false;
             foreach (var span in spans)
             {
-                if (span.Kind == "keyword" && span.Text == "script") pending = true;
+                if (span is { Kind: "keyword", Text: "script" }) pending = true;
                 if (span.Kind != "operator") continue;
-                if (span.Text == "{")
+                switch (span.Text)
                 {
-                    depth++;
-                    if (pending)
+                    case "{":
                     {
-                        scriptDepth = depth;
-                        pending = false;
+                        depth++;
+                        if (pending)
+                        {
+                            scriptDepth = depth;
+                            pending = false;
+                        }
+
+                        break;
                     }
-                }
-                else if (span.Text == "}")
-                {
-                    depth--;
-                    if (depth < scriptDepth) scriptDepth = -1;
+                    case "}":
+                        depth--;
+                        if (depth < scriptDepth) scriptDepth = -1;
+                        break;
                 }
             }
 
             return scriptDepth >= 0;
         }
 
-        public static ScriptSpan? WordAt(string text, int offset) => WordAt(Scan(text), offset);
+        public static ScriptSpan? WordAt(string text, int offset)
+        {
+            return WordAt(Scan(text), offset);
+        }
 
+        // ReSharper disable once MemberCanBePrivate.Global
         public static ScriptSpan? WordAt(IReadOnlyList<ScriptSpan> spans, int offset)
         {
             var index = -1;
@@ -217,13 +255,17 @@ namespace RitsukageGif.Scripting
             return word;
         }
 
-        public static string Hint(string word) => Analyze(word).Hint(word.Length) ?? word;
+        // ReSharper disable once UnusedMember.Global
+        public static string Hint(string word)
+        {
+            return Analyze(word).Hint(word.Length) ?? word;
+        }
 
         public static IReadOnlyList<int> ExecutableLines(string text)
         {
             if (Scan(text).FirstOrDefault(t => t.Kind != "comment")?.Text == "preset")
-                return WindowPreset.Parse(text).SelectMany(ExecutableLines).Distinct().Order().ToArray();
-            return ScriptLines(ScriptEngine.Compile(text)).Distinct().Order().ToArray();
+                return [.. WindowPreset.Parse(text).SelectMany(ExecutableLines).Distinct().Order()];
+            return [.. ScriptLines(ScriptEngine.Compile(text)).Distinct().Order()];
         }
 
         private static IEnumerable<int> ScriptLines(ScriptNode node)
@@ -235,16 +277,23 @@ namespace RitsukageGif.Scripting
                 yield return line;
         }
 
+        // ReSharper disable once MemberCanBePrivate.Global
         public static IReadOnlyList<int> ExecutableLines(WindowPreset preset)
         {
-            IEnumerable<PresetAction> Walk(IEnumerable<PresetAction> actions) => actions.SelectMany(a =>
-                new[] { a }.Concat(Walk(a.Body ?? [])).Concat(Walk(a.Otherwise ?? [])));
-
             var scriptLines = preset.Program is null ? [] : ScriptLines(preset.Program);
-            return Walk(preset.States.SelectMany(s => s.Enter.Concat(s.Exit).Concat(s.Rules.SelectMany(r => r.Actions)))
-                    .Concat(preset.Rules.SelectMany(r => r.Actions))
-                    .Concat((preset.Functions ?? []).SelectMany(f => f.Body)))
-                .Where(a => a.Line > 0).Select(a => a.Line).Concat(scriptLines).Distinct().Order().ToArray();
+            return
+            [
+                .. Walk(preset.States.SelectMany(s => s.Enter.Concat(s.Exit).Concat(s.Rules.SelectMany(r => r.Actions)))
+                        .Concat(preset.Rules.SelectMany(r => r.Actions))
+                        .Concat((preset.Functions ?? []).SelectMany(f => f.Body)))
+                    .Where(a => a.Line > 0).Select(a => a.Line).Concat(scriptLines).Distinct().Order(),
+            ];
+
+            IEnumerable<PresetAction> Walk(IEnumerable<PresetAction> actions)
+            {
+                return actions.SelectMany(a =>
+                    new[] { a }.Concat(Walk(a.Body ?? [])).Concat(Walk(a.Otherwise ?? [])));
+            }
         }
     }
 }

@@ -1,7 +1,14 @@
-﻿namespace RitsukageGif.Scripting
+namespace RitsukageGif.Scripting
 {
     public sealed partial class ScriptBindingRegistry
     {
+        private readonly Dictionary<string, (string Name, string[] Arguments)> _genericSyntax =
+            new(StringComparer.Ordinal);
+
+        private readonly Dictionary<string, ScriptGenericTypeBinding> _genericTypes = new(StringComparer.Ordinal);
+
+        private readonly Func<object?, string, object?>?[] _nestedValidators = new Func<object?, string, object?>?[65];
+
         public static bool TryGetGenericType(string typeName, out string name, out string[] arguments)
         {
             name = "";
@@ -20,14 +27,15 @@
 
             var nesting = 0;
             for (var index = start; index < typeName.Length; index++)
-            {
-                if (typeName[index] == '<') nesting++;
-                else if (typeName[index] == '>' && (--nesting < 0 || nesting == 0 && index != typeName.Length - 1))
+                switch (typeName[index])
                 {
-                    name = "";
-                    return false;
+                    case '<':
+                        nesting++;
+                        break;
+                    case '>' when --nesting < 0 || (nesting == 0 && index != typeName.Length - 1):
+                        name = "";
+                        return false;
                 }
-            }
 
             if (nesting != 0)
             {
@@ -53,13 +61,19 @@
             var start = 0;
             for (var index = 0; index < typeName.Length; index++)
             {
-                if (typeName[index] is '<' or '(' or '[') depth++;
-                else if (typeName[index] is '>' or ')' or ']') depth--;
-                else if (typeName[index] == separator && depth == 0)
+                switch (typeName[index])
                 {
-                    parts ??= [];
-                    parts.Add(typeName[start..index].Trim());
-                    start = index + 1;
+                    case '<' or '(' or '[':
+                        depth++;
+                        break;
+                    case '>' or ')' or ']':
+                        depth--;
+                        break;
+                    case var character when character == separator && depth == 0:
+                        parts ??= [];
+                        parts.Add(typeName[start..index].Trim());
+                        start = index + 1;
+                        break;
                 }
 
                 if (depth < 0) return [typeName];
@@ -67,15 +81,8 @@
 
             if (parts is null || depth != 0) return [typeName];
             parts.Add(typeName[start..].Trim());
-            return parts.ToArray();
+            return [.. parts];
         }
-
-        private readonly Dictionary<string, ScriptGenericTypeBinding> _genericTypes = new(StringComparer.Ordinal);
-
-        private readonly Dictionary<string, (string Name, string[] Arguments)> _genericSyntax =
-            new(StringComparer.Ordinal);
-
-        private readonly Func<object?, string, object?>?[] _nestedValidators = new Func<object?, string, object?>?[65];
 
         private bool TryGetCachedGenericType(string typeName, out string name, out string[] arguments)
         {
@@ -102,16 +109,20 @@
             }
         }
 
+        // ReSharper disable once UnusedMethodReturnValue.Global
         public ScriptBindingRegistry RegisterGenericType(string name, ScriptGenericTypeBinding binding)
         {
-            if (binding.Arity <= 0 || binding.Arity > 64) throw new ArgumentOutOfRangeException(nameof(binding));
-            if (binding.OutcomeValueParameter is { } parameter && (parameter < 0 || parameter >= binding.Arity))
+            if (binding.Arity is <= 0 or > 64 ||
+                (binding.OutcomeValueParameter is { } parameter && (parameter < 0 || parameter >= binding.Arity)))
                 throw new ArgumentOutOfRangeException(nameof(binding));
             _genericTypes.Add(name, binding);
             return this;
         }
 
-        public ScriptGenericTypeBinding? GetGenericTypeBinding(string name) => _genericTypes.GetValueOrDefault(name);
+        public ScriptGenericTypeBinding? GetGenericTypeBinding(string name)
+        {
+            return _genericTypes.GetValueOrDefault(name);
+        }
 
         private object? ValidateGeneric(object? value, string name, string[] arguments, int depth)
         {

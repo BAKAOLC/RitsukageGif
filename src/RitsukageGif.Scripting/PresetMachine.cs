@@ -1,24 +1,29 @@
+using System.Globalization;
+
 namespace RitsukageGif.Scripting
 {
     public sealed class PresetMachine(WindowPreset preset, PresetDebugger? debugger = null)
     {
+        private static readonly ILogger Logger = LogHub.GetLogger("Scripting.PresetMachine");
+        private readonly Stack<Dictionary<string, object?>> _calls = new();
+        private readonly HashSet<PresetRule> _conditions = [];
+        private readonly List<string> _emitted = [];
+        private readonly HashSet<PresetRule> _fired = [];
+
+        private readonly Dictionary<string, PresetLayerState> _layers = new();
+        private readonly LinkedList<PresetAction> _pending = new();
+
         private readonly Dictionary<string, object> _variables =
             new(preset.InitialValues ?? new Dictionary<string, object>());
 
-        private readonly Dictionary<string, PresetLayerState> _layers = new();
-        private readonly Stack<Dictionary<string, object?>> _calls = new();
-        private readonly List<string> _emitted = [];
+        private int _activeLine = 1, _activeColumn = 1;
+        private double _entered, _started, _resumeAt;
+        private bool _handlingError;
+        private PresetContext? _previous;
+        private PresetState? _state;
+        private bool _suspended;
         public PresetRuntime Runtime { get; } = new();
         public IReadOnlyDictionary<string, object> Values => _variables;
-        private readonly LinkedList<PresetAction> _pending = new();
-        private readonly HashSet<PresetRule> _fired = [];
-        private readonly HashSet<PresetRule> _conditions = [];
-        private PresetState? _state;
-        private PresetContext? _previous;
-        private double _entered, _started, _resumeAt;
-        private bool _suspended;
-        private bool _handlingError;
-        private int _activeLine = 1, _activeColumn = 1;
         public bool Finished { get; private set; }
         public string? State => _state?.Name;
         public string? LastError { get; private set; }
@@ -30,14 +35,10 @@ namespace RitsukageGif.Scripting
             var initializing = _state is null;
             if (initializing)
             {
+                Logger.ZLogInformation($"Preset state machine started. StateCount={preset.States.Count}");
                 _started = now;
                 Enter(preset.Initial, now);
             }
-
-            PresetContext Context() => observe() with
-            {
-                Elapsed = now - _entered, Constants = preset.Constants, Variables = _variables
-            };
 
             var context = Context();
             var events = new HashSet<string>(signals.Concat(_emitted), StringComparer.Ordinal);
@@ -46,7 +47,10 @@ namespace RitsukageGif.Scripting
             if (!initializing) _previous = context;
             if (context.Window is { } current)
             {
-                if (current.Id != old?.Window?.Id) events.Add("found");
+                if (current.Id != old?.Window?.Id)
+                {
+                    events.Add("found");
+                }
                 else if (old.Window is { } before)
                 {
                     if (current.Bounds.X != before.Bounds.X || current.Bounds.Y != before.Bounds.Y) events.Add("moved");
@@ -57,8 +61,12 @@ namespace RitsukageGif.Scripting
             }
 
             if (old?.Window is { } previousWindow && context.Window?.Id != previousWindow.Id) events.Add("lost");
-            if (context.Recording && old?.Recording != true) events.Add("recording");
-            if (!context.Recording && old?.Recording == true) events.Add("stopped");
+            switch (context.Recording)
+            {
+                case true when old?.Recording != true: events.Add("recording"); break;
+                case false when old?.Recording == true: events.Add("stopped"); break;
+            }
+
             try
             {
                 // Local rules take priority; one rule per observation prevents competing transitions.
@@ -94,7 +102,7 @@ namespace RitsukageGif.Scripting
                             var seconds = action.Arguments is { Count: > 0 }
                                 ? action.Arguments[0].Number(Context())
                                 : action.Seconds;
-                            if (seconds <= 0 || seconds > 86400)
+                            if (seconds is <= 0 or > 86400)
                                 throw new InvalidOperationException(UiText.Get("DslDuration"));
                             _resumeAt = now + seconds;
                             _suspended = true;
@@ -103,8 +111,14 @@ namespace RitsukageGif.Scripting
                         if (action.Kind == "await" && action.Condition!.Boolean(Context()))
                         {
                         }
-                        else if (now < _resumeAt) break;
-                        else if (action.Kind == "await") throw new TimeoutException(UiText.Get("DslAwaitTimeout"));
+                        else if (now < _resumeAt)
+                        {
+                            break;
+                        }
+                        else if (action.Kind == "await")
+                        {
+                            throw new TimeoutException(UiText.Get("DslAwaitTimeout"));
+                        }
 
                         _suspended = false;
                         _pending.RemoveFirst();
@@ -120,7 +134,7 @@ namespace RitsukageGif.Scripting
                             break;
                         case "log":
                             debugger?.Log(Convert.ToString(action.Arguments![0].Evaluate(Context()),
-                                System.Globalization.CultureInfo.InvariantCulture) ?? ""); break;
+                                CultureInfo.InvariantCulture) ?? ""); break;
                         case "assert":
                             if (!action.Arguments![0].Boolean(Context()))
                                 throw new InvalidOperationException(UiText.Get("DslAssertion"));
@@ -179,6 +193,7 @@ namespace RitsukageGif.Scripting
                             await ExitAsync(Context(), execute, cancellation);
                             await execute(action);
                             Finished = true;
+                            Logger.ZLogInformation($"Preset state machine completed.");
                             _pending.Clear();
                             debugger?.Complete();
                             break;
@@ -195,10 +210,13 @@ namespace RitsukageGif.Scripting
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
+                Logger.ZLogDebug($"Preset state machine step canceled.");
                 throw;
             }
             catch (Exception ex)
             {
+                Logger.ZLogError(
+                    $"Preset action failed. ExceptionType={ex.GetType().Name} Line={_activeLine} Column={_activeColumn} ErrorHandlerActive={_handlingError} StackTrace={ex.StackTrace}");
                 LastError = UiText.Format("DslDiagnostic", _activeLine, _activeColumn, ex.Message);
                 _pending.Clear();
                 _suspended = false;
@@ -215,6 +233,16 @@ namespace RitsukageGif.Scripting
                 Prepend(handler.Actions);
                 // The handler runs on the next observation, without recursively dispatching failures.
                 _previous = Context();
+            }
+
+            return;
+
+            PresetContext Context()
+            {
+                return observe() with
+                {
+                    Elapsed = now - _entered, Constants = preset.Constants, Variables = _variables,
+                };
             }
         }
 
@@ -238,21 +266,24 @@ namespace RitsukageGif.Scripting
         {
             var layer = _layers.GetValueOrDefault(action.Target!) ?? new PresetLayerState();
             var args = action.Arguments!;
-            if (action.Kind == "move")
+            switch (action.Kind)
             {
-                var values = args.Skip(1).Select(a => checked((int)Math.Round(a.Number(context)))).ToArray();
-                var rect = new PixelRect(values[0], values[1], values[2], values[3]);
-                if (rect.IsEmpty || Math.Abs((long)rect.X) > 16384 || Math.Abs((long)rect.Y) > 16384 ||
-                    rect.Width > 16384 || rect.Height > 16384)
-                    throw new InvalidOperationException(UiText.Get("InvalidRecording"));
-                layer = layer with { Placement = rect };
-            }
-            else if (action.Kind == "visible") layer = layer with { Visible = args[1].Boolean(context) };
-            else
-            {
-                var opacity = args[1].Number(context);
-                if (opacity is < 0 or > 1) throw new InvalidOperationException(UiText.Format("DslRange", 0, 1));
-                layer = layer with { Opacity = opacity };
+                case "move":
+                    var values = args.Skip(1).Select(a => checked((int)Math.Round(a.Number(context)))).ToArray();
+                    var rect = new PixelRect(values[0], values[1], values[2], values[3]);
+                    if (rect.IsEmpty || Math.Abs((long)rect.X) > 16384 || Math.Abs((long)rect.Y) > 16384 ||
+                        rect.Width > 16384 || rect.Height > 16384)
+                        throw new InvalidOperationException(UiText.Get("InvalidRecording"));
+                    layer = layer with { Placement = rect };
+                    break;
+                case "visible":
+                    layer = layer with { Visible = args[1].Boolean(context) };
+                    break;
+                default:
+                    var opacity = args[1].Number(context);
+                    if (opacity is < 0 or > 1) throw new InvalidOperationException(UiText.Format("DslRange", 0, 1));
+                    layer = layer with { Opacity = opacity };
+                    break;
             }
 
             _layers[action.Target!] = layer;
@@ -286,17 +317,16 @@ namespace RitsukageGif.Scripting
         private void Enter(string name, double now)
         {
             if (_state is not null)
-            {
                 foreach (var rule in _state.Rules)
                 {
                     _fired.Remove(rule);
                     _conditions.Remove(rule);
                 }
-            }
 
             while (_calls.Count > 0) RestoreCall();
             Runtime.Publish(_variables, _layers);
             _state = preset.States.Single(s => s.Name == name);
+            Logger.ZLogDebug($"Preset state entered. PendingActions={_pending.Count}");
             _entered = now;
             _handlingError = false;
             _pending.Clear();
@@ -317,32 +347,33 @@ namespace RitsukageGif.Scripting
             {
                 token.ThrowIfCancellationRequested();
                 if (--budget == 0) throw new InvalidOperationException(UiText.Get("DslExecutionLimit"));
-                if (action.Kind == "if")
+                switch (action.Kind)
                 {
-                    foreach (var child in (action.Condition!.Boolean(context) ? action.Body! : action.Otherwise!)
-                             .Reverse())
-                        work.Push(child);
+                    case "if":
+                        foreach (var child in (action.Condition!.Boolean(context) ? action.Body! : action.Otherwise!)
+                                 .Reverse())
+                            work.Push(child);
+                        break;
+                    case "repeat":
+                        if (action.Seconds > 1) work.Push(action with { Seconds = action.Seconds - 1 });
+                        foreach (var child in action.Body!.Reverse()) work.Push(child);
+                        break;
+                    case "assign":
+                        _variables[action.Target!] = Evaluate(action.Arguments![0], context);
+                        Runtime.Publish(_variables, _layers);
+                        break;
+                    case "move" or "visible" or "opacity": UpdateLayer(action, context); break;
+                    case "log":
+                        debugger?.Log(Convert.ToString(action.Arguments![0].Evaluate(context)) ?? "");
+                        break;
+                    case "assert":
+                        if (!action.Arguments![0].Boolean(context))
+                            throw new InvalidOperationException(UiText.Get("DslAssertion"));
+                        break;
+                    case "emit": _emitted.Add(action.Target!); break;
+                    case "breakpoint": break;
+                    default: await execute(action); break;
                 }
-                else if (action.Kind == "repeat")
-                {
-                    if (action.Seconds > 1) work.Push(action with { Seconds = action.Seconds - 1 });
-                    foreach (var child in action.Body!.Reverse()) work.Push(child);
-                }
-                else if (action.Kind == "assign")
-                {
-                    _variables[action.Target!] = Evaluate(action.Arguments![0], context);
-                    Runtime.Publish(_variables, _layers);
-                }
-                else if (action.Kind is "move" or "visible" or "opacity") UpdateLayer(action, context);
-                else if (action.Kind == "log")
-                    debugger?.Log(Convert.ToString(action.Arguments![0].Evaluate(context)) ?? "");
-                else if (action.Kind == "assert")
-                {
-                    if (!action.Arguments![0].Boolean(context))
-                        throw new InvalidOperationException(UiText.Get("DslAssertion"));
-                }
-                else if (action.Kind == "emit") _emitted.Add(action.Target!);
-                else if (action.Kind != "breakpoint") await execute(action);
             }
         }
     }

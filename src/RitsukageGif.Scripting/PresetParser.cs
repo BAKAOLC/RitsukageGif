@@ -4,27 +4,34 @@ namespace RitsukageGif.Scripting
 {
     internal sealed class PresetParser(string source, ScriptBindingRegistry? bindings = null)
     {
+        private static readonly string[] Variables =
+            ["exists", "recording", "busy", "idle", "title", "width", "height", "elapsed", "recording.elapsed"];
+
+        private readonly Dictionary<string, double> _constants = new(StringComparer.Ordinal);
+
         private readonly RecordingSettingsBinding _recordingSettings =
             new(bindings ?? CaptureScriptLibrary.CreateBindings());
 
         private readonly IReadOnlyList<PresetToken> _tokens = PresetLexer.Scan(source);
-        private readonly Dictionary<string, double> _constants = new(StringComparer.Ordinal);
         private readonly Dictionary<string, Type> _types = new(StringComparer.Ordinal);
         private readonly Dictionary<string, object> _values = new(StringComparer.Ordinal);
         private int _at, _depth, _functionDepth, _loopDepth;
         private PresetToken Current => _tokens[_at];
 
-        private static readonly string[] Variables =
-            ["exists", "recording", "busy", "idle", "title", "width", "height", "elapsed", "recording.elapsed"];
-
-        private PresetContext Sample => new(new PresetWindowState(1, "", new PixelRect(0, 0, 1920, 1080)), false, false,
+        private PresetContext Sample => new(new(1, "", new(0, 0, 1920, 1080)), false, false,
             0,
             0, _constants, 100, _values);
 
-        private PresetSyntaxException Error(string key, params object[] values) => new(Current.Line, Current.Column,
-            values.Length == 0 ? UiText.Get(key) : UiText.Format(key, values));
+        private PresetSyntaxException Error(string key, params object[] values)
+        {
+            return new(Current.Line, Current.Column,
+                values.Length == 0 ? UiText.Get(key) : UiText.Format(key, values));
+        }
 
-        private bool Is(string text) => !Current.Quoted && Current.Text == text;
+        private bool Is(string text)
+        {
+            return !Current.Quoted && Current.Text == text;
+        }
 
         private bool Accept(string text)
         {
@@ -82,7 +89,7 @@ namespace RitsukageGif.Scripting
             }
         }
 
-        private IReadOnlyList<WindowPreset> ParseDocument()
+        private List<WindowPreset> ParseDocument()
         {
             var result = new List<WindowPreset>();
             while (!Is("<eof>"))
@@ -149,7 +156,7 @@ namespace RitsukageGif.Scripting
                             var area = Area();
                             preset = preset with
                             {
-                                ClientArea = area.Client, Area = area.Values, Absolute = area.Absolute
+                                ClientArea = area.Client, Area = area.Values, Absolute = area.Absolute,
                             };
                             break;
                         case "follow":
@@ -169,7 +176,7 @@ namespace RitsukageGif.Scripting
                             var filename = String();
                             Expect(";");
                             PresetOutputNaming.Validate(directory, filename);
-                            outputs.Add(new PresetOutput(directory, filename));
+                            outputs.Add(new(directory, filename));
                             break;
                         case "layout": preset = preset with { Layout = Layout() }; break;
                         case "initial":
@@ -186,8 +193,7 @@ namespace RitsukageGif.Scripting
                 }
 
                 if (!preset.Absolute && preset.Layout?.Layers.All(l => l.Absolute || l.Media is not null) != true &&
-                    preset.Process == "*" &&
-                    preset.Title == "*") throw Error("DslWindowRequired");
+                    preset is { Process: "*", Title: "*" }) throw Error("DslWindowRequired");
                 if (states.Count == 0 && preset.Program is null) throw Error("DslStateRequired");
                 if (preset.Program is not null && states.Count > 0) throw Error("DslScriptState");
                 if (states.Select(s => s.Name).Distinct().Count() != states.Count) throw Error("DslDuplicate", "state");
@@ -196,33 +202,34 @@ namespace RitsukageGif.Scripting
                     Constants = new Dictionary<string, double>(_constants), States = states, Rules = rules,
                     Initial = preset.Initial.Length == 0 ? states.FirstOrDefault()?.Name ?? "script" : preset.Initial,
                     Outputs = outputs,
-                    Functions = functions, InitialValues = new Dictionary<string, object>(_values)
+                    Functions = functions, InitialValues = new Dictionary<string, object>(_values),
                 };
-                if (preset.Program is null && !states.Any(s => s.Name == preset.Initial))
+                if (preset.Program is null && states.All(s => s.Name != preset.Initial))
                     throw Error("DslUnknownName", preset.Initial);
                 foreach (var action in Walk(states
                              .SelectMany(s => s.Enter.Concat(s.Exit).Concat(s.Rules.SelectMany(r => r.Actions)))
                              .Concat(rules.SelectMany(r => r.Actions))))
-                    if (action.Kind == "goto" && !states.Any(s => s.Name == action.Target))
+                    if (action.Kind == "goto" && states.All(s => s.Name != action.Target))
                         throw Error("DslUnknownName", action.Target!);
                 if (functions.Select(f => f.Name).Distinct().Count() != functions.Count)
                     throw Error("DslDuplicate", "fn");
                 foreach (var action in Walk(states
                              .SelectMany(st => st.Enter.Concat(st.Exit).Concat(st.Rules.SelectMany(r => r.Actions)))
                              .Concat(rules.SelectMany(r => r.Actions)).Concat(functions.SelectMany(f => f.Body))))
-                {
-                    if (action.Kind == "call")
+                    switch (action.Kind)
                     {
-                        var function = functions.SingleOrDefault(f => f.Name == action.Target);
-                        if (function is null) throw Error("DslUnknownName", action.Target!);
-                        if (function.Parameters.Count != action.Arguments!.Count)
-                            throw Error("DslArguments", action.Target!);
+                        case "call":
+                        {
+                            var function = functions.SingleOrDefault(f => f.Name == action.Target);
+                            if (function is null) throw Error("DslUnknownName", action.Target!);
+                            if (function.Parameters.Count != action.Arguments!.Count)
+                                throw Error("DslArguments", action.Target!);
+                            break;
+                        }
+                        case "move" or "visible" or "opacity"
+                            when preset.Layout?.Layers.Any(l => l.Name == action.Target) != true:
+                            throw Error("DslUnknownName", action.Target!);
                     }
-
-                    if (action.Kind is "move" or "visible" or "opacity" &&
-                        preset.Layout?.Layers.Any(l => l.Name == action.Target) != true)
-                        throw Error("DslUnknownName", action.Target!);
-                }
 
                 if (preset.Absolute && preset.Source != CaptureSourceKind.Screen) throw Error("DslAbsoluteScreen");
                 ValidateFallbacks(preset);
@@ -267,7 +274,7 @@ namespace RitsukageGif.Scripting
             var title = String();
             Expect(";");
             if (string.IsNullOrWhiteSpace(process) || string.IsNullOrWhiteSpace(title) ||
-                process == "*" && title == "*")
+                (process == "*" && title == "*"))
                 throw Error("DslWindowRequired");
             return (process, title);
         }
@@ -285,10 +292,10 @@ namespace RitsukageGif.Scripting
         {
             var media = new PresetMediaSource(String(), Ffmpeg: ffmpeg, Channel: channel,
                 Live: channel, Loop: !channel, HoldLast: !channel, Delay: channel ? .1 : 0);
-            if (string.IsNullOrWhiteSpace(media.File)) throw Error("DslUnexpected", media.File);
-            if (channel && (media.File.Length > 128 ||
-                            media.File.Any(character =>
-                                !char.IsAsciiLetterOrDigit(character) && character is not ('.' or '_' or '-'))))
+            if (string.IsNullOrWhiteSpace(media.File) || (channel && (media.File.Length > 128 ||
+                                                                      media.File.Any(character =>
+                                                                          !char.IsAsciiLetterOrDigit(character) &&
+                                                                          character is not ('.' or '_' or '-')))))
                 throw Error("DslUnexpected", media.File);
             if (!Accept("{")) return media;
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -336,27 +343,35 @@ namespace RitsukageGif.Scripting
             Expect(";");
             if (kind is not ("transparent" or "color" or "image" or "source")) throw Error("DslUnexpected", kind);
             if (kind == "color") ValidateColor(value);
-            return new PresetFallback(kind, value);
+            return new(kind, value);
         }
 
-        private static bool IsColor(string value) => value == "transparent" ||
-                                                     value.Length is 7 or 9 && value[0] == '#' &&
-                                                     value[1..].All(char.IsAsciiHexDigit);
+        private static bool IsColor(string value)
+        {
+            return value == "transparent" ||
+                   (value.Length is 7 or 9 && value[0] == '#' &&
+                    value[1..].All(char.IsAsciiHexDigit));
+        }
 
         private void ValidateColor(string value)
         {
             if (!IsColor(value)) throw Error("DslColor");
         }
 
-        private bool Boolean() => Accept("true") || Accept("on") ? true :
-            Accept("false") || Accept("off") ? false : throw Error("DslBooleanRequired");
+        private bool Boolean()
+        {
+            if (Accept("true") || Accept("on")) return true;
+            if (Accept("false") || Accept("off")) return false;
+            throw Error("DslBooleanRequired");
+        }
 
         private (bool Client, bool Absolute, IReadOnlyList<PresetExpression> Values) Area()
         {
             Expect("area");
             var absolute = Accept("screen");
-            var client = !absolute && (Accept("client") ? true :
-                Accept("window") ? false : throw Error("DslExpected", "client/window/screen", Current.Text));
+            var client = !absolute && Accept("client");
+            if (!absolute && !client && !Accept("window"))
+                throw Error("DslExpected", "client/window/screen", Current.Text);
             Expect("(");
             var values = new List<PresetExpression>();
             for (var i = 0; i < 4; i++)
@@ -392,10 +407,19 @@ namespace RitsukageGif.Scripting
                 if (fields.ContainsKey(key)) throw Error("DslDuplicate", key);
                 Accept("=");
                 object? value;
-                if (Current.Quoted) value = String();
-                else if (Is("true") || Is("false") || Is("on") || Is("off")) value = Boolean();
+                if (Current.Quoted)
+                {
+                    value = String();
+                }
+                else if (Is("true") || Is("false") || Is("on") || Is("off"))
+                {
+                    value = Boolean();
+                }
                 else if (Current.Text.Length > 0 && (char.IsLetter(Current.Text[0]) || Current.Text[0] == '_') &&
-                         !_constants.ContainsKey(Current.Text) && !_values.ContainsKey(Current.Text)) value = Name();
+                         !_constants.ContainsKey(Current.Text) && !_values.ContainsKey(Current.Text))
+                {
+                    value = Name();
+                }
                 else
                 {
                     var expression = Expression();
@@ -445,8 +469,8 @@ namespace RitsukageGif.Scripting
                 var name = String();
                 if (layers.Any(l => l.Name == name)) throw Error("DslDuplicate", name);
                 var defaults = WindowPreset.ForWindow("*", "*");
-                var layer = new PresetLayer(name, null, "*", true, defaults.Area, new PixelRect(0, 0, width, height),
-                    new PresetShape("rect"), CaptureSourceKind.Screen, new PresetFallback());
+                var layer = new PresetLayer(name, null, "*", true, defaults.Area, new(0, 0, width, height),
+                    new("rect"), CaptureSourceKind.Screen, new());
                 var seen = new HashSet<string>();
                 Expect("{");
                 while (!Accept("}"))
@@ -467,11 +491,14 @@ namespace RitsukageGif.Scripting
                                 if (!ffmpeg && !channel) Expect("file");
                                 layer = layer with
                                 {
-                                    Source = CaptureSourceKind.Media, Media = MediaSource(ffmpeg, channel)
+                                    Source = CaptureSourceKind.Media, Media = MediaSource(ffmpeg, channel),
                                 };
                                 Expect(";");
                             }
-                            else layer = layer with { Source = Source() };
+                            else
+                            {
+                                layer = layer with { Source = Source() };
+                            }
 
                             break;
                         case "missing": layer = layer with { Missing = Fallback() }; break;
@@ -496,35 +523,40 @@ namespace RitsukageGif.Scripting
                             var rh = Integer(1, 16384);
                             Expect(")");
                             Expect(";");
-                            layer = layer with { Placement = new PixelRect(x, y, rw, rh) };
+                            layer = layer with { Placement = new(x, y, rw, rh) };
                             break;
                         case "shape":
                             _at++;
                             var kind = Name();
                             double radius = 0;
                             var points = new List<double>();
-                            if (kind == "rounded")
+                            switch (kind)
                             {
-                                Expect("(");
-                                radius = Integer(0, 16384);
-                                Expect(")");
-                            }
-                            else if (kind == "polygon")
-                            {
-                                Expect("(");
-                                do
+                                case "rounded":
                                 {
-                                    points.Add(Integer(-16384, 16384));
-                                } while (Accept(","));
+                                    Expect("(");
+                                    radius = Integer(0, 16384);
+                                    Expect(")");
+                                    break;
+                                }
+                                case "polygon":
+                                {
+                                    Expect("(");
+                                    do
+                                        points.Add(Integer(-16384, 16384));
+                                    while (Accept(","));
 
-                                Expect(")");
-                                if (points.Count < 6 || points.Count % 2 != 0 || points.Count > 512)
-                                    throw Error("DslPolygon");
+                                    Expect(")");
+                                    if (points.Count < 6 || points.Count % 2 != 0 || points.Count > 512)
+                                        throw Error("DslPolygon");
+                                    break;
+                                }
+                                case not ("rect" or "ellipse"):
+                                    throw Error("DslUnexpected", kind);
                             }
-                            else if (kind is not ("rect" or "ellipse")) throw Error("DslUnexpected", kind);
 
                             Expect(";");
-                            layer = layer with { Shape = new PresetShape(kind, radius, points) };
+                            layer = layer with { Shape = new(kind, radius, points) };
                             break;
                         default: throw Error("DslUnexpected", Current.Text);
                     }
@@ -538,7 +570,7 @@ namespace RitsukageGif.Scripting
             }
 
             if (layers.Count == 0) throw Error("DslLayerRequired");
-            return new PresetLayout(width, height, background, layers);
+            return new(width, height, background, layers);
         }
 
         private PresetState State()
@@ -550,13 +582,15 @@ namespace RitsukageGif.Scripting
             var rules = new List<PresetRule>();
             var seen = new HashSet<string>();
             while (!Accept("}"))
-            {
                 if (Is("enter") || Is("exit"))
                 {
                     var key = Name();
                     if (!seen.Add(key)) throw Error("DslDuplicate", key);
                     var body = Actions();
-                    if (key == "enter") enter = body;
+                    if (key == "enter")
+                    {
+                        enter = body;
+                    }
                     else
                     {
                         if (Walk(body).Any(a =>
@@ -566,10 +600,12 @@ namespace RitsukageGif.Scripting
                         exit = body;
                     }
                 }
-                else rules.Add(Rule());
-            }
+                else
+                {
+                    rules.Add(Rule());
+                }
 
-            return new PresetState(name, enter, exit, rules);
+            return new(name, enter, exit, rules);
         }
 
         private PresetRule Rule()
@@ -597,15 +633,18 @@ namespace RitsukageGif.Scripting
             IReadOnlyList<PresetAction> actions;
             if (Accept("->"))
             {
-                actions = [new PresetAction("goto", Name())];
+                actions = [new("goto", Name())];
                 Expect(";");
             }
-            else actions = Actions();
+            else
+            {
+                actions = Actions();
+            }
 
-            return new PresetRule(kind, delay, condition, actions);
+            return new(kind, delay, condition, actions);
         }
 
-        private IReadOnlyList<PresetAction> Actions()
+        private List<PresetAction> Actions()
         {
             EnterDepth();
             Expect("{");
@@ -621,23 +660,23 @@ namespace RitsukageGif.Scripting
                         var condition = Condition();
                         var body = Actions();
                         var other = Accept("else") ? Actions() : [];
-                        result.Add(new PresetAction(kind, Condition: condition, Body: body, Otherwise: other));
+                        result.Add(new(kind, Condition: condition, Body: body, Otherwise: other));
                         break;
                     case "while":
                         var predicate = Condition();
                         _loopDepth++;
                         var loopBody = Actions();
                         _loopDepth--;
-                        result.Add(new PresetAction(kind, Condition: predicate, Body: loopBody));
+                        result.Add(new(kind, Condition: predicate, Body: loopBody));
                         break;
                     case "break":
                         if (_loopDepth == 0) throw Error("DslUnexpected", kind);
-                        result.Add(new PresetAction(kind));
+                        result.Add(new(kind));
                         Expect(";");
                         break;
                     case "return":
                         if (_functionDepth == 0) throw Error("DslUnexpected", kind);
-                        result.Add(new PresetAction(kind));
+                        result.Add(new(kind));
                         Expect(";");
                         break;
                     case "log":
@@ -647,7 +686,7 @@ namespace RitsukageGif.Scripting
                     case "visible":
                     case "opacity":
                         var arguments = Arguments();
-                        var count = kind == "move" ? 5 : kind is "visible" or "opacity" ? 2 : 1;
+                        var count = kind switch { "move" => 5, "visible" or "opacity" => 2, _ => 1 };
                         if (arguments.Count != count) throw Error("DslArguments", kind);
                         if (kind == "assert" && TypeOf(arguments[0]) != typeof(bool)) throw Error("DslBooleanRequired");
                         string? target = null;
@@ -661,13 +700,13 @@ namespace RitsukageGif.Scripting
                                     throw Error("DslInvalidExpression");
                         }
 
-                        result.Add(new PresetAction(kind, target, Arguments: arguments));
+                        result.Add(new(kind, target, Arguments: arguments));
                         Expect(";");
                         break;
                     case "repeat":
                         var repeatCount = Integer(1, 1000);
                         _loopDepth++;
-                        result.Add(new PresetAction(kind, Seconds: repeatCount, Body: Actions()));
+                        result.Add(new(kind, Seconds: repeatCount, Body: Actions()));
                         _loopDepth--;
                         break;
                     case "wait":
@@ -676,9 +715,12 @@ namespace RitsukageGif.Scripting
                             var delay = Arguments();
                             if (delay.Count != 1 || TypeOf(delay[0]) != typeof(double))
                                 throw Error("DslArguments", kind);
-                            result.Add(new PresetAction(kind, Arguments: delay));
+                            result.Add(new(kind, Arguments: delay));
                         }
-                        else result.Add(new PresetAction(kind, Seconds: Duration()));
+                        else
+                        {
+                            result.Add(new(kind, Seconds: Duration()));
+                        }
 
                         Expect(";");
                         break;
@@ -686,16 +728,16 @@ namespace RitsukageGif.Scripting
                         var awaited = Condition();
                         Expect("timeout");
                         var timeout = Duration();
-                        result.Add(new PresetAction(kind, Seconds: timeout, Condition: awaited));
+                        result.Add(new(kind, Seconds: timeout, Condition: awaited));
                         Expect(";");
                         break;
                     case "goto":
-                        result.Add(new PresetAction(kind, Name()));
+                        result.Add(new(kind, Name()));
                         Expect(";");
                         break;
                     case "start":
                         EmptyCall();
-                        result.Add(new PresetAction(kind, Settings: Is("{") ? Settings() : null));
+                        result.Add(new(kind, Settings: Is("{") ? Settings() : null));
                         Expect(";");
                         break;
                     case "select":
@@ -707,7 +749,7 @@ namespace RitsukageGif.Scripting
                     case "finish":
                     case "breakpoint":
                         EmptyCall();
-                        result.Add(new PresetAction(kind));
+                        result.Add(new(kind));
                         Expect(";");
                         break;
                     default:
@@ -716,13 +758,13 @@ namespace RitsukageGif.Scripting
                             if (!_types.TryGetValue(kind, out var type)) throw Error("DslUnknownName", kind);
                             var assignment = Expression();
                             if (TypeOf(assignment) != type) throw Error("DslInvalidExpression");
-                            result.Add(new PresetAction("assign", kind, Arguments: [assignment]));
+                            result.Add(new("assign", kind, Arguments: [assignment]));
                         }
                         else
                         {
                             var args = Arguments();
                             if (args.Any(e => TypeOf(e) != typeof(double))) throw Error("DslNumberRequired");
-                            result.Add(new PresetAction("call", kind, Arguments: args));
+                            result.Add(new("call", kind, Arguments: args));
                         }
 
                         Expect(";");
@@ -742,16 +784,15 @@ namespace RitsukageGif.Scripting
             if (Accept("(")) Expect(")");
         }
 
-        private IReadOnlyList<PresetExpression> Arguments()
+        private List<PresetExpression> Arguments()
         {
             Expect("(");
             var args = new List<PresetExpression>();
             if (!Accept(")"))
             {
                 do
-                {
                     args.Add(Expression());
-                } while (Accept(","));
+                while (Accept(","));
 
                 Expect(")");
             }
@@ -761,19 +802,26 @@ namespace RitsukageGif.Scripting
 
         private void RequireInitial(PresetExpression expression)
         {
-            switch (expression)
+            while (true)
             {
-                case PresetVariable v when !_constants.ContainsKey(v.Name) && !_values.ContainsKey(v.Name):
-                    throw Error("DslUnknownName", v.Name);
-                case PresetPercent: throw Error("DslInvalidExpression");
-                case PresetUnary u: RequireInitial(u.Operand); break;
-                case PresetBinary b:
-                    RequireInitial(b.Left);
-                    RequireInitial(b.Right);
-                    break;
-                case PresetCall c:
-                    foreach (var arg in c.Arguments) RequireInitial(arg);
-                    break;
+                switch (expression)
+                {
+                    case PresetVariable v when !_constants.ContainsKey(v.Name) && !_values.ContainsKey(v.Name):
+                        throw Error("DslUnknownName", v.Name);
+                    case PresetPercent: throw Error("DslInvalidExpression");
+                    case PresetUnary u:
+                        expression = u.Operand;
+                        continue;
+                    case PresetBinary b:
+                        RequireInitial(b.Left);
+                        expression = b.Right;
+                        continue;
+                    case PresetCall c:
+                        foreach (var arg in c.Arguments) RequireInitial(arg);
+                        break;
+                }
+
+                return;
             }
         }
 
@@ -802,7 +850,7 @@ namespace RitsukageGif.Scripting
             var body = Actions();
             _functionDepth--;
             foreach (var parameter in parameters) _types.Remove(parameter);
-            return new PresetFunction(name, parameters, body);
+            return new(name, parameters, body);
         }
 
         private PresetExpression Condition()
@@ -816,38 +864,53 @@ namespace RitsukageGif.Scripting
         {
             if (TypeOf(expression) != typeof(double)) throw Error("DslNumberRequired");
 
+            Validate(expression);
+            return;
+
             void Validate(PresetExpression e)
             {
-                switch (e)
+                while (true)
                 {
-                    case PresetVariable v
-                        when !_constants.ContainsKey(v.Name) && !_values.ContainsKey(v.Name) &&
-                             !(geometry && (v.Name is "width" or "height" || _types.ContainsKey(v.Name))):
-                        throw Error("DslUnknownName", v.Name);
-                    case PresetPercent when !geometry: throw Error("DslInvalidExpression");
-                    case PresetCall call:
-                        foreach (var arg in call.Arguments) Validate(arg);
-                        break;
-                    case PresetUnary u: Validate(u.Operand); break;
-                    case PresetBinary b:
-                        Validate(b.Left);
-                        Validate(b.Right);
-                        break;
+                    switch (e)
+                    {
+                        case PresetVariable v
+                            when !_constants.ContainsKey(v.Name) && !_values.ContainsKey(v.Name) &&
+                                 !(geometry && (v.Name is "width" or "height" || _types.ContainsKey(v.Name))):
+                            throw Error("DslUnknownName", v.Name);
+                        case PresetPercent when !geometry: throw Error("DslInvalidExpression");
+                        case PresetCall call:
+                            foreach (var arg in call.Arguments) Validate(arg);
+                            break;
+                        case PresetUnary u:
+                            e = u.Operand;
+                            continue;
+                        case PresetBinary b:
+                            Validate(b.Left);
+                            e = b.Right;
+                            continue;
+                    }
+
+                    return;
                 }
             }
-
-            Validate(expression);
         }
 
-        private Type TypeOf(PresetExpression e) => e switch
+        private Type TypeOf(PresetExpression e)
         {
-            PresetLiteral l => l.Value.GetType(), PresetPercent => typeof(double),
-            PresetCall => typeof(double),
-            PresetVariable v => _types.TryGetValue(v.Name, out var type) ? type :
-                v.Name == "title" ? typeof(string) :
-                v.Name is "exists" or "recording" or "busy" or "idle" ? typeof(bool) : typeof(double),
-            PresetUnary u => CheckUnary(u), PresetBinary b => CheckBinary(b), _ => throw Error("DslInvalidExpression")
-        };
+            return e switch
+            {
+                PresetLiteral l => l.Value.GetType(), PresetPercent or PresetCall => typeof(double),
+                PresetVariable v => _types.TryGetValue(v.Name, out var type)
+                    ? type
+                    : v.Name switch
+                    {
+                        "title" => typeof(string), "exists" or "recording" or "busy" or "idle" => typeof(bool),
+                        _ => typeof(double),
+                    },
+                PresetUnary u => CheckUnary(u), PresetBinary b => CheckBinary(b),
+                _ => throw Error("DslInvalidExpression"),
+            };
+        }
 
         private Type CheckUnary(PresetUnary e)
         {
@@ -861,28 +924,39 @@ namespace RitsukageGif.Scripting
             var left = TypeOf(e.Left);
             var right = TypeOf(e.Right);
             if (e.Operator == "+" && left == typeof(string) && right == typeof(string)) return typeof(string);
-            var expected = e.Operator is "and" or "or" or "&&" or "||" ? typeof(bool) :
-                e.Operator == "~" ? typeof(string) : typeof(double);
+            var expected = e.Operator switch
+            {
+                "and" or "or" or "&&" or "||" => typeof(bool), "~" => typeof(string), _ => typeof(double),
+            };
             if (e.Operator is "==" or "!=")
             {
                 if (left != right) throw Error("DslInvalidExpression");
             }
-            else if (left != expected || right != expected) throw Error("DslInvalidExpression");
+            else if (left != expected || right != expected)
+            {
+                throw Error("DslInvalidExpression");
+            }
 
             return e.Operator is "+" or "-" or "*" or "/" ? typeof(double) : typeof(bool);
         }
 
-        private static int Precedence(string op) => op switch
+        private static int Precedence(string op)
         {
-            "or" or "||" => 1, "and" or "&&" => 2, "==" or "!=" or "~" => 3,
-            ">" or "<" or ">=" or "<=" => 4, "+" or "-" => 5, "*" or "/" => 6, _ => 0
-        };
+            return op switch
+            {
+                "or" or "||" => 1, "and" or "&&" => 2, "==" or "!=" or "~" => 3,
+                ">" or "<" or ">=" or "<=" => 4, "+" or "-" => 5, "*" or "/" => 6, _ => 0,
+            };
+        }
 
         private PresetExpression Expression(int minimum = 1)
         {
             EnterDepth();
             PresetExpression left;
-            if (Current.Quoted) left = new PresetLiteral(String());
+            if (Current.Quoted)
+            {
+                left = new PresetLiteral(String());
+            }
             else if (Accept("("))
             {
                 left = Expression();
@@ -893,8 +967,14 @@ namespace RitsukageGif.Scripting
                 var op = _tokens[_at++].Text;
                 left = new PresetUnary(op, Expression(7));
             }
-            else if (Accept("true")) left = new PresetLiteral(true);
-            else if (Accept("false")) left = new PresetLiteral(false);
+            else if (Accept("true"))
+            {
+                left = new PresetLiteral(true);
+            }
+            else if (Accept("false"))
+            {
+                left = new PresetLiteral(false);
+            }
             else if (char.IsAsciiDigit(Current.Text[0]) || Current.Text[0] == '.')
             {
                 var n = Numeric();
@@ -906,9 +986,10 @@ namespace RitsukageGif.Scripting
                 if (Is("("))
                 {
                     var args = Arguments();
-                    var count = id == "clamp" ? 3 :
-                        id is "min" or "max" ? 2 :
-                        id is "abs" or "round" or "floor" or "ceil" ? 1 : 0;
+                    var count = id switch
+                    {
+                        "clamp" => 3, "min" or "max" => 2, "abs" or "round" or "floor" or "ceil" => 1, _ => 0,
+                    };
                     if (count == 0) throw Error("DslUnknownName", id);
                     if (args.Count != count || args.Any(e => TypeOf(e) != typeof(double)))
                         throw Error("DslArguments", id);

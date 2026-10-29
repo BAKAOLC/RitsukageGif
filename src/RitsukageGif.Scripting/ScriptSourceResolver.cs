@@ -5,12 +5,10 @@ namespace RitsukageGif.Scripting
 {
     public sealed class ScriptSourceResolver(Func<string, string?>? openDocument = null)
     {
-        private sealed record Entry(long Length, long Modified, string Text);
-
         private readonly Dictionary<string, Entry> _cache =
             new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
-        private readonly object _sync = new();
+        private readonly Lock _sync = new();
 
         public string Read(string path)
         {
@@ -50,7 +48,7 @@ namespace RitsukageGif.Scripting
                 }
 
                 if (_cache.Count >= 128) _cache.Clear();
-                _cache[path] = new Entry(info.Length, info.LastWriteTimeUtc.Ticks, text);
+                _cache[path] = new(info.Length, info.LastWriteTimeUtc.Ticks, text);
                 return text;
             }
         }
@@ -69,5 +67,7 @@ namespace RitsukageGif.Scripting
                 return "unavailable";
             }
         }
+
+        private sealed record Entry(long Length, long Modified, string Text);
     }
 }

@@ -1,28 +1,21 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 
 namespace RitsukageGif.Scripting
 {
     public sealed partial class ScriptBindingRegistry
     {
-        private sealed record Global(object? Value, ScriptMemberDescriptor Descriptor);
-
-        private sealed record ObjectSchema(IReadOnlyList<ScriptPropertyDescriptor> Properties, bool AllowExtra);
-
-        private sealed record EnumBinding(
-            Type ValueType,
-            Dictionary<string, object?> Values,
-            ScriptEnumDescriptor Descriptor);
-
         private readonly Dictionary<string, string> _declarations = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, Global> _globals = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, ScriptTableBinding> _tables = new(StringComparer.Ordinal);
-        private readonly List<IScriptHostBinding> _hostBindings = [];
-        private readonly Dictionary<string, IScriptHostBinding> _types = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, ObjectSchema> _schemas = new(StringComparer.Ordinal);
         private readonly Dictionary<string, EnumBinding> _enums = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Global> _globals = new(StringComparer.Ordinal);
+        private readonly List<IScriptHostBinding> _hostBindings = [];
+        private readonly Dictionary<string, ObjectSchema> _schemas = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, ScriptTableBinding> _tables = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, IScriptHostBinding> _types = new(StringComparer.Ordinal);
 
-        public IReadOnlyList<ScriptMemberDescriptor> GetGlobals() =>
-            _globals.Values.Select(g => g.Descriptor).ToArray();
+        public IReadOnlyList<ScriptMemberDescriptor> GetGlobals()
+        {
+            return [.. _globals.Values.Select(g => g.Descriptor)];
+        }
 
         public IReadOnlyList<ScriptMemberDescriptor> GetMembers(string typeName)
         {
@@ -30,45 +23,61 @@ namespace RitsukageGif.Scripting
             if (TryGetCachedGenericType(typeName, out var genericName, out var genericArguments))
                 return GetGenericMembers(genericName, genericArguments);
             if (_enums.TryGetValue(typeName, out var enumeration))
-                return enumeration.Values.Keys.Select(name => new ScriptMemberDescriptor(name, "enumMember", typeName))
-                    .ToArray();
+                return
+                [
+                    .. enumeration.Values.Keys.Select(name => new ScriptMemberDescriptor(name, "enumMember", typeName)),
+                ];
             if (_tables.TryGetValue(typeName, out var table)) return table.Members;
             if (_types.TryGetValue(typeName, out var type)) return type.Members;
             if (_schemas.TryGetValue(typeName, out var schema))
-                return schema.Properties
-                    .Select(p => new ScriptMemberDescriptor(p.Name, "property", p.TypeName, Writable: true)).ToArray();
+                return
+                [
+                    .. schema.Properties
+                        .Select(p => new ScriptMemberDescriptor(p.Name, "property", p.TypeName, Writable: true)),
+                ];
             return [];
         }
 
+        // ReSharper disable once UnusedMethodReturnValue.Global
         public ScriptBindingRegistry RegisterDeclarationSchema(string blockName, string typeName)
         {
             _declarations.Add(blockName, typeName);
             return this;
         }
 
-        public string? GetDeclarationSchema(string blockName) => _declarations.GetValueOrDefault(blockName);
+        public string? GetDeclarationSchema(string blockName)
+        {
+            return _declarations.GetValueOrDefault(blockName);
+        }
 
-        public IReadOnlyList<ScriptPropertyDescriptor>? GetObjectSchema(string name) =>
-            _schemas.GetValueOrDefault(name)?.Properties;
+        public IReadOnlyList<ScriptPropertyDescriptor>? GetObjectSchema(string name)
+        {
+            return _schemas.GetValueOrDefault(name)?.Properties;
+        }
 
-        public ScriptEnumDescriptor? GetEnum(string name) => _enums.GetValueOrDefault(name)?.Descriptor;
+        public ScriptEnumDescriptor? GetEnum(string name)
+        {
+            return _enums.GetValueOrDefault(name)?.Descriptor;
+        }
 
+        // ReSharper disable once UnusedMethodReturnValue.Global
         public ScriptBindingRegistry RegisterFunction(string name, ScriptNative callback,
             IReadOnlyList<ScriptParameter>? parameters = null, string returnType = "any", string? description = null,
             string? inferredReturnType = null, bool invalidatesReceiverElement = false)
         {
             var function = CreateFunction(name, callback, parameters, returnType, description, inferredReturnType,
                 invalidatesReceiverElement);
-            _globals.Add(name, new Global(function, new ScriptMemberDescriptor(name, "function", "function",
+            _globals.Add(name, new(function, new(name, "function", "function",
                 function.Descriptor, description)));
             return this;
         }
 
+        // ReSharper disable once UnusedMember.Global
         public ScriptBindingRegistry RegisterValue(string name, object? value, string typeName = "any",
             string? description = null)
         {
-            _globals.Add(name, new Global(Validate(value, typeName),
-                new ScriptMemberDescriptor(name, "variable", typeName, Description: description)));
+            _globals.Add(name, new(Validate(value, typeName),
+                new(name, "variable", typeName, Description: description)));
             return this;
         }
 
@@ -77,7 +86,7 @@ namespace RitsukageGif.Scripting
             var table = new ScriptTableBinding(this, name);
             _tables.Add(name, table);
             _globals.Add(name,
-                new Global(table, new ScriptMemberDescriptor(name, "module", name, Description: description)));
+                new(table, new(name, "module", name, Description: description)));
             return table;
         }
 
@@ -87,17 +96,20 @@ namespace RitsukageGif.Scripting
             if (!_enums.TryGetValue(name, out var binding))
             {
                 var entries = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                binding = new EnumBinding(typeof(T), entries, new ScriptEnumDescriptor(name,
+                binding = new(typeof(T), entries, new(name,
                     new ReadOnlyDictionary<string, object?>(entries)));
                 _enums.Add(name, binding);
             }
-            else if (binding.ValueType != typeof(T)) throw TypeError();
+            else if (binding.ValueType != typeof(T))
+            {
+                throw TypeError();
+            }
 
             var table = _tables.GetValueOrDefault(name);
             if (exposeGlobal)
             {
                 if (!_tables.TryGetValue(name, out table)) table = RegisterTable(name);
-                _globals[name] = new Global(table, new ScriptMemberDescriptor(name, "enum", name));
+                _globals[name] = new(table, new(name, "enum", name));
             }
 
             foreach (var pair in values)
@@ -119,16 +131,20 @@ namespace RitsukageGif.Scripting
             return this;
         }
 
-        public ScriptBindingRegistry ExtendEnum<T>(string name, IReadOnlyDictionary<string, T> values) =>
-            RegisterEnum(name, values);
+        // ReSharper disable once UnusedMember.Global
+        public ScriptBindingRegistry ExtendEnum<T>(string name, IReadOnlyDictionary<string, T> values)
+        {
+            return RegisterEnum(name, values);
+        }
 
+        // ReSharper disable once UnusedMethodReturnValue.Global
         public ScriptBindingRegistry RegisterObjectSchema(string name,
             IReadOnlyList<ScriptPropertyDescriptor> properties,
             bool allowExtra = false)
         {
             if (properties.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != properties.Count)
                 throw TypeError();
-            _schemas.Add(name, new ObjectSchema(properties.ToArray(), allowExtra));
+            _schemas.Add(name, new([.. properties], allowExtra));
             return this;
         }
 
@@ -194,7 +210,7 @@ namespace RitsukageGif.Scripting
         private object? ValidateCore(object? value, string typeName, int depth)
         {
             if (depth > 64) throw new InvalidOperationException(UiText.Get("DslExecutionLimit"));
-            if (typeName.Length == 2 && typeName[0] == '$' && char.IsAsciiDigit(typeName[1])) return value;
+            if (typeName is ['$', _] && char.IsAsciiDigit(typeName[1])) return value;
             typeName = UnwrapTypeGroup(typeName);
             var alternatives = typeName.Contains('|') ? SplitType(typeName, '|') : [];
             if (alternatives.Length > 1)
@@ -223,7 +239,7 @@ namespace RitsukageGif.Scripting
             }
 
             if (typeName is "any" or "unknown" ||
-                typeName.StartsWith('$') && int.TryParse(typeName.AsSpan(1), out _)) return value;
+                (typeName.StartsWith('$') && int.TryParse(typeName.AsSpan(1), out _))) return value;
             if (typeName.EndsWith("[]", StringComparison.Ordinal))
             {
                 if (value is not List<object?> array) throw TypeError();
@@ -233,7 +249,7 @@ namespace RitsukageGif.Scripting
                 {
                     var item = ValidateCore(array[index], elementType, depth + 1);
                     if (Equals(item, array[index])) continue;
-                    normalized ??= new List<object?>(array);
+                    normalized ??= [.. array];
                     normalized[index] = item;
                 }
 
@@ -244,14 +260,17 @@ namespace RitsukageGif.Scripting
 
             if (TryGetCachedGenericType(typeName, out var genericName, out var genericArguments))
                 return ValidateGeneric(value, genericName, genericArguments, depth);
-            if (typeName is "void" or "null") return value is null ? null : throw TypeError();
-            if (typeName == "function") return value is IScriptCallable or ScriptNative ? value : throw TypeError();
-            if (typeName == "number") return ValidateNumber(value);
+            switch (typeName)
+            {
+                case "void" or "null": return value is null ? null : throw TypeError();
+                case "function": return value is IScriptCallable or ScriptNative ? value : throw TypeError();
+                case "number": return ValidateNumber(value);
+                case "string": return value is string ? value : throw TypeError();
+                case "boolean": return value is bool ? value : throw TypeError();
+                case "array": return value is List<object?> ? value : throw TypeError();
+                case "object": return value is Dictionary<string, object?> ? value : throw TypeError();
+            }
 
-            if (typeName == "string") return value is string ? value : throw TypeError();
-            if (typeName == "boolean") return value is bool ? value : throw TypeError();
-            if (typeName == "array") return value is List<object?> ? value : throw TypeError();
-            if (typeName == "object") return value is Dictionary<string, object?> ? value : throw TypeError();
             if (_enums.TryGetValue(typeName, out var enumeration))
             {
                 if (value is string name)
@@ -268,14 +287,12 @@ namespace RitsukageGif.Scripting
                 if (value is not Dictionary<string, object?> source) throw TypeError();
                 var result = new Dictionary<string, object?>(StringComparer.Ordinal);
                 foreach (var property in schema.Properties)
-                {
                     if (source.TryGetValue(property.Name, out var field))
                         result[property.Name] = ValidateCore(field, property.TypeName, depth + 1);
                     else if (!property.Optional)
                         throw new InvalidOperationException(UiText.Format("DslArguments", property.Name));
                     else if (property.DefaultValue is not null)
                         result[property.Name] = ValidateCore(property.DefaultValue, property.TypeName, depth + 1);
-                }
 
                 foreach (var field in source)
                 {
@@ -288,8 +305,8 @@ namespace RitsukageGif.Scripting
                 return result;
             }
 
-            if (_types.TryGetValue(typeName, out var host) && value is not null && host.Matches(value)) return value;
-            if (value is ScriptTableBinding table && table.Name == typeName) return value;
+            if ((_types.TryGetValue(typeName, out var host) && value is not null && host.Matches(value)) ||
+                (value is ScriptTableBinding table && table.Name == typeName)) return value;
             throw TypeError();
         }
 
@@ -300,21 +317,25 @@ namespace RitsukageGif.Scripting
             {
                 float f => f, decimal d => (double)d, byte b => b, sbyte b => b,
                 short n => n, ushort n => n, int n => n, uint n => n, long n => n, ulong n => n,
-                _ => throw TypeError()
+                _ => throw TypeError(),
             };
             return double.IsFinite(number) ? number : throw TypeError();
         }
 
-        internal IEnumerable<KeyValuePair<string, object?>> BindGlobals() => _globals.Select(p =>
-            new KeyValuePair<string, object?>(p.Key, p.Value.Value));
+        internal IEnumerable<KeyValuePair<string, object?>> BindGlobals()
+        {
+            return _globals.Select(p =>
+                new KeyValuePair<string, object?>(p.Key, p.Value.Value));
+        }
 
-        internal ScriptCallableDescriptor CreateDescriptor(string name, IReadOnlyList<ScriptParameter>? parameters,
+        internal static ScriptCallableDescriptor CreateDescriptor(string name,
+            IReadOnlyList<ScriptParameter>? parameters,
             string returnType, string? description, string? inferredReturnType = null,
             bool invalidatesReceiverElement = false)
         {
             var entries = parameters?.Select(parameter => parameter.CallbackParameters is null
                     ? parameter
-                    : parameter with { CallbackParameters = Array.AsReadOnly(parameter.CallbackParameters.ToArray()) })
+                    : parameter with { CallbackParameters = Array.AsReadOnly([.. parameter.CallbackParameters]) })
                 .ToArray() ?? [];
             if (entries.Select(p => p.Name).Distinct(StringComparer.Ordinal).Count() != entries.Length)
                 throw TypeError();
@@ -322,26 +343,28 @@ namespace RitsukageGif.Scripting
             for (var i = 0; i < entries.Length; i++)
             {
                 var parameter = entries[i];
-                if (parameter.Variadic && i != entries.Length - 1 ||
-                    optional && !parameter.Optional && !parameter.Variadic)
+                if ((parameter.Variadic && i != entries.Length - 1) ||
+                    (optional && parameter is { Optional: false, Variadic: false }))
                     throw TypeError();
                 optional |= parameter.Optional;
             }
 
-            return new ScriptCallableDescriptor(name, entries, returnType, description, inferredReturnType,
+            return new(name, entries, returnType, description, inferredReturnType,
                 invalidatesReceiverElement);
         }
 
-        internal ScriptBoundFunction CreateFunction(string name, ScriptNative callback,
+        internal static ScriptBoundFunction CreateFunction(string name, ScriptNative callback,
             IReadOnlyList<ScriptParameter>? parameters, string returnType, string? description,
-            string? inferredReturnType = null, bool invalidatesReceiverElement = false) =>
-            new(
+            string? inferredReturnType = null, bool invalidatesReceiverElement = false)
+        {
+            return new(
                 CreateDescriptor(name, parameters, returnType, description, inferredReturnType,
                     invalidatesReceiverElement), callback);
+        }
 
         internal async ValueTask<object?> InvokeAsync(ScriptBoundFunction function, IReadOnlyList<object?> arguments,
-            CancellationToken token,
-            Func<object?, IReadOnlyList<object?>, CancellationToken, ValueTask<object?>> invoker)
+            Func<object?, IReadOnlyList<object?>, CancellationToken, ValueTask<object?>> invoker,
+            CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             var parameters = function.Descriptor.Parameters;
@@ -408,6 +431,18 @@ namespace RitsukageGif.Scripting
             return null;
         }
 
-        private static Exception TypeError() => new InvalidOperationException(UiText.Get("ScriptTypeError"));
+        private static InvalidOperationException TypeError()
+        {
+            return new(UiText.Get("ScriptTypeError"));
+        }
+
+        private sealed record Global(object? Value, ScriptMemberDescriptor Descriptor);
+
+        private sealed record ObjectSchema(IReadOnlyList<ScriptPropertyDescriptor> Properties, bool AllowExtra);
+
+        private sealed record EnumBinding(
+            Type ValueType,
+            Dictionary<string, object?> Values,
+            ScriptEnumDescriptor Descriptor);
     }
 }

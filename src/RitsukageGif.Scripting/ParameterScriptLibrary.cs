@@ -21,7 +21,7 @@ namespace RitsukageGif.Scripting
                 ScriptEngine.Native(args => values.Get((string)args[0]!) is double number ? number : args[1]),
                 [new("name", "string"), new("fallback", "number", true, 0d)], "number");
             table.Function("string",
-                ScriptEngine.Native(args => values.Get((string)args[0]!) is string text ? text : args[1]),
+                ScriptEngine.Native(args => values.Get((string)args[0]!) as string ?? args[1]),
                 [new("name", "string"), new("fallback", "string", true, "")], "string");
             table.Function("boolean",
                 ScriptEngine.Native(args => values.Get((string)args[0]!) is bool value ? value : args[1]),

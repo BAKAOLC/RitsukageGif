@@ -14,8 +14,11 @@ namespace RitsukageGif.Scripting
                 for (var i = branch + 1; i < Position; i++)
                 {
                     if (tokens[i].Quoted) continue;
-                    if (tokens[i].Text is "(" or "[" or "{") depth++;
-                    else if (tokens[i].Text is ")" or "]" or "}") depth--;
+                    switch (tokens[i].Text)
+                    {
+                        case "(" or "[" or "{": depth++; break;
+                        case ")" or "]" or "}": depth--; break;
+                    }
                 }
 
                 if (depth == 0) pending++;
@@ -25,9 +28,8 @@ namespace RitsukageGif.Scripting
             var colons = 0;
             for (var i = Position + 1; i < tokens.Count; i++)
             {
-                var token = tokens[i];
-                if (token.Quoted) continue;
-                var text = token.Text;
+                var (text, _, _, quoted) = tokens[i];
+                if (quoted) continue;
                 if (text is "(" or "[" or "{")
                 {
                     nesting++;

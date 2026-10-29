@@ -35,41 +35,41 @@ namespace RitsukageGif.Scripting
             var values = new List<Value>();
             var uncertain = false;
             foreach (var argument in children.Skip(1))
-            {
                 if (argument.Kind == "spread")
                 {
                     var source = argument.Children[0];
                     if (!uncertain && source.Kind == "array" && source.Children.All(c => c.Kind != "spread"))
+                    {
                         values.AddRange(source.Children.Select(item => Infer(item, scope, depth + 1)));
+                    }
                     else
                     {
                         Infer(source, scope, depth + 1);
                         uncertain = true;
-                        values.Add(new Value());
+                        values.Add(new());
                     }
                 }
                 else
                 {
                     var value = Infer(argument, scope, depth + 1);
-                    values.Add(uncertain ? new Value() : value);
+                    values.Add(uncertain ? new() : value);
                 }
-            }
 
             if (uncertain)
                 while (values.Count < parameterCount)
-                    values.Add(new Value());
-            return values.ToArray();
+                    values.Add(new());
+            return [.. values];
         }
 
         private Value InferFunctionResult(ScriptNode function, Scope closure, IReadOnlyList<Value> arguments, int depth)
         {
-            if (depth > 24) return new Value();
+            if (depth > 24) return new();
             if (function.TypeName is { } returnType) return Typed(returnType);
             var scope = CopyInferenceScope(closure.Parent, InferenceWrites(function),
                 rootReferences: InferenceReferences(function));
             var invocation = new Scope(closure.Start, closure.End, scope) { Transient = true };
             var copies = new Dictionary<Value, Value>(ReferenceEqualityComparer.Instance);
-            BindFunctionArguments(function, arguments.Select(value => CopyInferenceValue(value, copies)).ToArray(),
+            BindFunctionArguments(function, [.. arguments.Select(value => CopyInferenceValue(value, copies))],
                 invocation);
             Value? result = null;
             InferFlow(function.Children[0], invocation, depth + 1, ref result);
@@ -95,9 +95,14 @@ namespace RitsukageGif.Scripting
                     yield return "null";
                 }
                 else if (ScriptBindingRegistry.UnwrapTypeGroup(item) is var unwrapped && unwrapped != item)
+                {
                     foreach (var alternative in TypeAlternatives(unwrapped))
                         yield return alternative;
-                else yield return item;
+                }
+                else
+                {
+                    yield return item;
+                }
 
                 start = i + 1;
             }
@@ -106,7 +111,7 @@ namespace RitsukageGif.Scripting
         private static Value MergePatternValues(Value left, Value right, int depth = 0)
         {
             if (ReferenceEquals(left, right)) return left;
-            if (depth > 24) return new Value();
+            if (depth > 24) return new();
             if (left.TypeName == "never") return right;
             if (right.TypeName == "never") return left;
             var types = TypeAlternatives(left.TypeName).Concat(TypeAlternatives(right.TypeName))
@@ -126,7 +131,7 @@ namespace RitsukageGif.Scripting
                 Callable = left.Callable == right.Callable ? left.Callable : null,
                 Function = ReferenceEquals(left.Function, right.Function) ? left.Function : null,
                 Closure = ReferenceEquals(left.Closure, right.Closure) ? left.Closure : null,
-                Receiver = ReferenceEquals(left.Receiver, right.Receiver) ? left.Receiver : null
+                Receiver = ReferenceEquals(left.Receiver, right.Receiver) ? left.Receiver : null,
             };
             foreach (var member in left.Members)
                 if (right.Members.TryGetValue(member.Key, out var other))

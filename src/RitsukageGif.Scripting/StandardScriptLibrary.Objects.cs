@@ -8,7 +8,8 @@ namespace RitsukageGif.Scripting
             objects.Method("keys", (map, _, _) => Result(map.Keys.Cast<object?>().ToList()), returnType: "array");
             objects.Method("values", (map, _, _) => Result(map.Values.ToList()), returnType: "array");
             objects.Method("entries",
-                (map, _, _) => Result(map.Select(pair => (object?)new List<object?> { pair.Key, pair.Value }).ToList()),
+                (map, _, _) =>
+                    Result(map.Select(object? (pair) => new List<object?> { pair.Key, pair.Value }).ToList()),
                 returnType: "array");
             objects.Method("has", (map, args, _) => Result(map.ContainsKey((string)args[0]!)), [new("key", "string")],
                 "boolean");

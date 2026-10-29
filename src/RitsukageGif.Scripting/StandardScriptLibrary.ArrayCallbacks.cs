@@ -29,7 +29,7 @@ namespace RitsukageGif.Scripting
                 },
                 [
                     new("callback", "function", CallbackParameters: ["$element", "number", "$receiver"],
-                        CallbackReturnType: "boolean")
+                        CallbackReturnType: "boolean"),
                 ], "array", inferredReturnType: "$receiver");
             arrays.Method("forEach", async (array, args, token) =>
             {
@@ -49,7 +49,7 @@ namespace RitsukageGif.Scripting
                 },
                 [
                     new("callback", "function", CallbackParameters: ["$element", "number", "$receiver"],
-                        CallbackReturnType: "boolean")
+                        CallbackReturnType: "boolean"),
                 ], "boolean");
             arrays.Method("every", async (array, args, token) =>
                 {
@@ -62,7 +62,7 @@ namespace RitsukageGif.Scripting
                 },
                 [
                     new("callback", "function", CallbackParameters: ["$element", "number", "$receiver"],
-                        CallbackReturnType: "boolean")
+                        CallbackReturnType: "boolean"),
                 ], "boolean");
             arrays.Method("find", async (array, args, token) =>
                 {
@@ -79,7 +79,7 @@ namespace RitsukageGif.Scripting
                 },
                 [
                     new("callback", "function", CallbackParameters: ["$element", "number", "$receiver"],
-                        CallbackReturnType: "boolean")
+                        CallbackReturnType: "boolean"),
                 ],
                 inferredReturnType: "$element|null");
             arrays.Method("findIndex", async (array, args, token) =>
@@ -93,11 +93,11 @@ namespace RitsukageGif.Scripting
                 },
                 [
                     new("callback", "function", CallbackParameters: ["$element", "number", "$receiver"],
-                        CallbackReturnType: "boolean")
+                        CallbackReturnType: "boolean"),
                 ], "number");
             arrays.Method("reduce", async (array, args, token) =>
             {
-                if (args.Count > 2 || args.Count == 1 && array.Count == 0) throw TypeError();
+                if (args.Count > 2 || (args.Count == 1 && array.Count == 0)) throw TypeError();
                 var initial = args.Count == 2;
                 var result = initial ? args[1] : array[0];
                 var length = array.Count;
@@ -106,7 +106,7 @@ namespace RitsukageGif.Scripting
                 return result;
             }, [
                 new("callback", "function", CallbackParameters: ["$1??$element", "$element", "number", "$receiver"]),
-                new("initial", Variadic: true)
+                new("initial", Variadic: true),
             ], inferredReturnType: "$1??$element|$callback0");
         }
     }

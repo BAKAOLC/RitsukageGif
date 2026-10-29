@@ -12,25 +12,32 @@ namespace RitsukageGif.Scripting
         IMediaProcessingService? mediaService = null,
         ScriptParameters? parameters = null,
         IImageCompositionService? imageService = null,
-        IInputChannelReader? inputReader = null)
+        IInputChannelReader? inputReader = null,
+        IStaticCaptureService? staticCaptureService = null,
+        IVideoRecordingService? videoService = null,
+        ITextRecognitionService? textRecognitionService = null,
+        IBarcodeRecognitionService? barcodeRecognitionService = null,
+        IPrivacyDetectionService? privacyService = null)
     {
-        public PresetRuntime Runtime { get; } = new();
-        public ScriptParameters Parameters { get; } = parameters ?? new ScriptParameters();
-        internal IInputChannelReader? InputReader { get; } = inputReader;
-        private readonly Dictionary<string, PresetLayerState> _layers = new();
-        private readonly Dictionary<string, List<object?>> _handlers = new();
+        private static readonly ILogger Logger = LogHub.GetLogger("Scripting.Session");
         private readonly ConcurrentQueue<string> _events = new();
+        private readonly Dictionary<string, List<object?>> _handlers = new();
+        private readonly Dictionary<string, PresetLayerState> _layers = new();
 
         private readonly Dictionary<string, object> _values =
             new(preset.InitialValues ?? new Dictionary<string, object>());
 
+        private ScriptEngine? _engine;
+        private PresetContext? _previous;
+
         private bool _pumping;
         private bool _recordingEnded;
-        private PresetContext? _previous;
-        private ScriptEngine? _engine;
+        public PresetRuntime Runtime { get; } = new();
+        public ScriptParameters Parameters { get; } = parameters ?? new ScriptParameters();
+        internal IInputChannelReader? InputReader { get; } = inputReader;
         public string? LastError { get; private set; }
-        public ScriptDiagnostic? LastDiagnostic { get; private set; }
-        public IReadOnlyList<ScriptStackFrame>? LastStackFrames { get; private set; }
+        private ScriptDiagnostic? LastDiagnostic { get; set; }
+        private IReadOnlyList<ScriptStackFrame>? LastStackFrames { get; set; }
 
         public void Signal(string name)
         {
@@ -40,6 +47,7 @@ namespace RitsukageGif.Scripting
 
         public async Task RunAsync(CancellationToken token)
         {
+            Logger.ZLogInformation($"Script session started. DebuggerAttached={debugger is not null}");
             try
             {
                 var result = await RunCoreAsync(token);
@@ -51,13 +59,19 @@ namespace RitsukageGif.Scripting
                                      new ScriptDiagnostic(preset.Program?.Line ?? 1, preset.Program?.Column ?? 1,
                                          LastError, preset.SourceFile);
                     LastStackFrames = _engine?.FailureFrames;
-                    await ExecuteActionAsync(new PresetAction("cancel"));
+                    Logger.ZLogWarning(
+                        $"Script session returned an error result. Line={LastDiagnostic.Line} Column={LastDiagnostic.Column}");
+                    await ExecuteActionAsync(new("cancel"));
                 }
-                else if (!_recordingEnded) await ExecuteActionAsync(new PresetAction("stop"));
+                else if (!_recordingEnded)
+                {
+                    await ExecuteActionAsync(new("stop"));
+                }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
-                await ExecuteActionAsync(new PresetAction("cancel"));
+                Logger.ZLogInformation($"Script session canceled.");
+                await ExecuteActionAsync(new("cancel"));
             }
             catch (Exception ex)
             {
@@ -66,14 +80,18 @@ namespace RitsukageGif.Scripting
                 {
                     ScriptExecutionException execution => execution.Diagnostic,
                     PresetSyntaxException syntax => syntax.Diagnostic,
-                    _ => new ScriptDiagnostic(preset.Program?.Line ?? 1, preset.Program?.Column ?? 1, ex.Message,
-                        preset.SourceFile)
+                    _ => new(preset.Program?.Line ?? 1, preset.Program?.Column ?? 1, ex.Message,
+                        preset.SourceFile),
                 };
                 LastStackFrames = (ex as ScriptExecutionException)?.Frames;
-                await ExecuteActionAsync(new PresetAction("cancel"));
+                Logger.ZLogError(
+                    $"Script session failed. ExceptionType={ex.GetType().Name} Line={LastDiagnostic.Line} Column={LastDiagnostic.Column} StackTrace={ex.StackTrace}");
+                await ExecuteActionAsync(new("cancel"));
             }
             finally
             {
+                Logger.ZLogInformation(
+                    $"Script session ended. Failed={LastError is not null} Canceled={token.IsCancellationRequested}");
                 if (isCurrent?.Invoke() != false) debugger?.Complete(LastError, LastDiagnostic, LastStackFrames);
             }
         }
@@ -82,8 +100,12 @@ namespace RitsukageGif.Scripting
         {
             if (action.Kind == "start") InitializePlayback(PresetMotion.Now);
             await execute(action);
-            if (action.Kind is "stop" or "cancel" or "finish") _recordingEnded = true;
-            else if (action.Kind is "start" or "startMany") _recordingEnded = false;
+            _recordingEnded = action.Kind switch
+            {
+                "stop" or "cancel" or "finish" => true,
+                "start" or "startMany" => false,
+                _ => _recordingEnded,
+            };
         }
 
         private async Task<object?> RunCoreAsync(CancellationToken token)
@@ -160,17 +182,22 @@ namespace RitsukageGif.Scripting
             }
         }
 
-        private static Dictionary<string, object?> Context(PresetContext c) => new()
+        private static Dictionary<string, object?> Context(PresetContext c)
         {
-            ["exists"] = c.Window is not null, ["recording"] = c.Recording, ["busy"] = c.Busy, ["idle"] = !c.Busy,
-            ["title"] = c.Window?.Title ?? "", ["width"] = (double)(c.Window?.Bounds.Width ?? 0),
-            ["height"] = (double)(c.Window?.Bounds.Height ?? 0), ["elapsed"] = c.RecordingElapsed,
-            ["outputs"] = (c.Outputs ?? []).Cast<object?>().ToList(),
-            ["streams"] = StreamValues(c)
-        };
+            return new()
+            {
+                ["exists"] = c.Window is not null, ["recording"] = c.Recording, ["busy"] = c.Busy, ["idle"] = !c.Busy,
+                ["title"] = c.Window?.Title ?? "", ["width"] = (double)(c.Window?.Bounds.Width ?? 0),
+                ["height"] = (double)(c.Window?.Bounds.Height ?? 0), ["elapsed"] = c.RecordingElapsed,
+                ["outputs"] = (c.Outputs ?? []).Cast<object?>().ToList(),
+                ["streams"] = StreamValues(c),
+            };
+        }
 
-        private static string RequireName(object? value) =>
-            value as string ?? throw new ArgumentException(UiText.Get("ScriptTypeError"));
+        private static string RequireName(object? value)
+        {
+            return value as string ?? throw new ArgumentException(UiText.Get("ScriptTypeError"));
+        }
 
         private static double Seconds(object? value)
         {
@@ -179,46 +206,63 @@ namespace RitsukageGif.Scripting
             return seconds;
         }
 
-        private PresetLayer Layer(string name) => preset.Layout?.Layers.SingleOrDefault(l => l.Name == name) ??
-                                                  throw new ArgumentException(UiText.Format("DslUnknownName", name));
+        private PresetLayer Layer(string name)
+        {
+            return preset.Layout?.Layers.SingleOrDefault(l => l.Name == name) ??
+                   throw new ArgumentException(UiText.Format("DslUnknownName", name));
+        }
 
         private void UpdateLayer(string operation, IReadOnlyList<object?> args)
         {
-            var minimum = operation == "animate" ? 6 : operation is "move" or "crop" ? 5 : 2;
+            var minimum = operation switch { "animate" => 6, "move" or "crop" => 5, _ => 2 };
             if (args.Count < minimum || args.Count > minimum + (operation == "animate" ? 1 : 0))
                 throw new ArgumentException(UiText.Format("DslArguments", operation));
             var name = RequireName(args[0]);
             var definition = Layer(name);
             var state = _layers.GetValueOrDefault(name) ?? new PresetLayerState();
-            if (operation is "move" or "animate" or "crop")
+            switch (operation)
             {
-                if (args.Count < 5) throw new ArgumentException(UiText.Format("DslArguments", operation));
-                var numbers = args.Skip(1).Take(4).Select(a => checked((int)Math.Round(ScriptEngine.Number(a))))
-                    .ToArray();
-                var rect = new PixelRect(numbers[0], numbers[1], numbers[2], numbers[3]);
-                if (rect.IsEmpty || rect.Width > 16384 || rect.Height > 16384 || Math.Abs((long)rect.X) > 131072 ||
-                    Math.Abs((long)rect.Y) > 131072) throw new ArgumentException(UiText.Get("InvalidRecording"));
-                if (operation == "crop") state = state with { Crop = rect };
-                else if (operation == "move") state = state with { Placement = rect, Motion = null };
-                else
+                case "move":
+                case "animate":
+                case "crop":
                 {
-                    var seconds = Seconds(args[5]);
-                    var easing = args.Count > 6 ? RequireName(args[6]) : "linear";
-                    var now = Runtime.Now;
-                    var from = state.Motion?.At(now) ?? state.Placement ?? definition.Placement;
-                    state = state with
+                    if (args.Count < 5) throw new ArgumentException(UiText.Format("DslArguments", operation));
+                    var numbers = args.Skip(1).Take(4).Select(a => checked((int)Math.Round(ScriptEngine.Number(a))))
+                        .ToArray();
+                    var rect = new PixelRect(numbers[0], numbers[1], numbers[2], numbers[3]);
+                    if (rect.IsEmpty || rect.Width > 16384 || rect.Height > 16384 || Math.Abs((long)rect.X) > 131072 ||
+                        Math.Abs((long)rect.Y) > 131072) throw new ArgumentException(UiText.Get("InvalidRecording"));
+                    switch (operation)
                     {
-                        Placement = rect, Motion = new PresetMotion(from, rect, now, seconds, easing)
-                    };
+                        case "crop":
+                            state = state with { Crop = rect };
+                            break;
+                        case "move":
+                            state = state with { Placement = rect, Motion = null };
+                            break;
+                        default:
+                            var seconds = Seconds(args[5]);
+                            var easing = args.Count > 6 ? RequireName(args[6]) : "linear";
+                            var now = Runtime.Now;
+                            var from = state.Motion?.At(now) ?? state.Placement ?? definition.Placement;
+                            state = state with
+                            {
+                                Placement = rect, Motion = new(from, rect, now, seconds, easing),
+                            };
+                            break;
+                    }
+
+                    break;
                 }
-            }
-            else if (operation == "visible") state = state with { Visible = ScriptEngine.Truth(args[1]) };
-            else
-            {
-                var opacity = ScriptEngine.Number(args[1]);
-                if (!double.IsFinite(opacity) || opacity is < 0 or > 1)
-                    throw new ArgumentException(UiText.Format("DslRange", 0, 1));
-                state = state with { Opacity = opacity };
+                case "visible":
+                    state = state with { Visible = ScriptEngine.Truth(args[1]) };
+                    break;
+                default:
+                    var opacity = ScriptEngine.Number(args[1]);
+                    if (!double.IsFinite(opacity) || opacity is < 0 or > 1)
+                        throw new ArgumentException(UiText.Format("DslRange", 0, 1));
+                    state = state with { Opacity = opacity };
+                    break;
             }
 
             _layers[name] = state;

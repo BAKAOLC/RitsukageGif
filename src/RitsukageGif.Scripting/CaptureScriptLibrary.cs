@@ -11,6 +11,11 @@ namespace RitsukageGif.Scripting
             FileScriptLibrary.Register(bindings, baseDirectory ?? host?.SourceDirectory);
             MediaScriptLibrary.Register(bindings, host?.MediaService, baseDirectory ?? host?.SourceDirectory);
             ImageScriptLibrary.Register(bindings, host?.ImageService, baseDirectory ?? host?.SourceDirectory);
+            StaticCaptureScriptLibrary.Register(bindings, host?.StaticCaptureService,
+                baseDirectory ?? host?.SourceDirectory);
+            VideoScriptLibrary.Register(bindings, host?.VideoService, baseDirectory ?? host?.SourceDirectory);
+            RecognitionScriptLibrary.Register(bindings, host?.TextRecognitionService, host?.BarcodeRecognitionService,
+                baseDirectory ?? host?.SourceDirectory, host?.PrivacyService);
             var settings = new RecordingSettingsBinding(bindings);
             settings.Register();
             var outputs = new RecordingOutputsBinding(bindings, settings,
@@ -19,43 +24,43 @@ namespace RitsukageGif.Scripting
             bindings.RegisterEnum("Easing", new Dictionary<string, string>
             {
                 ["Linear"] = "linear", ["EaseIn"] = "ease-in", ["EaseOut"] = "ease-out", ["EaseInOut"] = "ease-in-out",
-                ["ease-in"] = "ease-in", ["ease-out"] = "ease-out", ["ease-in-out"] = "ease-in-out"
+                ["ease-in"] = "ease-in", ["ease-out"] = "ease-out", ["ease-in-out"] = "ease-in-out",
             });
             bindings.RegisterEnum("CaptureEvent", new Dictionary<string, string>
             {
                 ["Found"] = "found", ["Lost"] = "lost", ["Closed"] = "closed", ["Moved"] = "moved",
                 ["Resized"] = "resized",
                 ["Title"] = "title", ["Saved"] = "saved", ["Cancelled"] = "cancelled", ["Stopped"] = "stopped",
-                ["Error"] = "error"
+                ["Error"] = "error",
             });
             bindings.RegisterObjectSchema("RecordingStatus",
             [
                 new("exists", "boolean"), new("recording", "boolean"), new("busy", "boolean"), new("idle", "boolean"),
                 new("title", "string"), new("width", "number"), new("height", "number"), new("elapsed", "number"),
-                new("outputs", "string[]"), new("streams", "RecordingStreamStatus[]")
+                new("outputs", "string[]"), new("streams", "RecordingStreamStatus[]"),
             ]);
             bindings.RegisterObjectSchema("RecordingStreamStatus",
             [
                 new("name", "string"), new("state", "string"), new("captured", "number"),
-                new("encoded", "number"), new("elapsed", "number"), new("path", "string"), new("error", "string?")
+                new("encoded", "number"), new("elapsed", "number"), new("path", "string"), new("error", "string?"),
             ]);
             bindings.RegisterObjectSchema("SceneLayer",
             [
                 new("x", "number"), new("y", "number"), new("width", "number"), new("height", "number"),
                 new("visible", "boolean"), new("opacity", "number"), new("effects", "PixelEffect[]"),
-                new("playback", "PlaybackState?")
+                new("playback", "PlaybackState?"),
             ]);
             bindings.RegisterObjectSchema("PlaybackOptions",
             [
                 new("position", "number", true), new("speed", "number", true), new("paused", "boolean", true),
-                new("loop", "boolean", true), new("holdLast", "boolean", true)
+                new("loop", "boolean", true), new("holdLast", "boolean", true),
             ]);
             bindings.RegisterObjectSchema("PlaybackState",
             [
                 new("position", "number"), new("speed", "number"), new("paused", "boolean"),
-                new("loop", "boolean"), new("holdLast", "boolean")
+                new("loop", "boolean"), new("holdLast", "boolean"),
             ]);
-            PresetScriptSession Host() => host ?? throw new InvalidOperationException(UiText.Get("EditorNoRuntime"));
+
             var recording = bindings.RegisterTable("record");
             ScriptNative start = (args, token) => Host().ExecuteBoundAction("start",
                 args.Count == 0 || args[0] is null ? null : settings.Read(args[0]), token);
@@ -86,7 +91,7 @@ namespace RitsukageGif.Scripting
             [
                 new("placement", "SceneRect", true), new("crop", "SceneRect", true),
                 new("visible", "boolean", true), new("opacity", "number", true), new("effects", "PixelEffect[]", true),
-                new("playback", "PlaybackOptions", true)
+                new("playback", "PlaybackOptions", true),
             ]);
             scene.Function("set", ScriptEngine.Native(args => Host().SetLayerBound((string)args[0]!,
                     (Dictionary<string, object?>)args[1]!)),
@@ -94,7 +99,7 @@ namespace RitsukageGif.Scripting
             ScriptParameter[] rectangle =
             [
                 new("name", "string"), new("x", "number"), new("y", "number"), new("width", "number"),
-                new("height", "number")
+                new("height", "number"),
             ];
             scene.Function("move", ScriptEngine.Native(args => Host().UpdateLayerBound("move", args)), rectangle,
                 "void");
@@ -112,31 +117,31 @@ namespace RitsukageGif.Scripting
                     .SetLayerBound((string)args[1]!, (Dictionary<string, object?>)args[2]!)),
                 [new("output", "string"), new("name", "string"), new("options", "SceneUpdate")], "void");
             scene.Function("effects", ScriptEngine.Native(args => Host().SetLayerBound((string)args[0]!,
-                    new Dictionary<string, object?> { ["effects"] = args[1] })),
+                    new() { ["effects"] = args[1] })),
                 [new("name", "string"), new("effects", "PixelEffect[]")], "void");
             scene.Function("effectsFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                    .SetLayerBound((string)args[1]!, new Dictionary<string, object?> { ["effects"] = args[2] })),
+                    .SetLayerBound((string)args[1]!, new() { ["effects"] = args[2] })),
                 [new("output", "string"), new("name", "string"), new("effects", "PixelEffect[]")], "void");
             scene.Function("playback", ScriptEngine.Native(args => Host().SetLayerBound((string)args[0]!,
-                    new Dictionary<string, object?> { ["playback"] = args[1] })),
+                    new() { ["playback"] = args[1] })),
                 [new("name", "string"), new("options", "PlaybackOptions")], "void");
             scene.Function("playbackFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                    .SetLayerBound((string)args[1]!, new Dictionary<string, object?> { ["playback"] = args[2] })),
+                    .SetLayerBound((string)args[1]!, new() { ["playback"] = args[2] })),
                 [new("output", "string"), new("name", "string"), new("options", "PlaybackOptions")], "void");
             scene.Function("getFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
                     .ReadLayerBound((string)args[1]!)),
                 [new("output", "string"), new("name", "string")], "SceneLayer");
             foreach (var operation in new[] { "move", "crop", "animate", "visible", "opacity" })
             {
-                ScriptParameter[] parameters = operation switch
+                var parameters = operation switch
                 {
                     "visible" => [new("name", "string"), new("visible", "boolean")],
                     "opacity" => [new("name", "string"), new("opacity", "number")],
                     "animate" => [.. rectangle, new("seconds", "number"), new("easing", "Easing", true, "linear")],
-                    _ => rectangle
+                    _ => rectangle,
                 };
                 scene.Function(operation + "For", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                        .UpdateLayerBound(operation, args.Skip(1).ToArray())),
+                        .UpdateLayerBound(operation, [.. args.Skip(1)])),
                     [new("output", "string"), .. parameters], "void");
             }
 
@@ -149,6 +154,11 @@ namespace RitsukageGif.Scripting
                 [new("name", "CaptureEvent|string")], "void");
             events.Function("pump", (_, token) => Host().PumpBound(token), [], "void");
             return bindings;
+
+            PresetScriptSession Host()
+            {
+                return host ?? throw new InvalidOperationException(UiText.Get("EditorNoRuntime"));
+            }
         }
     }
 }

@@ -10,12 +10,12 @@ namespace RitsukageGif.Scripting
         public static void Register(ScriptBindingRegistry bindings, string? baseDirectory = null)
         {
             var root = Path.GetFullPath(baseDirectory ?? Environment.CurrentDirectory);
-            string Resolve(string path) => Path.GetFullPath(path, root);
+
             ScriptServiceErrors.Register(bindings);
             bindings.RegisterObjectSchema("FileInfo",
             [
                 new("path", "string"), new("name", "string"), new("extension", "string"),
-                new("size", "number"), new("isDirectory", "boolean"), new("modifiedUtc", "string")
+                new("size", "number"), new("isDirectory", "boolean"), new("modifiedUtc", "string"),
             ]);
             var files = bindings.RegisterTable("files");
             ScriptParameter[] pathParameter = [new("path", "string")];
@@ -105,7 +105,7 @@ namespace RitsukageGif.Scripting
                 }
             }, [
                 new("source", "string"), new("destination", "string"),
-                new("overwrite", "boolean", true, false)
+                new("overwrite", "boolean", true, false),
             ], "Result<string,ServiceError>");
             files.Function("move", Wrap(args =>
             {
@@ -115,7 +115,7 @@ namespace RitsukageGif.Scripting
                 return destination;
             }), [
                 new("source", "string"), new("destination", "string"),
-                new("overwrite", "boolean", true, false)
+                new("overwrite", "boolean", true, false),
             ], "Result<string,ServiceError>");
             files.Function("createDirectory",
                 Wrap(args => Directory.CreateDirectory(Resolve((string)args[0]!)).FullName),
@@ -146,30 +146,45 @@ namespace RitsukageGif.Scripting
             }, pathParameter, "Result<FileInfo[],ServiceError>");
             RegisterPaths(bindings, Resolve);
             RegisterBytes(files, Resolve);
+            return;
+
+            string Resolve(string path)
+            {
+                return Path.GetFullPath(path, root);
+            }
         }
 
-        private static bool IsFileError(Exception exception) =>
-            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException;
-
-        private static ScriptResult TooLarge(string path) => new(false,
-            ScriptServiceErrors.Create("limitExceeded", UiText.Get("ServiceLimitExceeded"), path));
-
-        private static ScriptNative Wrap(Func<IReadOnlyList<object?>, object?> action) => (args, token) =>
+        private static bool IsFileError(Exception exception)
         {
-            token.ThrowIfCancellationRequested();
-            try
+            return exception is IOException or UnauthorizedAccessException or ArgumentException
+                or NotSupportedException;
+        }
+
+        private static ScriptResult TooLarge(string path)
+        {
+            return new(false,
+                ScriptServiceErrors.Create("limitExceeded", UiText.Get("ServiceLimitExceeded"), path));
+        }
+
+        private static ScriptNative Wrap(Func<IReadOnlyList<object?>, object?> action)
+        {
+            return (args, token) =>
             {
-                var value = action(args);
                 token.ThrowIfCancellationRequested();
-                return ValueTask.FromResult<object?>(new ScriptResult(true, value));
-            }
-            catch (Exception exception) when (IsFileError(exception))
-            {
-                token.ThrowIfCancellationRequested();
-                return ValueTask.FromResult<object?>(new ScriptResult(false,
-                    ScriptServiceErrors.FromException(exception, args.Count == 0 ? null : args[0] as string)));
-            }
-        };
+                try
+                {
+                    var value = action(args);
+                    token.ThrowIfCancellationRequested();
+                    return ValueTask.FromResult<object?>(new ScriptResult(true, value));
+                }
+                catch (Exception exception) when (IsFileError(exception))
+                {
+                    token.ThrowIfCancellationRequested();
+                    return ValueTask.FromResult<object?>(new ScriptResult(false,
+                        ScriptServiceErrors.FromException(exception, args.Count == 0 ? null : args[0] as string)));
+                }
+            };
+        }
 
         private static bool Exists(string path)
         {
@@ -188,12 +203,12 @@ namespace RitsukageGif.Scripting
         {
             var isDirectory = (File.GetAttributes(path) & FileAttributes.Directory) != 0;
             FileSystemInfo info = isDirectory ? new DirectoryInfo(path) : new FileInfo(path);
-            return new Dictionary<string, object?>
+            return new()
             {
                 ["path"] = info.FullName, ["name"] = info.Name, ["extension"] = info.Extension,
                 ["size"] = info is FileInfo file ? file.Length : 0d,
                 ["isDirectory"] = isDirectory,
-                ["modifiedUtc"] = info.LastWriteTimeUtc.ToString("O", CultureInfo.InvariantCulture)
+                ["modifiedUtc"] = info.LastWriteTimeUtc.ToString("O", CultureInfo.InvariantCulture),
             };
         }
     }

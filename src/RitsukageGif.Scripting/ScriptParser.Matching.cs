@@ -11,8 +11,11 @@ namespace RitsukageGif.Scripting
             for (var i = _patternGuardStart; i < Position; i++)
             {
                 if (tokens[i].Quoted) continue;
-                if (tokens[i].Text is "(" or "[" or "{") depth++;
-                else if (tokens[i].Text is ")" or "]" or "}") depth--;
+                switch (tokens[i].Text)
+                {
+                    case "(" or "[" or "{": depth++; break;
+                    case ")" or "]" or "}": depth--; break;
+                }
             }
 
             return depth == 0;
@@ -59,26 +62,46 @@ namespace RitsukageGif.Scripting
             {
                 var token = Current;
                 ScriptNode pattern;
-                if (Take("not")) pattern = Node("pattern-not", token, [MatchPattern(3)]);
+                if (Take("not"))
+                {
+                    pattern = Node("pattern-not", token, [MatchPattern(3)]);
+                }
                 else if (Is("(") && TryGroupedPatternType(out var groupedType))
+                {
                     pattern = Node("pattern-type", token,
                         PatternBindingAhead() ? [Node("pattern-binding", Current, text: Name())] : [], groupedType);
+                }
                 else if (Take("("))
                 {
                     pattern = MatchPattern();
                     Need(")");
                 }
-                else if (Take("_")) pattern = Node("pattern-wildcard", token);
-                else if (Take("var")) pattern = Node("pattern-binding", token, text: Name());
+                else if (Take("_"))
+                {
+                    pattern = Node("pattern-wildcard", token);
+                }
+                else if (Take("var"))
+                {
+                    pattern = Node("pattern-binding", token, text: Name());
+                }
                 else if (Is("<") || Is("<=") || Is(">") || Is(">="))
                 {
                     Position++;
                     pattern = Node("pattern-relational", token, [PatternLiteral()]);
                 }
-                else if (Take("{")) pattern = ObjectPattern(token);
-                else if (Take("[")) pattern = ArrayPattern(token);
+                else if (Take("{"))
+                {
+                    pattern = ObjectPattern(token);
+                }
+                else if (Take("["))
+                {
+                    pattern = ArrayPattern(token);
+                }
                 else if (Current.Quoted || Is("true") || Is("false") || Is("null") || Is("-") || Is("+") ||
-                         TryNumber(Current.Text, out _)) pattern = PatternLiteral();
+                         TryNumber(Current.Text, out _))
+                {
+                    pattern = PatternLiteral();
+                }
                 else
                 {
                     var start = Position;
@@ -89,9 +112,8 @@ namespace RitsukageGif.Scripting
                         if (!Take(")"))
                         {
                             do
-                            {
                                 arguments.Add(MatchPattern());
-                            } while (Take(",") && !Is(")"));
+                            while (Take(",") && !Is(")"));
 
                             Need(")");
                         }
@@ -111,7 +133,7 @@ namespace RitsukageGif.Scripting
                     }
                 }
 
-                while (!Current.Quoted && Current.Text is "and" or "or")
+                while (Current is { Quoted: false, Text: "and" or "or" })
                 {
                     var priority = Is("and") ? 2 : 1;
                     if (priority < minimum) break;
@@ -147,10 +169,13 @@ namespace RitsukageGif.Scripting
             return false;
         }
 
-        private bool PatternBindingAhead() => !Current.Quoted && Current.Text.Length > 0 &&
-                                              (char.IsLetter(Current.Text[0]) || Current.Text[0] == '_') &&
-                                              Current.Text is not ("when" or "and" or "or" or "not" or "is"
-                                                  or "switch");
+        private bool PatternBindingAhead()
+        {
+            return Current is { Quoted: false, Text.Length: > 0 } &&
+                   (char.IsLetter(Current.Text[0]) || Current.Text[0] == '_') &&
+                   Current.Text is not ("when" or "and" or "or" or "not" or "is"
+                       or "switch");
+        }
 
         private ScriptNode PatternLiteral()
         {
@@ -208,12 +233,15 @@ namespace RitsukageGif.Scripting
                     hasRest = true;
                     var variable = Take("var");
                     var bindingToken = Current;
-                    var binding = Take("_") || !variable && (Is(",") || Is("]"))
+                    var binding = Take("_") || (!variable && (Is(",") || Is("]")))
                         ? Node("pattern-wildcard", bindingToken)
                         : Node("pattern-binding", bindingToken, text: Name());
                     items.Add(Node("pattern-rest", item, [binding]));
                 }
-                else items.Add(MatchPattern());
+                else
+                {
+                    items.Add(MatchPattern());
+                }
 
                 if (Take("]")) break;
                 Need(",");
@@ -222,28 +250,38 @@ namespace RitsukageGif.Scripting
             return Node("pattern-array", token, items);
         }
 
-        private static void ValidatePatternBindings(ScriptNode pattern) =>
+        private static void ValidatePatternBindings(ScriptNode pattern)
+        {
             CollectPatternBindings(ValidateTree(pattern));
+        }
 
         private static HashSet<string> CollectPatternBindings(ScriptNode pattern)
         {
             var bindings = new HashSet<string>(StringComparer.Ordinal);
-            if (pattern.Kind == "pattern-binding") bindings.Add(pattern.Text);
-            else if (pattern.Kind == "pattern-or")
+            switch (pattern.Kind)
             {
-                bindings = CollectPatternBindings(pattern.Children[0]);
-                if (!bindings.SetEquals(CollectPatternBindings(pattern.Children[1])))
-                    throw new PresetSyntaxException(pattern.Line, pattern.Column, UiText.Get("ScriptPatternBindings"));
-            }
-            else
-            {
-                foreach (var child in pattern.Children)
-                foreach (var name in CollectPatternBindings(child))
-                    if (!bindings.Add(name))
+                case "pattern-binding":
+                    bindings.Add(pattern.Text);
+                    break;
+                case "pattern-or":
+                {
+                    bindings = CollectPatternBindings(pattern.Children[0]);
+                    if (!bindings.SetEquals(CollectPatternBindings(pattern.Children[1])))
                         throw new PresetSyntaxException(pattern.Line, pattern.Column,
                             UiText.Get("ScriptPatternBindings"));
-                if (pattern.Kind == "pattern-not" && bindings.Count > 0)
-                    throw new PresetSyntaxException(pattern.Line, pattern.Column, UiText.Get("ScriptPatternBindings"));
+                    break;
+                }
+                default:
+                {
+                    foreach (var name in pattern.Children.SelectMany(CollectPatternBindings))
+                        if (!bindings.Add(name))
+                            throw new PresetSyntaxException(pattern.Line, pattern.Column,
+                                UiText.Get("ScriptPatternBindings"));
+                    if (pattern.Kind == "pattern-not" && bindings.Count > 0)
+                        throw new PresetSyntaxException(pattern.Line, pattern.Column,
+                            UiText.Get("ScriptPatternBindings"));
+                    break;
+                }
             }
 
             return bindings;

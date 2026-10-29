@@ -10,19 +10,6 @@ namespace RitsukageGif.Scripting
             var tokens = new List<PresetToken>();
             int at = 0, line = 1, column = 1;
 
-            char Take()
-            {
-                var c = source[at++];
-                if (c == '\n')
-                {
-                    line++;
-                    column = 1;
-                }
-                else column++;
-
-                return c;
-            }
-
             while (at < source.Length)
             {
                 var c = source[at];
@@ -32,7 +19,7 @@ namespace RitsukageGif.Scripting
                     continue;
                 }
 
-                if (c == '#' || c == '/' && at + 1 < source.Length && source[at + 1] == '/')
+                if (c == '#' || (c == '/' && at + 1 < source.Length && source[at + 1] == '/'))
                 {
                     while (at < source.Length && source[at] != '\n') Take();
                     continue;
@@ -78,7 +65,7 @@ namespace RitsukageGif.Scripting
                             {
                                 '\'' => '\'', 'n' => '\n', 'r' => '\r', 't' => '\t', '"' => '"', '\\' => '\\',
                                 _ when tolerant => '\0',
-                                _ => throw new PresetSyntaxException(line, column, UiText.Get("DslInvalidEscape"))
+                                _ => throw new PresetSyntaxException(line, column, UiText.Get("DslInvalidEscape")),
                             };
                         }
 
@@ -87,18 +74,18 @@ namespace RitsukageGif.Scripting
 
                     if (!closed && !tolerant)
                         throw new PresetSyntaxException(startLine, startColumn, UiText.Get("DslUnclosedString"));
-                    tokens.Add(new PresetToken(text.ToString(), startLine, startColumn, true));
+                    tokens.Add(new(text.ToString(), startLine, startColumn, true));
                 }
                 else if (char.IsLetter(c) || c == '_')
                 {
                     while (at < source.Length && (char.IsLetterOrDigit(source[at]) || source[at] == '_' ||
-                                                  source[at] == '.' && at + 1 < source.Length &&
-                                                  (char.IsLetter(source[at + 1]) || source[at + 1] == '_')))
+                                                  (source[at] == '.' && at + 1 < source.Length &&
+                                                   (char.IsLetter(source[at + 1]) || source[at + 1] == '_'))))
                         text.Append(Take());
-                    tokens.Add(new PresetToken(text.ToString(), startLine, startColumn));
+                    tokens.Add(new(text.ToString(), startLine, startColumn));
                 }
                 else if (char.IsAsciiDigit(c) ||
-                         c == '.' && at + 1 < source.Length && char.IsAsciiDigit(source[at + 1]))
+                         (c == '.' && at + 1 < source.Length && char.IsAsciiDigit(source[at + 1])))
                 {
                     if (c == '0' && at + 1 < source.Length && source[at + 1] is 'x' or 'X' or 'b' or 'B')
                     {
@@ -123,7 +110,7 @@ namespace RitsukageGif.Scripting
                         }
                     }
 
-                    tokens.Add(new PresetToken(text.ToString(), startLine, startColumn));
+                    tokens.Add(new(text.ToString(), startLine, startColumn));
                 }
                 else
                 {
@@ -135,15 +122,31 @@ namespace RitsukageGif.Scripting
                     }
 
                     if (at < source.Length &&
-                        (text.ToString() + source[at]) is "->" or "==" or "!=" or "<=" or ">=" or "&&" or "||" or "+="
-                        or "-=" or "*=" or "/=" or "%=" or "++" or "--" or "=>" or "??" or "?.")
+                        text.ToString() + source[at] is "->" or "==" or "!=" or "<=" or ">=" or "&&" or "||" or "+="
+                            or "-=" or "*=" or "/=" or "%=" or "++" or "--" or "=>" or "??" or "?.")
                         text.Append(Take());
-                    tokens.Add(new PresetToken(text.ToString(), startLine, startColumn));
+                    tokens.Add(new(text.ToString(), startLine, startColumn));
                 }
             }
 
-            tokens.Add(new PresetToken("<eof>", line, column));
+            tokens.Add(new("<eof>", line, column));
             return tokens;
+
+            char Take()
+            {
+                var c = source[at++];
+                if (c == '\n')
+                {
+                    line++;
+                    column = 1;
+                }
+                else
+                {
+                    column++;
+                }
+
+                return c;
+            }
         }
     }
 }

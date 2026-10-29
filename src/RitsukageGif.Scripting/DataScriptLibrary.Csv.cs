@@ -20,7 +20,10 @@ namespace RitsukageGif.Scripting
                 var character = text[i];
                 if (quoted)
                 {
-                    if (character != '"') field.Append(character);
+                    if (character != '"')
+                    {
+                        field.Append(character);
+                    }
                     else if (i + 1 < text.Length && text[i + 1] == '"')
                     {
                         field.Append('"');
@@ -49,7 +52,7 @@ namespace RitsukageGif.Scripting
                     continue;
                 }
 
-                if (closed || character == '"' && started) throw new FormatException(UiText.Get("ScriptTypeError"));
+                if (closed || (character == '"' && started)) throw new FormatException(UiText.Get("ScriptTypeError"));
                 if (character == '"') quoted = true;
                 else field.Append(character);
                 started = true;

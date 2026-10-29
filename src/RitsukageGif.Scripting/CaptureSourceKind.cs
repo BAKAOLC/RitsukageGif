@@ -4,6 +4,6 @@ namespace RitsukageGif.Scripting
     {
         Screen,
         Window,
-        Media
+        Media,
     }
 }

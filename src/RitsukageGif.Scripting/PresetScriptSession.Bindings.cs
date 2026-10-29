@@ -9,7 +9,7 @@ namespace RitsukageGif.Scripting
             CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            await ExecuteActionAsync(new PresetAction(action, Settings: settings));
+            await ExecuteActionAsync(new(action, Settings: settings));
             return null;
         }
 
@@ -68,7 +68,7 @@ namespace RitsukageGif.Scripting
                 ["x"] = (double)rect.X, ["y"] = (double)rect.Y, ["width"] = (double)rect.Width,
                 ["height"] = (double)rect.Height, ["visible"] = state.Visible, ["opacity"] = state.Opacity,
                 ["effects"] = PixelEffectsBinding.Values(state.Effects),
-                ["playback"] = PlaybackValue(definition.Media, state.Playback)
+                ["playback"] = PlaybackValue(definition.Media, state.Playback),
             };
         }
 

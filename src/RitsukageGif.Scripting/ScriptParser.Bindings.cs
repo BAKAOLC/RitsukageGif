@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace RitsukageGif.Scripting
 {
     internal sealed partial class ScriptParser
@@ -6,7 +8,6 @@ namespace RitsukageGif.Scripting
         {
             if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ||
                 text.StartsWith("0b", StringComparison.OrdinalIgnoreCase))
-            {
                 try
                 {
                     number = Convert.ToUInt64(text[2..], char.ToLowerInvariant(text[1]) == 'x' ? 16 : 2);
@@ -17,10 +18,9 @@ namespace RitsukageGif.Scripting
                     number = 0;
                     return false;
                 }
-            }
 
-            return double.TryParse(text, System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out number) && double.IsFinite(number);
+            return double.TryParse(text, NumberStyles.Float,
+                CultureInfo.InvariantCulture, out number) && double.IsFinite(number);
         }
 
         private string TypeAnnotation()
@@ -48,9 +48,8 @@ namespace RitsukageGif.Scripting
                     {
                         var arguments = new List<string>();
                         do
-                        {
                             arguments.Add(ReadType(ref complexity));
-                        } while (Take(","));
+                        while (Take(","));
 
                         Need(">");
                         type += "<" + string.Join(",", arguments) + ">";
@@ -60,7 +59,10 @@ namespace RitsukageGif.Scripting
                 while (Is("[") || Is("?"))
                 {
                     if (++complexity > 64) throw Error("type complexity < 64");
-                    if (Take("?")) type += "?";
+                    if (Take("?"))
+                    {
+                        type += "?";
+                    }
                     else
                     {
                         Need("[");
@@ -122,7 +124,10 @@ namespace RitsukageGif.Scripting
 
                         var name = Current.Quoted ? tokens[Position++].Text : Name();
                         ScriptNode value;
-                        if (Take(":")) value = BindingPattern(true);
+                        if (Take(":"))
+                        {
+                            value = BindingPattern(true);
+                        }
                         else
                         {
                             if (key.Quoted) throw Error(":");
@@ -137,7 +142,10 @@ namespace RitsukageGif.Scripting
 
                     pattern = Node("binding-object", token, items);
                 }
-                else pattern = Node("binding-name", token, text: Name());
+                else
+                {
+                    pattern = Node("binding-name", token, text: Name());
+                }
 
                 if (allowDefault && Take("=")) pattern = Node("binding-default", token, [pattern, Expression()]);
                 return pattern;
@@ -148,7 +156,7 @@ namespace RitsukageGif.Scripting
             }
         }
 
-        private IReadOnlyList<ScriptNode> Parameters()
+        private List<ScriptNode> Parameters()
         {
             var parameters = new List<ScriptNode>();
             var names = new HashSet<string>(StringComparer.Ordinal);
@@ -183,13 +191,15 @@ namespace RitsukageGif.Scripting
         }
 
         private static ScriptNode FunctionNode(PresetToken token, string name, IReadOnlyList<ScriptNode> parameters,
-            string? returnType, ScriptNode body) =>
-            Node("function", token, [body], name,
+            string? returnType, ScriptNode body)
+        {
+            return Node("function", token, [body], name,
                     parameters.Select(p => BindingNames(p).FirstOrDefault() ?? "").ToArray())
                 with
                 {
-                    Parameters = parameters, TypeName = returnType
+                    Parameters = parameters, TypeName = returnType,
                 };
+        }
 
         private ScriptNode ArrowBody(PresetToken token, IReadOnlyList<ScriptNode> parameters, string? returnType)
         {
@@ -226,19 +236,19 @@ namespace RitsukageGif.Scripting
                 "name" => node with { Kind = "binding-name" },
                 "array" => node with
                 {
-                    Kind = "binding-array", Children = node.Children.Select(AssignmentPattern).ToArray()
+                    Kind = "binding-array", Children = [.. node.Children.Select(AssignmentPattern)],
                 },
                 "object" => node with
                 {
-                    Kind = "binding-object", Children = node.Children.Select(AssignmentPattern).ToArray()
+                    Kind = "binding-object", Children = [.. node.Children.Select(AssignmentPattern)],
                 },
                 "pair" => node with { Kind = "binding-property", Children = [AssignmentPattern(node.Children[0])] },
                 "spread" => node with { Kind = "binding-rest", Children = [AssignmentPattern(node.Children[0])] },
                 "assign" when node.Text == "=" => node with
                 {
-                    Kind = "binding-default", Children = [AssignmentPattern(node.Children[0]), node.Children[1]]
+                    Kind = "binding-default", Children = [AssignmentPattern(node.Children[0]), node.Children[1]],
                 },
-                _ => throw Error("binding pattern")
+                _ => throw Error("binding pattern"),
             };
         }
 

@@ -9,25 +9,25 @@ namespace RitsukageGif.Scripting
             {
                 string text => text.Length, List<object?> array => array.Count,
                 Dictionary<string, object?> map => map.Count, ScriptMap map => map.Count,
-                ScriptSet set => set.Count, _ => throw TypeError()
-            }), [new ScriptParameter("value")], "number");
+                ScriptSet set => set.Count, _ => throw TypeError(),
+            }), [new("value")], "number");
             bindings.RegisterFunction("str", ScriptEngine.Native(args => Text(args[0])),
-                [new ScriptParameter("value")], "string");
+                [new("value")], "string");
             bindings.RegisterFunction("number", ScriptEngine.Native(args =>
-                ParseNumber(args[0])), [new ScriptParameter("value")], "number");
+                ParseNumber(args[0])), [new("value")], "number");
             bindings.RegisterFunction("assert", ScriptEngine.Native(args => ScriptEngine.Truth(args[0])
                     ? null
                     : throw new InvalidOperationException(args[1] is null
                         ? UiText.Get("DslAssertion")
                         : Text(args[1]))),
-                [new ScriptParameter("condition", "boolean"), new ScriptParameter("message", Optional: true)], "void");
-            ScriptNative output = ScriptEngine.Native(args =>
+                [new("condition", "boolean"), new("message", Optional: true)], "void");
+            var output = ScriptEngine.Native(args =>
             {
                 debugger?.Log(string.Join(" ", args.Select(Text)));
                 return null;
             });
-            bindings.RegisterFunction("print", output, [new ScriptParameter("values", Variadic: true)], "void");
-            bindings.RegisterFunction("log", output, [new ScriptParameter("values", Variadic: true)], "void");
+            bindings.RegisterFunction("print", output, [new("values", Variadic: true)], "void");
+            bindings.RegisterFunction("log", output, [new("values", Variadic: true)], "void");
 
             RegisterMath(bindings);
             RegisterStrings(bindings);
@@ -39,23 +39,38 @@ namespace RitsukageGif.Scripting
             return bindings;
         }
 
-        private static void AddUnary(ScriptTableBinding table, string name, Func<double, double> function) =>
+        private static void AddUnary(ScriptTableBinding table, string name, Func<double, double> function)
+        {
             table.Function(name, ScriptEngine.Native(args => function(ScriptEngine.Number(args[0]))),
-                [new ScriptParameter("value", "number")], "number");
+                [new("value", "number")], "number");
+        }
 
-        private static void AddBinary(ScriptTableBinding table, string name, Func<double, double, double> function) =>
+        private static void AddBinary(ScriptTableBinding table, string name, Func<double, double, double> function)
+        {
             table.Function(name,
                 ScriptEngine.Native(args => function(ScriptEngine.Number(args[0]), ScriptEngine.Number(args[1]))),
-                [new ScriptParameter("left", "number"), new ScriptParameter("right", "number")], "number");
+                [new("left", "number"), new("right", "number")], "number");
+        }
 
-        private static ValueTask<object?> Result(object? value) => ValueTask.FromResult(value);
-        private static string Text(object? value) => ScriptValueText.Convert(value);
-        private static Exception TypeError() => new InvalidOperationException(UiText.Get("ScriptTypeError"));
+        private static ValueTask<object?> Result(object? value)
+        {
+            return ValueTask.FromResult(value);
+        }
+
+        private static string Text(object? value)
+        {
+            return ScriptValueText.Convert(value);
+        }
+
+        private static InvalidOperationException TypeError()
+        {
+            return new(UiText.Get("ScriptTypeError"));
+        }
 
         private static int Index(object? key)
         {
             var number = ScriptEngine.Number(key);
-            return number >= 0 && number <= int.MaxValue && number.Equals(Math.Truncate(number))
+            return number is >= 0 and <= int.MaxValue && number.Equals(Math.Truncate(number))
                 ? (int)number
                 : throw TypeError();
         }

@@ -1,9 +1,16 @@
+using System.Text.RegularExpressions;
+
 namespace RitsukageGif.Scripting
 {
     public sealed partial class ScriptSemanticModel
     {
-        private static string DisplayReturnType(string type) =>
-            System.Text.RegularExpressions.Regex.Replace(type, @"\$(\d+)", match => "T" + match.Groups[1].Value);
+        [GeneratedRegex(@"\$(\d+)")]
+        private static partial Regex GenericParameterRegex();
+
+        private static string DisplayReturnType(string type)
+        {
+            return GenericParameterRegex().Replace(type, match => "T" + match.Groups[1].Value);
+        }
 
         private void CheckPropagation(ScriptNode node, ScriptNode? function, Scope scope)
         {

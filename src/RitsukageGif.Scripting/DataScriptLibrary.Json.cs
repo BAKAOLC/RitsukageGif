@@ -7,7 +7,7 @@ namespace RitsukageGif.Scripting
         internal static object? ParseJson(string text)
         {
             CheckSize(Utf8.GetByteCount(text));
-            using var document = JsonDocument.Parse(text, new JsonDocumentOptions { MaxDepth = 64 });
+            using var document = JsonDocument.Parse(text, new() { MaxDepth = 64 });
             var remaining = MaximumItems;
             return ConvertJson(document.RootElement, ref remaining);
         }
@@ -24,6 +24,7 @@ namespace RitsukageGif.Scripting
                 case JsonValueKind.Number: return Finite(element.GetDouble());
                 case JsonValueKind.Array:
                     var array = new List<object?>();
+                    // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                     foreach (var item in element.EnumerateArray()) array.Add(ConvertJson(item, ref remaining));
                     return array;
                 case JsonValueKind.Object:
@@ -31,21 +32,25 @@ namespace RitsukageGif.Scripting
                     foreach (var item in element.EnumerateObject())
                         map.Add(item.Name, ConvertJson(item.Value, ref remaining));
                     return map;
+                case JsonValueKind.Undefined:
                 default: throw new ArgumentException(UiText.Get("ScriptTypeError"));
             }
         }
 
-        private static double Finite(double value) => double.IsFinite(value)
-            ? value
-            : throw new ArgumentException(UiText.Get("ScriptTypeError"));
+        private static double Finite(double value)
+        {
+            return double.IsFinite(value)
+                ? value
+                : throw new ArgumentException(UiText.Get("ScriptTypeError"));
+        }
 
         private static string StringifyJson(object? value, bool pretty)
         {
             using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = pretty, MaxDepth = 64 }))
+            using (var writer = new Utf8JsonWriter(stream, new() { Indented = pretty, MaxDepth = 64 }))
             {
                 var remaining = MaximumItems;
-                WriteJson(writer, value, new HashSet<object>(ReferenceEqualityComparer.Instance), 0, ref remaining);
+                WriteJson(writer, value, new(ReferenceEqualityComparer.Instance), 0, ref remaining);
                 writer.Flush();
             }
 

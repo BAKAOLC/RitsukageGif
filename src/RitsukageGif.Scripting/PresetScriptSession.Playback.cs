@@ -18,23 +18,26 @@ namespace RitsukageGif.Scripting
             if (!double.IsFinite(position) || position < 0 || !double.IsFinite(speed) || speed < 0 ||
                 speed > (media.Ffmpeg ? 16 : 100))
                 throw new ArgumentException(UiText.Get("InvalidRecording"));
-            return new PresetPlaybackState(position, speed,
+            return new(position, speed,
                 options.GetValueOrDefault("paused") is bool paused ? paused : state.Paused,
                 options.GetValueOrDefault("loop") is bool loop ? loop : state.Loop,
                 options.GetValueOrDefault("holdLast") is bool hold ? hold : state.HoldLast, now);
         }
 
-        private static double PlaybackPosition(PresetPlaybackState state, double now) => state.Position +
-            (state.Paused ? 0 : Math.Max(0, now - state.UpdatedAt) * state.Speed);
+        private static double PlaybackPosition(PresetPlaybackState state, double now)
+        {
+            return state.Position +
+                   (state.Paused ? 0 : Math.Max(0, now - state.UpdatedAt) * state.Speed);
+        }
 
-        private object? PlaybackValue(PresetMediaSource? media, PresetPlaybackState? state)
+        private Dictionary<string, object?>? PlaybackValue(PresetMediaSource? media, PresetPlaybackState? state)
         {
             if (media is null) return null;
-            return new Dictionary<string, object?>
+            return new()
             {
                 ["position"] = state is null ? media.Position : PlaybackPosition(state, Runtime.Now),
                 ["speed"] = state?.Speed ?? media.Speed, ["paused"] = state?.Paused ?? false,
-                ["loop"] = state?.Loop ?? media.Loop, ["holdLast"] = state?.HoldLast ?? media.HoldLast
+                ["loop"] = state?.Loop ?? media.Loop, ["holdLast"] = state?.HoldLast ?? media.HoldLast,
             };
         }
 
@@ -47,7 +50,7 @@ namespace RitsukageGif.Scripting
                 var state = _layers.GetValueOrDefault(layer.Name) ?? new PresetLayerState();
                 var playback = state.Playback is { } existing
                     ? existing with { UpdatedAt = now }
-                    : new PresetPlaybackState(media.Position, media.Speed, false, media.Loop, media.HoldLast, now);
+                    : new(media.Position, media.Speed, false, media.Loop, media.HoldLast, now);
                 _layers[layer.Name] = state with { Playback = playback };
             }
 

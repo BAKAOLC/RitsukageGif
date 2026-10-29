@@ -5,20 +5,20 @@ namespace RitsukageGif.Scripting
         private static void RegisterResults(ScriptBindingRegistry bindings)
         {
             var results = bindings.RegisterType<ScriptResult>("Result");
-            bindings.RegisterPattern(new ScriptPatternDescriptor("Ok", "Result", ["$0"], MatchOk));
-            bindings.RegisterPattern(new ScriptPatternDescriptor("Err", "Result", ["$1"], MatchErr));
-            bindings.RegisterPattern(new ScriptPatternDescriptor("Some", "Option", ["$0"], MatchSome));
-            bindings.RegisterPattern(new ScriptPatternDescriptor("None", "Option", [], MatchNone));
+            bindings.RegisterPattern(new("Ok", "Result", ["$0"], MatchOk));
+            bindings.RegisterPattern(new("Err", "Result", ["$1"], MatchErr));
+            bindings.RegisterPattern(new("Some", "Option", ["$0"], MatchSome));
+            bindings.RegisterPattern(new("None", "Option", [], MatchNone));
             bindings.RegisterPatternCases("Result", ["Ok", "Err"]);
             bindings.RegisterPatternCases("Option", ["Some", "None"]);
-            bindings.RegisterGenericType("Result", new ScriptGenericTypeBinding(2, (value, arguments, validate) =>
+            bindings.RegisterGenericType("Result", new(2, (value, arguments, validate) =>
                 {
                     if (value is not ScriptResult outcome) throw TypeError();
                     var normalized = validate(outcome.Value, arguments[outcome.IsOk ? 0 : 1]);
-                    return Equals(normalized, outcome.Value) ? outcome : new ScriptResult(outcome.IsOk, normalized);
-                }, (members, arguments) => SpecializeOutcomeMembers(members, arguments), OutcomeValueParameter: 0,
-                Matches: (value, arguments, matches) => value is ScriptResult outcome &&
-                                                        matches(outcome.Value, arguments[outcome.IsOk ? 0 : 1])));
+                    return Equals(normalized, outcome.Value) ? outcome : new(outcome.IsOk, normalized);
+                }, SpecializeOutcomeMembers, 0,
+                (value, arguments, matches) => value is ScriptResult outcome &&
+                                               matches(outcome.Value, arguments[outcome.IsOk ? 0 : 1])));
             var result = bindings.RegisterTable("result");
             result.Function("ok", ScriptEngine.Native(args => new ScriptResult(true, args[0])), [new("value")],
                 "Result<$0,never>");
@@ -63,13 +63,13 @@ namespace RitsukageGif.Scripting
                 inferredReturnType: "$receiver0|$callback0");
             results.Method("map",
                 async (value, args, token) => value.IsOk
-                    ? new ScriptResult(true, await bindings.InvokeCallableAsync(args[0], [value.Value], token))
+                    ? new(true, await bindings.InvokeCallableAsync(args[0], [value.Value], token))
                     : value, [new("transform", "function", CallbackParameters: ["$receiver0"])], "Result",
                 inferredReturnType: "Result<$callback0,$receiver1>");
             results.Method("mapErr",
                 async (value, args, token) => value.IsOk
                     ? value
-                    : new ScriptResult(false, await bindings.InvokeCallableAsync(args[0], [value.Value], token)),
+                    : new(false, await bindings.InvokeCallableAsync(args[0], [value.Value], token)),
                 [new("transform", "function", CallbackParameters: ["$receiver1"])], "Result",
                 inferredReturnType: "Result<$receiver0,$callback0>");
             results.Method("andThen",
@@ -83,20 +83,20 @@ namespace RitsukageGif.Scripting
                 [new("recover", "function", CallbackParameters: ["$receiver1"], CallbackReturnType: "Result")],
                 "Result", inferredReturnType: "Result<$receiver0,never>|$callback0");
             var options = bindings.RegisterType<ScriptOption>("Option");
-            bindings.RegisterGenericType("Option", new ScriptGenericTypeBinding(1, (value, arguments, validate) =>
+            bindings.RegisterGenericType("Option", new(1, (value, arguments, validate) =>
                 {
                     if (value is not ScriptOption outcome) throw TypeError();
                     if (!outcome.HasValue) return outcome;
                     var normalized = validate(outcome.Value, arguments[0]);
-                    return Equals(normalized, outcome.Value) ? outcome : new ScriptOption(true, normalized);
-                }, (members, arguments) => SpecializeOutcomeMembers(members, arguments), OutcomeValueParameter: 0,
-                Matches: (value, arguments, matches) => value is ScriptOption outcome &&
-                                                        (!outcome.HasValue || matches(outcome.Value, arguments[0]))));
+                    return Equals(normalized, outcome.Value) ? outcome : new(true, normalized);
+                }, SpecializeOutcomeMembers, 0,
+                (value, arguments, matches) => value is ScriptOption outcome &&
+                                               (!outcome.HasValue || matches(outcome.Value, arguments[0]))));
             var option = bindings.RegisterTable("option");
             option.Function("some", ScriptEngine.Native(args => new ScriptOption(true, args[0])), [new("value")],
                 "Option<$0>");
             option.Function("fromNullable",
-                ScriptEngine.Native(args => args[0] is null ? ScriptOption.None : new ScriptOption(true, args[0])),
+                ScriptEngine.Native(args => args[0] is null ? ScriptOption.None : new(true, args[0])),
                 [new("value")], "Option<$0>");
             option.Value("none", ScriptOption.None, "Option<never>");
             options.Property("isSome", "boolean", value => value.HasValue);
@@ -116,7 +116,7 @@ namespace RitsukageGif.Scripting
                 inferredReturnType: "$receiver0|$callback0");
             options.Method("map",
                 async (value, args, token) => value.HasValue
-                    ? new ScriptOption(true, await bindings.InvokeCallableAsync(args[0], [value.Value], token))
+                    ? new(true, await bindings.InvokeCallableAsync(args[0], [value.Value], token))
                     : value, [new("transform", "function", CallbackParameters: ["$receiver0"])], "Option",
                 inferredReturnType: "Option<$callback0>");
             options.Method("andThen",
@@ -138,7 +138,7 @@ namespace RitsukageGif.Scripting
         {
             if (value is ScriptResult { IsOk: true } outcome)
             {
-                payload = new[] { outcome.Value };
+                payload = [outcome.Value];
                 return true;
             }
 
@@ -150,7 +150,7 @@ namespace RitsukageGif.Scripting
         {
             if (value is ScriptResult { IsOk: false } outcome)
             {
-                payload = new[] { outcome.Value };
+                payload = [outcome.Value];
                 return true;
             }
 
@@ -162,7 +162,7 @@ namespace RitsukageGif.Scripting
         {
             if (value is ScriptOption { HasValue: true } outcome)
             {
-                payload = new[] { outcome.Value };
+                payload = [outcome.Value];
                 return true;
             }
 
@@ -176,17 +176,22 @@ namespace RitsukageGif.Scripting
             return value is ScriptOption { HasValue: false };
         }
 
-        private static IReadOnlyList<ScriptMemberDescriptor> SpecializeOutcomeMembers(
-            IReadOnlyList<ScriptMemberDescriptor> members, IReadOnlyList<string> arguments) =>
-            members.Select(member => member.Name switch
-            {
-                "value" => member with { TypeName = arguments[0] },
-                "error" when arguments.Count == 2 => member with { TypeName = arguments[1] },
-                "unwrapOr" or "unwrapOrElse" when member.Callable is not null => member with
+        private static ScriptMemberDescriptor[] SpecializeOutcomeMembers(
+            IReadOnlyList<ScriptMemberDescriptor> members, IReadOnlyList<string> arguments)
+        {
+            return
+            [
+                .. members.Select(member => member.Name switch
                 {
-                    Callable = member.Callable with { ReturnTypeName = arguments[0] }
-                },
-                _ => member
-            }).ToArray();
+                    "value" => member with { TypeName = arguments[0] },
+                    "error" when arguments.Count == 2 => member with { TypeName = arguments[1] },
+                    "unwrapOr" or "unwrapOrElse" when member.Callable is not null => member with
+                    {
+                        Callable = member.Callable with { ReturnTypeName = arguments[0] },
+                    },
+                    _ => member,
+                }),
+            ];
+        }
     }
 }

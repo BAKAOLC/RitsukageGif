@@ -18,20 +18,20 @@ namespace RitsukageGif.Scripting
             ["sound"] = new(new("sound", "boolean", true), (settings, value) => settings with { Sound = (bool)value! }),
             ["ffmpeg"] = new(new("ffmpeg", "boolean", true),
                 (settings, value) => settings with { Ffmpeg = (bool)value! }),
-            ["copy"] = new(new("copy", "boolean", true), (settings, value) => settings with { Copy = (bool)value! })
+            ["copy"] = new(new("copy", "boolean", true), (settings, value) => settings with { Copy = (bool)value! }),
         };
 
         public void Register()
         {
             bindings.RegisterEnum("OutputFormat", new Dictionary<string, OutputFormat>
             {
-                ["Gif"] = OutputFormat.Gif, ["WebP"] = OutputFormat.WebP, ["APng"] = OutputFormat.APng
+                ["Gif"] = OutputFormat.Gif, ["WebP"] = OutputFormat.WebP, ["APng"] = OutputFormat.APng,
             });
             bindings.RegisterEnum("GifQuality", new Dictionary<string, GifQuality>
             {
-                ["Fast"] = GifQuality.Fast, ["Balanced"] = GifQuality.Balanced, ["Best"] = GifQuality.Best
+                ["Fast"] = GifQuality.Fast, ["Balanced"] = GifQuality.Balanced, ["Best"] = GifQuality.Best,
             });
-            bindings.RegisterObjectSchema(SchemaName, _fields.Values.Select(field => field.Property).ToArray());
+            bindings.RegisterObjectSchema(SchemaName, [.. _fields.Values.Select(field => field.Property)]);
             bindings.RegisterDeclarationSchema("record", SchemaName);
         }
 

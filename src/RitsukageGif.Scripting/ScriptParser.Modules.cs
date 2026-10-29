@@ -40,7 +40,10 @@ namespace RitsukageGif.Scripting
                     Need(",");
                 }
             }
-            else if (defaultName is null) throw Error("import binding");
+            else if (defaultName is null)
+            {
+                throw Error("import binding");
+            }
 
             if (imports.Select(n => n.Text).Distinct(StringComparer.Ordinal).Count() != imports.Count)
                 throw Error("unique import binding");

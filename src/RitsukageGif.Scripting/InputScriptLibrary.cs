@@ -8,7 +8,7 @@ namespace RitsukageGif.Scripting
             bindings.RegisterObjectSchema("InputData",
             [
                 new("value"), new("version", "number"), new("timestamp", "number"),
-                new("connected", "boolean")
+                new("connected", "boolean"),
             ]);
             var inputs = bindings.RegisterTable("inputs");
             inputs.Function("names", ScriptEngine.Native(_ => reader?.Names.Cast<object?>().ToList() ?? []),
@@ -54,17 +54,20 @@ namespace RitsukageGif.Scripting
                 {
                     // Scripts may mutate their copy without changing the cached external snapshot.
                     ["value"] = Copy(previous.Value), ["version"] = (double)snapshot.Version,
-                    ["timestamp"] = snapshot.Timestamp, ["connected"] = snapshot.Connected
+                    ["timestamp"] = snapshot.Timestamp, ["connected"] = snapshot.Connected,
                 };
             }
         }
 
-        private static object? Copy(object? value) => value switch
+        private static object? Copy(object? value)
         {
-            Dictionary<string, object?> fields => fields.ToDictionary(pair => pair.Key, pair => Copy(pair.Value),
-                StringComparer.Ordinal),
-            List<object?> items => items.Select(Copy).ToList(),
-            _ => value
-        };
+            return value switch
+            {
+                Dictionary<string, object?> fields => fields.ToDictionary(pair => pair.Key, pair => Copy(pair.Value),
+                    StringComparer.Ordinal),
+                List<object?> items => items.Select(Copy).ToList(),
+                _ => value,
+            };
+        }
     }
 }

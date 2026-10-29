@@ -9,12 +9,12 @@ namespace RitsukageGif.Scripting
             PixelEffectsBinding.Register(bindings);
             bindings.RegisterEnum("MediaFormat", new Dictionary<string, string>
             {
-                ["Gif"] = "gif", ["WebP"] = "webp", ["Png"] = "png", ["APng"] = "apng"
+                ["Gif"] = "gif", ["WebP"] = "webp", ["Png"] = "png", ["APng"] = "apng",
             });
             bindings.RegisterObjectSchema("MediaInfo",
             [
                 new("path", "string"), new("bytes", "number"), new("width", "number"), new("height", "number"),
-                new("frames", "number"), new("duration", "number"), new("format", "string")
+                new("frames", "number"), new("duration", "number"), new("format", "string"),
             ]);
             bindings.RegisterObjectSchema("MediaOptions",
             [
@@ -25,7 +25,7 @@ namespace RitsukageGif.Scripting
                 new("cropWidth", "number", true), new("cropHeight", "number", true),
                 new("flipHorizontal", "boolean", true), new("flipVertical", "boolean", true),
                 new("rotation", "number", true), new("frameIndex", "number", true),
-                new("effects", "PixelEffect[]", true)
+                new("effects", "PixelEffect[]", true),
             ]);
             bindings.RegisterObjectSchema("MediaOutput",
                 [new("path", "string"), new("options", "MediaOptions", true)]);
@@ -97,10 +97,15 @@ namespace RitsukageGif.Scripting
             MediaOptimizationScriptLibrary.Register(bindings, media, service as IMediaOptimizationService, root);
             return;
 
-            string Resolve(string path) => Path.GetFullPath(path, root);
+            string Resolve(string path)
+            {
+                return Path.GetFullPath(path, root);
+            }
 
-            IMediaProcessingService Host() =>
-                service ?? throw new InvalidOperationException(UiText.Get("EditorNoRuntime"));
+            IMediaProcessingService Host()
+            {
+                return service ?? throw new InvalidOperationException(UiText.Get("EditorNoRuntime"));
+            }
 
             async ValueTask<object?> Inspect(string path, CancellationToken token)
             {
@@ -130,16 +135,31 @@ namespace RitsukageGif.Scripting
             }
         }
 
-        internal static Dictionary<string, object?> Info(MediaInfo info) => new()
+        internal static Dictionary<string, object?> Info(MediaInfo info)
         {
-            ["path"] = info.Path, ["bytes"] = (double)info.Bytes, ["width"] = (double)info.Width,
-            ["height"] = (double)info.Height, ["frames"] = (double)info.Frames,
-            ["duration"] = info.DurationSeconds, ["format"] = info.Format
-        };
+            return new()
+            {
+                ["path"] = info.Path, ["bytes"] = (double)info.Bytes, ["width"] = (double)info.Width,
+                ["height"] = (double)info.Height, ["frames"] = (double)info.Frames,
+                ["duration"] = info.DurationSeconds, ["format"] = info.Format,
+            };
+        }
 
         internal static MediaProcessOptions ReadOptions(object? value)
         {
             var fields = value as Dictionary<string, object?> ?? [];
+
+            return new()
+            {
+                Format = fields.GetValueOrDefault("format") as string,
+                Colors = Integer("colors") ?? 256, Width = Integer("width"), Height = Integer("height"),
+                Quality = Integer("quality") ?? 90, Lossless = Boolean("lossless", true), Dither = Boolean("dither"),
+                Overwrite = Boolean("overwrite"), CropX = Integer("cropX"), CropY = Integer("cropY"),
+                CropWidth = Integer("cropWidth"), CropHeight = Integer("cropHeight"),
+                FlipHorizontal = Boolean("flipHorizontal"), FlipVertical = Boolean("flipVertical"),
+                Rotation = Integer("rotation") ?? 0, FrameIndex = Integer("frameIndex"),
+                Effects = fields.GetValueOrDefault("effects") is { } effects ? PixelEffectsBinding.Read(effects) : null,
+            };
 
             int? Integer(string name)
             {
@@ -151,20 +171,10 @@ namespace RitsukageGif.Scripting
                 return (int)number;
             }
 
-            bool Boolean(string name, bool fallback = false) =>
-                fields.GetValueOrDefault(name) is bool flag ? flag : fallback;
-
-            return new MediaProcessOptions
+            bool Boolean(string name, bool fallback = false)
             {
-                Format = fields.GetValueOrDefault("format") as string,
-                Colors = Integer("colors") ?? 256, Width = Integer("width"), Height = Integer("height"),
-                Quality = Integer("quality") ?? 90, Lossless = Boolean("lossless", true), Dither = Boolean("dither"),
-                Overwrite = Boolean("overwrite"), CropX = Integer("cropX"), CropY = Integer("cropY"),
-                CropWidth = Integer("cropWidth"), CropHeight = Integer("cropHeight"),
-                FlipHorizontal = Boolean("flipHorizontal"), FlipVertical = Boolean("flipVertical"),
-                Rotation = Integer("rotation") ?? 0, FrameIndex = Integer("frameIndex"),
-                Effects = fields.GetValueOrDefault("effects") is { } effects ? PixelEffectsBinding.Read(effects) : null
-            };
+                return fields.GetValueOrDefault(name) is bool flag ? flag : fallback;
+            }
         }
     }
 }

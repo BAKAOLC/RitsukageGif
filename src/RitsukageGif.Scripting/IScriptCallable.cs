@@ -1,6 +1,4 @@
 namespace RitsukageGif.Scripting
 {
-    internal interface IScriptCallable
-    {
-    }
+    internal interface IScriptCallable;
 }

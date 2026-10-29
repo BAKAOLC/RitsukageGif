@@ -71,7 +71,7 @@ namespace RitsukageGif.Scripting
                     captures ??= [];
                     if (captures.Any(existing => existing.Key == pattern.Text))
                         throw new InvalidOperationException(UiText.Format("DslDuplicate", pattern.Text));
-                    captures.Add(new KeyValuePair<string, Cell>(pattern.Text, new Cell(value, false, null)));
+                    captures.Add(new(pattern.Text, new(value, false, null)));
                     return true;
                 case "pattern-literal":
                     return value is not double && pattern.Value is double literal &&
@@ -109,7 +109,10 @@ namespace RitsukageGif.Scripting
                             if (!module.Names.Contains(property.Text, StringComparer.Ordinal)) return false;
                             field = module.Get(property.Text);
                         }
-                        else if (!_bindings.TryReadPatternProperty(value, property.Text, out field)) return false;
+                        else if (!_bindings.TryReadPatternProperty(value, property.Text, out field))
+                        {
+                            return false;
+                        }
 
                         if (!MatchPattern(property.Children[0], field, ref captures, depth + 1, token)) return false;
                     }
@@ -124,7 +127,7 @@ namespace RitsukageGif.Scripting
                     return pattern.Text switch
                     {
                         ">" => number > boundary, ">=" => number >= boundary,
-                        "<" => number < boundary, "<=" => number <= boundary, _ => throw TypeError()
+                        "<" => number < boundary, "<=" => number <= boundary, _ => throw TypeError(),
                     };
                 case "pattern-and":
                     return MatchPattern(children[0], value, ref captures, depth + 1, token) &&

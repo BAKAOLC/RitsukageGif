@@ -6,7 +6,7 @@ namespace RitsukageGif.Scripting
         string baseDirectory)
     {
         public const string SchemaName = "RecordingOutput";
-        public const int MaximumOutputs = 8;
+        private const int MaximumOutputs = 8;
 
         public void Register()
         {
@@ -14,7 +14,7 @@ namespace RitsukageGif.Scripting
             [
                 new("name", "string"), new("path", "string"),
                 new("presetFile", "string", true), new("presetName", "string", true),
-                new("options", RecordingSettingsBinding.SchemaName, true)
+                new("options", RecordingSettingsBinding.SchemaName, true),
             ]);
         }
 
@@ -38,14 +38,17 @@ namespace RitsukageGif.Scripting
                 if (!paths.Add(path)) throw new ArgumentException(UiText.Format("DslDuplicate", path));
                 var presetFile = entry.GetValueOrDefault("presetFile") is { } file ? Resolve(Text(file)) : null;
                 var presetName = entry.GetValueOrDefault("presetName") is { } preset ? Text(preset) : null;
-                result.Add(new PresetRecordingOutput(name, path, presetFile, presetName,
+                result.Add(new(name, path, presetFile, presetName,
                     entry.GetValueOrDefault("options") is { } options ? settings.Read(options) : null));
             }
 
             return result;
         }
 
-        private string Resolve(string path) => Path.GetFullPath(path, baseDirectory);
+        private string Resolve(string path)
+        {
+            return Path.GetFullPath(path, baseDirectory);
+        }
 
         private static string Text(object? value)
         {

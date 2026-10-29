@@ -34,27 +34,33 @@ namespace RitsukageGif.Scripting
             return result;
         }
 
+        // ReSharper disable once MemberCanBePrivate.Global
         public static WindowPreset Resolve(WindowPreset preset, string file)
         {
             var folder = Path.GetDirectoryName(Path.GetFullPath(file))!;
-            string ResolvePath(string value) => Path.GetFullPath(Environment.ExpandEnvironmentVariables(value), folder);
-
-            PresetFallback? ResolveFallback(PresetFallback? value) =>
-                value is { Kind: "image" } ? value with { Value = ResolvePath(value.Value) } : value;
 
             return preset with
             {
                 SourceFile = Path.GetFullPath(file),
-                Outputs = preset.Outputs.Select(o => o with { Directory = ResolvePath(o.Directory) }).ToArray(),
+                Outputs = [.. preset.Outputs.Select(o => o with { Directory = ResolvePath(o.Directory) })],
                 Missing = ResolveFallback(preset.Missing),
                 Layout = preset.Layout is { } layout
                     ? layout with
                     {
-                        Layers = layout.Layers.Select(l => l with { Missing = ResolveFallback(l.Missing)! })
-                            .ToArray()
+                        Layers = [.. layout.Layers.Select(l => l with { Missing = ResolveFallback(l.Missing)! })],
                     }
-                    : null
+                    : null,
             };
+
+            string ResolvePath(string value)
+            {
+                return Path.GetFullPath(Environment.ExpandEnvironmentVariables(value), folder);
+            }
+
+            PresetFallback? ResolveFallback(PresetFallback? value)
+            {
+                return value is { Kind: "image" } ? value with { Value = ResolvePath(value.Value) } : value;
+            }
         }
     }
 }

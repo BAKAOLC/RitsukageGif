@@ -32,12 +32,16 @@ namespace RitsukageGif.Scripting
 
         private static PixelRect Rectangle(Dictionary<string, object?> fields)
         {
-            int Component(string name) => checked((int)Math.Round(ScriptEngine.Number(fields[name])));
             var rectangle = new PixelRect(Component("x"), Component("y"), Component("width"), Component("height"));
             if (rectangle.IsEmpty || rectangle.Width > 16384 || rectangle.Height > 16384 ||
                 Math.Abs((long)rectangle.X) > 131072 || Math.Abs((long)rectangle.Y) > 131072)
                 throw new ArgumentException(UiText.Get("InvalidRecording"));
             return rectangle;
+
+            int Component(string name)
+            {
+                return checked((int)Math.Round(ScriptEngine.Number(fields[name])));
+            }
         }
     }
 }

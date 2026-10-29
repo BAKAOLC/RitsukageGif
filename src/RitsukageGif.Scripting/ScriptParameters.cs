@@ -5,20 +5,30 @@ namespace RitsukageGif.Scripting
     public sealed class ScriptParameters
     {
         private readonly Lock _gate = new();
-        private Dictionary<string, object?> _values = new(StringComparer.Ordinal);
-        private long _revision;
         private TaskCompletionSource<long> _changed = NewSignal();
+        private long _revision;
+        private Dictionary<string, object?> _values = new(StringComparer.Ordinal);
 
-        private static TaskCompletionSource<long> NewSignal() =>
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public long Revision
+        {
+            get
+            {
+                lock (_gate) return _revision;
+            }
+        }
+
+        private static TaskCompletionSource<long> NewSignal()
+        {
+            return new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
 
         public Dictionary<string, object?> State()
         {
             lock (_gate)
-                return new Dictionary<string, object?>
+                return new()
                 {
                     ["revision"] = (double)_revision,
-                    ["values"] = new Dictionary<string, object?>(_values, StringComparer.Ordinal)
+                    ["values"] = new Dictionary<string, object?>(_values, StringComparer.Ordinal),
                 };
         }
 
@@ -37,14 +47,6 @@ namespace RitsukageGif.Scripting
             return await pending.WaitAsync(token);
         }
 
-        public long Revision
-        {
-            get
-            {
-                lock (_gate) return _revision;
-            }
-        }
-
         public object? Get(string name, object? fallback = null)
         {
             lock (_gate) return _values.GetValueOrDefault(name, fallback);
@@ -52,7 +54,7 @@ namespace RitsukageGif.Scripting
 
         public Dictionary<string, object?> Snapshot()
         {
-            lock (_gate) return new Dictionary<string, object?>(_values, StringComparer.Ordinal);
+            lock (_gate) return new(_values, StringComparer.Ordinal);
         }
 
         public void Update(IReadOnlyDictionary<string, object?> changes)
@@ -61,7 +63,7 @@ namespace RitsukageGif.Scripting
             foreach (var (name, value) in changes)
                 if (name.Length is 0 or > 128 || name.Any(char.IsControl) ||
                     value is not (null or string or bool or double) ||
-                    value is string { Length: > 4096 } || value is double number && !double.IsFinite(number))
+                    value is string { Length: > 4096 } || (value is double number && !double.IsFinite(number)))
                     throw new ArgumentException(UiText.Get("ScriptParametersInvalid"));
             TaskCompletionSource<long> signal;
             long revision;
@@ -93,7 +95,7 @@ namespace RitsukageGif.Scripting
                     "true" => true, "false" => false, "null" => null,
                     _ when double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
                         => number,
-                    _ => text
+                    _ => text,
                 };
                 if (!result.TryAdd(assignment[..equals], value))
                     throw new ArgumentException(UiText.Get("ScriptParametersInvalid"));

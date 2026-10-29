@@ -11,11 +11,14 @@ namespace RitsukageGif.Scripting
         public bool? Ffmpeg { get; init; }
         public bool? Copy { get; init; }
 
-        public PresetRecordingSettings Overlay(PresetRecordingSettings other) => new()
+        public PresetRecordingSettings Overlay(PresetRecordingSettings other)
         {
-            Fps = other.Fps ?? Fps, Scale = other.Scale ?? Scale, Format = other.Format ?? Format,
-            Quality = other.Quality ?? Quality, Cursor = other.Cursor ?? Cursor, Sound = other.Sound ?? Sound,
-            Ffmpeg = other.Ffmpeg ?? Ffmpeg, Copy = other.Copy ?? Copy
-        };
+            return new()
+            {
+                Fps = other.Fps ?? Fps, Scale = other.Scale ?? Scale, Format = other.Format ?? Format,
+                Quality = other.Quality ?? Quality, Cursor = other.Cursor ?? Cursor, Sound = other.Sound ?? Sound,
+                Ffmpeg = other.Ffmpeg ?? Ffmpeg, Copy = other.Copy ?? Copy,
+            };
+        }
     }
 }

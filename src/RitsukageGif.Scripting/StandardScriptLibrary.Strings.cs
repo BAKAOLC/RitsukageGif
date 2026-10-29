@@ -23,7 +23,7 @@ namespace RitsukageGif.Scripting
                     StringComparison.Ordinal)),
                 [new("value", "string"), new("start", "number", true, 0d)], "number");
             strings.Method("split", (text, args, _) => Result((string)args[0]! == ""
-                    ? text.Select(character => (object?)character.ToString()).ToList()
+                    ? text.Select(object? (character) => character.ToString()).ToList()
                     : text.Split((string)args[0]!).Cast<object?>().ToList()),
                 [new("separator", "string")], "array");
             strings.Method("slice", (text, args, _) =>

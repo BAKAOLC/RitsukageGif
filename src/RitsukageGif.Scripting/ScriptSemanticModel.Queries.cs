@@ -2,13 +2,11 @@
 {
     public sealed partial class ScriptSemanticModel
     {
-        private sealed record CallSite(Value Target, int Argument, IReadOnlyList<ScriptSpan> Tail);
-
         private Value ExpressionBefore(int end, int offset)
         {
-            if (end >= 2 && _source.AsSpan(end - 2, 2).SequenceEqual("?.")) end -= 2;
+            if (end >= 2 && _source.AsSpan(end - 2, 2) is "?.") end -= 2;
             var tokens = _tokens.Where(t => t.Offset < end).ToArray();
-            if (tokens.Length == 0) return new Value();
+            if (tokens.Length == 0) return new();
             var depth = 0;
             var start = tokens.Length - 1;
             for (; start >= 0; start--)
@@ -16,36 +14,45 @@
                 var text = tokens[start].Text;
                 if (depth == 0 && start < tokens.Length - 1 && text == "}" &&
                     tokens[start + 1].Kind is "identifier" or "function") break;
-                if (text is ")" or "]" or "}") depth++;
+                if (text is ")" or "]" or "}")
+                {
+                    depth++;
+                }
                 else if (text is "(" or "[" or "{")
                 {
                     if (depth == 0) break;
                     depth--;
                 }
-                else if (depth == 0 && (text is ";" or "," or "=" or ":" or "+" or "-" or "*" or "/" or "return"
+                else if (depth == 0 && text is ";" or "," or "=" or ":" or "+" or "-" or "*" or "/" or "return"
                              or "let" or "const" or "??" or "=>" or "when" or "&&" or "and" or ">" or "<" or "&" or "|"
-                             or "?")) break;
+                             or "?")
+                {
+                    break;
+                }
             }
 
             start++;
-            if (start >= tokens.Length) return new Value();
+            if (start >= tokens.Length) return new();
             try
             {
                 var expression = ScriptParser.ParseExpressionForAnalysis(_source[tokens[start].Offset..end]);
                 var line = Array.BinarySearch(_lineStarts, offset);
                 if (line < 0) line = ~line - 1;
 
-                ScriptNode Locate(ScriptNode node) => node with
-                {
-                    Line = line + 1, Column = offset - _lineStarts[line] + 1,
-                    Children = node.Children.Select(Locate).ToArray()
-                };
-
                 return Infer(Locate(expression), _root.At(offset));
+
+                ScriptNode Locate(ScriptNode node)
+                {
+                    return node with
+                    {
+                        Line = line + 1, Column = offset - _lineStarts[line] + 1,
+                        Children = [.. node.Children.Select(Locate)],
+                    };
+                }
             }
             catch (Exception error) when (error is FormatException or ArgumentException or InvalidOperationException)
             {
-                return new Value();
+                return new();
             }
         }
 
@@ -56,8 +63,11 @@
             for (var i = 0; i < tokens.Length; i++)
             {
                 if (tokens[i].Kind != "operator") continue;
-                if (tokens[i].Text is "(" or "[" or "{") stack.Push((tokens[i], i));
-                else if (tokens[i].Text is ")" or "]" or "}" && stack.Count > 0) stack.Pop();
+                switch (tokens[i].Text)
+                {
+                    case "(" or "[" or "{": stack.Push((tokens[i], i)); break;
+                    case ")" or "]" or "}" when stack.Count > 0: stack.Pop(); break;
+                }
             }
 
             foreach (var (token, index) in stack)
@@ -71,28 +81,34 @@
                 for (var i = index + 1; i < tokens.Length; i++)
                 {
                     if (tokens[i].Kind != "operator") continue;
-                    if (tokens[i].Text is "(" or "[" or "{") depth++;
-                    else if (tokens[i].Text is ")" or "]" or "}") depth--;
-                    else if (tokens[i].Text == "," && depth == 0)
+                    switch (tokens[i].Text)
                     {
-                        argument++;
-                        argumentStart = i + 1;
+                        case "(" or "[" or "{": depth++; break;
+                        case ")" or "]" or "}": depth--; break;
+                        case "," when depth == 0:
+                            argument++;
+                            argumentStart = i + 1;
+                            break;
                     }
                 }
 
-                return new CallSite(target, argument, tokens.Skip(argumentStart).ToArray());
+                return new(target, argument, [.. tokens.Skip(argumentStart)]);
             }
 
             return null;
         }
 
-        private static string ParameterLabel(ScriptParameter parameter) =>
-            (parameter.Variadic ? "..." : "") + parameter.Name + (parameter.Optional ? "?" : "") + ": " +
-            parameter.TypeName;
+        private static string ParameterLabel(ScriptParameter parameter)
+        {
+            return (parameter.Variadic ? "..." : "") + parameter.Name + (parameter.Optional ? "?" : "") + ": " +
+                   parameter.TypeName;
+        }
 
-        private static string Label(ScriptCallableDescriptor callable) =>
-            callable.Name + "(" + string.Join(", ", callable.Parameters.Select(ParameterLabel)) + "): " +
-            DisplayReturnType(callable.ReturnTypeName);
+        private static string Label(ScriptCallableDescriptor callable)
+        {
+            return callable.Name + "(" + string.Join(", ", callable.Parameters.Select(ParameterLabel)) + "): " +
+                   DisplayReturnType(callable.ReturnTypeName);
+        }
 
         public ScriptSignature? Signature(int offset)
         {
@@ -101,7 +117,7 @@
             return descriptor is null
                 ? null
                 : new ScriptSignature(Label(descriptor),
-                    descriptor.Parameters.Select(ParameterLabel).ToArray(),
+                    [.. descriptor.Parameters.Select(ParameterLabel)],
                     Math.Min(call!.Argument, Math.Max(0, descriptor.Parameters.Count - 1)), descriptor.Description);
         }
 
@@ -124,26 +140,27 @@
             string? type = null;
             IReadOnlyList<ScriptSpan> tail = [];
             var declaration = false;
-            if (call is not null && Callable(call.Target) is { } descriptor && descriptor.Parameters.Count > 0)
+            if (call is not null && Callable(call.Target) is { Parameters.Count: > 0 } descriptor)
             {
                 type = descriptor.Parameters[Math.Min(call.Argument, descriptor.Parameters.Count - 1)].TypeName;
                 tail = call.Tail;
             }
-            else if (!PresetLanguage.IsScriptContext(_tokens.Where(t => t.Offset < offset).ToArray()))
+            else if (!PresetLanguage.IsScriptContext([.. _tokens.Where(t => t.Offset < offset)]))
             {
                 var stack = new Stack<int>();
-                for (var i = 0; i < _tokens.Count && _tokens[i].Offset < offset; i++)
-                {
-                    if (_tokens[i].Text == "{") stack.Push(i);
-                    else if (_tokens[i].Text == "}" && stack.Count > 0) stack.Pop();
-                }
+                for (var i = 0; i < _tokens.Length && _tokens[i].Offset < offset; i++)
+                    switch (_tokens[i].Text)
+                    {
+                        case "{": stack.Push(i); break;
+                        case "}" when stack.Count > 0: stack.Pop(); break;
+                    }
 
                 foreach (var index in stack)
                 {
                     if (index == 0 || _bindings.GetDeclarationSchema(_tokens[index - 1].Text) is not
                             { } schema) continue;
                     type = schema;
-                    tail = _tokens.Skip(index + 1).TakeWhile(t => t.Offset < offset).ToArray();
+                    tail = [.. _tokens.Skip(index + 1).TakeWhile(t => t.Offset < offset)];
                     declaration = true;
                     break;
                 }
@@ -173,7 +190,7 @@
             var boundary = Array.FindLastIndex(before, t => t.Text is ";" or "{" or "}");
             var header = before.Skip(boundary + 1).ToArray();
             return header.Any(t => t.Text is "fn" or "function") ||
-                   header.FirstOrDefault()?.Text is "let" or "const" && header.All(t => t.Text != "=");
+                   (header.FirstOrDefault()?.Text is "let" or "const" && header.All(t => t.Text != "="));
         }
 
         public IReadOnlyList<ScriptCompletion> Complete(int offset)
@@ -184,44 +201,52 @@
             var quoted = active?.Kind == "string";
             var start = offset;
             while (start > 0 && (char.IsLetterOrDigit(_source[start - 1]) || _source[start - 1] == '_' ||
-                                 quoted && _source[start - 1] == '-')) start--;
+                                 (quoted && _source[start - 1] == '-'))) start--;
             var prefix = _source[start..offset];
             IEnumerable<ScriptCompletion> items;
             var previous = _tokens.LastOrDefault(t => t.Offset < start);
-            if (!quoted && previous?.Text is "." or "?.")
+            switch (quoted, previous)
             {
-                var receiver = ExpressionBefore(previous.Offset, offset);
-                items = Members(receiver).Select(pair => new ScriptCompletion(pair.Key, pair.Key,
-                    Describe(pair.Value, pair.Key),
-                    _bindings.GetEnum(receiver.TypeName) is not null ? "enumMember" :
-                    Callable(pair.Value) is null ? "property" : "method"));
-            }
-            else if (!quoted && IsTypeContext(start))
-                items = _bindings.GetTypeNames().Select(type => new ScriptCompletion(type, type, type, "class"));
-            else if (ContextItems(offset, start, quoted) is { } context) items = context;
-            else if (quoted) return [];
-            else
-            {
-                var visible = new Dictionary<string, Binding>();
-                for (var scope = _root.At(offset); scope is not null; scope = scope.Parent)
-                    foreach (var pair in scope.Bindings)
-                        if (pair.Value.Offset <= offset)
-                            visible.TryAdd(pair.Key, pair.Value);
-                items = visible.Values.Select(b => new ScriptCompletion(b.Name, b.Name,
-                    Describe(b.Value, b.Name),
-                    b.Kind));
-                items = items.Concat(_bindings.GetPatterns().Select(pattern => new ScriptCompletion(pattern.Name,
-                    pattern.Name,
-                    pattern.Name + "(" + string.Join(", ", pattern.PayloadTypes.Select(DisplayReturnType)) + "): " +
-                    pattern.InputType, "function")));
-                items = items.Concat(PresetLanguage.Keywords.Concat(
-                    PresetLanguage.IsScriptContext(_tokens.Where(t => t.Offset < offset).ToArray())
-                        ? []
-                        : PresetLanguage.DeclarationWords).Select(k => new ScriptCompletion(k, k, k)));
+                case (false, { Text: "." or "?." } member):
+                    var receiver = ExpressionBefore(member.Offset, offset);
+                    items = Members(receiver).Select(pair => new ScriptCompletion(pair.Key, pair.Key,
+                        Describe(pair.Value, pair.Key),
+                        _bindings.GetEnum(receiver.TypeName) is not null ? "enumMember" :
+                        Callable(pair.Value) is null ? "property" : "method"));
+                    break;
+                case (false, _) when IsTypeContext(start):
+                    items = _bindings.GetTypeNames().Select(type => new ScriptCompletion(type, type, type, "class"));
+                    break;
+                case (_, _) when ContextItems(offset, start, quoted) is { } context:
+                    items = context;
+                    break;
+                case (true, _):
+                    return [];
+                default:
+                    var visible = new Dictionary<string, Binding>();
+                    for (var scope = _root.At(offset); scope is not null; scope = scope.Parent)
+                        foreach (var pair in scope.Bindings)
+                            if (pair.Value.Offset <= offset)
+                                visible.TryAdd(pair.Key, pair.Value);
+                    items = visible.Values.Select(b => new ScriptCompletion(b.Name, b.Name,
+                        Describe(b.Value, b.Name),
+                        b.Kind));
+                    items = items.Concat(_bindings.GetPatterns().Select(pattern => new ScriptCompletion(pattern.Name,
+                        pattern.Name,
+                        pattern.Name + "(" + string.Join(", ", pattern.PayloadTypes.Select(DisplayReturnType)) + "): " +
+                        pattern.InputType, "function")));
+                    items = items.Concat(PresetLanguage.Keywords.Concat(
+                        PresetLanguage.IsScriptContext([.. _tokens.Where(t => t.Offset < offset)])
+                            ? []
+                            : PresetLanguage.DeclarationWords).Select(k => new ScriptCompletion(k, k, k)));
+                    break;
             }
 
-            return items.Where(c => c.Label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                .DistinctBy(c => c.Label).OrderBy(c => c.Label).ToArray();
+            return
+            [
+                .. items.Where(c => c.Label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .DistinctBy(c => c.Label).OrderBy(c => c.Label),
+            ];
         }
 
         private string Describe(Value value, string name)
@@ -237,7 +262,7 @@
             var token = _tokens.LastOrDefault(t => t.Offset <= offset && offset <= t.Offset + t.Length);
             if (token is null || token.Kind is "string" or "comment") return null;
             var value = ExpressionBefore(token.Offset + token.Length, offset);
-            return value.TypeName == "any" && value.Description is null ? token.Text : Describe(value, token.Text);
+            return value is { TypeName: "any", Description: null } ? token.Text : Describe(value, token.Text);
         }
 
         public ScriptSymbol? Definition(int offset)
@@ -250,5 +275,7 @@
                 : _root.At(offset).Find(token.Text, offset)?.Declaration;
             return symbol?.Line > 0 ? symbol : null;
         }
+
+        private sealed record CallSite(Value Target, int Argument, IReadOnlyList<ScriptSpan> Tail);
     }
 }

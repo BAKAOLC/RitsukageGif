@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace RitsukageGif.Scripting
 {
     public static partial class StandardScriptLibrary
@@ -37,11 +39,13 @@ namespace RitsukageGif.Scripting
             }), [new("value", "number"), new("minimum", "number"), new("maximum", "number")], "number");
         }
 
-        private static double ParseNumber(object? value) =>
-            double.TryParse(Text(value), System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out var number) && double.IsFinite(number)
+        private static double ParseNumber(object? value)
+        {
+            return double.TryParse(Text(value), NumberStyles.Float,
+                CultureInfo.InvariantCulture, out var number) && double.IsFinite(number)
                 ? number
                 : throw TypeError();
+        }
 
         private static int Offset(object? value, int length, bool relative = true)
         {

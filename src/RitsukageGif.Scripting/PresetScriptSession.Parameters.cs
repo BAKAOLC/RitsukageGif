@@ -3,12 +3,14 @@ namespace RitsukageGif.Scripting
     public sealed partial class PresetScriptSession
     {
         private readonly Lock _parameterWakeGate = new();
+        private long _observedParameterWake;
         private TaskCompletionSource _parameterWake = NewParameterWake();
         private long _parameterWakeRevision;
-        private long _observedParameterWake;
 
-        private static TaskCompletionSource NewParameterWake() =>
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private static TaskCompletionSource NewParameterWake()
+        {
+            return new(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
 
         public void NotifyParameterWait()
         {

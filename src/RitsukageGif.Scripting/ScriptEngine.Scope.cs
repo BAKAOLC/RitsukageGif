@@ -4,20 +4,26 @@
     {
         private sealed class Cell(object? value, bool readOnly, string? typeName)
         {
-            public object? Value = value;
-            public Func<object?>? Getter;
-            public object? Read() => Getter is null ? Value : Getter();
             public readonly bool ReadOnly = readOnly;
             public readonly string? TypeName = typeName;
+            public Func<object?>? Getter;
+            public object? Value = value;
+
+            public object? Read()
+            {
+                return Getter is null ? Value : Getter();
+            }
         }
 
         private sealed class Scope
         {
-            private readonly Scope? _parent;
-            private readonly Scope _executionScope;
-            private readonly string? _returnType;
             private readonly ScriptBindingRegistry _bindings;
+            private readonly Scope _executionScope;
+            private readonly Scope? _parent;
+            private readonly string? _returnType;
             private PropagationContext? _propagation;
+
+            private Dictionary<string, Cell>? _values;
 
             public Scope(Scope? parent = null, ScriptBindingRegistry? bindings = null, bool functionScope = false,
                 string? returnType = null)
@@ -28,15 +34,20 @@
                 _returnType = returnType;
             }
 
-            public Evaluation Unwrap(object? value) =>
-                (_executionScope._propagation ??= new PropagationContext(_executionScope._returnType)).Unwrap(value);
-
-            public void ValidatePropagation(object? value) => _executionScope._propagation?.Validate(value);
             public bool HasPropagation => _executionScope._propagation?.HasPropagation ?? false;
 
-            private Dictionary<string, Cell>? _values;
+            private Dictionary<string, Cell> Values => _values ??= new(StringComparer.Ordinal);
 
-            private Dictionary<string, Cell> Values => _values ??= new Dictionary<string, Cell>(StringComparer.Ordinal);
+            public Evaluation Unwrap(object? value)
+            {
+                return (_executionScope._propagation ??= new(_executionScope._returnType))
+                    .Unwrap(value);
+            }
+
+            public void ValidatePropagation(object? value)
+            {
+                _executionScope._propagation?.Validate(value);
+            }
 
             public void Define(string name, object? value, bool readOnly = false, string? typeName = null)
             {
@@ -46,7 +57,7 @@
 
             public void DefineValidated(string name, object? value, bool readOnly, string? typeName)
             {
-                if (!Values.TryAdd(name, new Cell(value, readOnly, typeName)))
+                if (!Values.TryAdd(name, new(value, readOnly, typeName)))
                     throw new InvalidOperationException(UiText.Format("DslDuplicate", name));
             }
 
@@ -56,20 +67,32 @@
                     throw new InvalidOperationException(UiText.Format("DslDuplicate", name));
             }
 
-            private Cell Find(string name) => _values?.GetValueOrDefault(name) ?? _parent?.Find(name) ??
-                throw new InvalidOperationException(UiText.Format("DslUnknownName", name));
+            private Cell Find(string name)
+            {
+                return _values?.GetValueOrDefault(name) ?? _parent?.Find(name) ??
+                    throw new InvalidOperationException(UiText.Format("DslUnknownName", name));
+            }
 
-            public object? Get(string name) => Find(name).Read();
+            public object? Get(string name)
+            {
+                return Find(name).Read();
+            }
 
-            public object? GetLocal(string name) => _values is not null && _values.TryGetValue(name, out var cell)
-                ? cell.Read()
-                : throw new InvalidOperationException(UiText.Format("DslUnknownName", name));
+            public object? GetLocal(string name)
+            {
+                return _values is not null && _values.TryGetValue(name, out var cell)
+                    ? cell.Read()
+                    : throw new InvalidOperationException(UiText.Format("DslUnknownName", name));
+            }
 
-            public bool ContainsLocal(string name) => _values?.ContainsKey(name) ?? false;
+            public bool ContainsLocal(string name)
+            {
+                return _values?.ContainsKey(name) ?? false;
+            }
 
             public void DefineImport(string name, Func<object?> getter)
             {
-                if (!Values.TryAdd(name, new Cell(null, true, null) { Getter = getter }))
+                if (!Values.TryAdd(name, new(null, true, null) { Getter = getter }))
                     throw new InvalidOperationException(UiText.Format("DslDuplicate", name));
             }
 
@@ -86,7 +109,7 @@
                 if (_values is null) return copy;
                 foreach (var pair in _values)
                     copy.Values.Add(pair.Key,
-                        new Cell(pair.Value.Value, pair.Value.ReadOnly, pair.Value.TypeName)
+                        new(pair.Value.Value, pair.Value.ReadOnly, pair.Value.TypeName)
                             { Getter = pair.Value.Getter });
                 return copy;
             }

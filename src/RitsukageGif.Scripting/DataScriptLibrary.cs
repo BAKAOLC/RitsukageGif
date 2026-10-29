@@ -7,7 +7,7 @@ namespace RitsukageGif.Scripting
     {
         internal const int MaximumBytes = 16 * 1024 * 1024;
         private const int MaximumItems = 100000;
-        internal static readonly UTF8Encoding Utf8 = new(false, true);
+        private static readonly UTF8Encoding Utf8 = new(false, true);
 
         public static void Register(ScriptBindingRegistry bindings)
         {
@@ -25,28 +25,31 @@ namespace RitsukageGif.Scripting
             RegisterBytes(bindings);
         }
 
-        internal static ScriptNative Wrap(Func<IReadOnlyList<object?>, object?> action) => (args, token) =>
+        private static ScriptNative Wrap(Func<IReadOnlyList<object?>, object?> action)
         {
-            token.ThrowIfCancellationRequested();
-            var result = Try(() => action(args));
-            token.ThrowIfCancellationRequested();
-            return ValueTask.FromResult<object?>(result);
-        };
+            return (args, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var result = Try(() => action(args));
+                token.ThrowIfCancellationRequested();
+                return ValueTask.FromResult<object?>(result);
+            };
+        }
 
-        internal static ScriptResult Try(Func<object?> action)
+        private static ScriptResult Try(Func<object?> action)
         {
             try
             {
-                return new ScriptResult(true, action());
+                return new(true, action());
             }
             catch (Exception exception) when (exception is ArgumentException or FormatException or JsonException
                                                   or InvalidOperationException)
             {
-                return new ScriptResult(false, ScriptServiceErrors.Create("invalidData", exception.Message));
+                return new(false, ScriptServiceErrors.Create("invalidData", exception.Message));
             }
         }
 
-        internal static void CheckSize(long size)
+        private static void CheckSize(long size)
         {
             if (size > MaximumBytes) throw new ArgumentException(UiText.Get("ServiceLimitExceeded"));
         }

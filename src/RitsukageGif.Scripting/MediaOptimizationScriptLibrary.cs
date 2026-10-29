@@ -10,12 +10,12 @@ namespace RitsukageGif.Scripting
             [
                 new("targetBytes", "number"), new("processing", "MediaOptions", true),
                 new("minimumQuality", "number", true), new("minimumColors", "number", true),
-                new("minimumScale", "number", true), new("maximumAttempts", "number", true)
+                new("minimumScale", "number", true), new("maximumAttempts", "number", true),
             ]);
             bindings.RegisterObjectSchema("MediaOptimizationResult",
             [
                 new("achieved", "boolean"), new("info", "MediaInfo?", true), new("smallestBytes", "number"),
-                new("attempts", "number"), new("settings", "MediaOptions")
+                new("attempts", "number"), new("settings", "MediaOptions"),
             ]);
             media.Function("optimize", async (args, token) =>
                 {
@@ -35,7 +35,7 @@ namespace RitsukageGif.Scripting
                             MinimumQuality = Integer(fields, "minimumQuality"),
                             MinimumColors = Integer(fields, "minimumColors"),
                             MinimumScale = Number(fields, "minimumScale", 1),
-                            MaximumAttempts = Integer(fields, "maximumAttempts") ?? 8
+                            MaximumAttempts = Integer(fields, "maximumAttempts") ?? 8,
                         };
                         var host = service ?? throw new InvalidOperationException(UiText.Get("EditorNoRuntime"));
                         var result = await host.OptimizeAsync(Path.GetFullPath((string)args[0]!, root),
@@ -57,7 +57,7 @@ namespace RitsukageGif.Scripting
                             ["info"] = result.Info is { } info ? MediaScriptLibrary.Info(info) : null,
                             ["smallestBytes"] = (double)result.SmallestBytes,
                             ["attempts"] = (double)result.Attempts,
-                            ["settings"] = settings
+                            ["settings"] = settings,
                         });
                     }
                     catch (Exception error) when (error is not OperationCanceledException)

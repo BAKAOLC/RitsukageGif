@@ -2,8 +2,8 @@ namespace RitsukageGif.Scripting
 {
     public sealed partial class PresetScriptSession
     {
-        private Dictionary<string, PresetScriptSession> _outputScenes = new(StringComparer.OrdinalIgnoreCase);
         private List<PresetScriptSession> _inheritedOutputScenes = [];
+        private Dictionary<string, PresetScriptSession> _outputScenes = new(StringComparer.OrdinalIgnoreCase);
 
         private async Task StartOutputsAsync(IReadOnlyList<PresetRecordingOutput> outputs, CancellationToken token)
         {
@@ -49,14 +49,17 @@ namespace RitsukageGif.Scripting
                 resolved.Add(output with { Preset = source, Runtime = scene.Runtime });
             }
 
-            await ExecuteActionAsync(new PresetAction("startMany", Outputs: resolved));
+            await ExecuteActionAsync(new("startMany", Outputs: resolved));
             _outputScenes = scenes;
             _inheritedOutputScenes = inherited;
         }
 
-        internal PresetScriptSession OutputScene(string name) => _outputScenes.TryGetValue(name, out var scene)
-            ? scene
-            : throw new ArgumentException(UiText.Format("DslUnknownName", name));
+        internal PresetScriptSession OutputScene(string name)
+        {
+            return _outputScenes.TryGetValue(name, out var scene)
+                ? scene
+                : throw new ArgumentException(UiText.Format("DslUnknownName", name));
+        }
 
         internal async ValueTask<object?> OutputsBound(CancellationToken token)
         {
@@ -64,12 +67,18 @@ namespace RitsukageGif.Scripting
             return StreamValues(await observe());
         }
 
-        private static List<object?> StreamValues(PresetContext context) => (context.Streams ?? [])
-            .Select(stream => (object?)new Dictionary<string, object?>
-            {
-                ["name"] = stream.Name, ["state"] = stream.State, ["captured"] = (double)stream.Captured,
-                ["encoded"] = (double)stream.Encoded, ["elapsed"] = stream.Elapsed, ["path"] = stream.Path,
-                ["error"] = stream.Error
-            }).ToList();
+        private static List<object?> StreamValues(PresetContext context)
+        {
+            return
+            [
+                .. (context.Streams ?? [])
+                .Select(object? (stream) => new Dictionary<string, object?>
+                {
+                    ["name"] = stream.Name, ["state"] = stream.State, ["captured"] = (double)stream.Captured,
+                    ["encoded"] = (double)stream.Encoded, ["elapsed"] = stream.Elapsed, ["path"] = stream.Path,
+                    ["error"] = stream.Error,
+                }),
+            ];
+        }
     }
 }
