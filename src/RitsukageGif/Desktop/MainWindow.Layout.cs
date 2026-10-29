@@ -38,10 +38,7 @@ namespace RitsukageGif.Desktop
             selectionActions.Children.Add(_select);
             StyleButton(_selectMenu, 20);
             _selectMenu.Padding = new(0);
-            _selectMenu.Content = new PathIcon
-            {
-                Data = Geometry.Parse("M0,0 L8,0 4,4 Z"), Width = 8, Height = 4,
-            };
+            _selectMenu.Content = DropDownChevron.Create(_selectMenu);
             _selectMenu.Bind(ToolTip.TipProperty, LiveText.Resource("MainSourceMenu"));
             _selectMenu.Bind(AutomationProperties.NameProperty, LiveText.Resource("MainSourceMenu"));
             Grid.SetColumn(_selectMenu, 1);

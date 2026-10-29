@@ -69,11 +69,22 @@ namespace RitsukageGif.Desktop
                     }),
                 };
                 button.Classes.Add("number-stepper");
-                button.Content = new Path
+                button.Content = new Viewbox
                 {
-                    Data = Geometry.Parse(i == 0 ? "M0,4 L4,0 8,4" : "M0,0 L4,4 8,0"),
-                    Width = 8, Height = 4, StrokeThickness = 1.5,
-                    [!Shape.StrokeProperty] = button[!ForegroundProperty],
+                    Width = 12, Height = 8,
+                    Child = new Canvas
+                    {
+                        Width = 12, Height = 8,
+                        Children =
+                        {
+                            new Path
+                            {
+                                Data = Geometry.Parse(i == 0 ? "M2,6 L6,2 10,6" : "M2,2 L6,6 10,2"),
+                                Width = 12, Height = 8, StrokeThickness = 1.5,
+                                [!Shape.StrokeProperty] = button[!ForegroundProperty],
+                            },
+                        },
+                    },
                 };
                 button.Bind(AutomationProperties.NameProperty,
                     LiveText.Resource(i == 0 ? "NumericIncrease" : "NumericDecrease"));

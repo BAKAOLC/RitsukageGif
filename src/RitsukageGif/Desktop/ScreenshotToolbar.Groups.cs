@@ -102,12 +102,9 @@ namespace RitsukageGif.Desktop
                 HideToolGroups();
                 if (!open) flyout.ShowAt(button);
             });
-            drop.Width = 14;
+            drop.Width = 20;
             drop.Padding = new(2, 0);
-            var chevron = ToolbarIcon.Create(drop, FluentToolbarIcon.Geometry("ToolbarChevron")!);
-            chevron.Width = 8;
-            chevron.Height = 4;
-            drop.Content = chevron;
+            drop.Content = DropDownChevron.Create(drop);
             _toolGroupDrops.Add((drop, variants.Contains(ScreenshotTool.Select)));
             _toolStrip.Children.Add(new StackPanel
             {

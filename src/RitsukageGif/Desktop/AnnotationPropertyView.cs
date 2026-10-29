@@ -84,10 +84,9 @@ namespace RitsukageGif.Desktop
                     TextDecorations = key == "AnnotationStrikeThrough" ? TextDecorations.Strikethrough : null,
                     [!TextBlock.ForegroundProperty] = button[!TemplatedControl.ForegroundProperty],
                 };
-            if (icon == "ToolbarChevron" && button.Content is Control chevron)
+            if (icon == "ToolbarChevron")
             {
-                chevron.Width = 8;
-                chevron.Height = 4;
+                button.Content = DropDownChevron.Create(button);
                 MinimalChrome(button);
             }
 

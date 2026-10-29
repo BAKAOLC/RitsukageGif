@@ -54,7 +54,7 @@ namespace RitsukageGif.Desktop
                 Text = text, TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center,
             });
-            var arrow = ToolbarIcon.Create(this, "M5,9 L12,16 19,9");
+            var arrow = DropDownChevron.Create(this);
             Grid.SetColumn(arrow, 1);
             content.Children.Add(arrow);
             Content = content;
