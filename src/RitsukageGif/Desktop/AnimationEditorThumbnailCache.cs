@@ -10,6 +10,7 @@ namespace RitsukageGif.Desktop
     {
         private const int Capacity = 256;
         private const int PendingCapacity = 128;
+        private static readonly ILogger Logger = LogHub.GetLogger("Desktop.AnimationEditor.Thumbnails");
         private readonly Dictionary<string, AnimationEditorThumbnailEntry> _entries = new(StringComparer.Ordinal);
         private readonly List<AnimationEditorThumbnailEntry> _pending = [];
         private readonly Lock _sync = new();
@@ -165,24 +166,19 @@ namespace RitsukageGif.Desktop
                 {
                     bitmap = Decode(entry.Path);
                 }
-                catch (Exception)
+                catch (Exception error)
                 {
-                    /* A missing frame does not prevent other thumbnails from loading. */
+                    Logger.ZLogWarning(error,
+                        $"Animation thumbnail decode failed. ExceptionType={error.GetType().Name} HResult={error.HResult}");
                 }
 
                 lock (_sync)
                 {
                     entry.Bitmap = bitmap;
-                    if (bitmap is null)
-                    {
-                        if (_entries.TryGetValue(entry.Path, out var current) && ReferenceEquals(current, entry))
-                            _entries.Remove(entry.Path);
-                        entry.Retired = true;
-                    }
-                    else if (entry is { Retired: true, Leases: 0 })
+                    if (entry is { Retired: true, Leases: 0 })
                     {
                         entry.Bitmap = null;
-                        bitmap.Dispose();
+                        bitmap?.Dispose();
                         bitmap = null;
                     }
 
@@ -248,7 +244,7 @@ namespace RitsukageGif.Desktop
             {
                 AnimationEditorThumbnailEntry? oldest = null;
                 foreach (var candidate in _entries.Values)
-                    if (candidate is { Leases: 0, Bitmap: not null } &&
+                    if (candidate is { Leases: 0, Loading.IsCompleted: true } &&
                         (oldest is null || candidate.Stamp < oldest.Stamp))
                         oldest = candidate;
                 if (oldest is null) return;

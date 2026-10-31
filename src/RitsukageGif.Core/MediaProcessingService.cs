@@ -71,8 +71,6 @@ namespace RitsukageGif.Core
                 CheckBudget(width, height, images.Count);
                 if (width != info.Width || height != info.Height) throw new InvalidDataException();
                 if (info.Format == "apng") images[0].AnimationIterations = MediaPngCodec.ReadIterations(input);
-                foreach (var image in images)
-                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
                 switch (info.Format)
                 {
                     case "apng": MediaPngCodec.Coalesce(images, token); break;
@@ -80,6 +78,8 @@ namespace RitsukageGif.Core
                     default: images.Coalesce(); break;
                 }
 
+                foreach (var image in images)
+                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
                 token.ThrowIfCancellationRequested();
                 return images;
             }
@@ -280,7 +280,7 @@ namespace RitsukageGif.Core
                 for (var index = start; index < end; index++)
                 {
                     token.ThrowIfCancellationRequested();
-                    result.Add(source[index].Clone());
+                    result.Add(MagickImageCloner.Clone(source[index], token));
                 }
 
                 return result;

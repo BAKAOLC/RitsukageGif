@@ -8,8 +8,8 @@ namespace RitsukageGif.Core
         private const int HistoryLimit = 32;
         private static readonly ILogger Logger = LogHub.GetLogger("Core.AnimationEditor");
 
-        private readonly string _directory = Path.Combine(Path.GetTempPath(),
-            "RitsukageGif-edit-" + Guid.NewGuid().ToString("N"));
+        private readonly string _directory;
+        private readonly bool _ownsDirectory;
 
         private readonly List<AnimationEditSnapshot> _redo = [];
 
@@ -17,8 +17,15 @@ namespace RitsukageGif.Core
         private AnimationEditSnapshot _current = new([], 0);
         private bool _disposed;
 
-        private AnimationEditDocument()
+        private AnimationEditDocument() : this(Path.Combine(Path.GetTempPath(),
+            "RitsukageGif-edit-" + Guid.NewGuid().ToString("N")), true)
         {
+        }
+
+        private AnimationEditDocument(string directory, bool ownsDirectory)
+        {
+            _directory = Path.GetFullPath(directory);
+            _ownsDirectory = ownsDirectory;
             Directory.CreateDirectory(_directory);
         }
 
@@ -40,6 +47,7 @@ namespace RitsukageGif.Core
             _undo.Clear();
             _redo.Clear();
             _current = new([], 0);
+            if (!_ownsDirectory) return;
             try
             {
                 Directory.Delete(_directory, true);
@@ -79,6 +87,7 @@ namespace RitsukageGif.Core
             }
         }
 
+        // ReSharper disable once UnusedMember.Global
         public static AnimationEditDocument Open(string path, CancellationToken token = default)
         {
             Logger.ZLogDebug($"Animation document import started");

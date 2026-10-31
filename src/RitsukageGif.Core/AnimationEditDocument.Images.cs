@@ -13,14 +13,22 @@ namespace RitsukageGif.Core
             var frames = new List<AnimationEditFrame>();
             uint loops = 0;
 
-            if (info.Format == "apng")
+            switch (info)
             {
-                foreach (var image in MediaPngCodec.ReadCoalescedFrames(path, info, token)) Add(image);
-            }
-            else
-            {
-                using var images = MediaProcessingService.Decode(path, info, token);
-                foreach (var image in images) Add(image);
+                case { Format: "apng" }:
+                    foreach (var image in MediaPngCodec.ReadCoalescedFrames(path, info, token)) Add(image);
+                    break;
+                case { Format: "webp", Frames: > 1 }:
+                    foreach (var image in MediaWebpCodec.ReadCoalescedFrames(path, info, token)) Add(image);
+                    break;
+                case { Format: "gif", Frames: > 1 }:
+                    foreach (var image in ReadAnimationFrames(path, info, token)) Add(image);
+                    break;
+                default:
+                    using (var images = MediaProcessingService.Decode(path, info, token))
+                        foreach (var image in images)
+                            Add(image);
+                    break;
             }
 
             if (frames.Count == 0) throw new InvalidDataException();

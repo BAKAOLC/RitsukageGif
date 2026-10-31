@@ -3,7 +3,7 @@ using ImageMagick;
 
 namespace RitsukageGif.Core
 {
-    internal static class MediaWebpCodec
+    internal static partial class MediaWebpCodec
     {
         internal static void Coalesce(string path, MagickImageCollection images, int width, int height,
             CancellationToken token)

@@ -30,13 +30,13 @@ namespace RitsukageGif.Core
                         }
 
                         using var previous = index != frameIndex && frame.GifDisposeMethod == GifDisposeMethod.Previous
-                            ? canvas.Clone()
+                            ? MagickImageCloner.Clone(canvas, token)
                             : null;
                         canvas.Composite(frame, frame.Page.X, frame.Page.Y, frame.Compose);
                         token.ThrowIfCancellationRequested();
                         if (index++ == frameIndex)
                         {
-                            var selected = canvas.Clone();
+                            var selected = MagickImageCloner.Clone(canvas, token);
                             try
                             {
                                 selected.AnimationDelay = 0;

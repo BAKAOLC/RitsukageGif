@@ -19,10 +19,12 @@ namespace RitsukageGif.Core
             foreach (var frame in images)
             {
                 token.ThrowIfCancellationRequested();
-                using var previous = frame.GifDisposeMethod == GifDisposeMethod.Previous ? canvas.Clone() : null;
+                using var previous = frame.GifDisposeMethod == GifDisposeMethod.Previous
+                    ? MagickImageCloner.Clone(canvas, token)
+                    : null;
                 // SOURCE replaces transparent pixels too; GIF coalescing always blends them over.
                 canvas.Composite(frame, frame.Page.X, frame.Page.Y, frame.Compose);
-                var image = canvas.Clone();
+                var image = MagickImageCloner.Clone(canvas, token);
                 image.AnimationDelay = frame.AnimationDelay;
                 image.AnimationTicksPerSecond = frame.AnimationTicksPerSecond;
                 image.AnimationIterations = images[0].AnimationIterations;
