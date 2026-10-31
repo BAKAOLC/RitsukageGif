@@ -56,6 +56,7 @@ namespace RitsukageGif.Desktop
                 case GlobalActionKind.ScreenshotAndSave:
                 case GlobalActionKind.ScreenshotQuickSave:
                 case GlobalActionKind.ScreenshotAndCopyText:
+                case GlobalActionKind.ScreenshotAndTranslate:
                 case GlobalActionKind.ScreenshotAndScroll:
                     await ExecuteScreenshotActionAsync(action, bounds);
                     break;

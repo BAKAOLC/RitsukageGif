@@ -46,6 +46,7 @@ namespace RitsukageGif.Desktop
             Annotations.PrivacyDetectionRequested += request =>
                 _screenshotTask = DetectPrivacyAsync(request, Annotations, Annotations.PrivacyDetectionToken);
             Annotations.RecognitionRequested += mode => RecognizeSelection(mode);
+            Annotations.TranslationRequested += () => RecognizeSelection(RecognitionMode.Text, translate: true);
             Annotations.StartScrollingRequested += vertical => _scrollingTask = StartScrollingAsync(vertical);
             Annotations.CompleteRequested += action =>
             {

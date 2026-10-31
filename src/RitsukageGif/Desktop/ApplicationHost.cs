@@ -46,6 +46,7 @@ namespace RitsukageGif.Desktop
             _pinnedImages.Preferences = Settings.PinnedImages;
             _pinnedImages.AnnotationPreferences = Settings.Annotation;
             _pinnedImages.RecognitionPreferencesProvider = () => Settings.Recognition;
+            _pinnedImages.TranslationPreferencesProvider = () => Settings.Translation;
             _pinnedImages.AnnotationPreferencesChanged = PersistAnnotationPreferences;
             _pinnedImages.SavePreferencesProvider = () => Settings.ScreenshotSave;
             _pinnedImages.OutputColorModeProvider = () => Settings.CaptureColorMode;
@@ -372,6 +373,8 @@ namespace RitsukageGif.Desktop
                 await RunShutdownStageAsync("selection", () => selectionOperation, selectionToken);
             if (screenshotOperation is not null)
                 await RunShutdownStageAsync("screenshot", () => screenshotOperation, screenshotToken);
+            await RunShutdownStageAsync("translation windows", () => Task.WhenAll(_translationTasks.ToArray()),
+                cleanupToken);
             await RunShutdownStageAsync("pinned image session", StopPinnedSessionAsync, CancellationToken.None);
             if (recordingOperation is not null)
                 await RunShutdownStageAsync("recording", () => recordingOperation,

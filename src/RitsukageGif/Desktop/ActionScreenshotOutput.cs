@@ -7,5 +7,6 @@ namespace RitsukageGif.Desktop
         Save,
         QuickSave,
         CopyText,
+        Translate,
     }
 }

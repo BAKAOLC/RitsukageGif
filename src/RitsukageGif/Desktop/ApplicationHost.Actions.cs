@@ -25,6 +25,7 @@ namespace RitsukageGif.Desktop
                 GlobalActionKind.Screenshot or GlobalActionKind.ScreenshotAndCopy or GlobalActionKind.ScreenshotAndPin
                     or GlobalActionKind.ScreenshotAndSave or GlobalActionKind.ScreenshotQuickSave
                     or GlobalActionKind.ScreenshotAndCopyText
+                    or GlobalActionKind.ScreenshotAndTranslate
                     or GlobalActionKind.ScreenshotAndScroll => CanTakeScreenshot,
                 GlobalActionKind.CaptureActiveWindow => OperatingSystem.IsWindows() && CanTakeScreenshot,
                 GlobalActionKind.CaptureLastRegion => !DesktopCapture.UsesSourceSelection && CanTakeScreenshot &&
@@ -38,6 +39,7 @@ namespace RitsukageGif.Desktop
                 GlobalActionKind.RestoreLastPinnedImage => _pinnedImages.CanRestoreClosed && !IsSelecting &&
                                                            !IsConfiguring,
                 GlobalActionKind.PinClipboard => !IsSelecting && !IsConfiguring,
+                GlobalActionKind.TranslateClipboard => !IsSelecting && !IsConfiguring,
                 GlobalActionKind.ToggleGlobalShortcuts => !IsConfiguring,
                 GlobalActionKind.OpenScriptEditor or GlobalActionKind.OpenImageEditor
                     or GlobalActionKind.OpenVideoRecorder or
@@ -75,10 +77,14 @@ namespace RitsukageGif.Desktop
                     case GlobalActionKind.ScreenshotAndSave:
                     case GlobalActionKind.ScreenshotQuickSave:
                     case GlobalActionKind.ScreenshotAndCopyText:
+                    case GlobalActionKind.ScreenshotAndTranslate:
                     case GlobalActionKind.ScreenshotAndScroll:
                     case GlobalActionKind.CaptureActiveWindow:
                     case GlobalActionKind.CaptureLastRegion:
                         await ExecuteScreenshotActionAsync(action);
+                        break;
+                    case GlobalActionKind.TranslateClipboard:
+                        await TranslateClipboardAsync();
                         break;
                     case GlobalActionKind.RunPreset:
                         var presets = PresetCatalog.Load([action.Parameter]);

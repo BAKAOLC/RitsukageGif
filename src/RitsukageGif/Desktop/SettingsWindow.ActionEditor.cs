@@ -89,6 +89,7 @@ namespace RitsukageGif.Desktop
                     ActionScreenshotOutput.Save => "ScreenshotSave",
                     ActionScreenshotOutput.QuickSave => "ScreenshotQuickSave",
                     ActionScreenshotOutput.CopyText => "GlobalActionScreenshotAndCopyText",
+                    ActionScreenshotOutput.Translate => "GlobalActionScreenshotAndTranslate",
                     _ => throw new ArgumentOutOfRangeException(nameof(item)),
                 })).ToArray(),
                 SelectedIndex = 0,

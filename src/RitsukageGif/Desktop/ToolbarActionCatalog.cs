@@ -18,6 +18,7 @@ namespace RitsukageGif.Desktop
             new(ToolbarActionId.RecognizeText, "RecognizeText", "RecognizeText"),
             new(ToolbarActionId.RecognizeBarcode, "RecognizeBarcode", "RecognizeBarcode"),
             new(ToolbarActionId.OutputColor, "OutputColorMode", "OutputColorMode"),
+            new(ToolbarActionId.Translate, "TranslationRun", "TranslationRun"),
         ];
 
         public static ToolbarActionDefinition Get(ToolbarActionId id)

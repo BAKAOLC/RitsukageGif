@@ -143,6 +143,7 @@ namespace RitsukageGif.Desktop
                 var clipboard = owner.Clipboard ??
                                 throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
                 await clipboard.SetTextAsync(text);
+                await clipboard.FlushAsync();
                 if (RecognitionOutputHandler is { } recognized)
                     await recognized(new(png, ScreenshotOutputAction.Copy)
                     {
@@ -152,7 +153,8 @@ namespace RitsukageGif.Desktop
                     }, token);
                 if (RecognitionPreferences.ShowDialogOnCopyAll)
                     await RecognitionWindow.ShowAsync(owner, png, RecognitionMode.Text,
-                        preferences: RecognitionPreferences, initialText: text, token: token);
+                        preferences: RecognitionPreferences, initialText: text, token: token,
+                        translationPreferences: TranslationPreferences);
                 return true;
             }
 

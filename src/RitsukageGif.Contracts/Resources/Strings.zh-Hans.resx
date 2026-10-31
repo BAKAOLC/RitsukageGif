@@ -3201,6 +3201,8 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureCropRight" xml:space="preserve">
     <value>裁掉当前画面右侧</value>
   </data>
+  <data name="GlobalActionScreenshotAndTranslate" xml:space="preserve"><value>截图并翻译</value></data>
+  <data name="GlobalActionTranslateClipboard" xml:space="preserve"><value>翻译剪贴板文本</value></data>
   <data name="PinnedAnimation" xml:space="preserve"><value>动图</value></data>
   <data name="PinnedAnimationCopyOriginal" xml:space="preserve"><value>复制原动图</value></data>
   <data name="PinnedAnimationNext" xml:space="preserve"><value>下一帧</value></data>
@@ -3212,4 +3214,66 @@ X {0}, Y {1}</value>
   <data name="PinnedImageOutputContent" xml:space="preserve"><value>复制和保存的内容</value></data>
   <data name="PinnedImageOutputCurrent" xml:space="preserve"><value>当前图像</value></data>
   <data name="PinnedImageOutputOriginal" xml:space="preserve"><value>创建时原图</value></data>
+  <data name="TranslateScreenshot" xml:space="preserve"><value>翻译截图</value></data>
+  <data name="TranslationApiKey" xml:space="preserve"><value>API 密钥</value></data>
+  <data name="TranslationAzure" xml:space="preserve"><value>Azure Translator</value></data>
+  <data name="TranslationCanceled" xml:space="preserve"><value>翻译已停止。</value></data>
+  <data name="TranslationCompleted" xml:space="preserve"><value>翻译完成。</value></data>
+  <data name="TranslationConfigureService" xml:space="preserve"><value>请检查翻译服务和语言设置。</value></data>
+  <data name="TranslationCredentialMissing" xml:space="preserve"><value>此服务没有已保存的 API 密钥。</value></data>
+  <data name="TranslationCredentialUnavailable" xml:space="preserve"><value>系统凭据存储不可用。</value></data>
+  <data name="TranslationDeepL" xml:space="preserve"><value>DeepL</value></data>
+  <data name="TranslationDeleteKey" xml:space="preserve"><value>删除密钥</value></data>
+  <data name="TranslationEndpoint" xml:space="preserve"><value>API 地址</value></data>
+  <data name="TranslationEnterKey" xml:space="preserve"><value>请输入 API 密钥。</value></data>
+  <data name="TranslationFailed" xml:space="preserve"><value>翻译失败，可重试。</value></data>
+  <data name="TranslationFallbackLanguage" xml:space="preserve"><value>备用语言</value></data>
+  <data name="TranslationHttpError" xml:space="preserve"><value>翻译服务返回 HTTP {0}。</value></data>
+  <data name="TranslationInvalidEndpoint" xml:space="preserve"><value>请输入完整的 HTTP 或 HTTPS API 地址。</value></data>
+  <data name="TranslationInvalidResponse" xml:space="preserve"><value>服务返回的翻译无效。</value></data>
+  <data name="TranslationKeyDeleted" xml:space="preserve"><value>已删除保存的 API 密钥。</value></data>
+  <data name="TranslationKeySaved" xml:space="preserve"><value>API 密钥已保存至系统凭据存储。</value></data>
+  <data name="TranslationLibreTranslate" xml:space="preserve"><value>LibreTranslate</value></data>
+  <data name="TranslationModel" xml:space="preserve"><value>模型</value></data>
+  <data name="TranslationOpenAiCompatible" xml:space="preserve"><value>兼容 OpenAI</value></data>
+  <data name="TranslationOriginal" xml:space="preserve"><value>原文</value></data>
+  <data name="TranslationProvider" xml:space="preserve"><value>服务</value></data>
+  <data name="TranslationRegion" xml:space="preserve"><value>区域</value></data>
+  <data name="TranslationResponseTooLarge" xml:space="preserve"><value>翻译响应过大。</value></data>
+  <data name="TranslationResult" xml:space="preserve"><value>译文</value></data>
+  <data name="TranslationRetry" xml:space="preserve"><value>重试</value></data>
+  <data name="TranslationRun" xml:space="preserve"><value>翻译</value></data>
+  <data name="TranslationSaveKey" xml:space="preserve"><value>保存密钥</value></data>
+  <data name="TranslationSourceLanguage" xml:space="preserve"><value>源语言</value></data>
+  <data name="TranslationStop" xml:space="preserve"><value>停止</value></data>
+  <data name="TranslationTargetLanguage" xml:space="preserve"><value>目标语言</value></data>
+  <data name="TranslationTimedOut" xml:space="preserve"><value>翻译超时。</value></data>
+  <data name="TranslationTimeout" xml:space="preserve"><value>超时（秒）</value></data>
+  <data name="TranslationTitle" xml:space="preserve"><value>翻译</value></data>
+  <data name="TranslationUseApiKey" xml:space="preserve"><value>使用已保存的 API 密钥</value></data>
+  <data name="TranslationUseFallback" xml:space="preserve"><value>使用备用语言</value></data>
+  <data name="TranslationWorking" xml:space="preserve"><value>正在翻译…</value></data>
+  <data name="TranslationLanguageArabic" xml:space="preserve"><value>阿拉伯语</value></data>
+  <data name="TranslationLanguageAutomatic" xml:space="preserve"><value>自动检测</value></data>
+  <data name="TranslationLanguageChinese" xml:space="preserve"><value>中文</value></data>
+  <data name="TranslationLanguageChineseSimplified" xml:space="preserve"><value>简体中文</value></data>
+  <data name="TranslationLanguageChineseTraditional" xml:space="preserve"><value>繁体中文</value></data>
+  <data name="TranslationLanguageCustom" xml:space="preserve"><value>自定义（{0}）</value></data>
+  <data name="TranslationLanguageDutch" xml:space="preserve"><value>荷兰语</value></data>
+  <data name="TranslationLanguageEnglish" xml:space="preserve"><value>英语</value></data>
+  <data name="TranslationLanguageFrench" xml:space="preserve"><value>法语</value></data>
+  <data name="TranslationLanguageGerman" xml:space="preserve"><value>德语</value></data>
+  <data name="TranslationLanguageHindi" xml:space="preserve"><value>印地语</value></data>
+  <data name="TranslationLanguageItalian" xml:space="preserve"><value>意大利语</value></data>
+  <data name="TranslationLanguageJapanese" xml:space="preserve"><value>日语</value></data>
+  <data name="TranslationLanguageKorean" xml:space="preserve"><value>韩语</value></data>
+  <data name="TranslationLanguageNone" xml:space="preserve"><value>无</value></data>
+  <data name="TranslationLanguagePolish" xml:space="preserve"><value>波兰语</value></data>
+  <data name="TranslationLanguagePortuguese" xml:space="preserve"><value>葡萄牙语</value></data>
+  <data name="TranslationLanguageRussian" xml:space="preserve"><value>俄语</value></data>
+  <data name="TranslationLanguageSpanish" xml:space="preserve"><value>西班牙语</value></data>
+  <data name="TranslationLanguageThai" xml:space="preserve"><value>泰语</value></data>
+  <data name="TranslationLanguageTurkish" xml:space="preserve"><value>土耳其语</value></data>
+  <data name="TranslationLanguageUkrainian" xml:space="preserve"><value>乌克兰语</value></data>
+  <data name="TranslationLanguageVietnamese" xml:space="preserve"><value>越南语</value></data>
 </root>

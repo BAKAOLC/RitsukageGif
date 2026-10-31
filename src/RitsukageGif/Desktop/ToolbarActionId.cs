@@ -16,5 +16,6 @@ namespace RitsukageGif.Desktop
         RecognizeText,
         RecognizeBarcode,
         OutputColor,
+        Translate,
     }
 }

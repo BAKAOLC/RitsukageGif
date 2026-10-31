@@ -21,6 +21,7 @@ namespace RitsukageGif.Desktop
                     pair => (string[])pair.Value.Clone(), StringComparer.Ordinal),
                 Appearance = Appearance with { },
                 System = System with { }, Recognition = Recognition with { },
+                Translation = Translation with { },
                 CapturePreferences = CapturePreferences with { },
                 ScrollCapture = ScrollCapture with { },
                 ScreenshotClipboard = ScreenshotClipboard with

@@ -37,5 +37,6 @@ namespace RitsukageGif.Desktop
         RecognizeQr,
         CopyColor,
         CycleColorFormat,
+        Translate,
     }
 }

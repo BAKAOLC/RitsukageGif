@@ -3201,6 +3201,8 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureCropRight" xml:space="preserve">
     <value>Crop to the right of the current frame</value>
   </data>
+  <data name="GlobalActionScreenshotAndTranslate" xml:space="preserve"><value>Screenshot and translate</value></data>
+  <data name="GlobalActionTranslateClipboard" xml:space="preserve"><value>Translate clipboard text</value></data>
   <data name="PinnedAnimation" xml:space="preserve"><value>Animation</value></data>
   <data name="PinnedAnimationCopyOriginal" xml:space="preserve"><value>Copy original animation</value></data>
   <data name="PinnedAnimationNext" xml:space="preserve"><value>Next frame</value></data>
@@ -3212,4 +3214,66 @@ X {0}, Y {1}</value>
   <data name="PinnedImageOutputContent" xml:space="preserve"><value>Copy and save content</value></data>
   <data name="PinnedImageOutputCurrent" xml:space="preserve"><value>Current image</value></data>
   <data name="PinnedImageOutputOriginal" xml:space="preserve"><value>Original image</value></data>
+  <data name="TranslateScreenshot" xml:space="preserve"><value>Translate screenshot</value></data>
+  <data name="TranslationApiKey" xml:space="preserve"><value>API key</value></data>
+  <data name="TranslationAzure" xml:space="preserve"><value>Azure Translator</value></data>
+  <data name="TranslationCanceled" xml:space="preserve"><value>Translation stopped.</value></data>
+  <data name="TranslationCompleted" xml:space="preserve"><value>Translation complete.</value></data>
+  <data name="TranslationConfigureService" xml:space="preserve"><value>Check the translation service and language settings.</value></data>
+  <data name="TranslationCredentialMissing" xml:space="preserve"><value>No saved API key was found for this service.</value></data>
+  <data name="TranslationCredentialUnavailable" xml:space="preserve"><value>The system credential store is unavailable.</value></data>
+  <data name="TranslationDeepL" xml:space="preserve"><value>DeepL</value></data>
+  <data name="TranslationDeleteKey" xml:space="preserve"><value>Delete key</value></data>
+  <data name="TranslationEndpoint" xml:space="preserve"><value>API endpoint</value></data>
+  <data name="TranslationEnterKey" xml:space="preserve"><value>Enter an API key.</value></data>
+  <data name="TranslationFailed" xml:space="preserve"><value>Translation failed. You can retry.</value></data>
+  <data name="TranslationFallbackLanguage" xml:space="preserve"><value>Fallback language</value></data>
+  <data name="TranslationHttpError" xml:space="preserve"><value>Translation service returned HTTP {0}.</value></data>
+  <data name="TranslationInvalidEndpoint" xml:space="preserve"><value>Enter a complete HTTP or HTTPS API endpoint.</value></data>
+  <data name="TranslationInvalidResponse" xml:space="preserve"><value>The service returned an invalid translation.</value></data>
+  <data name="TranslationKeyDeleted" xml:space="preserve"><value>Saved API key deleted.</value></data>
+  <data name="TranslationKeySaved" xml:space="preserve"><value>API key saved in the system credential store.</value></data>
+  <data name="TranslationLibreTranslate" xml:space="preserve"><value>LibreTranslate</value></data>
+  <data name="TranslationModel" xml:space="preserve"><value>Model</value></data>
+  <data name="TranslationOpenAiCompatible" xml:space="preserve"><value>OpenAI-compatible</value></data>
+  <data name="TranslationOriginal" xml:space="preserve"><value>Original text</value></data>
+  <data name="TranslationProvider" xml:space="preserve"><value>Service</value></data>
+  <data name="TranslationRegion" xml:space="preserve"><value>Region</value></data>
+  <data name="TranslationResponseTooLarge" xml:space="preserve"><value>The translation response is too large.</value></data>
+  <data name="TranslationResult" xml:space="preserve"><value>Translation</value></data>
+  <data name="TranslationRetry" xml:space="preserve"><value>Retry</value></data>
+  <data name="TranslationRun" xml:space="preserve"><value>Translate</value></data>
+  <data name="TranslationSaveKey" xml:space="preserve"><value>Save key</value></data>
+  <data name="TranslationSourceLanguage" xml:space="preserve"><value>Source language</value></data>
+  <data name="TranslationStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="TranslationTargetLanguage" xml:space="preserve"><value>Target language</value></data>
+  <data name="TranslationTimedOut" xml:space="preserve"><value>Translation timed out.</value></data>
+  <data name="TranslationTimeout" xml:space="preserve"><value>Timeout (seconds)</value></data>
+  <data name="TranslationTitle" xml:space="preserve"><value>Translation</value></data>
+  <data name="TranslationUseApiKey" xml:space="preserve"><value>Use a saved API key</value></data>
+  <data name="TranslationUseFallback" xml:space="preserve"><value>Use fallback language</value></data>
+  <data name="TranslationWorking" xml:space="preserve"><value>Translating…</value></data>
+  <data name="TranslationLanguageArabic" xml:space="preserve"><value>Arabic</value></data>
+  <data name="TranslationLanguageAutomatic" xml:space="preserve"><value>Auto</value></data>
+  <data name="TranslationLanguageChinese" xml:space="preserve"><value>Chinese</value></data>
+  <data name="TranslationLanguageChineseSimplified" xml:space="preserve"><value>Chinese (Simplified)</value></data>
+  <data name="TranslationLanguageChineseTraditional" xml:space="preserve"><value>Chinese (Traditional)</value></data>
+  <data name="TranslationLanguageCustom" xml:space="preserve"><value>Custom ({0})</value></data>
+  <data name="TranslationLanguageDutch" xml:space="preserve"><value>Dutch</value></data>
+  <data name="TranslationLanguageEnglish" xml:space="preserve"><value>English</value></data>
+  <data name="TranslationLanguageFrench" xml:space="preserve"><value>French</value></data>
+  <data name="TranslationLanguageGerman" xml:space="preserve"><value>German</value></data>
+  <data name="TranslationLanguageHindi" xml:space="preserve"><value>Hindi</value></data>
+  <data name="TranslationLanguageItalian" xml:space="preserve"><value>Italian</value></data>
+  <data name="TranslationLanguageJapanese" xml:space="preserve"><value>Japanese</value></data>
+  <data name="TranslationLanguageKorean" xml:space="preserve"><value>Korean</value></data>
+  <data name="TranslationLanguageNone" xml:space="preserve"><value>None</value></data>
+  <data name="TranslationLanguagePolish" xml:space="preserve"><value>Polish</value></data>
+  <data name="TranslationLanguagePortuguese" xml:space="preserve"><value>Portuguese</value></data>
+  <data name="TranslationLanguageRussian" xml:space="preserve"><value>Russian</value></data>
+  <data name="TranslationLanguageSpanish" xml:space="preserve"><value>Spanish</value></data>
+  <data name="TranslationLanguageThai" xml:space="preserve"><value>Thai</value></data>
+  <data name="TranslationLanguageTurkish" xml:space="preserve"><value>Turkish</value></data>
+  <data name="TranslationLanguageUkrainian" xml:space="preserve"><value>Ukrainian</value></data>
+  <data name="TranslationLanguageVietnamese" xml:space="preserve"><value>Vietnamese</value></data>
 </root>

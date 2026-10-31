@@ -161,6 +161,7 @@ namespace RitsukageGif.Desktop
                 ToolbarActionId.RenumberAnnotations => SelectionCommand.RenumberAnnotations,
                 ToolbarActionId.RecognizeText => SelectionCommand.RecognizeText,
                 ToolbarActionId.RecognizeBarcode => SelectionCommand.RecognizeQr,
+                ToolbarActionId.Translate => SelectionCommand.Translate,
                 ToolbarActionId.OutputColor => null,
                 _ => throw new ArgumentOutOfRangeException(nameof(id)),
             };

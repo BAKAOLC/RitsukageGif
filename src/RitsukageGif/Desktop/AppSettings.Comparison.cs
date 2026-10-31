@@ -64,7 +64,7 @@ namespace RitsukageGif.Desktop
                        static (a, b) =>
                            SameSequence(a, b, static (a, b) => EqualityComparer<string>.Default.Equals(a, b))) &&
                    Same(left.System, right.System) &&
-                   Same(left.Recognition, right.Recognition);
+                   Same(left.Recognition, right.Recognition) && left.Translation == right.Translation;
         }
 
         private static bool Same(AppearancePreferences? left, AppearancePreferences? right)

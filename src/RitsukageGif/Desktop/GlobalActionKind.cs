@@ -29,5 +29,7 @@ namespace RitsukageGif.Desktop
         ClosePinnedImages,
         TogglePinnedImages,
         ToggleGlobalShortcuts,
+        ScreenshotAndTranslate,
+        TranslateClipboard,
     }
 }
