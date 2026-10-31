@@ -22,6 +22,7 @@ rgscript 是 RitsukageGif 的脚本语言。预设用于定义捕获范围、画
 16. [音视频录制](video-recording.md)：MP4、WebM、系统声音、麦克风及停止与取消。
 17. [文字与二维码识别](recognition.md)：系统 OCR、识别语言、二维码、条码及定位结果。
 18. [诊断日志](diagnostics.md)：日志位置、级别、保存规则和故障定位。
+19. [翻译](translation.md)：翻译服务、截图及剪贴板文本、停止与重试。
 
 ## 第一个录制预设
 
