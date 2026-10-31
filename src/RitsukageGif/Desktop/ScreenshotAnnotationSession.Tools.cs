@@ -171,7 +171,7 @@ namespace RitsukageGif.Desktop
                     ? annotation.Properties.Number.ToString(CultureInfo.CurrentCulture)
                     : annotation.Text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                 CreateTypeface(annotation.Properties), annotation.FontSize, brush);
-            if (_behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap)
+            if (annotation.Tool != ScreenshotTool.Number && _behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap)
                 text.MaxTextWidth = annotation.Properties.WrapWidth > 0
                     ? annotation.Properties.WrapWidth
                     : Math.Max(1,
@@ -194,7 +194,8 @@ namespace RitsukageGif.Desktop
             if (annotation.Tool == ScreenshotTool.Number)
             {
                 var diameter = Math.Max(annotation.FontSize * 1.7, size.Width);
-                var bounds = new Rect(annotation.Points[0], new Size(diameter, diameter));
+                var bounds = new Rect(annotation.Points[0] - new Vector(diameter / 2, diameter / 2),
+                    new Size(diameter, diameter));
                 context.DrawEllipse(new SolidColorBrush(annotation.Color), null, bounds);
                 text.SetForegroundBrush(Brushes.White);
                 context.DrawText(text, new(bounds.Center.X - text.Width / 2, bounds.Center.Y - text.Height / 2));

@@ -32,7 +32,7 @@ namespace RitsukageGif.Desktop
             new(SelectionCommand.RecognizeTextAndCopy, Key.C, KeyModifiers.Shift, "RecognizeTextAndCopy"),
             new(SelectionCommand.CopyColor, Key.C, KeyModifiers.None, "SelectionCopyColor"),
             new(SelectionCommand.CycleColorFormat, Key.LeftShift, KeyModifiers.None, "SelectionColorFormat"),
-            new(SelectionCommand.SelectTool, Key.V, KeyModifiers.None, "AnimationSelection",
+            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationSelection",
                 Tool: ScreenshotTool.Select),
             new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationEllipse",
                 Tool: ScreenshotTool.Ellipse),

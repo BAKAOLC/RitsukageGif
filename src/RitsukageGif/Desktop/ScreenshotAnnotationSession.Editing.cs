@@ -8,6 +8,7 @@ namespace RitsukageGif.Desktop
         private static readonly IPen SelectedAnnotationPen = new Pen(Brushes.DeepSkyBlue, 1, DashStyle.Dash);
         private PixelPoint _moveStart;
         private ScreenshotAnnotation? _moving;
+        private int _polylineNode = -1;
         private ScreenshotAnnotation? _selected;
 
         public OutputColorMode OutputColorMode
@@ -34,19 +35,21 @@ namespace RitsukageGif.Desktop
 
         public bool HasSelectedAnnotation => _selected is not null;
 
-        public bool HitTestAnnotation(PixelPoint point)
+        public bool HitTestAnnotation(PixelPoint point, bool currentToolOnly = false)
         {
-            return FindAnnotation(point) is not null;
+            return FindAnnotation(point, currentToolOnly) is not null;
         }
 
-        private ScreenshotAnnotation? FindAnnotation(PixelPoint point)
+        private ScreenshotAnnotation? FindAnnotation(PixelPoint point, bool currentToolOnly = false)
         {
             if (!_behavior.SecondaryEditingEnabled || !AnnotationsVisible ||
                 !AnnotationBounds.Contains(point)) return null;
             var location = new Point(point.X, point.Y);
-            return _annotations.LastOrDefault(annotation => (annotation.Tool != ScreenshotTool.Eraser ||
-                                                             _behavior.EraserSecondaryEditingEnabled) &&
-                                                            HitTest(annotation, location));
+            return _annotations.LastOrDefault(annotation =>
+                (!currentToolOnly || Tool == ScreenshotTool.Select || annotation.Tool == Tool) &&
+                (annotation.Tool != ScreenshotTool.Eraser ||
+                 _behavior.EraserSecondaryEditingEnabled) &&
+                HitTest(annotation, location));
         }
 
         private bool HitTest(ScreenshotAnnotation annotation, Point point)
@@ -141,10 +144,15 @@ namespace RitsukageGif.Desktop
             return Distance(point, start + vector * fraction);
         }
 
-        public bool BeginObjectMove(PixelPoint point)
+        public bool BeginObjectMove(PixelPoint point, bool currentToolOnly = false)
         {
-            if (IsBusy || !CanAnnotate) return false;
-            var annotation = HitTestSelectedControl(point) ? _selected : FindAnnotation(point);
+            if (IsBusy || !CanAnnotate || IsDrawing ||
+                (currentToolOnly && Tool is ScreenshotTool.Brush or ScreenshotTool.Highlight or ScreenshotTool.Eraser
+                    or ScreenshotTool.StrokeEraser)) return false;
+            var annotation = HitTestSelectedControl(point) &&
+                             (!currentToolOnly || Tool == ScreenshotTool.Select || _selected?.Tool == Tool)
+                ? _selected
+                : FindAnnotation(point, currentToolOnly);
             _selected = annotation;
             if (annotation is null)
             {
@@ -159,7 +167,16 @@ namespace RitsukageGif.Desktop
             MosaicSize = annotation.MosaicSize;
             _moving = annotation;
             _resizeCorner = -1;
-            if (ShowControlPoints(annotation))
+            _polylineNode = -1;
+            if (CanEditPolylineNodes(annotation))
+                for (var index = 0; index < annotation.Points.Count; index++)
+                    if (Distance(annotation.Points[index], new(point.X, point.Y)) <= 8)
+                    {
+                        _polylineNode = index;
+                        break;
+                    }
+
+            if (CanEditControlPoints(annotation))
             {
                 var corners = ControlCorners(annotation.Bounds);
                 for (var index = 0; index < corners.Length; index++)
@@ -177,6 +194,20 @@ namespace RitsukageGif.Desktop
         public void MoveObject(PixelPoint point)
         {
             if (_moving is not { } original) return;
+            if (_polylineNode >= 0)
+            {
+                var nodeReplacement = ReferenceEquals(_selected, original) ? CloneAnnotation(original) : _selected!;
+                var nodeIndex = _annotations.IndexOf(_selected!);
+                if (nodeIndex < 0) return;
+                nodeReplacement.Points[_polylineNode] = new(
+                    Math.Clamp(point.X, AnnotationBounds.X, AnnotationBounds.Right),
+                    Math.Clamp(point.Y, AnnotationBounds.Y, AnnotationBounds.Bottom));
+                _annotations[nodeIndex] = nodeReplacement;
+                _selected = nodeReplacement;
+                Changed?.Invoke();
+                return;
+            }
+
             var bounds = AnnotationObjectBounds(original);
             switch (_resizeCorner)
             {
@@ -214,6 +245,7 @@ namespace RitsukageGif.Desktop
             if (_moving is not { } original || _selected is not { } replacement) return;
             var index = _annotations.IndexOf(replacement);
             _moving = null;
+            _polylineNode = -1;
             _resizeCorner = -1;
             if (ReferenceEquals(original, replacement))
             {
@@ -241,6 +273,7 @@ namespace RitsukageGif.Desktop
             if (!ReferenceEquals(_selected, original)) _selected?.Dispose();
             _selected = original;
             _moving = null;
+            _polylineNode = -1;
             _resizeCorner = -1;
         }
 
@@ -380,6 +413,9 @@ namespace RitsukageGif.Desktop
             using var clip = context.PushClip(new(AnnotationBounds.X, AnnotationBounds.Y, AnnotationBounds.Width,
                 AnnotationBounds.Height));
             context.DrawRectangle(null, SelectedAnnotationPen, AnnotationObjectBounds(_selected));
+            if (ShowPolylineNodes(_selected))
+                foreach (var point in _selected.Points)
+                    context.DrawRectangle(Brushes.White, SelectedAnnotationPen, new(point.X - 3, point.Y - 3, 6, 6));
             if (ShowControlPoints(_selected))
                 foreach (var point in ControlCorners(_selected.Bounds))
                     context.DrawRectangle(Brushes.White, SelectedAnnotationPen, new(point.X - 3, point.Y - 3, 6, 6));
