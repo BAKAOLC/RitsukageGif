@@ -13,6 +13,7 @@ namespace RitsukageGif.Desktop
         public bool SelectableText { get; set; } = true;
         public bool ThumbnailSelectableText { get; set; }
         public bool CopyVisibleRegion { get; set; } = true;
+        public PinnedImageOutputContent OutputContent { get; set; }
         public bool ResizeFromBorder { get; set; } = true;
         public bool ThumbnailWheelZoom { get; set; } = true;
         public bool ShowMenuShortcuts { get; set; } = true;
@@ -41,6 +42,7 @@ namespace RitsukageGif.Desktop
                 MouseThroughOpacity =
                 double.IsFinite(MouseThroughOpacity) ? Math.Clamp(MouseThroughOpacity, 0.15, 1) : 0.5,
                 HistoryLimit = Math.Max(0, HistoryLimit),
+                OutputContent = Enum.IsDefined(OutputContent) ? OutputContent : PinnedImageOutputContent.Current,
                 LockedOperations = LockedOperations & (PinnedLockedOperations.Move | PinnedLockedOperations.Resize |
                                                        PinnedLockedOperations.Close | PinnedLockedOperations.Shortcuts |
                                                        PinnedLockedOperations.Annotation),

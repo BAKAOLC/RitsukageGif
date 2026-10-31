@@ -505,6 +505,9 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<bool>.Default.Equals(baseline.ThumbnailSelectableText, edited.ThumbnailSelectableText)
                     ? current.ThumbnailSelectableText
                     : edited.ThumbnailSelectableText,
+                OutputContent = baseline.OutputContent == edited.OutputContent
+                    ? current.OutputContent
+                    : edited.OutputContent,
                 CopyVisibleRegion =
                 EqualityComparer<bool>.Default.Equals(baseline.CopyVisibleRegion, edited.CopyVisibleRegion)
                     ? current.CopyVisibleRegion

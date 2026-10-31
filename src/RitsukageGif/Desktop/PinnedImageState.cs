@@ -20,5 +20,9 @@ namespace RitsukageGif.Desktop
         public int ThumbnailY { get; set; }
         public int ThumbnailWidth { get; set; }
         public int ThumbnailHeight { get; set; }
+        public bool HasOriginalImage { get; set; }
+        public bool HasOriginalSdrImage { get; set; }
+        public bool HasOriginalEncoded { get; set; }
+        public bool AnimationActive { get; set; }
     }
 }

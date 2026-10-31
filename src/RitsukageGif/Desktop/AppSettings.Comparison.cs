@@ -198,6 +198,7 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<bool>.Default.Equals(left.SelectableText, right.SelectableText) &&
                    EqualityComparer<bool>.Default.Equals(left.ThumbnailSelectableText, right.ThumbnailSelectableText) &&
                    EqualityComparer<bool>.Default.Equals(left.CopyVisibleRegion, right.CopyVisibleRegion) &&
+                   left.OutputContent == right.OutputContent &&
                    EqualityComparer<bool>.Default.Equals(left.ResizeFromBorder, right.ResizeFromBorder) &&
                    EqualityComparer<bool>.Default.Equals(left.ThumbnailWheelZoom, right.ThumbnailWheelZoom) &&
                    EqualityComparer<bool>.Default.Equals(left.ShowMenuShortcuts, right.ShowMenuShortcuts) &&

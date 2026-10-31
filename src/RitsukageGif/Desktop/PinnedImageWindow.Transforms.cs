@@ -93,6 +93,7 @@ namespace RitsukageGif.Desktop
                 ? CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, token)
                 : null;
             var workToken = work?.Token ?? _lifetime.Token;
+            await FreezeAnimationFrameAsync(workToken);
             var source = _png;
             var sourceHdr = _hdrSource;
             var width = (int)_bitmap.Size.Width;

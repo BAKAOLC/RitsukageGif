@@ -59,6 +59,7 @@ namespace RitsukageGif.Desktop
         private void RefreshHdrPreview()
         {
             _hdrPreviewWork?.Cancel();
+            if (TryRefreshAnimationHdr()) return;
             if (_hdrPreview is null || _hdrSource is not { } source || _annotation is not null ||
                 _selectedTextStart >= 0) return;
             var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);

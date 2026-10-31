@@ -15,11 +15,12 @@ namespace RitsukageGif.Desktop
                 OutputNotification, CancellationToken.None);
         }
 
-        internal Task<ScreenshotResult> CaptureOutputAsync(OutputColorMode mode, CancellationToken token)
+        private Task<ScreenshotResult> CaptureOutputAsync(OutputColorMode mode, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_closed, this);
             if (_annotation is not null) return ComposeOutputAsync(mode, token);
+            if (CaptureAnimationFrameAsync(mode, token) is { } animation) return animation;
             var png = _hdrSource is null ? _png : _sdrPng ?? _png;
             var hdr = _hdrSource;
             var captureScaling = OriginalCaptureScaling;

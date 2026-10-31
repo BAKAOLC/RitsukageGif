@@ -18,7 +18,7 @@ namespace RitsukageGif.Desktop
 
         private async Task CopyFileAsync()
         {
-            var output = await CaptureOutputAsync(OutputColorModeProvider(), _lifetime.Token);
+            var output = await CapturePreferredOutputAsync(OutputColorModeProvider(), _lifetime.Token);
             await CopyImageAsync(output, true);
             await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Copy, output);
         }

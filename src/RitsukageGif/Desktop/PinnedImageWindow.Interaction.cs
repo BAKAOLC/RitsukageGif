@@ -17,7 +17,6 @@ namespace RitsukageGif.Desktop
         public bool IsInteractionLocked => IsOperationLocked(PinnedLockedOperations.Move);
         public bool IsCloseLocked => IsOperationLocked(PinnedLockedOperations.Close);
         private bool IsMouseThrough { get; set; }
-        public ReadOnlyMemory<byte> OriginalPng => _png;
         public Func<IReadOnlyList<string>> GroupsProvider { get; set; } = () => [];
         public Action<string, bool>? GroupVisibilityRequested { get; set; }
         public event EventHandler? StateChanged;
