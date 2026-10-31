@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
         private readonly bool _frameSubscribed;
         private readonly long _frameToken;
         private readonly bool _monitorCapture;
+        private readonly bool _retainFrames;
         private readonly CaptureFrameSignal _signal = new();
         private readonly nint _window;
         private CapturedFrameSet? _colorFrame;
@@ -21,15 +22,18 @@ namespace RitsukageGif.Desktop
         private int _format;
         private nint _frameHandler, _closedHandler;
         private bool _hdr;
+        private byte[]? _linearPixels;
         private byte[]? _pixels;
         private bool _preserveHdr;
         private Size _size;
         private float _whiteLevel;
 
-        public WindowsWindowContentCapture(nint window, bool cursor, bool monitorCapture = false)
+        public WindowsWindowContentCapture(nint window, bool cursor, bool monitorCapture = false,
+            bool retainFrames = true)
         {
             _window = window;
             _monitorCapture = monitorCapture;
+            _retainFrames = retainFrames;
             (_hdr, _whiteLevel) =
                 WindowsDisplayColor.Read(monitorCapture ? window : WindowsDisplayColor.ForWindow(window));
             _format = _hdr ? 10 : 87;
@@ -131,6 +135,7 @@ namespace RitsukageGif.Desktop
             _disposed = true;
             _colorFrame = null;
             _pixels = null;
+            _linearPixels = null;
             if (_frameSubscribed)
                 ((delegate* unmanaged[Stdcall]<nint, long, int>)Vtable(_pool)[9])(_pool, _frameToken);
             if (_closedSubscribed)
@@ -170,6 +175,7 @@ namespace RitsukageGif.Desktop
                 _hdr = color.Hdr;
                 _whiteLevel = color.WhiteLevel;
                 _pixels = null;
+                _linearPixels = null;
                 _colorFrame = null;
                 Release(ref _staging);
                 Check(((delegate* unmanaged[Stdcall]<nint, nint, int, int, Size, int>)Vtable(_pool)[6])(_pool,
@@ -211,12 +217,7 @@ namespace RitsukageGif.Desktop
                 Check(((delegate* unmanaged[Stdcall]<nint, Size*, int>)Vtable(frame)[8])(frame, &size));
                 if (size.Width <= 0 || size.Height <= 0) throw new CaptureSourceLostException();
                 ValidateSize(size);
-                if (size.Width != _size.Width || size.Height != _size.Height)
-                {
-                    Close(ref frame);
-                    RecreatePool(size);
-                    return null;
-                }
+                var resized = size.Width != _size.Width || size.Height != _size.Height;
 
                 Check(((delegate* unmanaged[Stdcall]<nint, nint*, int>)Vtable(frame)[6])(frame, &surface));
                 access = Query(surface, new("a9b3d012-3df2-4ee3-b8d1-8695f457d3c1"));
@@ -226,8 +227,7 @@ namespace RitsukageGif.Desktop
                 TextureDescription description;
                 ((delegate* unmanaged[Stdcall]<nint, TextureDescription*, void>)Vtable(texture)[10])(texture,
                     &description);
-                if (description.Width < size.Width || description.Height < size.Height ||
-                    description.Format != _format)
+                if (description.Format != _format)
                 {
                     Logger.ZLogDebug(
                         $"Window capture discarded a transitional surface: contentWidth={size.Width}, contentHeight={size.Height}, textureWidth={description.Width}, textureHeight={description.Height}, textureFormat={description.Format}, expectedFormat={_format}");
@@ -238,6 +238,14 @@ namespace RitsukageGif.Desktop
                     RecreatePool(size);
                     return null;
                 }
+
+                var readableWidth = (int)Math.Min(description.Width, (uint)size.Width);
+                var readableHeight = (int)Math.Min(description.Height, (uint)size.Height);
+                if (readableWidth <= 0 || readableHeight <= 0) throw new CaptureSourceLostException();
+                var clipped = readableWidth != size.Width || readableHeight != size.Height;
+                if (clipped)
+                    Logger.ZLogDebug(
+                        $"Window capture clipped a transitional surface: contentWidth={size.Width}, contentHeight={size.Height}, readableWidth={readableWidth}, readableHeight={readableHeight}");
 
                 if (_staging == 0 || description.Width != _description.Width ||
                     description.Height != _description.Height)
@@ -263,24 +271,45 @@ namespace RitsukageGif.Desktop
                         _context)[14])(_context, _staging, 0, 1, 0, &map));
                 try
                 {
-                    var rowBytes = checked(size.Width * (_format == 10 ? 8 : 4));
+                    var rowBytes = checked(readableWidth * (_format == 10 ? 8 : 4));
                     if (map.Data == 0 || map.RowPitch < rowBytes)
                         throw new InvalidOperationException(UiText.Get("InvalidFrameBuffer"));
-                    if (_preserveHdr) _pixels = new byte[checked(size.Width * size.Height * 4)];
-                    else _pixels ??= new byte[checked(size.Width * size.Height * 4)];
+                    var pixelBytes = checked(size.Width * size.Height * 4);
+                    if (_pixels?.Length != pixelBytes || (_preserveHdr && _retainFrames))
+                        _pixels = new byte[pixelBytes];
+                    byte[]? raw = null;
                     if (_format == 10)
-                        ScRgbToneMapper.ConvertRows(map.Data, map.RowPitch, _pixels, size.Width, size.Height,
-                            _whiteLevel, _hdr, _preserveHdr);
+                    {
+                        if (clipped)
+                        {
+                            raw = LinearPixels(size);
+                            raw.AsSpan().Clear();
+                            CopyMappedRows(map, raw, readableWidth, readableHeight, size.Width, 8);
+                            fixed (byte* address = raw)
+                                ScRgbToneMapper.ConvertRows((nint)address, checked((uint)size.Width * 8), _pixels,
+                                    size.Width, size.Height, _whiteLevel, _hdr, _preserveHdr);
+                        }
+                        else
+                        {
+                            ScRgbToneMapper.ConvertRows(map.Data, map.RowPitch, _pixels, size.Width, size.Height,
+                                _whiteLevel, _hdr, _preserveHdr);
+                        }
+                    }
                     else
-                        for (var y = 0; y < size.Height; y++)
-                            new ReadOnlySpan<byte>((byte*)map.Data + y * map.RowPitch, size.Width * 4).CopyTo(
-                                _pixels.AsSpan(y * size.Width * 4, size.Width * 4));
+                    {
+                        if (clipped) _pixels.AsSpan().Clear();
+                        CopyMappedRows(map, _pixels, readableWidth, readableHeight, size.Width, 4);
+                        if (!_monitorCapture) ToStraightAlpha(_pixels);
+                    }
+
                     if (_preserveHdr)
                     {
-                        var raw = new byte[checked(size.Width * size.Height * 8)];
-                        for (var y = 0; y < size.Height; y++)
-                            new ReadOnlySpan<byte>((byte*)map.Data + y * map.RowPitch, size.Width * 8)
-                                .CopyTo(raw.AsSpan(y * size.Width * 8, size.Width * 8));
+                        if (raw is null)
+                        {
+                            raw = LinearPixels(size);
+                            CopyMappedRows(map, raw, readableWidth, readableHeight, size.Width, 8);
+                        }
+
                         var color = new FrameColorInfo(_hdr, _whiteLevel * FrameColorInfo.ScRgbReferenceWhiteNits);
                         FrameColorRegion[] regions = [new(new(0, 0, size.Width, size.Height), color)];
                         _colorFrame = new(
@@ -297,6 +326,16 @@ namespace RitsukageGif.Desktop
                 }
 
                 FrameRevision++;
+                if (resized || clipped)
+                {
+                    // Static windows may not produce another frame after the pool discards pending frames.
+                    Release(ref texture);
+                    Release(ref access);
+                    Release(ref surface);
+                    Close(ref frame);
+                    RecreatePool(size, true);
+                }
+
                 return _pixels;
             }
             finally

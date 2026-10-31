@@ -62,6 +62,7 @@ namespace RitsukageGif.Desktop
             if (_disposed) return;
             _disposed = true;
             foreach (var entry in _windows.Values) entry.Capture.Dispose();
+            DisposeColorWindows();
             foreach (var source in _media.Values) source.Dispose();
             foreach (var screen in _bufferedScreens.Values) screen.Capture.Dispose();
             _bufferedScreens.Clear();
@@ -102,6 +103,7 @@ namespace RitsukageGif.Desktop
             }
 
             _expired.Clear();
+            BeginColorFrame();
             ExpireScreens();
         }
 
@@ -216,9 +218,16 @@ namespace RitsukageGif.Desktop
             return source;
         }
 
-        private sealed class WindowSource(nint handle, bool cursor, int fps) : ISceneWindowSource
+        private sealed class WindowSource(nint handle, bool cursor, int fps) : ISceneWindowSource, IColorFrameSource
         {
-            private readonly WindowContentCapture _capture = new(handle, cursor, fps);
+            // Scene consumers finish reading before the next capture; exported scene frames own their buffers.
+            private readonly WindowContentCapture _capture = new(handle, cursor, fps, false);
+
+            public CapturedFrameSet CaptureFrames(CancellationToken token = default)
+            {
+                return _capture.CaptureFrames(token);
+            }
+
             public int Width => _capture.Width;
             public int Height => _capture.Height;
             public long FrameRevision => _capture.FrameRevision;
