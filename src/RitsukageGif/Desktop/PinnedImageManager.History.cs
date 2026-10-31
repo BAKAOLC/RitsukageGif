@@ -4,24 +4,33 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedImageManager
     {
-        private readonly List<(PinnedImageState State, ReadOnlyMemory<byte> Png, string ContentHash)>
+        private readonly List<(PinnedImageState State, ReadOnlyMemory<byte> Png, string ContentHash,
+                PinnedImageOriginal Original, bool AnimationActive)>
             _closedImages = [];
 
         public bool CanRestoreClosed => _closedImages.Count != 0;
 
         private void RememberClosed(PinnedImageWindow window)
         {
-            var png = window.OriginalPng;
+            var png = window.CurrentPng;
             if (Preferences.HistoryLimit == 0) return;
-            if (png.Length > 128 * 1024 * 1024) return;
-            _closedImages.Add((window.CaptureState(), png, window.ContentHash));
+            if ((long)png.Length + window.OriginalContent.Png.Length +
+                (window.OriginalContent.SdrPng?.Length ?? 0) + (window.OriginalContent.Hdr?.Pixels.Length ?? 0) +
+                (window.OriginalContent.Encoded?.Length ?? 0) >
+                128L * 1024 * 1024) return;
+            _closedImages.Add((window.CaptureState(), png, window.ContentHash, window.OriginalContent,
+                window.StoredAnimationActive));
             TrimClosedHistory();
         }
 
         private void TrimClosedHistory()
         {
             while (_closedImages.Count > Preferences.HistoryLimit ||
-                   _closedImages.Sum(entry => (long)entry.Png.Length) > 128L * 1024 * 1024)
+                   _closedImages.Sum(entry => (long)entry.Png.Length + entry.Original.Png.Length +
+                                              (entry.Original.SdrPng?.Length ?? 0) +
+                                              (entry.Original.Hdr?.Pixels.Length ?? 0) +
+                                              (entry.Original.Encoded?.Length ?? 0)) >
+                   128L * 1024 * 1024)
                 _closedImages.RemoveAt(0);
         }
 
@@ -56,8 +65,14 @@ namespace RitsukageGif.Desktop
         private bool RestoreClosed(int index)
         {
             var entry = _closedImages[index];
-            var window = PinnedImageWindow.CreatePrepared(PinnedImageContent.Decode(entry.Png),
+            var content = PinnedImageContent.Decode(entry.Png) with
+            {
+                OriginalEncoded = entry.Original.Encoded, Animation = entry.Original.Animation,
+                AnimationActive = entry.AnimationActive,
+            };
+            var window = PinnedImageWindow.CreatePrepared(content,
                 () => CanRestoreHidden(), Preferences);
+            window.RestoreOriginal(entry.Original);
             AttachWindow(window);
             try
             {

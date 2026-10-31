@@ -160,8 +160,15 @@ namespace RitsukageGif.Desktop
                         token.ThrowIfCancellationRequested();
                         ObjectDisposedException.ThrowIf(_disposed, this);
                         var content = await Task.Run(() => PinnedImageContent.Decode(png, token), token);
+                        var original = await ReadOriginalAsync(state, content, token);
                         token.ThrowIfCancellationRequested();
+                        content = content with
+                        {
+                            OriginalEncoded = original.Encoded, Animation = original.Animation,
+                            AnimationActive = state.AnimationActive,
+                        };
                         window = PinnedImageWindow.CreatePrepared(content, () => CanRestoreHidden(), Preferences);
+                        window.RestoreOriginal(original, !state.HasOriginalImage);
                         AttachWindow(window);
                         _restoring = true;
                         try
@@ -227,23 +234,22 @@ namespace RitsukageGif.Desktop
                 if (_disposed) return;
                 var images = _windows.Select(window => (
                     State: _pendingRestore.TryGetValue(window, out var pending) ? pending : window.CaptureState(),
-                    Png: window.OriginalPng)).ToArray();
+                    Png: window.CurrentPng, Original: window.OriginalContent, window.AnimationActive)).ToArray();
                 Directory.CreateDirectory(_sessionDirectory);
-                foreach (var (state, png) in images)
+                foreach (var (state, png, original, animationActive) in images)
                 {
+                    state.HasOriginalImage = !png.Equals((ReadOnlyMemory<byte>)original.Png);
+                    state.HasOriginalSdrImage = original.Hdr is not null && original.SdrPng is not null;
+                    state.HasOriginalEncoded = original.Encoded is not null;
+                    state.AnimationActive = animationActive;
                     var target = ImagePath(state.Id);
-                    if (File.Exists(target)) continue;
-                    var temporary = target + ".tmp";
-                    try
-                    {
-                        await File.WriteAllBytesAsync(temporary, png, token);
-                        File.Move(temporary, target, false);
-                        createdImages.Add(target);
-                    }
-                    finally
-                    {
-                        if (File.Exists(temporary)) File.Delete(temporary);
-                    }
+                    await WriteSessionImageAsync(target, png, createdImages, token);
+                    if (state.HasOriginalImage)
+                        await WriteSessionImageAsync(OriginalPath(state.Id, false), original.Png, createdImages, token);
+                    if (state.HasOriginalSdrImage && original.SdrPng is { } sdr)
+                        await WriteSessionImageAsync(OriginalPath(state.Id, true), sdr, createdImages, token);
+                    if (original.Encoded is { } media)
+                        await WriteSessionImageAsync(OriginalEncodedPath(state.Id), media, createdImages, token);
                 }
 
                 var states = images.Select(image => image.State).Concat(_unrestoredStates.Values).ToArray();
@@ -270,6 +276,13 @@ namespace RitsukageGif.Desktop
                 {
                     var path = ImagePath(expired);
                     if (File.Exists(path)) File.Delete(path);
+                    foreach (var original in new[]
+                             {
+                                 OriginalPath(expired, false), OriginalPath(expired, true),
+                                 OriginalEncodedPath(expired),
+                             })
+                        if (File.Exists(original))
+                            File.Delete(original);
                 }
 
                 _persistedIds.Clear();

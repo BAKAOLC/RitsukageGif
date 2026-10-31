@@ -3201,4 +3201,15 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureCropRight" xml:space="preserve">
     <value>Crop to the right of the current frame</value>
   </data>
+  <data name="PinnedAnimation" xml:space="preserve"><value>Animation</value></data>
+  <data name="PinnedAnimationCopyOriginal" xml:space="preserve"><value>Copy original animation</value></data>
+  <data name="PinnedAnimationNext" xml:space="preserve"><value>Next frame</value></data>
+  <data name="PinnedAnimationPause" xml:space="preserve"><value>Pause</value></data>
+  <data name="PinnedAnimationPlay" xml:space="preserve"><value>Play</value></data>
+  <data name="PinnedAnimationPrevious" xml:space="preserve"><value>Previous frame</value></data>
+  <data name="PinnedAnimationSaveOriginal" xml:space="preserve"><value>Save original animation</value></data>
+  <data name="PinnedAnimationSpeed" xml:space="preserve"><value>Playback speed</value></data>
+  <data name="PinnedImageOutputContent" xml:space="preserve"><value>Copy and save content</value></data>
+  <data name="PinnedImageOutputCurrent" xml:space="preserve"><value>Current image</value></data>
+  <data name="PinnedImageOutputOriginal" xml:space="preserve"><value>Original image</value></data>
 </root>

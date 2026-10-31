@@ -30,6 +30,8 @@ namespace RitsukageGif.Desktop
             Row(behavior, "PinnedImageLockedOperations", lockedOptions);
             var shortcuts = Check(behavior, "PinnedImageMenuShortcuts", preferences.ShowMenuShortcuts);
             var current = Check(behavior, "PinnedImageCopyVisibleRegion", preferences.CopyVisibleRegion);
+            var outputContent = Choice(behavior, "PinnedImageOutputContent", (int)preferences.OutputContent,
+                "PinnedImageOutputCurrent", "PinnedImageOutputOriginal");
             var thumbnailWheel = Check(behavior, "PinnedImageThumbnailWheelZoom", preferences.ThumbnailWheelZoom);
             var thumbnailText = Check(behavior, "PinnedImageThumbnailSelectableText",
                 preferences.ThumbnailSelectableText);
@@ -68,6 +70,7 @@ namespace RitsukageGif.Desktop
                                    (lockKeys.IsChecked == true ? PinnedLockedOperations.Shortcuts : 0) |
                                    (lockAnnotation.IsChecked == true ? PinnedLockedOperations.Annotation : 0),
                 ShowMenuShortcuts = shortcuts.IsChecked == true, CopyVisibleRegion = current.IsChecked == true,
+                OutputContent = (PinnedImageOutputContent)Math.Max(0, outputContent.SelectedIndex),
                 ThumbnailWheelZoom = thumbnailWheel.IsChecked == true,
                 ThumbnailSelectableText = thumbnailText.IsChecked == true,
                 ZoomStep = (double)ReadSettingsNumber(zoom) / 100,

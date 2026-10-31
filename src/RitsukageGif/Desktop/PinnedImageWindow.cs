@@ -152,6 +152,7 @@ namespace RitsukageGif.Desktop
                                 ?.Gesture
                             : null;
             };
+            AddAnimationCommands(menu);
             content.ContextMenu = menu;
             ConfigureMouseInput(image, content, menu);
             KeyDown += OnKeyDown;
@@ -212,6 +213,8 @@ namespace RitsukageGif.Desktop
                 {
                     window.ConfigureHdr(content.Hdr);
                     window._sdrPng = content.SdrPng;
+                    window.InitializeOriginal(content);
+                    window.InitializeAnimation(content);
                     window.ContentHash = content.ContentHash;
                     window.RefreshPreferencePresentation();
                     return window;
@@ -233,7 +236,9 @@ namespace RitsukageGif.Desktop
         private void ReleaseResources()
         {
             if (_closed) return;
+            _animationActiveAtClose = AnimationActive;
             _closed = true;
+            DisposeAnimation();
             if (_screens is not null) _screens.Changed -= ScreensChanged;
             _lifetime.Cancel();
             ResetTextRecognition();
@@ -322,6 +327,11 @@ namespace RitsukageGif.Desktop
             if (_annotation is not null && _annotationPreviewImage is { } preview)
             {
                 _image.Source = preview;
+            }
+            else if (AnimationActive && _animationSurface is { } animation)
+            {
+                animation.Region = display;
+                _image.Source = animation;
             }
             else if (_isThumbnail)
             {
@@ -505,14 +515,14 @@ namespace RitsukageGif.Desktop
 
         private async Task CopyAsync()
         {
-            var output = await CaptureOutputAsync(OutputColorModeProvider(), _lifetime.Token);
+            var output = await CapturePreferredOutputAsync(OutputColorModeProvider(), _lifetime.Token);
             await CopyImageAsync(output);
             await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Copy, output);
         }
 
         private async Task SaveAsync()
         {
-            await SaveOutputAsync(await CaptureOutputAsync(OutputColorModeProvider(), _lifetime.Token));
+            await SaveOutputAsync(await CapturePreferredOutputAsync(OutputColorModeProvider(), _lifetime.Token));
         }
     }
 }

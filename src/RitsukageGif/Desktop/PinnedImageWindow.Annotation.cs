@@ -36,11 +36,14 @@ namespace RitsukageGif.Desktop
                    FocusManager?.GetFocusedElement() is TextBox;
         }
 
-        private Task BeginAnnotationAsync()
+        private async Task BeginAnnotationAsync()
         {
+            if (_annotation is not null || IsOperationLocked(PinnedLockedOperations.Annotation) || IsMouseThrough)
+                return;
             try
             {
-                return BeginAnnotationCore();
+                await FreezeAnimationFrameAsync(_lifetime.Token);
+                await BeginAnnotationCore();
             }
             catch
             {
