@@ -40,7 +40,6 @@ namespace RitsukageGif.Desktop
             catch (Exception error)
             {
                 Logger.ZLogError(error, $"Animation editor thumbnail warmup failed.");
-                throw;
             }
             finally
             {

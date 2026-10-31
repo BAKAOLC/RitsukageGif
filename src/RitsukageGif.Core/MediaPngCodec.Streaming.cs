@@ -25,9 +25,11 @@ namespace RitsukageGif.Core
                         continue;
                     }
 
-                    using var previous = frame.GifDisposeMethod == GifDisposeMethod.Previous ? canvas.Clone() : null;
+                    using var previous = frame.GifDisposeMethod == GifDisposeMethod.Previous
+                        ? MagickImageCloner.Clone(canvas, token)
+                        : null;
                     canvas.Composite(frame, frame.Page.X, frame.Page.Y, frame.Compose);
-                    using var complete = canvas.Clone();
+                    using var complete = MagickImageCloner.Clone(canvas, token);
                     complete.AnimationDelay = frame.AnimationDelay;
                     complete.AnimationTicksPerSecond = frame.AnimationTicksPerSecond;
                     complete.AnimationIterations = iterations;

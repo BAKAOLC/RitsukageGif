@@ -30,7 +30,7 @@ namespace RitsukageGif.Core
                     using var images = await Read(layer.Path, token);
                     if (layer.FrameIndex < 0 || layer.FrameIndex >= images.Count)
                         throw new ArgumentOutOfRangeException(nameof(options));
-                    using var image = images[layer.FrameIndex].Clone();
+                    using var image = MagickImageCloner.Clone(images[layer.FrameIndex], token);
                     var crop = layer.CropX.HasValue || layer.CropY.HasValue || layer.CropWidth.HasValue ||
                                layer.CropHeight.HasValue;
                     if (crop)
@@ -92,7 +92,8 @@ namespace RitsukageGif.Core
                 for (var index = 0; index < count; index++)
                 {
                     token.ThrowIfCancellationRequested();
-                    using var frame = images[checked(options.FirstFrame + index * options.FrameStep)].Clone();
+                    using var frame =
+                        MagickImageCloner.Clone(images[checked(options.FirstFrame + index * options.FrameStep)], token);
                     frame.Resize((uint)options.ThumbnailWidth, (uint)options.ThumbnailHeight);
                     canvas.Composite(frame, index % columns * options.ThumbnailWidth +
                                             (options.ThumbnailWidth - (int)frame.Width) / 2,
@@ -153,8 +154,6 @@ namespace RitsukageGif.Core
                     images.Max(image => Math.Max(image.Width, image.Page.Width)) != info.Width ||
                     images.Max(image => Math.Max(image.Height, image.Page.Height)) != info.Height)
                     throw new InvalidDataException();
-                foreach (var image in images)
-                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
                 switch (info.Format)
                 {
                     case "apng": MediaPngCodec.Coalesce(images, token); break;
@@ -162,6 +161,8 @@ namespace RitsukageGif.Core
                     default: images.Coalesce(); break;
                 }
 
+                foreach (var image in images)
+                    image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
                 token.ThrowIfCancellationRequested();
                 return images;
             }

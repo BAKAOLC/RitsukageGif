@@ -9,6 +9,7 @@
   <ItemGroup><ProjectReference Include="../RitsukageGif.Diagnostics/RitsukageGif.Diagnostics.csproj" />
     <ProjectReference Include="../RitsukageGif.Contracts/RitsukageGif.Contracts.csproj" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="15.0.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
     <PackageReference Include="ZXing.Net" Version="0.16.11" />
   </ItemGroup>
 </Project>

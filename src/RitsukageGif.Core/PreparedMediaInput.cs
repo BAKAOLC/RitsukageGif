@@ -10,7 +10,7 @@ namespace RitsukageGif.Core
 
         internal PreparedMediaInput(MediaInfo info, int frameIndex, IMagickImage<byte> image) : this(info, frameIndex)
         {
-            _images = new() { image.Clone() };
+            _images = new() { MagickImageCloner.Clone(image) };
         }
 
         internal MediaInfo Info { get; } = info;
