@@ -97,6 +97,8 @@ namespace RitsukageGif.Desktop
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.Recognition = (settings.Recognition ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+                settings.Translation = (settings.Translation ?? new()).Normalize();
+                // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.HotkeyPolicy = (settings.HotkeyPolicy ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.CapturePreferences = (settings.CapturePreferences ?? new()).Normalize();

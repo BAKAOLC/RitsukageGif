@@ -57,7 +57,8 @@ namespace RitsukageGif.Desktop
 
             var confirm = output switch
             {
-                ActionScreenshotOutput.Copy or ActionScreenshotOutput.CopyText => ScreenshotOutputAction.Copy,
+                ActionScreenshotOutput.Copy or ActionScreenshotOutput.CopyText or ActionScreenshotOutput.Translate =>
+                    ScreenshotOutputAction.Copy,
                 ActionScreenshotOutput.Pin => ScreenshotOutputAction.Pin,
                 ActionScreenshotOutput.Save or ActionScreenshotOutput.QuickSave => ScreenshotOutputAction.Save,
                 _ => throw new ArgumentOutOfRangeException(nameof(action)),
@@ -67,6 +68,9 @@ namespace RitsukageGif.Desktop
             {
                 case ActionScreenshotOutput.CopyText:
                     handler = CopyActionScreenshotTextAsync;
+                    break;
+                case ActionScreenshotOutput.Translate:
+                    handler = TranslateActionScreenshotAsync;
                     break;
                 case ActionScreenshotOutput.QuickSave:
                     var directory = action.Arguments.GetValueOrDefault("directory");
@@ -101,10 +105,12 @@ namespace RitsukageGif.Desktop
             var clipboard = (owner ?? _services.Context).Clipboard ??
                             throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
             await clipboard.SetTextAsync(text);
+            await clipboard.FlushAsync();
             token.ThrowIfCancellationRequested();
             if (Settings.Recognition.ShowDialogOnCopyAll && owner is not null)
                 await RecognitionWindow.ShowAsync(owner, result.Png, RecognitionMode.Text,
-                    preferences: Settings.Recognition, initialText: text, token: token);
+                    preferences: Settings.Recognition, initialText: text, token: token,
+                    translationPreferences: Settings.Translation);
             return true;
         }
 

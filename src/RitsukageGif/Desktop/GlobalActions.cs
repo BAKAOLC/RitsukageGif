@@ -15,7 +15,8 @@ namespace RitsukageGif.Desktop
                 or GlobalActionKind.ScreenshotAndCopy or GlobalActionKind.ScreenshotAndPin
                 or GlobalActionKind.ScreenshotAndSave or GlobalActionKind.ScreenshotQuickSave
                 or GlobalActionKind.CaptureActiveWindow or GlobalActionKind.CaptureLastRegion
-                or GlobalActionKind.ScreenshotAndCopyText or GlobalActionKind.ScreenshotAndScroll;
+                or GlobalActionKind.ScreenshotAndCopyText or GlobalActionKind.ScreenshotAndScroll
+                or GlobalActionKind.ScreenshotAndTranslate;
         }
 
         internal static bool IsDirectScreenshot(GlobalActionKind kind)
@@ -32,6 +33,7 @@ namespace RitsukageGif.Desktop
                 GlobalActionKind.ScreenshotAndSave => ActionScreenshotOutput.Save,
                 GlobalActionKind.ScreenshotQuickSave => ActionScreenshotOutput.QuickSave,
                 GlobalActionKind.ScreenshotAndCopyText => ActionScreenshotOutput.CopyText,
+                GlobalActionKind.ScreenshotAndTranslate => ActionScreenshotOutput.Translate,
                 _ => ActionScreenshotOutput.Copy,
             };
             if (!IsDirectScreenshot(action.Kind) || !action.Arguments.TryGetValue("output", out var output))

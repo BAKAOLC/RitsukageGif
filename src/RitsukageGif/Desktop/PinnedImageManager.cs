@@ -21,6 +21,7 @@ namespace RitsukageGif.Desktop
         } = new();
 
         public Func<RecognitionPreferences> RecognitionPreferencesProvider { get; set; } = () => new();
+        public Func<TranslationPreferences> TranslationPreferencesProvider { get; set; } = () => new();
 
         // ReSharper disable once MemberCanBePrivate.Global, AutoPropertyCanBeMadeGetOnly.Global
         public ITextRecognitionService TextRecognitionService { get; set; } = new OcrRecognitionService();
@@ -158,6 +159,7 @@ namespace RitsukageGif.Desktop
             window.PreferencesProvider = () => Preferences;
             window.TextRecognitionServiceProvider = () => TextRecognitionService;
             window.RecognitionPreferencesProvider = () => RecognitionPreferencesProvider();
+            window.TranslationPreferencesProvider = () => TranslationPreferencesProvider();
             window.SelectionRequested = ToggleSelection;
             window.CloseRequested = CloseSelection;
             window.MoveSelectionRequested = MoveSelection;

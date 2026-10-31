@@ -29,6 +29,8 @@ namespace RitsukageGif.Desktop
             HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
         };
 
+        private readonly Button _translate = new();
+
         private bool _busy;
         private bool _languagesLoaded;
         private Task _operation = Task.CompletedTask;
@@ -37,7 +39,7 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _work;
 
         private RecognitionWindow(ReadOnlyMemory<byte> image, RecognitionMode mode, RecognitionPreferences preferences,
-            string? initialText)
+            string? initialText, TranslationPreferences? translationPreferences)
         {
             _image = image;
             _mode = mode;
@@ -52,6 +54,24 @@ namespace RitsukageGif.Desktop
             _run.Bind(ContentProperty, LiveText.Resource("RecognitionRetry"));
             _cancel.Bind(ContentProperty, LiveText.Resource("Cancel"));
             _copy.Bind(ContentProperty, LiveText.Resource("ScreenshotCopy"));
+            _translate.Bind(ContentProperty, LiveText.Resource("TranslationRun"));
+            _translate.IsVisible = translationPreferences is not null;
+            _translate.Click += async (_, _) =>
+            {
+                if (_busy || string.IsNullOrWhiteSpace(_text.Text) || translationPreferences is null) return;
+                try
+                {
+                    await TranslationWindow.ShowAsync(this, _text.Text, translationPreferences,
+                        true, _lifetime.Token);
+                }
+                catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+                {
+                }
+                catch (Exception error)
+                {
+                    if (!_lifetime.IsCancellationRequested) _status.Text = error.Message;
+                }
+            };
             var close = new Button();
             close.Bind(ContentProperty, LiveText.Resource("Close"));
             close.Click += (_, _) => Close();
@@ -63,13 +83,18 @@ namespace RitsukageGif.Desktop
                 {
                     var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
                     await clipboard.SetTextAsync(_text.Text ?? "");
+                    await clipboard.FlushAsync();
                 }
                 catch (Exception error)
                 {
                     _status.Text = error.Message;
                 }
             };
-            _text.TextChanged += (_, _) => _copy.IsEnabled = !string.IsNullOrEmpty(_text.Text);
+            _text.TextChanged += (_, _) =>
+            {
+                _copy.IsEnabled = !string.IsNullOrEmpty(_text.Text);
+                _translate.IsEnabled = !_busy && !string.IsNullOrWhiteSpace(_text.Text);
+            };
             _codes.SelectionChanged += (_, _) =>
             {
                 if (_codes.SelectedItem is ComboBoxItem { Tag: BarcodeRecognitionResult result })
@@ -86,7 +111,7 @@ namespace RitsukageGif.Desktop
             var footer = new StackPanel
             {
                 Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-                Spacing = 8, Children = { _run, _cancel, _copy, close },
+                Spacing = 8, Children = { _run, _cancel, _translate, _copy, close },
             };
             var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), RowSpacing = 12, Margin = new(16) };
             layout.Children.Add(header);
@@ -103,10 +128,11 @@ namespace RitsukageGif.Desktop
 
         internal static async Task ShowAsync(Window owner, ReadOnlyMemory<byte> image, RecognitionMode mode,
             Func<CancellationToken, Task>? recognized = null,
-            RecognitionPreferences? preferences = null, string? initialText = null, CancellationToken token = default)
+            RecognitionPreferences? preferences = null, string? initialText = null,
+            TranslationPreferences? translationPreferences = null, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            var window = new RecognitionWindow(image, mode, preferences ?? new(), initialText)
+            var window = new RecognitionWindow(image, mode, preferences ?? new(), initialText, translationPreferences)
                 { _recognized = recognized };
             await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));
             try
@@ -216,6 +242,7 @@ namespace RitsukageGif.Desktop
             _language.IsEnabled = !busy && _languagesLoaded;
             _text.IsEnabled = !busy;
             _copy.IsEnabled = !string.IsNullOrEmpty(_text.Text);
+            _translate.IsEnabled = !busy && !string.IsNullOrWhiteSpace(_text.Text);
         }
     }
 }

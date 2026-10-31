@@ -5,11 +5,25 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class PinnedImageWindow
     {
+        internal Func<TranslationPreferences> TranslationPreferencesProvider { get; set; } = () => new();
+
         private void AddRecognitionMenu(ContextMenu menu)
         {
             menu.Items.Add(new Separator());
             menu.Items.Add(Command("RecognizeText", () => RecognizeAsync(RecognitionMode.Text)));
             menu.Items.Add(Command("RecognizeBarcode", () => RecognizeAsync(RecognitionMode.Barcode)));
+            menu.Items.Add(Command("TranslateScreenshot", TranslateAsync));
+        }
+
+        private async Task TranslateAsync()
+        {
+            var output = await CaptureOutputAsync(OutputColorMode.Sdr, _lifetime.Token);
+            var text = await RecognitionOutput.RecognizeAsync(output.Png, RecognitionPreferencesProvider().Normalize(),
+                TextRecognitionServiceProvider?.Invoke() ?? DefaultTextRecognition, _lifetime.Token);
+            _lifetime.Token.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
+            await TranslationWindow.ShowAsync(this, text, TranslationPreferencesProvider(),
+                true, _lifetime.Token);
         }
 
         private async Task RecognizeAsync(RecognitionMode mode)
@@ -31,7 +45,7 @@ namespace RitsukageGif.Desktop
 
             await RecognitionWindow.ShowAsync(this, png, mode,
                 _ => SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output), preferences,
-                token: _lifetime.Token);
+                token: _lifetime.Token, translationPreferences: TranslationPreferencesProvider());
         }
     }
 }

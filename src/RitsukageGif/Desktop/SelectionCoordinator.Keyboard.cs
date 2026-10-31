@@ -174,6 +174,9 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.RecognizeText:
                     RecognizeSelection(RecognitionMode.Text);
                     break;
+                case SelectionCommand.Translate:
+                    RecognizeSelection(RecognitionMode.Text, translate: true);
+                    break;
                 case SelectionCommand.RecognizeTextAndCopy:
                     RecognizeSelection(RecognitionMode.Text, true);
                     break;

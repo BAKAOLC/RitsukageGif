@@ -106,6 +106,7 @@ namespace RitsukageGif.Desktop
             cancel.Click += (_, _) => EndAnnotation();
             session.CompleteRequested += action => _ = RunAsync(() => CompleteAnnotationAsync(action));
             session.RecognitionRequested += mode => _ = RunAsync(() => RecognizeAsync(mode));
+            session.TranslationRequested += () => _ = RunAsync(TranslateAsync);
             var footer = _annotationFooter = new() { RowDefinitions = new("Auto,Auto") };
             footer.Children.Add(toolbar);
             var buttons = new StackPanel
@@ -315,6 +316,7 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.RenumberAnnotations: session.RenumberAnnotations(); break;
                 case SelectionCommand.FinishPolyline: session.FinishPolyline(); break;
                 case SelectionCommand.RecognizeText: session.RequestRecognition(RecognitionMode.Text); break;
+                case SelectionCommand.Translate: session.RequestTranslation(); break;
                 case SelectionCommand.RecognizeQr: session.RequestRecognition(RecognitionMode.Barcode); break;
                 case SelectionCommand.RecognizeTextAndCopy: _ = RunAsync(CopyRecognizedTextAsync); break;
                 case SelectionCommand.SelectTool: session.Tool = definition.Tool ?? ScreenshotTool.Select; break;

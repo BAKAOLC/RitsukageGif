@@ -55,6 +55,7 @@ namespace RitsukageGif.Desktop
             selection.FrameRoundInitialEnabled = capturePreferences.FrameRoundEnabled;
             selection.FrameRoundInitialRadius = capturePreferences.FrameRoundRadius;
             selection.RecognitionPreferences = Settings.Recognition;
+            selection.TranslationPreferences = Settings.Translation;
             selection.ConfigureHistory(_captureHistory);
             selection.PreferencesChanged += () =>
             {

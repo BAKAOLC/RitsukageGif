@@ -98,7 +98,8 @@ namespace RitsukageGif.Desktop
                 var kinds = new[]
                 {
                     GlobalActionKind.ScreenshotAndPin, GlobalActionKind.ScreenshotAndCopy,
-                    GlobalActionKind.ScreenshotAndCopyText, GlobalActionKind.ScreenshotQuickSave,
+                    GlobalActionKind.ScreenshotAndCopyText, GlobalActionKind.ScreenshotAndTranslate,
+                    GlobalActionKind.ScreenshotQuickSave,
                     GlobalActionKind.Screenshot, GlobalActionKind.ScreenshotAndScroll,
                     GlobalActionKind.StartRecording,
                 };

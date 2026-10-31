@@ -171,6 +171,7 @@ namespace RitsukageGif.Desktop
                 }
             };
             page.Children.Add(SettingsSection("RecognizeText", recognition));
+            page.Children.Add(SettingsSection("TranslationTitle", BuildTranslationSettings(draft)));
             page.Children.Add(SettingsSection("SystemTrayHeading", tray));
             var updates = Page();
             updates.Children.Add(SystemCheck("AutomaticUpdates", draft.CheckForUpdates,

@@ -27,6 +27,7 @@ namespace RitsukageGif.Desktop
             new(SelectionCommand.ScrollVertical, Key.L, KeyModifiers.None, "ScreenshotScrollVertical"),
             new(SelectionCommand.ScrollHorizontal, Key.None, KeyModifiers.None, "ScreenshotScrollHorizontal"),
             new(SelectionCommand.RecognizeText, Key.None, KeyModifiers.None, "RecognizeText"),
+            new(SelectionCommand.Translate, Key.None, KeyModifiers.None, "TranslationRun"),
             new(SelectionCommand.RecognizeQr, Key.None, KeyModifiers.None, "RecognizeBarcode"),
             new(SelectionCommand.RecognizeTextAndCopy, Key.C, KeyModifiers.Shift, "RecognizeTextAndCopy"),
             new(SelectionCommand.CopyColor, Key.C, KeyModifiers.None, "SelectionCopyColor"),
@@ -149,6 +150,7 @@ namespace RitsukageGif.Desktop
                 SelectionCommand.Confirm => snapshot.CanConfirm && !drawing,
                 SelectionCommand.Copy or SelectionCommand.Save or SelectionCommand.Pin or SelectionCommand.RecognizeText
                     or SelectionCommand.RecognizeQr or SelectionCommand.RecognizeTextAndCopy
+                    or SelectionCommand.Translate
                     or SelectionCommand.ScrollVertical or SelectionCommand.ScrollHorizontal =>
                     screenshot && snapshot.CanConfirm && !drawing,
                 SelectionCommand.CopyColor or SelectionCommand.CycleColorFormat => !drawing && !editing,

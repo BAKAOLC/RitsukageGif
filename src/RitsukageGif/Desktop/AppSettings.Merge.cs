@@ -160,6 +160,7 @@ namespace RitsukageGif.Desktop
                     static (_, _, e) => e),
                 System = Merge(current.System, baseline.System, edited.System),
                 Recognition = Merge(current.Recognition, baseline.Recognition, edited.Recognition),
+                Translation = Merge(current.Translation, baseline.Translation, edited.Translation),
             };
         }
 

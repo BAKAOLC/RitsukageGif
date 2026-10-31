@@ -93,6 +93,7 @@ namespace RitsukageGif.Desktop
                 () => session.RequestRecognition(RecognitionMode.Text)));
             _recognitionButtons.Add(RegisterAction(ToolbarActionId.RecognizeBarcode,
                 () => session.RequestRecognition(RecognitionMode.Barcode)));
+            _recognitionButtons.Add(RegisterAction(ToolbarActionId.Translate, session.RequestTranslation));
             _outputColor = new() { MinWidth = 100, MinHeight = 24, Margin = new(6, 0) };
             _outputColor.Bind(ToolTip.TipProperty, LiveText.Resource("OutputColorMode"));
             _outputColor.SelectionChanged += (_, _) =>
@@ -318,6 +319,7 @@ namespace RitsukageGif.Desktop
             SetShortcutTip(_redo, SelectionCommand.Redo);
             SetShortcutTip(_recognitionButtons[0], SelectionCommand.RecognizeText);
             SetShortcutTip(_recognitionButtons[1], SelectionCommand.RecognizeQr);
+            SetShortcutTip(_recognitionButtons[2], SelectionCommand.Translate);
         }
 
         private void SessionChanged()
