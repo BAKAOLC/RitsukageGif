@@ -94,6 +94,7 @@ namespace RitsukageGif.Desktop
                 settings.CleanupMaxSizeMiB is <= 0)
                 throw Invalid("settings");
             _ = Path.GetFullPath(settings.OutputDirectory);
+            ValidatePreferenceValues(settings);
             if (settings.VideoRecording.Fps is < 1 or > 100 || settings.VideoRecording.Divisor is < 1 or > 100 ||
                 settings.VideoRecording.Quality is < 0 or > 51 || !Enum.IsDefined(settings.VideoRecording.Container))
                 throw Invalid("VideoRecording");
