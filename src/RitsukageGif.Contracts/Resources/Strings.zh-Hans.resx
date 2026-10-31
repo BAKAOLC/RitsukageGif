@@ -3276,4 +3276,14 @@ X {0}, Y {1}</value>
   <data name="TranslationLanguageTurkish" xml:space="preserve"><value>土耳其语</value></data>
   <data name="TranslationLanguageUkrainian" xml:space="preserve"><value>乌克兰语</value></data>
   <data name="TranslationLanguageVietnamese" xml:space="preserve"><value>越南语</value></data>
+  <data name="CrashRecoveryMessage" xml:space="preserve"><value>上次运行未正常结束，可能是崩溃、强制关闭或断电。下方可查看诊断记录。</value></data>
+  <data name="CrashRecoveryTitle" xml:space="preserve"><value>上次运行未正常结束</value></data>
+  <data name="DiagnosticsExport" xml:space="preserve"><value>导出诊断记录</value></data>
+  <data name="DiagnosticsExported" xml:space="preserve"><value>诊断压缩包已保存，分享前请检查内容。</value></data>
+  <data name="DiagnosticsHeading" xml:space="preserve"><value>诊断</value></data>
+  <data name="DiagnosticsOpenLogs" xml:space="preserve"><value>打开日志文件夹</value></data>
+  <data name="DiagnosticsReportIssue" xml:space="preserve"><value>报告问题</value></data>
+  <data name="DiagnosticsStartupFailure" xml:space="preserve"><value>程序无法启动：{0}
+诊断记录：{1}</value></data>
+  <data name="AnimationImportWorkerFailed" xml:space="preserve"><value>动图导入失败（退出码 0x{0:X8}），当前文档未改变。日志：{1}</value></data>
 </root>

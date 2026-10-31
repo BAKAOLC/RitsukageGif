@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -15,16 +16,27 @@ namespace RitsukageGif.Desktop
         [LibraryImport("kernel32.dll")]
         private static partial int AttachConsole(uint processId);
 
+        [LibraryImport("user32.dll", EntryPoint = "MessageBoxW", StringMarshalling = StringMarshalling.Utf16)]
+        // ReSharper disable once UnusedMethodReturnValue.Local
+        private static partial int ShowStartupError(nint owner, string text, string title, uint type);
+
         [STAThread]
         public static int Main(string[] args)
         {
-            if (args is ["--version"])
+            switch (args)
             {
-                if (OperatingSystem.IsWindows() && AttachConsole(uint.MaxValue) != 0)
-                    Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
-                Console.WriteLine(JsonSerializer.Serialize(new(true, "version", ApplicationVersion.Display),
-                    CommandJson.Default.CommandReply));
-                return 0;
+                case ["--animation-import-worker", var input, var directory]:
+                    return AnimationImportProcess.RunWorker(input, directory);
+                case ["--animation-import-worker", ..]: return 2;
+                case ["--diagnostic-monitor", var process, var session] when int.TryParse(process, out var processId):
+                    return CrashSessionMonitor.Run(processId, session);
+                case ["--diagnostic-monitor", ..]: return 2;
+                case ["--version"]:
+                    if (OperatingSystem.IsWindows() && AttachConsole(uint.MaxValue) != 0)
+                        Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+                    Console.WriteLine(JsonSerializer.Serialize(new(true, "version", ApplicationVersion.Display),
+                        CommandJson.Default.CommandReply));
+                    return 0;
             }
 
             try
@@ -47,8 +59,20 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception error)
             {
+                CrashRecoverySession.Current?.RecordFailure(error);
                 ProcessLogger.ZLogCritical(error, $"Process terminated with an unhandled startup or lifetime failure.");
                 Console.Error.WriteLine(error.Message);
+                if (args.Length == 0 || args is ["--serve"])
+                {
+                    var directory = LogHub.DirectoryPath ?? Path.Combine(Path.GetTempPath(), "RitsukageGif", "logs");
+                    var report = CrashRecoverySession.Current?.ReportPath ??
+                                 CrashRecoverySession.RecordStartupFailure(directory, error);
+                    if (OperatingSystem.IsWindows())
+                        ShowStartupError(0,
+                            UiText.Format("DiagnosticsStartupFailure", error.Message, report ?? directory),
+                            UiText.Get("FatalErrorTitle"), 0x10);
+                }
+
                 return 1;
             }
             finally
@@ -129,12 +153,41 @@ namespace RitsukageGif.Desktop
             if (!created) return ActivateRunningInstance(args);
 
             StartHidden = args is ["--serve"];
+            var recovery = CrashRecoverySession.Begin(DiagnosticsActions.LogDirectory);
+            if (recovery.SessionPath is { } sessionPath)
+                try
+                {
+                    var monitor = CreateSelfStartInfo();
+                    monitor.ArgumentList.Add("--diagnostic-monitor");
+                    monitor.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+                    monitor.ArgumentList.Add(sessionPath);
+                    Process.Start(monitor)?.Dispose();
+                }
+                catch (Exception error) when (error is Win32Exception or IOException or NotSupportedException)
+                {
+                    ProcessLogger.ZLogWarning(error,
+                        $"Crash monitor could not start; restart detection remains available.");
+                }
+
             if (OperatingSystem.IsLinux() && !DesktopCapture.UsesSourceSelection) X11ErrorTrap.Initialize();
             var lifetimeExitCode = AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace()
                 .StartWithClassicDesktopLifetime(args);
             ProcessLogger.ZLogInformation($"Desktop lifetime returned. ExitCode={lifetimeExitCode}");
+            recovery.Complete(lifetimeExitCode);
             GC.KeepAlive(instance);
             return lifetimeExitCode;
+        }
+
+        internal static ProcessStartInfo CreateSelfStartInfo()
+        {
+            var start = new ProcessStartInfo(Environment.ProcessPath!)
+            {
+                UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
+            };
+            if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet",
+                    StringComparison.OrdinalIgnoreCase))
+                start.ArgumentList.Add(Environment.GetCommandLineArgs()[0]);
+            return start;
         }
 
         private static int ActivateRunningInstance(string[] args)

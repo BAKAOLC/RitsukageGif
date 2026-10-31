@@ -19,17 +19,27 @@ namespace RitsukageGif.Desktop
             AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             {
                 if (args.ExceptionObject is Exception error)
+                {
+                    CrashRecoverySession.Current?.RecordFailure(error);
                     TraceLogger.ZLogCritical(error, $"Unhandled process exception. Terminating={args.IsTerminating}");
+                }
                 else
+                {
                     TraceLogger.ZLogCritical($"Unhandled process failure. Terminating={args.IsTerminating}");
-                if (args.IsTerminating) Shutdown();
+                }
+
+                if (args.IsTerminating)
+                    LogHub.ShutdownAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
             };
             TaskScheduler.UnobservedTaskException += (_, args) =>
+            {
                 TraceLogger.ZLogError(args.Exception, $"Unobserved background task exception.");
+                args.SetObserved();
+            };
             AppDomain.CurrentDomain.ProcessExit += (_, _) =>
             {
                 TraceLogger.ZLogInformation($"Process exit observed. ExitCode={Environment.ExitCode}");
-                Shutdown();
+                LogHub.ShutdownAsync().AsTask().Wait(TimeSpan.FromSeconds(2));
             };
         }
 
