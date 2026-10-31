@@ -186,8 +186,18 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps);
-                frames = layer.Window.CaptureFrames(token);
+                if (_context is not null)
+                {
+                    var captured = _context.CaptureWindowFrames(target!.Handle, _options, token);
+                    if (captured is null) return false;
+                    frames = captured;
+                }
+                else
+                {
+                    layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps);
+                    frames = layer.Window.CaptureFrames(token);
+                }
+
                 var bounds = OperatingSystem.IsLinux() ? target!.Client : target!.Bounds;
                 var sx = (float)frames.Sdr.Width / bounds.Width;
                 var sy = (float)frames.Sdr.Height / bounds.Height;

@@ -5,13 +5,15 @@ namespace RitsukageGif.Desktop
     internal sealed class WindowContentCapture : IColorFrameSource
     {
         private readonly NativeCaptureLease? _native;
+        private readonly bool _retainFrames;
         private readonly WindowsWindowContentCapture? _windows;
         private readonly X11Capture? _x11;
         private int _width, _height;
 
-        public WindowContentCapture(nint window, bool cursor, int fps = 60)
+        public WindowContentCapture(nint window, bool cursor, int fps = 60, bool retainFrames = true)
         {
-            if (OperatingSystem.IsWindows()) _windows = new(window, cursor);
+            _retainFrames = retainFrames;
+            if (OperatingSystem.IsWindows()) _windows = new(window, cursor, retainFrames: retainFrames);
             else if (OperatingSystem.IsMacOS())
                 _native = NativeCaptureLease.Window(window, cursor, fps);
             else if (OperatingSystem.IsLinux() && !DesktopCapture.UsesSourceSelection)
@@ -35,7 +37,8 @@ namespace RitsukageGif.Desktop
             if (_windows is not null) return _windows.CaptureFrames(token);
             var pixels = Capture(token) ?? throw new CaptureSourceLostException();
             var color = new FrameColorInfo(false);
-            return new(new(Width, Height, checked(Width * 4), CapturePixelFormat.Bgra8Srgb, pixels.ToArray(), color,
+            return new(new(Width, Height, checked(Width * 4), CapturePixelFormat.Bgra8Srgb,
+                    _retainFrames ? [.. pixels] : pixels, color,
                     CaptureAlphaMode.Opaque, FrameRevision, [new(new(0, 0, Width, Height), color)]), null,
                 Stopwatch.GetTimestamp());
         }

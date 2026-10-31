@@ -7,8 +7,7 @@ namespace RitsukageGif.Desktop
 
         private void StartMultiple(IReadOnlyList<PresetRecordingOutput> definitions)
         {
-            if (Settings.CaptureColorMode != OutputColorMode.Sdr ||
-                Settings.CaptureToneMap != HdrToneMapMode.HighlightCompression)
+            if (Settings.CaptureColorMode != OutputColorMode.Sdr)
                 throw new NotSupportedException(UiText.Get("HdrMultipleUnsupported"));
             if (IsBusy || IsSelecting || IsConfiguring || IsClosing || definitions.Count is < 1 or > 8)
                 throw new InvalidOperationException(UiText.Get("CommandNotReady"));
@@ -68,12 +67,12 @@ namespace RitsukageGif.Desktop
             _recordClock.Restart();
             _stop = new();
             _abort = new();
-            _operation = RecordMultipleAsync(outputs, sources, _stop.Token, _abort.Token);
+            _operation = RecordMultipleAsync(outputs, sources, Settings.CaptureToneMap, _stop.Token, _abort.Token);
             Notify();
         }
 
         private async Task<RecordingOutcome> RecordMultipleAsync(List<MultiRecordingOutput> outputs,
-            Dictionary<string, PresetRecordingOutput> sources, CancellationToken stop,
+            Dictionary<string, PresetRecordingOutput> sources, HdrToneMapMode toneMap, CancellationToken stop,
             CancellationToken cancel)
         {
             var gate = new Lock();
@@ -119,7 +118,11 @@ namespace RitsukageGif.Desktop
                     return await new MultiRecordingSession().RunAsync(outputs, output =>
                     {
                         var source = sources[output.Name];
-                        return new SceneCapture(output.Options, displays.Read, source.Preset!, source.Runtime, context);
+                        var scene = new SceneCapture(output.Options, displays.Read, source.Preset!, source.Runtime,
+                            context);
+                        return toneMap == HdrToneMapMode.HighlightCompression
+                            ? scene
+                            : new ToneMappedFrameSource(scene, toneMap);
                     }, sink, stop, cancel, context.BeginFrame);
                 }, CancellationToken.None);
                 _streams =
