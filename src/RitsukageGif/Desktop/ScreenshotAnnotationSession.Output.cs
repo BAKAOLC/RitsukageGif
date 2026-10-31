@@ -315,7 +315,10 @@ namespace RitsukageGif.Desktop
                         ? new Size(Math.Max(annotation.FontSize * 1.7, text.Width + padding),
                             Math.Max(annotation.FontSize * 1.7, text.Width + padding))
                         : new Size(text.Width + padding, text.Height + padding);
-                    return new Rect(annotation.Points[0], size).Inflate(annotation.Properties.TextOutlineWidth);
+                    var origin = annotation.Tool == ScreenshotTool.Number
+                        ? annotation.Points[0] - new Vector(size.Width / 2, size.Height / 2)
+                        : annotation.Points[0];
+                    return new Rect(origin, size).Inflate(annotation.Properties.TextOutlineWidth);
             }
 
             var left = annotation.Points.Min(point => point.X);

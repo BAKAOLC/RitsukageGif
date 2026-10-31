@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
         private readonly MouseGestureTracker _mouseGesture = new();
         private bool _mouseSelecting, _mouseChordCancelled, _mouseButtonsPressed;
         private PixelPoint _mouseStart;
+        private bool _movingObject;
 
         private void ConfigureMouseInput(Func<PointerEventArgs, PixelPoint> sourcePoint,
             SelectionCoordinator? coordinator)
@@ -19,6 +20,20 @@ namespace RitsukageGif.Desktop
                 if (IsTextEditorSource(args.Source)) return;
                 args.Handled = true;
                 var properties = args.GetCurrentPoint(this).Properties;
+                if (_session.IsDrawingPolyline &&
+                    (properties.IsRightButtonPressed || (properties.IsLeftButtonPressed && args.ClickCount == 2)))
+                {
+                    _session.FinishPolyline();
+                    _mouseGesture.Reset();
+                    _mouseSelecting = false;
+                    _movingObject = false;
+                    _mouseChordCancelled = true;
+                    _mouseButtonsPressed = AnyPressed(properties);
+                    coordinator?.SetMouseInputHeld(_mouseButtonsPressed);
+                    Release();
+                    return;
+                }
+
                 if (_session.IsEditingText)
                 {
                     _session.CommitTextEdit();
@@ -88,7 +103,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 if (!_mouseSelecting) return;
-                if (_session.Tool == ScreenshotTool.Select) _session.MoveObject(sourcePoint(args));
+                if (_movingObject) _session.MoveObject(sourcePoint(args));
                 else _session.MoveWithModifiers(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
             };
             PointerReleased += async (_, args) =>
@@ -130,7 +145,8 @@ namespace RitsukageGif.Desktop
                                 return;
                             }
 
-                            if (await _session.TryCreateQuickMarkAsync(sourcePoint(args))) return;
+                            if (!_session.HitTestAnnotation(sourcePoint(args), true) &&
+                                await _session.TryCreateQuickMarkAsync(sourcePoint(args))) return;
                             _mouseSelecting = true;
                             Begin(sourcePoint(args));
                         }
@@ -146,7 +162,7 @@ namespace RitsukageGif.Desktop
 
                     if (_mouseSelecting)
                     {
-                        if (_session.Tool == ScreenshotTool.Select)
+                        if (_movingObject)
                         {
                             await _session.EndObjectMoveAsync();
                         }
@@ -161,6 +177,7 @@ namespace RitsukageGif.Desktop
                 finally
                 {
                     _mouseSelecting = false;
+                    _movingObject = false;
                     if (!_mouseButtonsPressed) Release();
                     _completing = false;
                 }
@@ -195,14 +212,10 @@ namespace RitsukageGif.Desktop
 
             void Begin(PixelPoint point)
             {
-                if (_session.Tool == ScreenshotTool.Select)
-                {
-                    if (!_session.BeginObjectMove(point)) _session.ClearAnnotationSelection();
-                }
-                else
-                {
-                    _session.Begin(point);
-                }
+                _movingObject = _session.BeginObjectMove(point, true);
+                if (_movingObject) return;
+                if (_session.Tool == ScreenshotTool.Select) _session.ClearAnnotationSelection();
+                else _session.Begin(point);
             }
 
             void Execute(MouseAction action, PixelPoint point)

@@ -112,14 +112,17 @@ namespace RitsukageGif.Desktop
 
         private bool ShowControlPoints(ScreenshotAnnotation annotation)
         {
-            if (!_behavior.SecondaryEditingEnabled ||
-                _behavior.ControlPointVisibility == AnnotationControlPointVisibility.Hidden)
-                return false;
-            if (annotation.Tool is not (ScreenshotTool.Rectangle or ScreenshotTool.Ellipse or ScreenshotTool.Arrow))
-                return false;
-            return _behavior.ControlPointVisibility == AnnotationControlPointVisibility.Always ||
-                   (_hoverPoint is { } hover && AnnotationObjectBounds(annotation).Inflate(10)
-                       .Contains(new Point(hover.X, hover.Y)));
+            return CanEditControlPoints(annotation) &&
+                   (_behavior.ControlPointVisibility == AnnotationControlPointVisibility.Always ||
+                    (_hoverPoint is { } hover && AnnotationObjectBounds(annotation).Inflate(10)
+                        .Contains(new Point(hover.X, hover.Y))));
+        }
+
+        private bool CanEditControlPoints(ScreenshotAnnotation annotation)
+        {
+            return _behavior.SecondaryEditingEnabled &&
+                   _behavior.ControlPointVisibility != AnnotationControlPointVisibility.Hidden &&
+                   annotation.Tool is ScreenshotTool.Rectangle or ScreenshotTool.Ellipse or ScreenshotTool.Arrow;
         }
 
         private static Point[] ControlCorners(Rect bounds)
@@ -132,10 +135,25 @@ namespace RitsukageGif.Desktop
             if (_selected is not { } annotation || !_behavior.SecondaryEditingEnabled || !AnnotationsVisible)
                 return false;
             var location = new Point(point.X, point.Y);
-            return (ShowControlPoints(annotation) &&
+            return (CanEditPolylineNodes(annotation) && annotation.Points.Any(node => Distance(node, location) <= 8)) ||
+                   (CanEditControlPoints(annotation) &&
                     ControlCorners(annotation.Bounds).Any(corner => Distance(corner, location) <= 8)) ||
                    (annotation.Tool == ScreenshotTool.Arrow && _behavior.ArrowCurveControlPoints &&
                     Distance(ArrowControlPoint(annotation), location) <= 8);
+        }
+
+        private bool ShowPolylineNodes(ScreenshotAnnotation annotation)
+        {
+            return CanEditPolylineNodes(annotation) &&
+                   (_behavior.ControlPointVisibility == AnnotationControlPointVisibility.Always ||
+                    (_hoverPoint is { } hover && AnnotationObjectBounds(annotation).Inflate(10)
+                        .Contains(new Point(hover.X, hover.Y))));
+        }
+
+        private bool CanEditPolylineNodes(ScreenshotAnnotation annotation)
+        {
+            return annotation.Tool == ScreenshotTool.Polyline && _behavior.SecondaryEditingEnabled &&
+                   _behavior.ControlPointVisibility != AnnotationControlPointVisibility.Hidden;
         }
 
         private void ResizeObject(ScreenshotAnnotation original, PixelPoint point)
