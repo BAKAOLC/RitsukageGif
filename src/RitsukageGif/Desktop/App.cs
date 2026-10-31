@@ -35,6 +35,8 @@ namespace RitsukageGif.Desktop
             {
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 _host = new(desktop);
+                CrashRecoverySession.Current?.MarkOperation("Desktop idle");
+                Dispatcher.UIThread.Post(ShowPreviousFailure, DispatcherPriority.Background);
                 desktop.ShutdownRequested += async (_, e) =>
                 {
                     if (_host.IsClosing) return;
@@ -49,6 +51,7 @@ namespace RitsukageGif.Desktop
 
         private void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs args)
         {
+            CrashRecoverySession.Current?.RecordFailure(args.Exception);
             AppLogger.ZLogCritical(args.Exception, $"Unhandled UI exception.");
             if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop) return;
             args.Handled = true;
@@ -87,8 +90,23 @@ namespace RitsukageGif.Desktop
                 }
             };
             _fatalError.Show();
+            if (CrashRecoverySession.Current?.ReportPath is { } reportPath)
+                CrashRecoverySession.Acknowledge(reportPath);
             _fatalError.Activate();
             WindowDiagnostics.Write(AppLogger, "FatalErrorShown", _fatalError);
+        }
+
+        private static void ShowPreviousFailure()
+        {
+            CrashRecoveryReport[] reports =
+            [
+                .. DiagnosticsActions.LogDirectories
+                    .SelectMany(CrashRecoverySession.PendingReports).OrderByDescending(report => report.StartedUtc),
+            ];
+            if (reports.Length == 0) return;
+            var window = new CrashRecoveryWindow(reports);
+            window.Show();
+            window.Activate();
         }
     }
 }

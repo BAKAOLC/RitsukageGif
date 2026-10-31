@@ -3276,4 +3276,14 @@ X {0}, Y {1}</value>
   <data name="TranslationLanguageTurkish" xml:space="preserve"><value>Turkish</value></data>
   <data name="TranslationLanguageUkrainian" xml:space="preserve"><value>Ukrainian</value></data>
   <data name="TranslationLanguageVietnamese" xml:space="preserve"><value>Vietnamese</value></data>
+  <data name="CrashRecoveryMessage" xml:space="preserve"><value>The previous session did not finish normally. This may indicate a crash, a forced exit, or a power interruption. Diagnostic records are available below.</value></data>
+  <data name="CrashRecoveryTitle" xml:space="preserve"><value>Previous session ended unexpectedly</value></data>
+  <data name="DiagnosticsExport" xml:space="preserve"><value>Export diagnostics</value></data>
+  <data name="DiagnosticsExported" xml:space="preserve"><value>Diagnostic archive saved. Review its contents before sharing.</value></data>
+  <data name="DiagnosticsHeading" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="DiagnosticsOpenLogs" xml:space="preserve"><value>Open log folder</value></data>
+  <data name="DiagnosticsReportIssue" xml:space="preserve"><value>Report an issue</value></data>
+  <data name="DiagnosticsStartupFailure" xml:space="preserve"><value>The application could not start: {0}
+Diagnostic report: {1}</value></data>
+  <data name="AnimationImportWorkerFailed" xml:space="preserve"><value>Animation import failed (exit code 0x{0:X8}). The current document is unchanged. Logs: {1}</value></data>
 </root>

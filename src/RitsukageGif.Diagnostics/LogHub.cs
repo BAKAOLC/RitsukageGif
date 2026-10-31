@@ -12,6 +12,7 @@ namespace RitsukageGif.Diagnostics
         private static DiagnosticLogBackend? _backend;
         private static Task? _shutdown;
         private static string? _lastFilePath;
+        private static string? _directoryPath;
         private static long _droppedEntries;
         private static long _errorDrops;
         private static long _sinkFailures;
@@ -22,6 +23,7 @@ namespace RitsukageGif.Diagnostics
         public static int PendingEntries => Backend?.Budget.Pending ?? 0;
         public static bool IsInitialized => Backend is not null;
         public static string? CurrentFilePath => Backend?.CurrentFilePath ?? Volatile.Read(ref _lastFilePath);
+        public static string? DirectoryPath => Volatile.Read(ref _directoryPath);
         public static long DroppedEntries => Interlocked.Read(ref _droppedEntries);
         public static long ErrorDrops => Interlocked.Read(ref _errorDrops);
         public static long SinkFailures => Interlocked.Read(ref _sinkFailures);
@@ -57,7 +59,22 @@ namespace RitsukageGif.Diagnostics
                 try
                 {
                     var directory = Path.Combine(Path.GetFullPath(dataDirectory), "logs");
-                    Directory.CreateDirectory(directory);
+                    try
+                    {
+                        Directory.CreateDirectory(directory);
+                        using var probe = new FileStream(
+                            Path.Combine(directory, $".write-test-{Environment.ProcessId}"), FileMode.Create,
+                            FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose);
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                    {
+                        DiagnosticEmergency.Write(
+                            "The configured log directory is unavailable; using temporary storage", error);
+                        directory = Path.Combine(Path.GetTempPath(), "RitsukageGif", "logs");
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    Volatile.Write(ref _directoryPath, directory);
                     var session = Guid.NewGuid().ToString("N")[..12];
                     Volatile.Write(ref _backend, new(directory, session, role, frozen));
                     _shutdown = null;

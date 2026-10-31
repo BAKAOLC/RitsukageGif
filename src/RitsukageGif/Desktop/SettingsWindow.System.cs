@@ -192,6 +192,7 @@ namespace RitsukageGif.Desktop
             updates.Children.Add(Labeled("SystemUpdateChannel", channel));
             AddSystemUpdateCheck(updates, draft);
             page.Children.Add(SettingsSection("SystemUpdatesHeading", updates));
+            page.Children.Add(BuildDiagnosticsSettings());
             SubscribeContentLanguage(Refresh);
             Refresh();
             return page;

@@ -14,6 +14,7 @@ namespace RitsukageGif.Desktop
         private async Task RunAsync(Func<CancellationToken, Task> action, [CallerMemberName] string operation = "")
         {
             if (_operation is not null) return;
+            CrashRecoverySession.Current?.MarkOperation($"Animation editor: {operation}");
             var started = Stopwatch.GetTimestamp();
             Logger.ZLogInformation($"Animation editor operation started. Operation={operation} ImageMode={_imageMode}");
             _playback.Stop();
@@ -45,6 +46,7 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
+                CrashRecoverySession.Current?.MarkOperation("Animation editor idle");
                 _operation = null;
                 _editing.IsEnabled = true;
                 _cancel.IsVisible = false;
@@ -190,7 +192,7 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                var loaded = await Task.Run(() => AnimationEditDocument.Open(path, token), token);
+                var loaded = await AnimationImportProcess.OpenAsync(path, token: token);
                 try
                 {
                     await _canvas.LoadFrameAsync(loaded.Frames[0].Path, token);
