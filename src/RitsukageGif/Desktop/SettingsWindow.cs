@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -313,7 +313,7 @@ namespace RitsukageGif.Desktop
 
         private static StackPanel Page()
         {
-            return new() { Spacing = 12, Margin = new(16) };
+            return new() { Spacing = 8, Margin = new(12) };
         }
 
         private static ComboBox ColorModeBox(OutputColorMode mode)
@@ -412,8 +412,8 @@ namespace RitsukageGif.Desktop
         {
             var row = new Grid
             {
-                ColumnDefinitions = new("*,*"), ColumnSpacing = 16, MinHeight = 38,
-                Margin = new(0, 2),
+                ColumnDefinitions = new("*,*"), ColumnSpacing = 12, MinHeight = 32,
+                Margin = new(0, 1),
             };
             var label = new TextBlock
             {

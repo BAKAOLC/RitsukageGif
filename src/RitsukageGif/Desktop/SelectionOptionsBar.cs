@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -34,7 +34,7 @@ namespace RitsukageGif.Desktop
             BorderBrush = new SolidColorBrush(Color.FromRgb(74, 78, 84));
             BorderThickness = new(1);
             CornerRadius = new(6);
-            Padding = new(4);
+            Padding = new(3);
             HorizontalAlignment = HorizontalAlignment.Left;
             VerticalAlignment = VerticalAlignment.Top;
             _cursor = Create("SelectionOptionCursor", "CaptureCursor", SelectionCommand.ToggleCursor,
@@ -67,7 +67,7 @@ namespace RitsukageGif.Desktop
                     {
                         ToolbarIconSize.Small => 26, ToolbarIconSize.Large => 38, _ => 30,
                     },
-                    Padding = new(8, 4),
+                    Padding = new(6, 4),
                     Foreground = Brushes.White, Background = Brushes.Transparent, BorderThickness = new(0),
                 };
                 label = new() { [!TextBlock.TextProperty] = LiveText.Resource(labelKey), FontSize = 12 };
@@ -179,8 +179,11 @@ namespace RitsukageGif.Desktop
 
             var viewport = new Size(monitor.Width / scale, monitor.Height / scale);
             MaxWidth = Math.Max(1, viewport.Width - 16);
-            Child!.Measure(new(Math.Max(1, MaxWidth - 10), Math.Max(1, viewport.Height - 10)));
-            var size = new Size(Child.DesiredSize.Width + 10, Child.DesiredSize.Height + 10);
+            var horizontalChrome = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
+            var verticalChrome = Padding.Top + Padding.Bottom + BorderThickness.Top + BorderThickness.Bottom;
+            Child!.Measure(new(Math.Max(1, MaxWidth - horizontalChrome),
+                Math.Max(1, viewport.Height - verticalChrome)));
+            var size = new Size(Child.DesiredSize.Width + horizontalChrome, Child.DesiredSize.Height + verticalChrome);
             if (OccupiedBounds.Width > 0 && _placedRegion == selected && _placedViewport == viewport &&
                 _placedSize == size && _placedToolbar == toolbar) return;
             var region = selected.IsEmpty

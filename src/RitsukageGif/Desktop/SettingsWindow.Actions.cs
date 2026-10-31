@@ -1,4 +1,4 @@
-﻿using Avalonia.Automation;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
     {
         private Grid ActionsPage(AppSettings draft)
         {
-            var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), Margin = new(16), RowSpacing = 12 };
+            var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), Margin = new(12), RowSpacing = 8 };
             var background = new Border { Background = AppTheme.SurfaceTint, CornerRadius = new(8) };
             Grid.SetRowSpan(background, 3);
             layout.Children.Add(background);
@@ -42,7 +42,7 @@ namespace RitsukageGif.Desktop
                 Orientation = Orientation.Horizontal, Spacing = 8,
                 Children = { add, clearActions, clearShortcuts, ignored },
             };
-            var footer = new StackPanel { Spacing = 16, Margin = new(16, 0, 16, 16), Children = { commands } };
+            var footer = new StackPanel { Spacing = 8, Margin = new(12, 0, 12, 12), Children = { commands } };
             Grid.SetRow(footer, 2);
             layout.Children.Add(footer);
             var statuses = new Dictionary<string, ContentControl>(StringComparer.Ordinal);
@@ -181,7 +181,7 @@ namespace RitsukageGif.Desktop
         private static Grid ActionSettingsRow(string name)
         {
             var row = new Grid
-                { ColumnDefinitions = new("1.2*,1*,Auto,28,28"), ColumnSpacing = 10, MinHeight = 48 };
+                { ColumnDefinitions = new("1.2*,1*,Auto,28,28"), ColumnSpacing = 8, MinHeight = 36 };
             row.Children.Add(new TextBlock
             {
                 Text = name, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
@@ -193,7 +193,7 @@ namespace RitsukageGif.Desktop
         {
             return new()
             {
-                Child = row, Padding = new(0, 4), BorderBrush = AppTheme.Outline,
+                Child = row, Padding = new(0, 2), BorderBrush = AppTheme.Outline,
                 BorderThickness = new(0, 0, 0, 1),
             };
         }

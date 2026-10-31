@@ -1,4 +1,4 @@
-﻿using Avalonia.Automation;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -85,7 +85,7 @@ namespace RitsukageGif.Desktop
         {
             return new()
             {
-                Background = AppTheme.SurfaceTint, CornerRadius = new(8), Padding = new(16, 4), Child = content,
+                Background = AppTheme.SurfaceTint, CornerRadius = new(8), Padding = new(12, 4), Child = content,
             };
         }
 
@@ -112,7 +112,7 @@ namespace RitsukageGif.Desktop
             row.Children.Add(status);
             return new()
             {
-                Child = row, Padding = new(0, 6), BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 0, 1),
+                Child = row, Padding = new(0, 3), BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 0, 1),
             };
         }
 

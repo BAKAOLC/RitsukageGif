@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -105,14 +105,14 @@ namespace RitsukageGif.Desktop
                 page.Children.Add(new Border
                 {
                     Background = AppTheme.SurfaceTint, BorderBrush = AppTheme.Outline, BorderThickness = new(1),
-                    CornerRadius = new(6), Padding = new(12, 8), Child = content,
+                    CornerRadius = new(6), Padding = new(10, 6), Child = content,
                 });
                 return content;
             }
 
             CheckBox Check(StackPanel parent, string key, bool value)
             {
-                var checkbox = new CheckBox { IsChecked = value, MinHeight = 32 };
+                var checkbox = new CheckBox { IsChecked = value, MinHeight = 28 };
                 checkbox.Bind(ContentProperty, LiveText.Resource(key));
                 parent.Children.Add(checkbox);
                 return checkbox;
@@ -147,7 +147,7 @@ namespace RitsukageGif.Desktop
                 var label = new TextBlock
                     { VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
                 label.Bind(TextBlock.TextProperty, LiveText.Resource(key));
-                var row = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 16, MinHeight = 36 };
+                var row = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 12, MinHeight = 32 };
                 row.Children.Add(label);
                 control.VerticalAlignment = VerticalAlignment.Center;
                 Grid.SetColumn(control, 1);

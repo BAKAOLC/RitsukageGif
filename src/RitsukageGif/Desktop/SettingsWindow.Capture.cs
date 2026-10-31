@@ -160,7 +160,7 @@ namespace RitsukageGif.Desktop
                 {
                     check.Bind(ContentProperty, LiveText.Resource(key));
                     check.HorizontalAlignment = HorizontalAlignment.Left;
-                    row = new() { MinHeight = 38 };
+                    row = new() { MinHeight = 32 };
                     row.Children.Add(check);
                 }
                 else
@@ -171,7 +171,7 @@ namespace RitsukageGif.Desktop
 
                 fields.Children.Add(new Border
                 {
-                    Child = row, Padding = new(0, 4), BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 0, 1),
+                    Child = row, Padding = new(0, 2), BorderBrush = AppTheme.Outline, BorderThickness = new(0, 0, 0, 1),
                 });
             }
 

@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
         private static readonly AttachedProperty<IDisposable?> TooltipBindingProperty =
             AvaloniaProperty.RegisterAttached<ScreenshotToolbar, Button, IDisposable?>("TooltipBinding");
 
-        private readonly StackPanel _body = new() { Spacing = 6 };
+        private readonly StackPanel _body = new() { Spacing = 3 };
         private readonly Button? _cancel;
         private readonly WrapPanel _commandRow;
         private readonly Border _contextFrame;
@@ -118,7 +118,7 @@ namespace RitsukageGif.Desktop
             _propertyPresenter = new(session, LoadWatermarkImageAsync, dialogScopeProvider);
             _contextFrame = Frame(_propertyPresenter, 3);
             _contextFrame.IsVisible = false;
-            _body.Children.Add(Frame(_commandRow, 5));
+            _body.Children.Add(Frame(_commandRow, 3));
             _body.Children.Add(_contextFrame);
             _body.Children.Add(_error);
             InitializePrivacyCommands();
@@ -173,7 +173,7 @@ namespace RitsukageGif.Desktop
             return new()
             {
                 Child = content, BorderBrush = AppTheme.Outline, BorderThickness = new(1, 0, 0, 0),
-                Padding = new(3, 0, 0, 0), Margin = new(3, 0, 0, 0),
+                Padding = new(2, 0, 0, 0), Margin = new(2, 0, 0, 0),
             };
         }
 
