@@ -1,4 +1,4 @@
-﻿using Avalonia.Automation;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -16,7 +16,7 @@ namespace RitsukageGif.Desktop
             var common = new StackPanel { Spacing = 0 };
             var sharedColor = Check("AnnotationSharedColor", value.SharedColor);
             var paletteButton = PaletteEditor(palette);
-            var paletteRow = new Grid { ColumnDefinitions = new("*,Auto"), MinHeight = 38 };
+            var paletteRow = new Grid { ColumnDefinitions = new("*,Auto"), MinHeight = 32 };
             paletteRow.Children.Add(sharedColor);
             Grid.SetColumn(paletteButton, 1);
             paletteRow.Children.Add(paletteButton);
@@ -150,7 +150,7 @@ namespace RitsukageGif.Desktop
                 if (control is CheckBox check)
                 {
                     check.HorizontalAlignment = HorizontalAlignment.Left;
-                    row = new() { MinHeight = 38, Children = { check } };
+                    row = new() { MinHeight = 32, Children = { check } };
                 }
                 else
                 {
@@ -159,7 +159,7 @@ namespace RitsukageGif.Desktop
 
                 fields.Children.Add(new Border
                 {
-                    Child = row, Padding = new(0, 4), BorderBrush = AppTheme.Outline,
+                    Child = row, Padding = new(0, 2), BorderBrush = AppTheme.Outline,
                     BorderThickness = new(0, 0, 0, 1),
                 });
             }

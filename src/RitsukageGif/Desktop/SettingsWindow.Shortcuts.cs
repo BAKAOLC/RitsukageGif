@@ -1,4 +1,4 @@
-﻿using Avalonia.Automation;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -12,7 +12,7 @@ namespace RitsukageGif.Desktop
     {
         private Grid SelectionShortcutsPage(AppSettings draft)
         {
-            var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), Margin = new(16), RowSpacing = 12 };
+            var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), Margin = new(12), RowSpacing = 8 };
             var diagnostics = new TextBlock { Foreground = AppTheme.Error, TextWrapping = TextWrapping.Wrap };
             layout.Children.Add(diagnostics);
             var tabs = new TabControl();
@@ -108,7 +108,7 @@ namespace RitsukageGif.Desktop
                 GlobalInputCapture.Observe(editor);
                 editor.Bind(ToolTip.TipProperty, LiveText.Resource("EnterHotkey"));
                 var clear = BindingButton("Clear", "M6,6 L18,18 M18,6 L6,18");
-                var row = new Grid { ColumnDefinitions = new("*,210,28,24"), ColumnSpacing = 12, MinHeight = 36 };
+                var row = new Grid { ColumnDefinitions = new("*,210,28,24"), ColumnSpacing = 8, MinHeight = 32 };
                 row.Children.Add(label);
                 Grid.SetColumn(editor, 1);
                 row.Children.Add(editor);
@@ -118,7 +118,7 @@ namespace RitsukageGif.Desktop
                 row.Children.Add(status);
                 rows.Children.Add(new Border
                 {
-                    Child = row, Padding = new(0, 4), BorderBrush = AppTheme.Outline,
+                    Child = row, Padding = new(0, 2), BorderBrush = AppTheme.Outline,
                     BorderThickness = new(0, 0, 0, 1),
                 });
                 var shiftPending = false;

@@ -14,7 +14,7 @@ namespace RitsukageGif.Desktop
             var initial = Array.FindIndex(pages, page => page.Label == selectedPage);
             if (initial < 0) initial = 0;
             var contents = pages.ToDictionary(page => page.Content, page => SettingsPageContent(page.Content));
-            var navigation = new StackPanel { Spacing = 2, Margin = new(8, 10) };
+            var navigation = new StackPanel { Spacing = 1, Margin = new(6, 8) };
             var title = new TextBlock { FontSize = 18, FontWeight = FontWeight.SemiBold };
             title.Bind(TextBlock.TextProperty, LiveText.Resource(pages[initial].Label));
             var view = new ContentControl
@@ -29,7 +29,7 @@ namespace RitsukageGif.Desktop
                 {
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                    MinHeight = 36,
+                    MinHeight = 32,
                 };
                 var label = new TextBlock
                 {
@@ -57,7 +57,7 @@ namespace RitsukageGif.Desktop
             var content = new Grid { RowDefinitions = new("Auto,*") };
             content.Children.Add(new Border
             {
-                Padding = new(16, 12), BorderBrush = AppTheme.Outline,
+                Padding = new(12, 8), BorderBrush = AppTheme.Outline,
                 BorderThickness = new(0, 0, 0, 1), Child = title,
             });
             Grid.SetRow(view, 1);
@@ -69,8 +69,8 @@ namespace RitsukageGif.Desktop
                 Content = navigation, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             });
             resetAll.HorizontalAlignment = HorizontalAlignment.Stretch;
-            resetAll.Margin = new(8);
-            resetAll.Padding = new(6, 6);
+            resetAll.Margin = new(6);
+            resetAll.Padding = new(6, 4);
             Grid.SetRow(resetAll, 1);
             sidebar.Children.Add(resetAll);
             body.Children.Add(new Border
@@ -142,17 +142,17 @@ namespace RitsukageGif.Desktop
         private static StackPanel SettingsSection(string title, StackPanel fields)
         {
             fields.Margin = new(0);
-            fields.Spacing = 4;
+            fields.Spacing = 2;
             return new()
             {
-                Spacing = 6,
+                Spacing = 4,
                 Children = { SectionHeading(title), MouseSettingsCard(fields) },
             };
         }
 
         private static void WrapSettingsFields(StackPanel page)
         {
-            var fields = new StackPanel { Spacing = 4 };
+            var fields = new StackPanel { Spacing = 2 };
             var controls = page.Children.ToArray();
             page.Children.Clear();
             foreach (var control in controls) fields.Children.Add(control);
