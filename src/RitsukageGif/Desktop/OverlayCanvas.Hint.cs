@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -25,7 +25,9 @@ namespace RitsukageGif.Desktop
 
         private Size _actionsSize;
 
-        private (PixelRect Region, double Width, string UiCulture, string Culture) _geometryKey;
+        private (PixelRect Region, double Width, bool Measuring, string UiCulture, string Culture) _geometryKey;
+
+        private Rect _hintStatusBounds, _hintActionsBounds, _hintMagnifierBounds;
 
         private (string? Process, string? Title, bool WindowSource, bool Follow, SelectionHintMode Mode,
             double Width, string UiCulture, string Culture) _targetKey;
@@ -47,9 +49,11 @@ namespace RitsukageGif.Desktop
         public Rect ReservedBounds { get; set; }
         public Rect SecondaryReservedBounds { get; set; }
         public Rect FrameReservedBounds { get; set; }
+        private bool Measuring => AuxiliaryVisible && CapturePreferences.GuideMeasurements && !Selected.IsEmpty;
 
-        private void DrawHint(DrawingContext context, Point mouse)
+        private void DrawHint(DrawingContext context, Point mouse, bool layoutOnly = false)
         {
+            _hintStatusBounds = _hintActionsBounds = _hintMagnifierBounds = default;
             var width = Math.Min(280, Bounds.Width - HintMargin * 2);
             var maximumHeight = Bounds.Height - HintMargin * 2;
             if (width < 72 || maximumHeight < 40) return;
@@ -68,7 +72,8 @@ namespace RitsukageGif.Desktop
                         FrameReservedBounds))
                 {
                     actions = candidate;
-                    DrawActionChips(context, actions);
+                    _hintActionsBounds = actions;
+                    if (!layoutOnly) DrawActionChips(context, actions);
                 }
             }
 
@@ -80,11 +85,11 @@ namespace RitsukageGif.Desktop
             {
                 var showRegion = CapturePreferences.ShowInformation && !Selected.IsEmpty;
                 var showTarget = CapturePreferences.ShowInformation && _targetText is not null;
-                var targetHeight = showTarget ? 40 : 0;
+                var targetHeight = showTarget ? Measuring ? 20 : 40 : 0;
                 var geometryHeight = showRegion ? 20 : 0;
                 var errorHeight = errorText is null ? 0 : errorText.Height + 4;
                 var contentWidth = Math.Max(showRegion ? _geometryText!.WidthIncludingTrailingWhitespace : 0,
-                    Math.Max(showTarget ? _targetText!.WidthIncludingTrailingWhitespace : 0,
+                    Math.Max(showTarget && !Measuring ? _targetText!.WidthIncludingTrailingWhitespace : 0,
                         Math.Max(showTarget ? _captureText!.WidthIncludingTrailingWhitespace : 0,
                             errorText?.WidthIncludingTrailingWhitespace ?? 0)));
                 var statusSize = new Size(Math.Ceiling(contentWidth) + 20,
@@ -95,23 +100,32 @@ namespace RitsukageGif.Desktop
                         FrameReservedBounds))
                 {
                     status = candidate;
-                    context.DrawRectangle(HintBackground, HintBorder, status, 5, 5);
-                    using var statusClip = context.PushClip(status.Deflate(6));
-                    var origin = status.TopLeft + new Vector(10, 6);
-                    if (showTarget)
+                    _hintStatusBounds = status;
+                    if (!layoutOnly)
                     {
-                        context.DrawText(_targetText!, origin);
-                        context.DrawText(_captureText!, origin + new Vector(0, 20));
-                        origin += new Vector(0, 40);
-                    }
+                        context.DrawRectangle(HintBackground, HintBorder, status, 5, 5);
+                        using var statusClip = context.PushClip(status.Deflate(6));
+                        var origin = status.TopLeft + new Vector(10, 6);
+                        if (showTarget)
+                        {
+                            if (!Measuring)
+                            {
+                                context.DrawText(_targetText!, origin);
+                                origin += new Vector(0, 20);
+                            }
 
-                    if (showRegion)
-                    {
-                        context.DrawText(_geometryText!, origin);
-                        origin += new Vector(0, 20);
-                    }
+                            context.DrawText(_captureText!, origin);
+                            origin += new Vector(0, 20);
+                        }
 
-                    if (errorText is not null) context.DrawText(errorText, origin + new Vector(0, 4));
+                        if (showRegion)
+                        {
+                            context.DrawText(_geometryText!, origin);
+                            origin += new Vector(0, 20);
+                        }
+
+                        if (errorText is not null) context.DrawText(errorText, origin + new Vector(0, 4));
+                    }
                 }
             }
 
@@ -125,6 +139,8 @@ namespace RitsukageGif.Desktop
                 SecondaryReservedBounds, FrameReservedBounds);
             if (!PanelClear(frame, mouse, selected, status, actions, ReservedBounds, SecondaryReservedBounds,
                     FrameReservedBounds)) return;
+            _hintMagnifierBounds = frame;
+            if (layoutOnly) return;
             context.DrawRectangle(HintBackground, HintBorder, frame, 6, 6);
             DrawMagnifier(context, new(frame.X, frame.Y, MagnifierWidth, MagnifierHeight));
             DrawMagnifierDetails(context, frame);
@@ -216,14 +232,17 @@ namespace RitsukageGif.Desktop
             var culture = CultureInfo.CurrentCulture.Name;
             var phase = Manipulating ? SelectionPhase.Selected : Snapshot?.Phase ?? SelectionPhase.Candidate;
             var region = Selected.IsEmpty ? new(Mouse.X, Mouse.Y, 0, 0) : Selected;
-            var geometryKey = (region, width, uiCulture, culture);
+            var geometryKey = (region, width, Measuring, uiCulture, culture);
             if (_geometryText is null || _geometryKey != geometryKey)
             {
                 _geometryKey = geometryKey;
                 _geometryText =
                     HintText(
-                        string.Create(CultureInfo.CurrentCulture,
-                            $"{region.X}, {region.Y}   {region.Width} × {region.Height} px"), width, Brushes.White, 13,
+                        Measuring
+                            ? string.Create(CultureInfo.CurrentCulture, $"{region.X}, {region.Y}")
+                            : string.Create(CultureInfo.CurrentCulture,
+                                $"{region.X}, {region.Y}   {region.Width} × {region.Height} px"), width, Brushes.White,
+                        13,
                         22);
             }
 

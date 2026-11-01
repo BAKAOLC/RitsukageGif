@@ -43,7 +43,9 @@ namespace RitsukageGif.Desktop
             // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
             switch (key)
             {
-                case Key.LeftAlt or Key.RightAlt: AuxiliaryVisible = false; break;
+                case Key.LeftAlt or Key.RightAlt:
+                    AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always;
+                    break;
                 case Key.LeftShift or Key.RightShift: _shiftKeyHeld = false; break;
             }
 

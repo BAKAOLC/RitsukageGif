@@ -5,5 +5,6 @@ namespace RitsukageGif.Desktop
         // ReSharper disable once UnusedMember.Global
         Hidden,
         Alt,
+        Always,
     }
 }

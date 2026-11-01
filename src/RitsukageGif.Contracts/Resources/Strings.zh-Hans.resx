@@ -2033,9 +2033,9 @@ X {0}, Y {1}</value>
   <data name="BuiltinShortcutDirectionalOperation" xml:space="preserve">
     <value>{0}{1}</value>
   </data>
-  <data name="SelectionCaptureWindow" xml:space="preserve"><value>捕获窗口内容</value></data>
-  <data name="SelectionCaptureScreen" xml:space="preserve"><value>捕获屏幕画面</value></data>
-  <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>捕获窗口内容，随窗口移动</value></data>
+  <data name="SelectionCaptureWindow" xml:space="preserve"><value>窗口内容</value></data>
+  <data name="SelectionCaptureScreen" xml:space="preserve"><value>屏幕画面</value></data>
+  <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>窗口跟随</value></data>
   <data name="ScrollCaptureCollecting" xml:space="preserve"><value>滚动内容以继续拼接</value></data>
   <data name="ScrollCapturePaused" xml:space="preserve"><value>已暂停</value></data>
   <data name="ScrollCaptureMoveVertical" xml:space="preserve"><value>上下移动选区</value></data>
@@ -3286,4 +3286,9 @@ X {0}, Y {1}</value>
   <data name="DiagnosticsStartupFailure" xml:space="preserve"><value>程序无法启动：{0}
 诊断记录：{1}</value></data>
   <data name="AnimationImportWorkerFailed" xml:space="preserve"><value>动图导入失败（退出码 0x{0:X8}），当前文档未改变。日志：{1}</value></data>
+  <data name="CaptureAuxiliaryAlways" xml:space="preserve"><value>始终显示</value></data>
+  <data name="CaptureGuideMeasurements" xml:space="preserve"><value>选区尺寸与间距</value></data>
+  <data name="MeasurementScreen" xml:space="preserve"><value>屏幕</value></data>
+  <data name="MeasurementWindow" xml:space="preserve"><value>窗口</value></data>
+  <data name="MeasurementControl" xml:space="preserve"><value>控件</value></data>
 </root>

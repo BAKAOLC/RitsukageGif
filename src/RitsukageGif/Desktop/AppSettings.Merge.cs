@@ -619,6 +619,10 @@ namespace RitsukageGif.Desktop
                 GuideThirds = EqualityComparer<bool>.Default.Equals(baseline.GuideThirds, edited.GuideThirds)
                     ? current.GuideThirds
                     : edited.GuideThirds,
+                GuideMeasurements =
+                EqualityComparer<bool>.Default.Equals(baseline.GuideMeasurements, edited.GuideMeasurements)
+                    ? current.GuideMeasurements
+                    : edited.GuideMeasurements,
                 GuideMagnifier = EqualityComparer<bool>.Default.Equals(baseline.GuideMagnifier, edited.GuideMagnifier)
                     ? current.GuideMagnifier
                     : edited.GuideMagnifier,

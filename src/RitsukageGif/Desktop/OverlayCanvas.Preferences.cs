@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
@@ -16,6 +16,7 @@ namespace RitsukageGif.Desktop
             if (Selected.IsEmpty) return;
             var local = Selected.ToLocal(_monitor, Scale);
             var region = new Rect(local.X, local.Y, local.Width, local.Height);
+            if (CapturePreferences.GuideMeasurements) DrawMeasurements(context);
             if (CapturePreferences.GuideSelectionCenter) DrawGuideCross(context, region.Center);
             if (CapturePreferences.GuideSelectionBorder)
             {
