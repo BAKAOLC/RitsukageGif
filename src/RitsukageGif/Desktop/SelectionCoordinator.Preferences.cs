@@ -4,6 +4,17 @@ namespace RitsukageGif.Desktop
     {
         private PixelRect _expandFrom;
         private WindowTarget? _expandTarget;
+
+        internal PixelRect MeasurementWindowBounds =>
+            CurrentControlTarget?.Bounds ?? Snapshot.Target?.Bounds ?? default;
+
+        internal PixelRect MeasurementReferenceControl => !Controls ? default :
+            _controlPoint == _pointer ? _controlBounds : MeasurementControlBounds;
+
+        internal PixelRect MeasurementScreenBounds =>
+            _windows.FirstOrDefault(window => window.Region.Contains(_pointer))?.Region ?? default;
+
+        private PixelRect MeasurementControlBounds { get; set; }
         internal int SnappingMode { get; private set; } = 3;
         internal CapturePreferences CapturePreferences { get; private set; } = new();
         internal CaptureDetectionMode DetectionMode { get; private set; } = CaptureDetectionMode.Windows;
@@ -50,6 +61,7 @@ namespace RitsukageGif.Desktop
             HintMode = Enum.IsDefined(hints) ? hints : SelectionHintMode.Full;
             if (capturePreferences is null) return;
             CapturePreferences = capturePreferences.Normalize();
+            AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always;
             DetectionMode = CapturePreferences.DetectionMode;
             Controls = DetectionMode == CaptureDetectionMode.Controls && CanDetectControls;
             _cursor = CapturePreferences.CursorPolicy == CaptureCursorPolicy.Visible;

@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -131,6 +131,9 @@ namespace RitsukageGif.Desktop
             DrawFrameDecoration(context);
             if (_bitmap is ScreenshotTiledImage) return;
             if (Snapshot?.Phase == SelectionPhase.Selected || Manipulating) DrawSelectionHandles(context);
+            _hintStatusBounds = _hintActionsBounds = _hintMagnifierBounds = default;
+            if (_monitor.Contains(Mouse))
+                DrawHint(context, new((Mouse.X - _monitor.X) / Scale, (Mouse.Y - _monitor.Y) / Scale), true);
             DrawAuxiliaryLines(context, new((Mouse.X - _monitor.X) / Scale, (Mouse.Y - _monitor.Y) / Scale));
 
             if (_monitor.Contains(Mouse))

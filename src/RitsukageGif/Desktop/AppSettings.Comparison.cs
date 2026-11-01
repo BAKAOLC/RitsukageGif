@@ -237,6 +237,7 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<bool>.Default.Equals(left.GuideSelectionCenter, right.GuideSelectionCenter) &&
                    EqualityComparer<bool>.Default.Equals(left.GuideSelectionBorder, right.GuideSelectionBorder) &&
                    EqualityComparer<bool>.Default.Equals(left.GuideThirds, right.GuideThirds) &&
+                   EqualityComparer<bool>.Default.Equals(left.GuideMeasurements, right.GuideMeasurements) &&
                    EqualityComparer<bool>.Default.Equals(left.GuideMagnifier, right.GuideMagnifier) &&
                    EqualityComparer<bool>.Default.Equals(left.ShowInformation, right.ShowInformation) &&
                    EqualityComparer<bool>.Default.Equals(left.ShowMagnifier, right.ShowMagnifier) &&

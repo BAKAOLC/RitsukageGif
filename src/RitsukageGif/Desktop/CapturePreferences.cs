@@ -13,6 +13,7 @@ namespace RitsukageGif.Desktop
         public bool GuideSelectionCenter { get; set; } = true;
         public bool GuideSelectionBorder { get; set; } = true;
         public bool GuideThirds { get; set; }
+        public bool GuideMeasurements { get; set; } = true;
         public bool GuideMagnifier { get; set; } = true;
         public bool ShowInformation { get; set; } = true;
         public bool ShowMagnifier { get; set; } = true;

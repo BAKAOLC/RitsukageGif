@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
@@ -268,7 +268,7 @@ namespace RitsukageGif.Desktop
             if (_selectionDialogDepth > 0) return;
             if (!_showing) StopFrameRefresh();
             CancelModifierTap();
-            AuxiliaryVisible = false;
+            AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always;
             if (_finished || _showing || _screenshotCompleting || _focusCheckPending) return;
             _focusCheckPending = true;
             Dispatcher.UIThread.Post(() =>
@@ -348,6 +348,7 @@ namespace RitsukageGif.Desktop
                     PrepareOutsideExpansion();
                     UpdatePoint(true);
                     _selectedTarget = _hoveredTarget;
+                    MeasurementControlBounds = Controls ? _controlBounds : default;
                     _pressRegion = ResolveClickTarget(_selectedTarget);
                     _selectionIsWholeTarget = false;
                     var screen = _screens.All.FirstOrDefault(item =>
@@ -395,8 +396,9 @@ namespace RitsukageGif.Desktop
                 }
 
                 UpdateShift(modifiers.HasFlag(KeyModifiers.Shift));
-                AuxiliaryVisible = modifiers.HasFlag(KeyModifiers.Alt) &&
-                                   CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Alt;
+                AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always ||
+                                   (modifiers.HasFlag(KeyModifiers.Alt) &&
+                                    CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Alt);
                 if (SelectionCommands.TryResolve(key, modifiers, out var definition, ShortcutBindings))
                 {
                     if (definition!.Command == SelectionCommand.Confirm) _confirmationKey = key;
@@ -425,6 +427,7 @@ namespace RitsukageGif.Desktop
             CancelSelectionManipulation();
             _state.Clear();
             _selectedTarget = null;
+            MeasurementControlBounds = default;
             _selectionIsWholeTarget = false;
             _rightConfirm = false;
             _pendingFinish = false;
@@ -510,6 +513,9 @@ namespace RitsukageGif.Desktop
                 _hovered = DetectionMode == CaptureDetectionMode.None ? default : ApplyDetectionMargin(_hovered);
             }
 
+            if (AuxiliaryVisible && CapturePreferences.GuideMeasurements && Controls && !UsesLocalSource &&
+                !_controlPending && _controlPoint != _pointer && CurrentControlTarget is { } measurementTarget)
+                _ = DetectControlAsync(measurementTarget, _pointer);
             var current = _windows.FirstOrDefault(window => window.Region.Contains(_pointer));
             _mouse = current?.Snap(_pointer, Mode) ?? _pointer;
             _mouse = ConstrainGeometryPoint(_mouse);
@@ -543,6 +549,10 @@ namespace RitsukageGif.Desktop
                         : _controlBounds.Intersect(WindowSource ? target.Client : target.Bounds));
                     Refresh();
                 }
+                else if (AuxiliaryVisible && CapturePreferences.GuideMeasurements)
+                {
+                    Refresh();
+                }
             }
             catch (OperationCanceledException) when (_finished)
             {
@@ -556,7 +566,8 @@ namespace RitsukageGif.Desktop
             {
                 _controlPending = false;
                 if (!_finished && Controls &&
-                    (_state is { Dragging: false, Selected.IsEmpty: true } || ScreenshotDrawing) &&
+                    (_state is { Dragging: false, Selected.IsEmpty: true } || ScreenshotDrawing ||
+                     (AuxiliaryVisible && CapturePreferences.GuideMeasurements)) &&
                     CurrentControlTarget is { } current &&
                     (revision != _controlRevision || windowSource != WindowSource ||
                      _pointer != point || current.Handle != target.Handle))

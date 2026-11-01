@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -206,6 +206,9 @@ namespace RitsukageGif.Desktop
             _canvas.CapturePreferences = _coordinator.CapturePreferences;
             _canvas.ApplyAppearance(_coordinator.AppearancePreferences);
             _canvas.AuxiliaryVisible = _coordinator.AuxiliaryVisible;
+            _canvas.MeasurementControlBounds = _coordinator.MeasurementReferenceControl;
+            _canvas.MeasurementWindowBounds = _coordinator.MeasurementWindowBounds;
+            _canvas.MeasurementScreenBounds = _coordinator.MeasurementScreenBounds;
             _canvas.ShowCursor = _coordinator.CanToggleCursor;
             _canvas.Mouse = point;
             _canvas.SampleColorFormat = _coordinator.SampleColorFormat;

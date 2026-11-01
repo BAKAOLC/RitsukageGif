@@ -2033,9 +2033,9 @@ X {0}, Y {1}</value>
   <data name="BuiltinShortcutDirectionalOperation" xml:space="preserve">
     <value>{1} {0}</value>
   </data>
-  <data name="SelectionCaptureWindow" xml:space="preserve"><value>Capture window content</value></data>
-  <data name="SelectionCaptureScreen" xml:space="preserve"><value>Capture screen pixels</value></data>
-  <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>Capture window content, following its position</value></data>
+  <data name="SelectionCaptureWindow" xml:space="preserve"><value>Window content</value></data>
+  <data name="SelectionCaptureScreen" xml:space="preserve"><value>Screen</value></data>
+  <data name="SelectionCaptureWindowFollowing" xml:space="preserve"><value>Following window</value></data>
   <data name="ScrollCaptureCollecting" xml:space="preserve"><value>Scroll to extend the capture</value></data>
   <data name="ScrollCapturePaused" xml:space="preserve"><value>Paused</value></data>
   <data name="ScrollCaptureMoveVertical" xml:space="preserve"><value>Move region vertically</value></data>
@@ -3286,4 +3286,9 @@ X {0}, Y {1}</value>
   <data name="DiagnosticsStartupFailure" xml:space="preserve"><value>The application could not start: {0}
 Diagnostic report: {1}</value></data>
   <data name="AnimationImportWorkerFailed" xml:space="preserve"><value>Animation import failed (exit code 0x{0:X8}). The current document is unchanged. Logs: {1}</value></data>
+  <data name="CaptureAuxiliaryAlways" xml:space="preserve"><value>Always show</value></data>
+  <data name="CaptureGuideMeasurements" xml:space="preserve"><value>Selection size and distances</value></data>
+  <data name="MeasurementScreen" xml:space="preserve"><value>Screen</value></data>
+  <data name="MeasurementWindow" xml:space="preserve"><value>Window</value></data>
+  <data name="MeasurementControl" xml:space="preserve"><value>Control</value></data>
 </root>

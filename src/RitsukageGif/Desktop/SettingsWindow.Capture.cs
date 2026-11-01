@@ -19,14 +19,15 @@ namespace RitsukageGif.Desktop
                 { Minimum = -128, Maximum = 128, Value = value.ElementMargin, Width = 100 };
             var expand = Toggle(value.ExpandOnOutsideClick);
             var cursor = Choice((int)value.CursorPolicy, "CaptureCursorHidden", "CaptureCursorVisible");
-            var auxiliary = Choice((int)value.AuxiliaryPolicy, "CaptureAuxiliaryHidden", "CaptureAuxiliaryAlt");
+            var auxiliary = Choice((int)value.AuxiliaryPolicy, "CaptureAuxiliaryHidden", "CaptureAuxiliaryAlt",
+                "CaptureAuxiliaryAlways");
             var guideValues = new[]
             {
                 value.GuideCursor, value.GuideSelectionCenter, value.GuideSelectionBorder, value.GuideMagnifier,
-                value.GuideThirds,
+                value.GuideThirds, value.GuideMeasurements,
             };
             var guides = Contents(guideValues, "CaptureGuideCursor", "CaptureGuideCenter", "CaptureGuideBorder",
-                "CaptureGuideMagnifier", "CaptureGuideThirds");
+                "CaptureGuideMagnifier", "CaptureGuideThirds", "CaptureGuideMeasurements");
             var info = Toggle(value.ShowInformation);
             var magnifier = Toggle(value.ShowMagnifier);
             var detailValues = new[]
@@ -118,7 +119,7 @@ namespace RitsukageGif.Desktop
                     AuxiliaryPolicy = (CaptureAuxiliaryPolicy)auxiliary.SelectedIndex,
                     GuideCursor = guideValues[0], GuideSelectionCenter = guideValues[1],
                     GuideSelectionBorder = guideValues[2], GuideMagnifier = guideValues[3],
-                    GuideThirds = guideValues[4],
+                    GuideThirds = guideValues[4], GuideMeasurements = guideValues[5],
                     ShowInformation = info.IsChecked == true, ShowMagnifier = magnifier.IsChecked == true,
                     MagnifierGrid = detailValues[0], MagnifierCrosshair = detailValues[1],
                     MagnifierCenterPixel = detailValues[2], MagnifierSelectionBorder = detailValues[3],
