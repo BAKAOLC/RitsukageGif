@@ -199,6 +199,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 var bounds = OperatingSystem.IsLinux() ? target!.Client : target!.Bounds;
+                if (area.Intersect(bounds).IsEmpty) return false;
                 var sx = (float)frames.Sdr.Width / bounds.Width;
                 var sy = (float)frames.Sdr.Height / bounds.Height;
                 source = new SKRect((area.X - bounds.X) * sx, (area.Y - bounds.Y) * sy,
@@ -214,6 +215,7 @@ namespace RitsukageGif.Desktop
 
         private void DrawHdrFallback(Layer layer, HdrLayer output, CancellationToken token)
         {
+            ReportWindowSourceLoss(layer, token);
             var fallback = layer.Definition.Missing;
             switch (fallback.Kind)
             {

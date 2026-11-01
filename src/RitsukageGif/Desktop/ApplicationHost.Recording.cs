@@ -54,6 +54,7 @@ namespace RitsukageGif.Desktop
                 $"Recording operation started. OperationId={operationId} Region={region} HasPreset={preset is not null}");
             var manualRecording = _presets.ActivePreset is null &&
                                   (preset is null || ReferenceEquals(preset, _manualPreset));
+            var sourceLoss = manualRecording ? ObserveWindowSourceLoss() : null;
             try
             {
                 var effective = preset?.Settings ?? new PresetRecordingSettings();
@@ -119,7 +120,14 @@ namespace RitsukageGif.Desktop
                     {
                         return preset is not null
                             ? new SceneCapture(captureOptions, currentDisplay, preset, runtime, inputs: _inputs)
-                            : new FollowingCapture(captureOptions, currentDisplay, CurrentRegion);
+                                { WindowSourceLost = sourceLoss is null ? null : sourceLoss.Report }
+                            : new FollowingCapture(captureOptions, currentDisplay, CurrentRegion)
+                            {
+                                SourceLost = sourceLoss is not null && DesktopCapture.UsesSourceSelection &&
+                                             NativeCaptureSession.SourceIsWindow
+                                    ? sourceLoss.Report
+                                    : null,
+                            };
                     }
 
                     if (hdrOutputs is not null)
@@ -244,6 +252,7 @@ namespace RitsukageGif.Desktop
                 if (!IsClosing && View is { } view) await view.ResumePreviewAsync();
                 RefreshDisplaySelection();
                 Notify();
+                if (!IsClosing && sourceLoss?.WasLost == true) ShowWindowSourceLost();
                 HostLogger.ZLogDebug($"Recording resources released. OperationId={operationId} Closing={IsClosing}");
             }
         }

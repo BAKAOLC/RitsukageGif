@@ -90,6 +90,7 @@ namespace RitsukageGif.Desktop
             bool retainOutput, CancellationToken stop, CancellationToken cancel)
         {
             var operationId = Interlocked.Increment(ref _nextOperationId);
+            var sourceLoss = _presets.ActivePreset is null ? ObserveWindowSourceLoss() : null;
             using var scope = HostLogger.BeginScope("VideoOperation {VideoOperationId}", operationId);
             HostLogger.ZLogInformation(
                 $"Video recording started. OperationId={operationId} SystemAudio={systemAudio} Microphone={microphone} HasPreset={preset is not null}");
@@ -132,7 +133,14 @@ namespace RitsukageGif.Desktop
                             Volatile.Read(ref _captureRegion) is { } following
                                 ? following.Resolve()
                                 : options.Capture.Region)
-                        : new SceneCapture(capture, currentDisplay, preset, runtime, inputs: _inputs);
+                        {
+                            SourceLost = sourceLoss is not null && DesktopCapture.UsesSourceSelection &&
+                                         NativeCaptureSession.SourceIsWindow
+                                ? sourceLoss.Report
+                                : null,
+                        }
+                        : new SceneCapture(capture, currentDisplay, preset, runtime, inputs: _inputs)
+                            { WindowSourceLost = sourceLoss is null ? null : sourceLoss.Report };
                     if (options.ColorMode != OutputColorMode.Sdr || toneMap == HdrToneMapMode.HighlightCompression)
                         return source;
                     if (source is IColorFrameSource color) return new ToneMappedFrameSource(color, toneMap);
@@ -191,6 +199,7 @@ namespace RitsukageGif.Desktop
 
                 RefreshDisplaySelection();
                 Notify();
+                if (!IsClosing && sourceLoss?.WasLost == true) ShowWindowSourceLost();
             }
         }
 

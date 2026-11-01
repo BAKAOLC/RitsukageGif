@@ -3291,4 +3291,7 @@ X {0}, Y {1}</value>
   <data name="MeasurementScreen" xml:space="preserve"><value>屏幕</value></data>
   <data name="MeasurementWindow" xml:space="preserve"><value>窗口</value></data>
   <data name="MeasurementControl" xml:space="preserve"><value>控件</value></data>
+  <data name="WindowSourceLostTitle" xml:space="preserve"><value>窗口捕获源已丢失</value></data>
+  <data name="WindowSourceLostStopped" xml:space="preserve"><value>捕获窗口或选定范围已不可用，已停止录制。请重新选择区域后继续。</value></data>
+  <data name="WindowSourceReselect" xml:space="preserve"><value>重新选择区域</value></data>
 </root>

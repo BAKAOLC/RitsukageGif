@@ -25,13 +25,21 @@ namespace RitsukageGif.Desktop
             _frameLength = checked(options.Width * options.Height * 4);
         }
 
+        internal Action? SourceLost { get; init; }
+
         public CapturedFrameSet CaptureFrames(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
             var resolved = _region();
             token.ThrowIfCancellationRequested();
-            if (resolved is not { IsEmpty: false } region) return BlankColorFrame();
+            if (resolved is not { IsEmpty: false } region)
+            {
+                SourceLost?.Invoke();
+                token.ThrowIfCancellationRequested();
+                return BlankColorFrame();
+            }
+
             if (region != _current)
             {
                 _capture.Move(region);
@@ -50,6 +58,7 @@ namespace RitsukageGif.Desktop
             }
             catch (CaptureSourceLostException)
             {
+                SourceLost?.Invoke();
                 token.ThrowIfCancellationRequested();
                 return BlankColorFrame();
             }
@@ -66,7 +75,13 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_disposed, this);
             var resolved = _region();
             token.ThrowIfCancellationRequested();
-            if (resolved is not { IsEmpty: false } region) return new byte[_frameLength];
+            if (resolved is not { IsEmpty: false } region)
+            {
+                SourceLost?.Invoke();
+                token.ThrowIfCancellationRequested();
+                return new byte[_frameLength];
+            }
+
             if (region != _current)
             {
                 _capture.Move(region);
@@ -79,6 +94,7 @@ namespace RitsukageGif.Desktop
             }
             catch (CaptureSourceLostException)
             {
+                SourceLost?.Invoke();
                 token.ThrowIfCancellationRequested();
                 return new byte[_frameLength];
             }
