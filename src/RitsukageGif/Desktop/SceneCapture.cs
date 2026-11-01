@@ -84,6 +84,8 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        internal Action? WindowSourceLost { get; init; }
+
         public byte[] Capture()
         {
             return Capture(CancellationToken.None);
@@ -303,6 +305,12 @@ namespace RitsukageGif.Desktop
                         if (pixels is not null)
                         {
                             var captureBounds = OperatingSystem.IsLinux() ? target!.Client : target!.Bounds;
+                            if (area.Intersect(captureBounds).IsEmpty)
+                            {
+                                DrawFallback(layer, token);
+                                return;
+                            }
+
                             var scaleX = (float)width / captureBounds.Width;
                             var scaleY = (float)height / captureBounds.Height;
                             var local = new SKRect((area.X - captureBounds.X) * scaleX,
@@ -361,6 +369,7 @@ namespace RitsukageGif.Desktop
         private void DrawFallback(Layer layer, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            ReportWindowSourceLoss(layer, token);
             var fallback = layer.Definition.Missing;
             var rect = new SKRect(0, 0, layer.Bitmap.Width, layer.Bitmap.Height);
             switch (fallback.Kind)

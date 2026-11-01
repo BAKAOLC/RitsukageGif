@@ -3291,4 +3291,7 @@ Diagnostic report: {1}</value></data>
   <data name="MeasurementScreen" xml:space="preserve"><value>Screen</value></data>
   <data name="MeasurementWindow" xml:space="preserve"><value>Window</value></data>
   <data name="MeasurementControl" xml:space="preserve"><value>Control</value></data>
+  <data name="WindowSourceLostTitle" xml:space="preserve"><value>Window capture source unavailable</value></data>
+  <data name="WindowSourceLostStopped" xml:space="preserve"><value>The capture window or selected area is no longer available. Recording has stopped. Select a new region to continue.</value></data>
+  <data name="WindowSourceReselect" xml:space="preserve"><value>Select a new region</value></data>
 </root>
