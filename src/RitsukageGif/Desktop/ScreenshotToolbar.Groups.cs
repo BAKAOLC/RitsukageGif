@@ -1,5 +1,6 @@
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -10,13 +11,13 @@ namespace RitsukageGif.Desktop
         private readonly Dictionary<Button, ScreenshotTool> _groupTools = [];
         private readonly Dictionary<ScreenshotTool, Button> _toolAnchors = [];
         private readonly List<Panel> _toolGroupChoices = [];
-        private readonly List<(Button Button, bool HasSelect)> _toolGroupDrops = [];
+        private readonly List<Button> _toolGroupDrops = [];
         private readonly List<Flyout> _toolGroupFlyouts = [];
         private readonly string _toolMenuGroupName = Guid.NewGuid().ToString("N");
 
         private void InitializeAdditionalTools()
         {
-            foreach (var (tool, nameKey, _, _) in ScreenshotToolCatalog.All)
+            foreach (var (tool, nameKey, _, _, _, _) in ScreenshotToolCatalog.All)
             {
                 var button = new RadioButton
                 {
@@ -54,29 +55,23 @@ namespace RitsukageGif.Desktop
             _groupTools.Clear();
             _toolAnchors.Clear();
             _toolStrip.Children.Clear();
-            _moreTools.Children.Clear();
-            var placed = new HashSet<ScreenshotTool>();
-            var privacyPlaced = false;
             foreach (var column in preferences.Columns)
             {
                 if (column.Count == 0) continue;
                 var includePrivacy = column.Contains(ScreenshotTool.Mosaic) && _privacyDetect is not null;
                 AddToolGroup(column, includePrivacy);
-                privacyPlaced |= includePrivacy;
-                foreach (var tool in column) placed.Add(tool);
             }
-
-            foreach (var definition in ScreenshotToolCatalog.All)
-                if (!placed.Contains(definition.Tool))
-                    _moreTools.Children.Add(_tools[definition.Tool]);
-            if (!privacyPlaced && _privacyDetect is not null) _moreTools.Children.Add(_privacyDetect);
         }
 
         private void AddToolGroup(List<ScreenshotTool> variants, bool includePrivacy)
         {
             var initial = variants[0];
             var button = SmallButton(ToolKey(initial), () => { }, ToolGeometry(initial));
-            button.Click += (_, _) => SelectTool(_groupTools[button]);
+            button.Click += (_, _) =>
+            {
+                var tool = _groupTools[button];
+                SelectTool(_session.Tool == tool ? ScreenshotTool.Select : tool);
+            };
             _groupTools.Add(button, initial);
             SetToolButtonContent(button, ToolKey(initial), initial);
             foreach (var tool in variants) _toolAnchors.Add(tool, button);
@@ -89,6 +84,9 @@ namespace RitsukageGif.Desktop
             var choices = new StackPanel { Spacing = 1 };
             foreach (var tool in variants) choices.Children.Add(_tools[tool]);
             if (includePrivacy) choices.Children.Add(_privacyDetect!);
+            choices.Children.Add(new Border
+                { Height = 1, Background = AppTheme.Outline, Margin = new(0, 4) });
+            choices.Children.Add(AdjustmentButton(true));
             _toolGroupChoices.Add(choices);
             var flyout = new Flyout
             {
@@ -96,20 +94,46 @@ namespace RitsukageGif.Desktop
                 Content = new ThemeVariantScope { Child = choices },
             };
             _toolGroupFlyouts.Add(flyout);
-            var drop = SmallButton(ToolKey(initial), () =>
+
+            var drop = SmallButton(ToolKey(initial), ShowChoices);
+            drop.Width = 20;
+            drop.Padding = new(2, 0);
+            drop.Content = DropDownChevron.Create(drop);
+            _toolGroupDrops.Add(drop);
+            var group = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Margin = new(0, 0, 2, 0), Children = { button, drop },
+            };
+            group.PointerPressed += ShowChoicesOnRightClick;
+            group.PointerWheelChanged += CycleTool;
+            _toolStrip.Children.Add(group);
+            return;
+
+            void ShowChoices()
             {
                 var open = flyout.IsOpen;
                 HideToolGroups();
                 if (!open) flyout.ShowAt(button);
-            });
-            drop.Width = 20;
-            drop.Padding = new(2, 0);
-            drop.Content = DropDownChevron.Create(drop);
-            _toolGroupDrops.Add((drop, variants.Contains(ScreenshotTool.Select)));
-            _toolStrip.Children.Add(new StackPanel
+            }
+
+            void ShowChoicesOnRightClick(object? _, PointerPressedEventArgs args)
             {
-                Orientation = Orientation.Horizontal, Margin = new(0, 0, 2, 0), Children = { button, drop },
-            });
+                if (!args.GetCurrentPoint(button).Properties.IsRightButtonPressed) return;
+                ShowChoices();
+                args.Handled = true;
+            }
+
+            void CycleTool(object? _, PointerWheelEventArgs args)
+            {
+                if (_session.IsBusy || !_session.CanAnnotate || args.Delta.Y == 0 || variants.Count < 2) return;
+                var active = _toolAnchors.GetValueOrDefault(_session.Tool) == button;
+                var index = variants.IndexOf(_groupTools[button]);
+                var next = variants[(index + (args.Delta.Y > 0 ? variants.Count - 1 : 1)) % variants.Count];
+                _groupTools[button] = next;
+                if (active) SelectTool(next);
+                else UpdateGroup(button, next, false);
+                args.Handled = true;
+            }
         }
 
         private static void SetToolButtonContent(Button button, string key, ScreenshotTool? tool = null)
@@ -125,6 +149,7 @@ namespace RitsukageGif.Desktop
             button.Content = icon;
             button.Width = button.Height;
             button.Padding = new(5);
+            button.Margin = new(0);
             button.HorizontalAlignment = HorizontalAlignment.Left;
             button.HorizontalContentAlignment = HorizontalAlignment.Center;
         }
@@ -132,8 +157,8 @@ namespace RitsukageGif.Desktop
         private void RefreshToolGroups(ScreenshotTool tool)
         {
             if (_toolAnchors.TryGetValue(tool, out var current)) _groupTools[current] = tool;
-            foreach (var (button, hasSelect) in _toolGroupDrops)
-                button.IsEnabled = !_session.IsBusy && (_session.CanAnnotate || hasSelect);
+            foreach (var button in _toolGroupDrops)
+                button.IsEnabled = _session is { IsBusy: false, CanAnnotate: true };
             foreach (var (button, selected) in _groupTools)
                 UpdateGroup(button, selected, _toolAnchors.GetValueOrDefault(tool) == button);
         }

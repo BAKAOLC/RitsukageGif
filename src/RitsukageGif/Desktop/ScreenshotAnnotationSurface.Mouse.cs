@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia;
 using Avalonia.Input;
 
 namespace RitsukageGif.Desktop
@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
             SelectionCoordinator? coordinator)
         {
             var bindings = coordinator?.MouseBindings ?? MouseCommands.SnapshotBindings();
-            PointerPressed += (_, args) =>
+            PointerPressed += async (_, args) =>
             {
                 if (IsTextEditorSource(args.Source)) return;
                 args.Handled = true;
@@ -34,10 +34,43 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
+                if (_session.IsDrawingPointLine &&
+                    (properties.IsLeftButtonPressed || properties.IsRightButtonPressed))
+                {
+                    var screenshotDoubleClick = properties.IsLeftButtonPressed && args.ClickCount == 2 &&
+                                                coordinator?.MouseContext == MouseGestureContext.Screenshot;
+                    if (properties.IsLeftButtonPressed && args.ClickCount != 2)
+                        _session.ConfirmPointLine(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                    else
+                        _session.CancelGesture();
+                    _mouseGesture.Reset();
+                    _mouseSelecting = false;
+                    _movingObject = false;
+                    _mouseChordCancelled = true;
+                    _mouseButtonsPressed = AnyPressed(properties);
+                    coordinator?.SetMouseInputHeld(_mouseButtonsPressed);
+                    Release();
+                    if (screenshotDoubleClick) coordinator!.ExecuteScreenshotDoubleClick(sourcePoint(args));
+                    return;
+                }
+
                 if (_session.IsEditingText)
                 {
                     _session.CommitTextEdit();
                     if (properties.IsRightButtonPressed) return;
+                }
+
+                if (properties.IsRightButtonPressed && _session.CanStraightenCurveAt(sourcePoint(args)))
+                {
+                    _mouseGesture.Reset();
+                    _mouseSelecting = false;
+                    _movingObject = false;
+                    _mouseChordCancelled = true;
+                    _mouseButtonsPressed = AnyPressed(properties);
+                    coordinator?.SetMouseInputHeld(_mouseButtonsPressed);
+                    Release();
+                    await _session.UpdateSelectedPropertiesAsync(_session.Properties with { Curved = false });
+                    return;
                 }
 
                 if (properties.IsLeftButtonPressed &&
@@ -74,6 +107,15 @@ namespace RitsukageGif.Desktop
                 _mouseStart = sourcePoint(args);
                 _captured = args.Pointer;
                 args.Pointer.Capture(this);
+                if (button == MouseButton.Left && _session.UsesPointLineCreation &&
+                    Resolve(new(MouseGestureKind.LeftClick, args.KeyModifiers), out var clickBinding) &&
+                    clickBinding!.Action == MouseAction.Select &&
+                    Resolve(new(MouseGestureKind.LeftDrag, args.KeyModifiers), out var dragBinding) &&
+                    dragBinding!.Action == MouseAction.Select)
+                {
+                    _mouseSelecting = true;
+                    Begin(_mouseStart, args.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                }
             };
             PointerMoved += (_, args) =>
             {
@@ -81,6 +123,7 @@ namespace RitsukageGif.Desktop
                 args.Handled = true;
                 _pointerPosition = sourcePoint(args);
                 _session.NotifyHover(_pointerPosition);
+                RefreshCursor();
                 InvalidateAnnotations();
                 var properties = args.GetCurrentPoint(this).Properties;
                 _mouseButtonsPressed = AnyPressed(properties);
@@ -88,22 +131,27 @@ namespace RitsukageGif.Desktop
                 if (_mouseGesture.IsActive && properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed)
                     CancelChord(args);
                 if (_mouseChordCancelled || _session.IsBusy) return;
+                if (_session.IsDrawingPolyline && !_mouseSelecting)
+                    _session.MovePolylinePreview(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                if (_session.IsDrawingPointLine && !_mouseSelecting)
+                    _session.MovePointLinePreview(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 if (_session.IsPrivacyDetectionActive)
                 {
-                    _mouseGesture.Move(args.GetPosition(this), 4, out var _);
+                    _mouseGesture.Move(args.GetPosition(this), DragThreshold, out var _);
                     return;
                 }
 
-                if (_mouseGesture.Move(args.GetPosition(this), 4, out var gesture) &&
+                if (_mouseGesture.Move(args.GetPosition(this), DragThreshold, out var gesture) && !_mouseSelecting &&
                     Resolve(gesture, out var binding) &&
                     binding!.Action == MouseAction.Select)
                 {
                     _mouseSelecting = true;
-                    Begin(_mouseStart);
+                    Begin(_mouseStart, args.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 }
 
                 if (!_mouseSelecting) return;
-                if (_movingObject) _session.MoveObject(sourcePoint(args));
+                if (_movingObject)
+                    _session.MoveObjectWithModifiers(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 else _session.MoveWithModifiers(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
             };
             PointerReleased += async (_, args) =>
@@ -145,16 +193,20 @@ namespace RitsukageGif.Desktop
                                 return;
                             }
 
-                            if (!_session.HitTestAnnotation(sourcePoint(args), true) &&
-                                await _session.TryCreateQuickMarkAsync(sourcePoint(args))) return;
-                            _mouseSelecting = true;
-                            Begin(sourcePoint(args));
+                            if (!_mouseSelecting)
+                            {
+                                if (!_session.HitTestAnnotation(sourcePoint(args), true) &&
+                                    await _session.TryCreateQuickMarkAsync(sourcePoint(args))) return;
+                                _mouseSelecting = true;
+                                Begin(_session.UsesPointLineCreation ? _mouseStart : sourcePoint(args),
+                                    args.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                            }
                         }
                         else
                         {
                             var point = sourcePoint(args);
                             _mouseClicks.Dispatch(binding, bindings, () => Execute(binding.Action, point),
-                                TopLevel.GetTopLevel(this)?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
+                                Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
                                 TimeSpan.FromMilliseconds(500),
                                 () => !_mouseButtonsPressed && !_mouseGesture.IsActive && !_mouseChordCancelled);
                         }
@@ -210,12 +262,12 @@ namespace RitsukageGif.Desktop
                 _mouseChordCancelled = true;
             }
 
-            void Begin(PixelPoint point)
+            void Begin(PixelPoint point, bool shift)
             {
                 _movingObject = _session.BeginObjectMove(point, true);
                 if (_movingObject) return;
                 if (_session.Tool == ScreenshotTool.Select) _session.ClearAnnotationSelection();
-                else _session.Begin(point);
+                else _session.BeginWithModifiers(point, shift);
             }
 
             void Execute(MouseAction action, PixelPoint point)

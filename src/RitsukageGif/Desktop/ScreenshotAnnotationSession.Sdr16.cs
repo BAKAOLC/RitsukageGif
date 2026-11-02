@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Media.Imaging;
 using ImageMagick;
 
@@ -34,27 +34,23 @@ namespace RitsukageGif.Desktop
                 foreach (var annotation in annotations)
                 {
                     token.ThrowIfCancellationRequested();
-                    var bounds = annotation.Bounds;
-                    var global = new PixelRect((int)Math.Floor(bounds.X), (int)Math.Floor(bounds.Y),
-                            Math.Max(1, (int)Math.Ceiling(bounds.Right) - (int)Math.Floor(bounds.X)),
-                            Math.Max(1, (int)Math.Ceiling(bounds.Bottom) - (int)Math.Floor(bounds.Y)))
-                        .Intersect(region).Intersect(AnnotationBounds);
-                    var local = new PixelRect(global.X - region.X, global.Y - region.Y, global.Width, global.Height);
                     // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
                     switch (annotation.Tool)
                     {
-                        case ScreenshotTool.Mosaic:
-                            await Task.Run(() => Png16PixelProcessor.Mosaic(output, source.Samples, source.Width,
-                                source.Height, local, annotation.MosaicSize, token), token);
+                        case ScreenshotTool.Highlight:
+                            await ApplyHighPrecisionMarkerAsync(output, source, region, annotation, token);
                             break;
+                        case ScreenshotTool.Mosaic:
                         case ScreenshotTool.Blur:
-                            await Task.Run(() => Png16PixelProcessor.Blur(output, source.Samples, source.Width,
-                                source.Height, local, annotation.Properties.BlurRadius, token), token);
+                            await Task.Run(() => ApplyPixelLayer16(output, source, region, annotation, token), token);
+                            break;
+                        case ScreenshotTool.SmartErase:
+                            await Task.Run(() => ApplyInpaintingLayer16(output, source, region, annotation,
+                                annotation.Properties.InpaintingRadius, token), token);
                             break;
                         case ScreenshotTool.Magnifier:
-                            await Task.Run(() => Png16PixelProcessor.Magnify(output, source.Samples, source.Width,
-                                source.Height, local, bounds.Center.X - region.X, bounds.Center.Y - region.Y,
-                                annotation.Properties.Magnification, token), token);
+                            await Task.Run(() => MagnifyHighPrecisionLayer(output, source, region, annotation, token),
+                                token);
                             await CompositeHighPrecisionLayerAsync(output, source, region, annotation, token);
                             break;
                         case ScreenshotTool.Eraser:
@@ -188,7 +184,7 @@ namespace RitsukageGif.Desktop
                 {
                     token.ThrowIfCancellationRequested();
                     using var stream = new MemoryStream();
-                    tile.Save(stream);
+                    tile.Save(stream, PngBitmapEncoderOptions.Default);
                     using var overlay = new MagickImage(stream.ToArray());
                     using var pixels = overlay.GetPixels();
                     var bgra = pixels.ToByteArray(PixelMapping.BGRA)!;
@@ -216,7 +212,7 @@ namespace RitsukageGif.Desktop
                     token.ThrowIfCancellationRequested();
                     var world = new PixelRect(left, top, Math.Min(tileSize, erased.Right - left),
                         Math.Min(tileSize, erased.Bottom - top));
-                    var coverage = CreateEraserCoverage(annotation, world, token);
+                    var coverage = CreatePixelCoverage(annotation, world, token);
                     Png16PixelProcessor.Restore(output, source.Samples, source.Width, source.Height,
                         new(world.X - region.X, world.Y - region.Y, world.Width, world.Height), coverage, token);
                 }

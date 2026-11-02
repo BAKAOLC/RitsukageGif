@@ -22,6 +22,7 @@ namespace RitsukageGif.Desktop
                 ScreenshotClipboardFileFormat.Jpeg => ".jpg",
                 ScreenshotClipboardFileFormat.Bmp => ".bmp",
                 ScreenshotClipboardFileFormat.Webp => ".webp",
+                ScreenshotClipboardFileFormat.Avif => ".avif",
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
             var path = Path.Combine(_directory, "Screenshot-" + Guid.NewGuid().ToString("N") + extension);
@@ -84,7 +85,7 @@ namespace RitsukageGif.Desktop
             var stem = Path.GetFileNameWithoutExtension(resolved);
             return stem.StartsWith("Screenshot-", StringComparison.Ordinal) &&
                    Guid.TryParseExact(stem[11..], "N", out _) &&
-                   Path.GetExtension(resolved) is ".png" or ".jpg" or ".bmp" or ".webp";
+                   Path.GetExtension(resolved) is ".png" or ".jpg" or ".bmp" or ".webp" or ".avif";
         }
     }
 }

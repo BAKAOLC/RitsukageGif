@@ -19,5 +19,6 @@ namespace RitsukageGif.Desktop
         Watermark,
         StrokeEraser,
         Blur,
+        SmartErase,
     }
 }

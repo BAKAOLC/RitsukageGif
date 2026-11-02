@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class OverlayWindow
     {
-        private HdrOverlayWindow? _hdrBackground;
+        private IHdrOverlayBackground? _hdrBackground;
         private bool _hdrFailed;
         private int _hdrGeneration;
         private CapturedFrame? _hdrRequestedScreen, _hdrRequestedWindow;
@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
 
         private void InitializeHdrBackground()
         {
-            if (_sourceLocal || !OperatingSystem.IsWindows()) return;
+            if (_sourceLocal || !HdrPreviewHost.IsSupported) return;
             if (_coordinator.HdrScreenshotFor(Region) is not null)
                 TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
             Opened += (_, _) => RefreshHdrBackground();
@@ -41,7 +41,7 @@ namespace RitsukageGif.Desktop
 
         private void RefreshHdrBackground()
         {
-            if (_sourceLocal || _imageDisposed || !OperatingSystem.IsWindows() || !IsVisible || !Topmost ||
+            if (_sourceLocal || _imageDisposed || !HdrPreviewHost.IsSupported || !IsVisible || !Topmost ||
                 TryGetPlatformHandle() is not { } handle) return;
             var screen = _coordinator.HdrScreenshotFor(Region);
             if (screen is null)
@@ -57,7 +57,9 @@ namespace RitsukageGif.Desktop
             {
                 if (_hdrBackground is null)
                 {
-                    _hdrBackground = new(handle.Handle, Region);
+                    _hdrBackground = OperatingSystem.IsMacOS()
+                        ? new MacOsHdrOverlayBackground(handle.Handle, Region)
+                        : new WindowsHdrOverlayBackground(handle.Handle, Region);
                     _hdrBackground.DisplayChanged += () =>
                     {
                         _hdrBackground?.InvalidateDevice();
@@ -68,8 +70,8 @@ namespace RitsukageGif.Desktop
                 }
 
                 if (ActualTransparencyLevel != WindowTransparencyLevel.Transparent ||
-                    !HdrOverlayWindow.SupportsTransparentInput(handle.Handle) ||
-                    !WindowsDisplayColor.Read(WindowsDisplayColor.ForRegion(Region)).Hdr ||
+                    !_hdrBackground.SupportsTransparentInput ||
+                    !_hdrBackground.SupportsHdr ||
                     (_coordinator.Snapshot.Cursor && _cursorOverlay is { CanRenderHdr: false }))
                 {
                     SuspendHdrBackground();

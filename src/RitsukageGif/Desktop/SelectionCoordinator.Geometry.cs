@@ -30,7 +30,9 @@ namespace RitsukageGif.Desktop
         {
             if (_finished || _screenshotCompleting || _state.Dragging || SelectionManipulating || ScreenshotDrawing ||
                 _state.Selected.IsEmpty || Annotations is { IsBusy: true }) return;
-            var limits = WindowSource && !UsesLocalSource ? Snapshot.Target?.Client ?? default : SelectionBounds();
+            var limits = WindowSource && !UsesLocalSource && ShapeMode != SelectionShapeMode.MultiWindow
+                ? Snapshot.Target?.Client ?? default
+                : SelectionBounds();
             if (limits.IsEmpty) return;
             width = Math.Clamp(width, 1, limits.Width);
             height = Math.Clamp(height, 1, limits.Height);
@@ -43,8 +45,10 @@ namespace RitsukageGif.Desktop
                 height = Math.Max(1, (int)Math.Round(desiredHeight * factor));
             }
 
+            var original = _state.Selected;
             _state.Set(new(Math.Clamp(x, limits.X, limits.Right - width),
                 Math.Clamp(y, limits.Y, limits.Bottom - height), width, height));
+            TransformShape(_selectionShape, original, _state.Selected);
             _selectionIsWholeTarget = false;
             if (GeometrySizeFixed) _geometryFixed = _state.Selected;
             PrepareWindowScreenshot();
@@ -61,7 +65,9 @@ namespace RitsukageGif.Desktop
         private PixelPoint ConstrainGeometryPoint(PixelPoint point)
         {
             if (!_state.Dragging || (!GeometryRatioLocked && !GeometrySizeFixed)) return point;
-            var limits = WindowSource && !UsesLocalSource ? _selectedTarget?.Client ?? default : SelectionBounds();
+            var limits = WindowSource && !UsesLocalSource && ShapeMode != SelectionShapeMode.MultiWindow
+                ? _selectedTarget?.Client ?? default
+                : SelectionBounds();
             if (limits.IsEmpty) return point;
             var dx = (long)point.X - _geometryAnchor.X;
             var dy = (long)point.Y - _geometryAnchor.Y;
@@ -94,7 +100,9 @@ namespace RitsukageGif.Desktop
 
         private PixelRect FitFixedGeometry(PixelRect region)
         {
-            var limits = WindowSource && !UsesLocalSource ? _selectedTarget?.Client ?? default : SelectionBounds();
+            var limits = WindowSource && !UsesLocalSource && ShapeMode != SelectionShapeMode.MultiWindow
+                ? _selectedTarget?.Client ?? default
+                : SelectionBounds();
             if (limits.IsEmpty) return region;
             var width = Math.Min(_geometryFixed.Width, limits.Width);
             var height = Math.Min(_geometryFixed.Height, limits.Height);

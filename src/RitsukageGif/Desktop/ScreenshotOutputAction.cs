@@ -6,5 +6,8 @@
         Save,
         Pin,
         QuickSave,
+        ExportPdf,
+        Print,
+        Edit,
     }
 }

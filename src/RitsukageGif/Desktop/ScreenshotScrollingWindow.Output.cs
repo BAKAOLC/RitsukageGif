@@ -29,7 +29,7 @@ namespace RitsukageGif.Desktop
             ScrollingUiLogger.ZLogInformation($"Scrolling output started. Action={action.ToString()}");
             try
             {
-                var image = await Task.Run(() => _session.Export(_outputToken), _outputToken);
+                var image = await Task.Run(() => _session.ExportAsync(_outputToken), _outputToken);
                 _outputToken.ThrowIfCancellationRequested();
                 if (_closed) return;
                 var accepted = action == ScrollingCaptureAction.Edit || _outputHandler is null ||

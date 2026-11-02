@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_imageDisposed, this);
             var frame = _coordinator.FrozenWindow;
             ScreenshotCursorOverlay? cursor = null;
-            if (!_sourceLocal && _coordinator.ScreenshotCursor is { } screenshotCursor)
+            if (_coordinator.ScreenshotCursor is { } screenshotCursor)
                 cursor = new(screenshotCursor, Region, frame?.Pixels ?? pixels, _canvas.Scale, frame?.Region);
             try
             {

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotAnnotationSession
     {
+        private const long AnnotationImageBudget = 128L * 1024 * 1024;
         public event Action<bool?>? StartScrollingRequested;
 
         public void RequestScrolling(bool? vertical = null)
@@ -28,8 +29,9 @@ namespace RitsukageGif.Desktop
             var retainedBytes = _retained.SelectMany(annotation => annotation.ImageTiles)
                 .Sum(tile => (long)tile.Image.PixelSize.Width * tile.Image.PixelSize.Height * 4);
             if ((sourceFrames is null ? retainedBytes : 0) + (long)region.Width * region.Height * 4 >
-                128L * 1024 * 1024)
+                AnnotationImageBudget)
                 throw new InvalidOperationException(UiText.Get("RecordingTooLarge"));
+            TrimMagnifierPreviewsForTiles(retainedBytes + (long)region.Width * region.Height * 4);
             var frames = sourceFrames ??
                          (_overlayFrame is { } overlay ? [.. _frames, overlay] : [.. _frames]);
             var samplingRegion = blurRadius == 0 ? region : ExpandSampleRegion(region, AnnotationBounds, blurRadius);
@@ -147,6 +149,9 @@ namespace RitsukageGif.Desktop
             if (region.IsEmpty || (long)region.Width * region.Height * 4 != sourceBgra.Length)
                 throw new ArgumentException(UiText.Get("InvalidFrameBuffer"), nameof(sourceBgra));
             if ((!HasAnnotations || !AnnotationsVisible) && !IsDrawing) return Task.FromResult(sourceBgra);
+            var sampling = ExpandPixelPreviewRegion(region,
+                _gesture is null ? _annotations : _annotations.Append(_gesture));
+            if (sampling != region) return ComposePixelPreviewRegionAsync(region, sampling, sourceBgra, token);
             return ComposeImageAsync(region, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -193,21 +198,19 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task<byte[]> ComposeImageAsync(PixelRect region, Func<CancellationToken, MagickImage> load,
-            CancellationToken token, bool rawOutput = false)
+            CancellationToken token, bool rawOutput = false, ScreenshotAnnotation[]? snapshot = null)
         {
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var annotations = _annotations.ToArray();
-            var gesture = _gesture;
+            var annotations = snapshot ?? [.. _annotations];
+            var gesture = snapshot is null ? _gesture : null;
             var visible = AnnotationsVisible;
-            var moving = rawOutput && _moving is not null ? _selected : null;
+            var moving = snapshot is null && rawOutput && _moving is not null ? _selected : null;
             ScreenshotAnnotation? previewMoving = null;
             ScreenshotAnnotation? previewGesture = null;
-            if (moving?.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.Magnifier
-                or ScreenshotTool.Eraser)
+            if (moving?.Tool is ScreenshotTool.Magnifier or ScreenshotTool.Eraser)
                 previewMoving = CloneAnnotation(moving);
-            if (rawOutput && gesture?.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.Magnifier
-                    or ScreenshotTool.Eraser)
+            if (rawOutput && gesture?.Tool is ScreenshotTool.Magnifier or ScreenshotTool.Eraser)
                 previewGesture = CloneAnnotation(gesture);
             try
             {
@@ -241,14 +244,18 @@ namespace RitsukageGif.Desktop
                 {
                     var layer = new List<ScreenshotAnnotation>();
                     foreach (var annotation in annotations)
-                        if (annotation.Tool is ScreenshotTool.Blur or ScreenshotTool.Mosaic or ScreenshotTool.Eraser
-                            or ScreenshotTool.Magnifier)
+                        if (annotation.Tool is ScreenshotTool.Blur or ScreenshotTool.Mosaic or ScreenshotTool.SmartErase
+                            or ScreenshotTool.Eraser
+                            or ScreenshotTool.Magnifier or ScreenshotTool.Highlight)
                         {
                             await CompositeAnnotationLayerAsync(source, region, layer, token);
                             layer.Clear();
                             // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
                             switch (annotation.Tool)
                             {
+                                case ScreenshotTool.Highlight:
+                                    await ApplyMarkerAsync(source, region, annotation, token);
+                                    break;
                                 case ScreenshotTool.Eraser:
                                     await EraseImageLayerAsync(source, region, annotation, token);
                                     break;
@@ -258,7 +265,11 @@ namespace RitsukageGif.Desktop
                                     break;
                                 case ScreenshotTool.Blur:
                                 case ScreenshotTool.Mosaic:
-                                    await CopyImageEffectLayerAsync(source, region, annotation, token);
+                                    await ApplyPixelLayerAsync(source, region, annotation, token);
+                                    break;
+                                case ScreenshotTool.SmartErase:
+                                    await ApplyInpaintingLayerAsync(source, region, annotation,
+                                        annotation.Properties.InpaintingRadius, token);
                                     break;
                             }
                         }
@@ -304,21 +315,45 @@ namespace RitsukageGif.Desktop
             // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
             switch (annotation.Tool)
             {
+                case ScreenshotTool.Brush when annotation.Points.Count > 1:
+                    return BrushGeometryFor(annotation).Path.Bounds.Inflate(Math.Max(2, annotation.Thickness));
+                case ScreenshotTool.Highlight:
+                    return MarkerBounds(annotation);
+                case ScreenshotTool.Magnifier:
+                    return MagnifierLensBounds(annotation).Union(annotation.Bounds)
+                        .Inflate(Math.Max(12, annotation.Thickness * 2));
+                case ScreenshotTool.Mosaic:
+                case ScreenshotTool.Blur:
+                case ScreenshotTool.SmartErase:
+                case ScreenshotTool.Eraser:
+                    return PixelEffectBounds(annotation);
                 case ScreenshotTool.Spotlight:
                 case ScreenshotTool.Watermark:
                     return new(AnnotationBounds.X, AnnotationBounds.Y, AnnotationBounds.Width, AnnotationBounds.Height);
                 case ScreenshotTool.Text:
-                case ScreenshotTool.Number:
                     var text = FormatLabel(annotation, Brushes.Black);
                     var padding = annotation.Properties.TextPadding * 2;
-                    var size = annotation.Tool == ScreenshotTool.Number
-                        ? new Size(Math.Max(annotation.FontSize * 1.7, text.Width + padding),
-                            Math.Max(annotation.FontSize * 1.7, text.Width + padding))
-                        : new Size(text.Width + padding, text.Height + padding);
-                    var origin = annotation.Tool == ScreenshotTool.Number
-                        ? annotation.Points[0] - new Vector(size.Width / 2, size.Height / 2)
-                        : annotation.Points[0];
-                    return new Rect(origin, size).Inflate(annotation.Properties.TextOutlineWidth);
+                    var size = new Size(text.Width + padding, text.Height + padding);
+                    return new Rect(annotation.Points[0], size).Inflate(annotation.Properties.TextOutlineWidth);
+                case ScreenshotTool.Number:
+                    return NumberRenderBounds(annotation);
+            }
+
+            if (annotation.Tool is ScreenshotTool.Arrow or ScreenshotTool.Line or ScreenshotTool.Polyline)
+            {
+                var geometry = GeometryFor(annotation);
+                var lineBounds = geometry.Path.Bounds;
+                if (geometry.StartHead is { } start) lineBounds = lineBounds.Union(start.Bounds);
+                if (geometry.EndHead is { } end) lineBounds = lineBounds.Union(end.Bounds);
+                lineBounds = lineBounds.Inflate(Math.Max(2, annotation.Thickness));
+                if (annotation.Tool == ScreenshotTool.Arrow && !string.IsNullOrWhiteSpace(annotation.Text))
+                {
+                    var lineComment = FormatLabel(annotation, Brushes.Black);
+                    lineBounds = lineBounds.Union(new(annotation.Points[^1] + new Vector(8, 8),
+                        new Size(lineComment.Width, lineComment.Height)));
+                }
+
+                return lineBounds;
             }
 
             var left = annotation.Points.Min(point => point.X);

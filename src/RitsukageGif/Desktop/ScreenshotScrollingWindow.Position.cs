@@ -49,7 +49,7 @@ namespace RitsukageGif.Desktop
                 {
                     border = new()
                     {
-                        SystemDecorations = SystemDecorations.None, ShowInTaskbar = false, ShowActivated = false,
+                        WindowDecorations = WindowDecorations.None, ShowInTaskbar = false, ShowActivated = false,
                         Topmost = true, CanResize = false, Background = Brushes.Transparent,
                         TransparencyLevelHint = [WindowTransparencyLevel.Transparent],
                         Focusable = false, IsHitTestVisible = false,

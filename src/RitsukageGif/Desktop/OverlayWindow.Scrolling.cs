@@ -36,6 +36,7 @@ namespace RitsukageGif.Desktop
             Grid.SetRow(scroll, 1);
             root.Children.Add(scroll);
             Content = root;
+            ConfigureScrollingHdrPreview(layers);
             scroll.ScrollChanged += (_, _) => RefreshViewport();
             scroll.SizeChanged += (_, _) => RefreshViewport();
             Opened += (_, _) => RefreshViewport();
@@ -43,8 +44,10 @@ namespace RitsukageGif.Desktop
 
             void RefreshViewport()
             {
-                _canvas.SetVisibleSource(new(scroll.Offset.X * scale,
-                    scroll.Offset.Y * scale, scroll.Viewport.Width * scale, scroll.Viewport.Height * scale));
+                _scrollHdrViewport = new(scroll.Offset.X * scale,
+                    scroll.Offset.Y * scale, scroll.Viewport.Width * scale, scroll.Viewport.Height * scale);
+                _canvas.SetVisibleSource(_scrollHdrViewport);
+                QueueScrollingHdrPreview();
             }
         }
     }

@@ -5,7 +5,7 @@ using Avalonia.Media.Imaging;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class ScreenshotScrollingPreview : Control
+    internal sealed partial class ScreenshotScrollingPreview : Decorator
     {
         public Bitmap? Image { get; set; }
         public PixelRect Viewport { get; set; }

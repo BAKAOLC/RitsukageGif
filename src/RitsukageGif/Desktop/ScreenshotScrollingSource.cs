@@ -1,29 +1,35 @@
-using ImageMagick;
-
 namespace RitsukageGif.Desktop
 {
-    internal sealed class ScreenshotScrollingSource : IDisposable
+    internal sealed partial class ScreenshotScrollingSource : IDisposable
     {
         private readonly DesktopCapture? _desktop;
         private readonly WindowTarget? _target;
         private readonly HdrToneMapMode _toneMap;
+        private readonly double _density;
         private bool _colorUnavailable;
         private PixelRect _current;
         private WindowContentCapture? _window;
 
         public ScreenshotScrollingSource(PixelRect region, PixelRect[] monitors, WindowTarget? target,
-            HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression)
+            HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression, double pixelDensity = 1)
         {
             _toneMap = toneMap;
+            _density = pixelDensity;
             _target = target;
             _current = region;
-            if (target is null) _desktop = new(new(region, Divisor: 1), monitors);
+            if (target is null) _desktop = new(new(region, Divisor: 1) { PixelDensity = _density }, monitors);
         }
 
         public void Dispose()
         {
             _desktop?.Dispose();
             _window?.Dispose();
+        }
+
+        internal void Suspend()
+        {
+            _desktop?.Suspend();
+            _window?.Suspend();
         }
 
         public byte[] Capture(PixelRect region, CancellationToken token)
@@ -54,6 +60,8 @@ namespace RitsukageGif.Desktop
             var bounds = OperatingSystem.IsLinux() ? target.Client : target.Bounds;
             if (region.Intersect(target.Client) != region) throw new CaptureSourceLostException();
             _window ??= new(target.Handle, false, 10);
+            _window.ConfigureRegion(region, Math.Max(1, (int)Math.Ceiling(region.Width * _density)),
+                Math.Max(1, (int)Math.Ceiling(region.Height * _density)));
             byte[]? pixels = null;
             if (!_colorUnavailable && _toneMap != HdrToneMapMode.HighlightCompression)
                 try
@@ -73,7 +81,8 @@ namespace RitsukageGif.Desktop
             if (target.Client != refreshed.Client ||
                 bounds != (OperatingSystem.IsLinux() ? refreshed.Client : refreshed.Bounds))
                 throw new CaptureSourceLostException();
-            return Crop(pixels, _window.Width, _window.Height, bounds, region, token);
+            return Crop(pixels, _window.Width, _window.Height, _window.CoordinateBounds ?? bounds, region, _density,
+                token);
         }
 
         private byte[] ReadSdr(CapturedFrameSet frames, CancellationToken token)
@@ -84,37 +93,33 @@ namespace RitsukageGif.Desktop
         }
 
         private static byte[] Crop(byte[] pixels, int width, int height, PixelRect bounds, PixelRect region,
-            CancellationToken token)
+            double density, CancellationToken token)
         {
             if (width <= 0 || height <= 0 || pixels.LongLength != (long)width * height * 4 ||
                 bounds.IsEmpty || region.IsEmpty || region.Intersect(bounds) != region)
                 throw new CaptureSourceLostException();
-            token.ThrowIfCancellationRequested();
-            if (width == bounds.Width && height == bounds.Height)
+            if (density.Equals(Math.Truncate(density)) && ((double)width).Equals(bounds.Width * density) &&
+                ((double)height).Equals(bounds.Height * density))
             {
-                var output = new byte[checked(region.Width * region.Height * 4)];
-                for (var y = 0; y < region.Height; y++)
+                var outputWidth = checked((int)(region.Width * density));
+                var outputHeight = checked((int)(region.Height * density));
+                var left = checked((int)((region.X - bounds.X) * density));
+                var top = checked((int)((region.Y - bounds.Y) * density));
+                var cropped = new byte[checked(outputWidth * outputHeight * 4)];
+                for (var y = 0; y < outputHeight; y++)
                 {
                     token.ThrowIfCancellationRequested();
-                    Buffer.BlockCopy(pixels, ((region.Y - bounds.Y + y) * width + region.X - bounds.X) * 4,
-                        output, y * region.Width * 4, region.Width * 4);
+                    pixels.AsSpan(((top + y) * width + left) * 4, outputWidth * 4)
+                        .CopyTo(cropped.AsSpan(y * outputWidth * 4));
                 }
 
-                return output;
+                return cropped;
             }
 
-            using var image = new MagickImage(pixels,
-                new PixelReadSettings((uint)width, (uint)height, StorageType.Char, PixelMapping.BGRA));
-            var left = (int)Math.Floor((double)(region.X - bounds.X) * width / bounds.Width);
-            var top = (int)Math.Floor((double)(region.Y - bounds.Y) * height / bounds.Height);
-            var right = (int)Math.Ceiling((double)(region.Right - bounds.X) * width / bounds.Width);
-            var bottom = (int)Math.Ceiling((double)(region.Bottom - bounds.Y) * height / bounds.Height);
-            image.Crop(new MagickGeometry(left, top, (uint)(right - left), (uint)(bottom - top)));
-            image.ResetPage();
-            image.Resize(new MagickGeometry((uint)region.Width, (uint)region.Height) { IgnoreAspectRatio = true });
-            token.ThrowIfCancellationRequested();
-            using var resized = image.GetPixels();
-            return resized.ToByteArray(PixelMapping.BGRA)!;
+            var frame = new CapturedFrame(width, height, checked(width * 4), CapturePixelFormat.Bgra8Srgb,
+                pixels, new(false), CaptureAlphaMode.Straight, 0, []);
+            var output = NativeFrameComposition.Compose([(bounds, new(frame, null, 0))], region, density, token);
+            return CapturedFramePixels.ToStraightBgra(output.Sdr, token);
         }
     }
 }

@@ -1,14 +1,37 @@
-﻿namespace RitsukageGif.Desktop
+namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
+        private bool _initialGeometryPending;
         internal PixelRect? InitialRegion { get; init; }
+        internal ActionScreenshotGeometry? InitialGeometry { get; init; }
         internal WindowTarget? InitialTarget { get; init; }
         internal bool WholeInitialTarget { get; init; }
 
-        private void ApplyInitialRegion()
+        private void ApplyPendingInitialGeometry()
         {
-            if (InitialRegion is not { IsEmpty: false } requested) return;
+            if (!_initialGeometryPending || InitialGeometry is null) return;
+            _initialGeometryPending = false;
+            ApplyInitialRegion(InitialGeometry.Resolve(_pointer));
+            QueueAutoConfirm();
+        }
+
+        private void ApplyInitialRegion(PixelRect? providedRegion = null)
+        {
+            _geometryRatio = InitialGeometry?.AspectRatio;
+            if (providedRegion is null && InitialRegion is null && InitialGeometry is { Width: not null })
+            {
+                if (InitialGeometry.NeedsPointer && !OperatingSystem.IsWindows())
+                {
+                    _initialGeometryPending = true;
+                    return;
+                }
+
+                providedRegion =
+                    InitialGeometry.Resolve(InitialGeometry.NeedsPointer ? NativeMethods.Mouse() : default);
+            }
+
+            if ((providedRegion ?? InitialRegion) is not { IsEmpty: false } requested) return;
             if (InitialTarget is { } initialTarget)
                 _selectedTarget = _targets.FirstOrDefault(candidate => candidate.Handle == initialTarget.Handle)
                                   ?? throw new CaptureSourceLostException();

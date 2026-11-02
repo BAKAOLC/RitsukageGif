@@ -13,6 +13,11 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class ScreenshotScrollingWindow
     {
+        private readonly CheckBox _autoCrop = new()
+        {
+            Margin = new(4, 0), FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+        };
+
         private readonly Button _cropLeading = new();
         private readonly Popup _cropPopup = new() { IsLightDismissEnabled = false };
         private readonly Button _cropTrailing = new();
@@ -198,6 +203,7 @@ namespace RitsukageGif.Desktop
             foreach (var button in _outputButtons) button.IsEnabled = enabled;
             _move.IsEnabled = _direction.IsEnabled = _pause.IsEnabled = !_outputting;
             _automatic.IsEnabled = !_outputting && _session.AutomaticAvailable;
+            _autoCrop.IsEnabled = !_outputting;
             _cropLeading.IsEnabled = enabled && _session.CanCropLeading;
             _cropTrailing.IsEnabled = enabled && _session.CanCropTrailing;
         }
@@ -217,6 +223,17 @@ namespace RitsukageGif.Desktop
 
             panel.Children.Add(_cropLeading);
             panel.Children.Add(_cropTrailing);
+            panel.Children.Add(Separator());
+            _autoCrop.Bind(ContentProperty, LiveText.Resource("ScrollCaptureAutoCrop"));
+            _autoCrop.IsChecked = _session.AutoCropOnReverse;
+            _autoCrop.IsCheckedChanged += (_, _) =>
+            {
+                if (_outputting) return;
+                var enabled = _autoCrop.IsChecked == true;
+                _session.AutoCropOnReverse = enabled;
+                _autoCropChanged?.Invoke(enabled);
+            };
+            panel.Children.Add(_autoCrop);
             return new()
             {
                 Padding = new(4), CornerRadius = new(5), Background = AppTheme.Surface,
@@ -256,8 +273,6 @@ namespace RitsukageGif.Desktop
             _axis = axis;
             _session.ConfigureAxis(axis, _region);
             _session.ConfigureInsets(leading, trailing);
-            _leadingInset = leading;
-            _trailingInset = trailing;
             SetOutputActionsEnabled(false);
             _preview.Image = null;
             _bitmap?.Dispose();

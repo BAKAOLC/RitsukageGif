@@ -20,14 +20,6 @@ namespace RitsukageGif.Desktop
             return PickSystemPathAsync(storage, preferences, outputDirectory, titleKey, colorMode, context, token);
         }
 
-        // ReSharper disable once UnusedMember.Global
-        public static async Task<string?> PickPathAsync(IStorageProvider storage,
-            ScreenshotSaveProfile preferences, string? outputDirectory, string titleKey,
-            OutputColorMode colorMode, CancellationToken token = default)
-        {
-            return await PickSystemPathAsync(storage, preferences, outputDirectory, titleKey, colorMode, null, token);
-        }
-
         private static async Task<string?> PickSystemPathAsync(IStorageProvider storage,
             ScreenshotSaveProfile preferences, string? outputDirectory, string titleKey,
             OutputColorMode colorMode, ScreenshotNameContext? context, CancellationToken token)
@@ -41,6 +33,7 @@ namespace RitsukageGif.Desktop
             [
                 new("PNG") { Patterns = ["*.png"] }, new("JPEG") { Patterns = ["*.jpg", "*.jpeg"] },
                 new("BMP") { Patterns = ["*.bmp"] }, new("WebP") { Patterns = ["*.webp"] },
+                new("AVIF") { Patterns = ["*.avif"] },
             ];
             var choices = colorMode switch
             {
@@ -51,11 +44,11 @@ namespace RitsukageGif.Desktop
                 _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
             };
             if (!string.IsNullOrWhiteSpace(normalized.Directory)) outputDirectory = normalized.Directory;
-            var directory = string.IsNullOrWhiteSpace(outputDirectory)
+            using var directory = string.IsNullOrWhiteSpace(outputDirectory)
                 ? null
-                : await storage.TryGetFolderFromPathAsync(outputDirectory);
+                : await StoragePickerAwaiter.WaitAsync(storage.TryGetFolderFromPathAsync(outputDirectory), token);
             token.ThrowIfCancellationRequested();
-            var file = await storage.SaveFilePickerAsync(new()
+            using var file = await StoragePickerAwaiter.WaitAsync(storage.SaveFilePickerAsync(new()
             {
                 Title = UiText.Get(titleKey), SuggestedFileName = name,
                 DefaultExtension = Path.GetExtension(name).TrimStart('.'),
@@ -65,7 +58,7 @@ namespace RitsukageGif.Desktop
                 SuggestedFileType =
                     choices.FirstOrDefault(choice => choice.Patterns?.Contains("*" + extension) == true),
                 FileTypeChoices = choices,
-            });
+            }), token);
             token.ThrowIfCancellationRequested();
             return file?.TryGetLocalPath();
         }
@@ -83,6 +76,7 @@ namespace RitsukageGif.Desktop
                 ".jpg" or ".jpeg" => StaticImageFormat.Jpeg,
                 ".bmp" => StaticImageFormat.Bmp,
                 ".webp" => StaticImageFormat.WebP,
+                ".avif" => StaticImageFormat.Avif,
                 _ => throw new ArgumentOutOfRangeException(nameof(path)),
             };
             await Gate.WaitAsync(token).ConfigureAwait(false);

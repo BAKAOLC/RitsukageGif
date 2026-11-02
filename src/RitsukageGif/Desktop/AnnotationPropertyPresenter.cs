@@ -50,6 +50,11 @@ namespace RitsukageGif.Desktop
             if (current is { } tool) Refresh(tool);
         }
 
+        public void HideFlyouts()
+        {
+            _view?.HideFlyouts();
+        }
+
         public void EditComment()
         {
             Refresh(ScreenshotTool.Arrow);

@@ -11,11 +11,26 @@ namespace RitsukageGif.Desktop
                 lock (_sync)
                 {
                     if (_firstRegion is not { } first) return null;
-                    var offset = checked(_leadingInset + _stitching.StartOffset);
+                    var offset = checked((int)Math.Round((_leadingInset + _stitching.StartOffset) / _density));
                     return _axis == ScrollCaptureAxis.Vertical
                         ? new(first.X, checked(first.Y + offset))
                         : new(checked(first.X + offset), first.Y);
                 }
+            }
+        }
+
+        internal PixelRect PreviewViewport
+        {
+            get
+            {
+                lock (_sync)
+                    return _axis == ScrollCaptureAxis.Vertical
+                        ? new(0, _stitching.CurrentOffset - _stitching.StartOffset,
+                            PhysicalSize(_initialRegion.Width),
+                            PhysicalSize(_initialRegion.Height) - _leadingInset - _trailingInset)
+                        : new(_stitching.CurrentOffset - _stitching.StartOffset, 0,
+                            PhysicalSize(_initialRegion.Width) - _leadingInset - _trailingInset,
+                            PhysicalSize(_initialRegion.Height));
             }
         }
 

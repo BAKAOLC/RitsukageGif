@@ -13,7 +13,8 @@ namespace RitsukageGif.Desktop
             {
                 var snapshot = Snapshot;
                 var result = SelectionResult.Create(snapshot.Region, WindowSource, snapshot.Target,
-                    UsesLocalSource, _cursor);
+                    UsesLocalSource, _cursor, _selectionShape,
+                    ShapeMode == SelectionShapeMode.MultiWindow ? SelectedShapeWindows() : null);
                 if (_finished || NeedsWindowScreenshot || result is null)
                 {
                     annotations.FailPrivacyDetection(request, null);

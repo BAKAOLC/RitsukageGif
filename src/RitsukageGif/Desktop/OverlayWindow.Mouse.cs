@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Input;
 
 namespace RitsukageGif.Desktop
@@ -89,7 +90,8 @@ namespace RitsukageGif.Desktop
                             var point = sourcePoint(args);
                             _mouseClicks.Dispatch(binding, _coordinator.MouseBindings,
                                 () => _coordinator.ExecuteMouseAction(binding.Action, point),
-                                PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ?? TimeSpan.FromMilliseconds(500),
+                                Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
+                                TimeSpan.FromMilliseconds(500),
                                 () => !_mouseButtonsPressed && !_mouseGesture.IsActive && !_mouseChordCancelled);
                         }
                     }
@@ -99,7 +101,7 @@ namespace RitsukageGif.Desktop
             };
             _canvas.PointerWheelChanged += (_, args) =>
             {
-                if (_mouseGesture.IsActive || _mouseChordCancelled)
+                if (_coordinator.CapturePreferences.DisableMouseWheel || _mouseGesture.IsActive || _mouseChordCancelled)
                 {
                     args.Handled = true;
                     return;

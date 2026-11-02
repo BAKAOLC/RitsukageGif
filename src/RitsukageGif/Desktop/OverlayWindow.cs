@@ -26,9 +26,12 @@ namespace RitsukageGif.Desktop
         private readonly SelectionCoordinator _coordinator;
         private readonly SelectionFrameControls _frameControls;
         private readonly Grid _layers;
+        private readonly SelectionRegionInfoBar _regionInfo;
         private readonly ScreenshotToolbar? _screenshotToolbar;
         private readonly SelectionActionBar? _selectionActions;
         private readonly SelectionOptionsBar _selectionOptions;
+        private readonly SelectionModePicker _shapeModePicker;
+        private readonly SimulatedWheelInput _simulatedWheel;
         private readonly bool _sourceLocal;
         private IPointer? _captured;
         private ScreenshotCursorOverlay? _cursorOverlay;
@@ -41,11 +44,12 @@ namespace RitsukageGif.Desktop
         public OverlayWindow(SelectionCoordinator coordinator, PixelRect region, double scaling, byte[] pixels,
             int radius, int threshold, bool sourceLocal = false)
         {
+            _simulatedWheel = new(this);
             _coordinator = coordinator;
             _sourceLocal = sourceLocal;
             Region = region;
             Bind(TitleProperty, LiveText.Resource("SelectionTitle"));
-            SystemDecorations = sourceLocal ? SystemDecorations.Full : SystemDecorations.None;
+            WindowDecorations = sourceLocal ? WindowDecorations.Full : WindowDecorations.None;
             CanResize = false;
             TransientWindowShell.Configure(this);
             Topmost = true;
@@ -58,6 +62,7 @@ namespace RitsukageGif.Desktop
             _canvas = new(region, pixels, radius, threshold, coordinator.ScreenshotPreview)
             {
                 ShortcutBindings = coordinator.ShortcutBindings,
+                CoordinateUnit = coordinator.SelectionCoordinateUnit,
                 Scale = scaling, ShowControls = coordinator.CanDetectControls,
                 ShowSource = coordinator.CanSwitchSource, Controls = coordinator.Controls,
                 ShowCursor = coordinator.CanToggleCursor,
@@ -67,15 +72,15 @@ namespace RitsukageGif.Desktop
             _layers = layers;
             _screenPixels = coordinator.ScreenshotMode ? pixels : null;
             layers.Children.Add(_canvas);
-            if (!sourceLocal && coordinator.ScreenshotCursor is { } frozenCursor)
+            if (coordinator.ScreenshotCursor is { } frozenCursor)
             {
                 _cursorOverlay = new(frozenCursor, region, pixels, scaling);
                 layers.Children.Add(_cursorOverlay);
             }
 
             Content = layers;
-            UiText.LanguageChanged += _canvas.InvalidateVisual;
-            Closed += (_, _) => UiText.LanguageChanged -= _canvas.InvalidateVisual;
+            UiText.LanguageChanged += RefreshLanguage;
+            Closed += (_, _) => UiText.LanguageChanged -= RefreshLanguage;
             Opened += (_, _) =>
             {
                 if (!sourceLocal && OperatingSystem.IsWindows() && TryGetPlatformHandle() is { } handle &&
@@ -91,7 +96,8 @@ namespace RitsukageGif.Desktop
                 annotations.RegisterFrame(region, pixels);
                 _annotationSurface = new(annotations, region, scaling, SourcePoint, coordinator);
                 _screenshotToolbar = new(annotations, region, scaling, coordinator.ShortcutBindings,
-                    coordinator.ExecuteToolbarCommand, dialogScopeProvider: coordinator.BeginSelectionDialog);
+                    coordinator.ExecuteToolbarCommand, dialogScopeProvider: coordinator.BeginSelectionDialog,
+                    shortcutBindingsProvider: () => coordinator.ShortcutBindings);
                 layers.Children.Add(_annotationSurface);
                 layers.Children.Add(_screenshotToolbar);
                 annotations.Changed += AnnotationChanged;
@@ -109,9 +115,10 @@ namespace RitsukageGif.Desktop
 
             _selectionOptions = new(coordinator.ExecuteToolbarCommand, coordinator.ShortcutBindings)
                 { IsVisible = false };
-            _selectionOptions.AttachGeometry(coordinator);
+            if (coordinator.ScreenshotPreview) _selectionOptions.AttachGeometry(coordinator);
             layers.Children.Add(_selectionOptions);
             _frameControls = new(coordinator) { IsVisible = false };
+            InitializeCodeOverlay();
             _frameControls.LayoutChanged += () =>
             {
                 _canvas.FrameReservedBounds = _frameControls.OccupiedBounds;
@@ -121,6 +128,10 @@ namespace RitsukageGif.Desktop
             {
                 Child = _frameControls,
             });
+            _shapeModePicker = new(coordinator);
+            layers.Children.Add(_shapeModePicker);
+            _regionInfo = new(coordinator);
+            layers.Children.Add(_regionInfo);
             AddHandler(PointerPressedEvent, (_, _) =>
             {
                 if (!_frameControls.IsPointerOver) _frameControls.ClosePopup();
@@ -138,7 +149,7 @@ namespace RitsukageGif.Desktop
             };
             AddHandler(KeyDownEvent, (_, args) =>
             {
-                if (coordinator.HandleTextInputKey(args.Key, true, FocusManager?.GetFocusedElement() is TextBox))
+                if (coordinator.HandleTextInputKey(args.Key, true, FocusManager.GetFocusedElement() is TextBox))
                     return;
 
                 coordinator.KeyInput(args.Key, true, args.KeyModifiers);
@@ -147,7 +158,7 @@ namespace RitsukageGif.Desktop
             }, RoutingStrategies.Tunnel, true);
             AddHandler(KeyUpEvent, (_, args) =>
             {
-                if (coordinator.HandleTextInputKey(args.Key, false, FocusManager?.GetFocusedElement() is TextBox))
+                if (coordinator.HandleTextInputKey(args.Key, false, FocusManager.GetFocusedElement() is TextBox))
                     return;
 
                 coordinator.KeyInput(args.Key, false, args.KeyModifiers);
@@ -176,6 +187,11 @@ namespace RitsukageGif.Desktop
         }
 
         public PixelRect Region { get; }
+
+        internal bool SimulateWheel(int direction)
+        {
+            return _simulatedWheel.Raise(direction);
+        }
 
         internal bool TryGetSampleColor(PixelPoint point, out Color color)
         {
@@ -211,7 +227,7 @@ namespace RitsukageGif.Desktop
             _canvas.MeasurementScreenBounds = _coordinator.MeasurementScreenBounds;
             _canvas.ShowCursor = _coordinator.CanToggleCursor;
             _canvas.Mouse = point;
-            _canvas.SampleColorFormat = _coordinator.SampleColorFormat;
+            _canvas.SampleColorTemplate = _coordinator.SampleColorTemplate;
             _canvas.Mode = mode;
             if (_sourceLocal && _canvas.Bounds.Width > 0) _canvas.Scale = Region.Width / _canvas.Bounds.Width;
             _canvas.Controls = _coordinator.Controls;
@@ -219,6 +235,8 @@ namespace RitsukageGif.Desktop
             _canvas.WindowFrame = _coordinator.FrozenWindow;
             _canvas.Manipulating = _coordinator.SelectionManipulating;
             _canvas.IsScreenshot = _coordinator.ScreenshotMode;
+            _canvas.CoordinateUnit = _coordinator.SelectionCoordinateUnit;
+            _canvas.RelativeCoordinates = _coordinator.RelativeCoordinates;
             _canvas.IsDrawing = _coordinator.Annotations?.IsDrawing == true;
             _canvas.IsEditing = _coordinator.ScreenshotDrawing;
             var decoration = _coordinator.Decoration;
@@ -238,7 +256,7 @@ namespace RitsukageGif.Desktop
                         _cursorOverlay = null;
                     }
 
-                    if (!_sourceLocal && _coordinator.ScreenshotCursor is { } screenshotCursor &&
+                    if (_coordinator.ScreenshotCursor is { } screenshotCursor &&
                         _screenPixels is not null)
                     {
                         _cursorOverlay = new(screenshotCursor, Region, frame?.Pixels ?? _screenPixels, _canvas.Scale,
@@ -254,6 +272,7 @@ namespace RitsukageGif.Desktop
                 _cursorOverlay.IsVisible = _coordinator.Snapshot.Cursor;
                 _cursorOverlay.Selection = selected;
                 _cursorOverlay.Scale = _canvas.Scale;
+                _cursorOverlay.Clip = _canvas.SelectionGeometry();
                 _cursorOverlay.InvalidateVisual();
             }
 
@@ -280,12 +299,26 @@ namespace RitsukageGif.Desktop
             _frameControls.Update(Region, _canvas.Scale, selected, _coordinator.OwnsScreenshotToolbar(this),
                 _canvas.ReservedBounds, _canvas.SecondaryReservedBounds);
             _canvas.FrameReservedBounds = _frameControls.OccupiedBounds;
+            _shapeModePicker.Update(Region, _canvas.Scale, point);
+            _canvas.ModePickerReservedBounds = _shapeModePicker.OccupiedBounds;
+            _regionInfo.Update(Region, _canvas.Scale, _coordinator.OwnsRegionInformation(this),
+                _canvas.ReservedBounds, _canvas.SecondaryReservedBounds, _canvas.FrameReservedBounds,
+                _canvas.ModePickerReservedBounds);
+            _canvas.InteractiveInformationVisible = _regionInfo.IsVisible;
+            _canvas.InformationReservedBounds = _regionInfo.OccupiedBounds;
+            UpdateCodeOverlay(selected);
 
             RefreshHdrBackground();
             _canvas.InvalidateVisual();
+            QueueScrollingHdrPreview(decoration);
         }
 
         private void AnnotationChanged()
+        {
+            Refresh(_coordinator.Snapshot.Region, _lastPoint, _lastMode);
+        }
+
+        private void RefreshLanguage()
         {
             Refresh(_coordinator.Snapshot.Region, _lastPoint, _lastMode);
         }
@@ -308,6 +341,8 @@ namespace RitsukageGif.Desktop
             _cursorOverlay?.Dispose();
             _screenshotToolbar?.Dispose();
             _frameControls.Dispose();
+            _shapeModePicker.Dispose();
+            _regionInfo.Dispose();
             _canvas.Dispose();
         }
     }

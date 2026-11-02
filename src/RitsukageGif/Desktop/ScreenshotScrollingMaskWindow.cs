@@ -7,13 +7,13 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotScrollingMaskWindow : Window
     {
-        private static readonly ILogger MaskLogger = LogHub.GetLogger("Desktop.Capture.ScrollingMask");
+        private static readonly ILogger MaskLogger = LogHub.GetLogger("Desktop.Capture.Mask");
         private readonly double _borderWidth;
         private readonly ScreenshotScrollingMaskSurface _surface;
 
         public ScreenshotScrollingMaskWindow(AppearancePreferences appearance)
         {
-            SystemDecorations = SystemDecorations.None;
+            WindowDecorations = WindowDecorations.None;
             ShowActivated = false;
             Topmost = true;
             CanResize = false;
@@ -30,6 +30,8 @@ namespace RitsukageGif.Desktop
             Content = _surface;
         }
 
+        internal string Operation { private get; init; } = "Scrolling";
+
         public void Update(PixelRect monitor, PixelRect capture, double scale, nint toolbar)
         {
             var firstShow = !IsVisible;
@@ -45,7 +47,7 @@ namespace RitsukageGif.Desktop
                 Marshal.SetLastPInvokeError(0);
                 if (SetWindowStyle(handle.Handle, -20, style | 0x08000000 | 0x80 | 0x20) == 0 &&
                     Marshal.GetLastPInvokeError() != 0)
-                    Trace.TraceWarning("Scrolling mask input style: {0}", Marshal.GetLastPInvokeError());
+                    Trace.TraceWarning("Capture mask input style: {0}", Marshal.GetLastPInvokeError());
                 excluded = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) &&
                            SetWindowDisplayAffinity(handle.Handle, 0x11);
                 _ = NativeMethods.SetWindowPos(handle.Handle, toolbar != 0 ? toolbar : -1, monitor.X, monitor.Y,
@@ -58,8 +60,8 @@ namespace RitsukageGif.Desktop
             if (firstShow)
             {
                 MaskLogger.ZLogInformation(
-                    $"Scrolling mask initialized. Monitor={monitor} Capture={capture} Scaling={RenderScaling} CaptureExcluded={excluded}");
-                WindowDiagnostics.Write(MaskLogger, "ScrollingMaskReady", this);
+                    $"Capture mask initialized. Operation={Operation} Monitor={monitor} Capture={capture} Scaling={RenderScaling} CaptureExcluded={excluded}");
+                WindowDiagnostics.Write(MaskLogger, Operation + "MaskReady", this);
             }
         }
 

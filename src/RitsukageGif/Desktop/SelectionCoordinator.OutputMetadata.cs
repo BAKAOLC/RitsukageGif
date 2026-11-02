@@ -1,4 +1,4 @@
-﻿namespace RitsukageGif.Desktop
+namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
@@ -19,6 +19,8 @@
             }
         }
 
+        internal string SelectionCoordinateUnit => OperatingSystem.IsMacOS() && !ScreenshotPreview ? "pt" : "px";
+
         internal double ScreenshotCaptureScaling
         {
             get
@@ -29,6 +31,7 @@
                 var bounds = snapshot is { WindowSource: true, Target: not null }
                     ? snapshot.Target.Bounds
                     : snapshot.Region;
+                if (OperatingSystem.IsMacOS()) return NativeDisplayCatalog.Density(bounds);
                 long largest = 0;
                 double scaling = 1;
                 foreach (var screen in _screens.All)

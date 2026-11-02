@@ -15,13 +15,13 @@ namespace RitsukageGif.Desktop
         }
 
         internal static IReadOnlyList<SelectionMeasurement> Create(PixelRect region, PixelRect reference,
-            string kind, bool right, bool bottom)
+            string kind, bool right, bool bottom, string unit)
         {
             if (region.IsEmpty) return [];
             var lines = new List<SelectionMeasurement>
             {
-                new(new(region.X, region.Y), new(region.Right, region.Y), $"{region.Width} px"),
-                new(new(region.X, region.Y), new(region.X, region.Bottom), $"{region.Height} px"),
+                new(new(region.X, region.Y), new(region.Right, region.Y), $"{region.Width} {unit}"),
+                new(new(region.X, region.Y), new(region.X, region.Bottom), $"{region.Height} {unit}"),
             };
             if (reference.IsEmpty) return lines;
             var name = UiText.Get(kind);
@@ -42,14 +42,14 @@ namespace RitsukageGif.Desktop
                 var bx = Math.Clamp(ax, reference.X, reference.Right);
                 var by = Math.Clamp(ay, reference.Y, reference.Bottom);
                 var length = Math.Sqrt((double)(bx - ax) * (bx - ax) + (double)(by - ay) * (by - ay));
-                if (length > 0) lines.Add(new(new(ax, ay), new(bx, by), $"{name} {length:0.#} px"));
+                if (length > 0) lines.Add(new(new(ax, ay), new(bx, by), $"{name} {length:0.#} {unit}"));
             }
 
             return lines;
 
             void Add(PixelPoint start, PixelPoint end, int length)
             {
-                if (length > 0) lines.Add(new(start, end, $"{name} {length} px"));
+                if (length > 0) lines.Add(new(start, end, $"{name} {length} {unit}"));
             }
         }
     }

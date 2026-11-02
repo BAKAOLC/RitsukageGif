@@ -61,11 +61,12 @@ namespace RitsukageGif.Desktop
             HintMode = Enum.IsDefined(hints) ? hints : SelectionHintMode.Full;
             if (capturePreferences is null) return;
             CapturePreferences = capturePreferences.Normalize();
+            RelativeCoordinates = CapturePreferences.RelativeCoordinates;
             AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always;
             DetectionMode = CapturePreferences.DetectionMode;
             Controls = DetectionMode == CaptureDetectionMode.Controls && CanDetectControls;
             _cursor = CapturePreferences.CursorPolicy == CaptureCursorPolicy.Visible;
-            SampleColorFormat = (SampleColorFormat)CapturePreferences.MagnifierColorFormat;
+            InitializeSampleColorFormat();
         }
 
         private PixelRect ApplyDetectionMargin(PixelRect region)

@@ -75,6 +75,7 @@ namespace RitsukageGif.Desktop
                 StaticImageFormat.Jpeg => "jpg",
                 StaticImageFormat.Bmp => "bmp",
                 StaticImageFormat.WebP => "webp",
+                StaticImageFormat.Avif => "avif",
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
             return name + "." + extension;
@@ -83,7 +84,7 @@ namespace RitsukageGif.Desktop
         internal static string? NormalizeExtension(string? extension)
         {
             var value = extension?.Trim().TrimStart('.').ToLowerInvariant();
-            return value is "png" or "jpg" or "jpeg" or "bmp" or "webp" or "exr" ? "." + value : null;
+            return value is "png" or "jpg" or "jpeg" or "bmp" or "webp" or "avif" or "exr" ? "." + value : null;
         }
 
         internal string DialogExtension(OutputColorMode mode)
@@ -102,6 +103,7 @@ namespace RitsukageGif.Desktop
             {
                 StaticImageFormat.Png => ".png", StaticImageFormat.Jpeg => ".jpg",
                 StaticImageFormat.Bmp => ".bmp", StaticImageFormat.WebP => ".webp",
+                StaticImageFormat.Avif => ".avif",
                 _ => ".png",
             };
         }

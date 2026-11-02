@@ -39,7 +39,9 @@ namespace RitsukageGif.Desktop
                     memory.Write(buffer, 0, count);
                 }
 
-                if (!_disposed) _session.SetWatermarkImage(memory.ToArray());
+                if (!_disposed)
+                    _session.SetWatermarkImage(memory.ToArray(),
+                        files[0].TryGetLocalPath() ?? files[0].Path.AbsoluteUri);
             }
             catch (Exception exception)
             {

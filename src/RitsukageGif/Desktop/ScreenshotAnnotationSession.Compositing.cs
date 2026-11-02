@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using ImageMagick;
@@ -36,7 +35,7 @@ namespace RitsukageGif.Desktop
                 {
                     token.ThrowIfCancellationRequested();
                     using var stream = new MemoryStream();
-                    tile.Save(stream);
+                    tile.Save(stream, PngBitmapEncoderOptions.Default);
                     using var overlay = new MagickImage(stream.ToArray());
                     using var overlayPixels = overlay.GetPixels();
                     var foreground = overlayPixels.ToByteArray(PixelMapping.BGRA)!;
@@ -63,36 +62,6 @@ namespace RitsukageGif.Desktop
 
                     token.ThrowIfCancellationRequested();
                     target.SetArea(left, top, (uint)width, (uint)height, destination);
-                }, token);
-            }
-        }
-
-        private static async Task CopyImageEffectLayerAsync(MagickImage source, PixelRect region,
-            ScreenshotAnnotation annotation, CancellationToken token)
-        {
-            foreach (var tile in annotation.ImageTiles)
-            {
-                token.ThrowIfCancellationRequested();
-                var bounds = new PixelRect((int)tile.Bounds.X, (int)tile.Bounds.Y,
-                    (int)tile.Bounds.Width, (int)tile.Bounds.Height);
-                var clipped = bounds.Intersect(region);
-                if (clipped.IsEmpty) continue;
-                var pixels = new byte[checked(clipped.Width * clipped.Height * 4)];
-                using (var bitmap = ((WriteableBitmap)tile.Image).Lock())
-                    for (var y = 0; y < clipped.Height; y++)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        Marshal.Copy(bitmap.Address + (clipped.Y + y - bounds.Y) * bitmap.RowBytes +
-                                     (clipped.X - bounds.X) * 4, pixels, y * clipped.Width * 4, clipped.Width * 4);
-                    }
-
-                await Task.Run(() =>
-                {
-                    token.ThrowIfCancellationRequested();
-                    using var image = new MagickImage(pixels,
-                        new PixelReadSettings((uint)clipped.Width, (uint)clipped.Height, StorageType.Char,
-                            PixelMapping.BGRA));
-                    source.Composite(image, clipped.X - region.X, clipped.Y - region.Y, CompositeOperator.Copy);
                 }, token);
             }
         }

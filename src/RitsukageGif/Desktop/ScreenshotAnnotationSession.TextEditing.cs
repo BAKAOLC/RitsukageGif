@@ -39,7 +39,10 @@ namespace RitsukageGif.Desktop
         {
             if (_disposed || !CanAnnotate || IsBusy || IsDrawing) return false;
             CommitTextEdit();
-            var target = _selected is { Tool: ScreenshotTool.Arrow or ScreenshotTool.Watermark } value ? value : null;
+            var target = _selected is
+                { Tool: ScreenshotTool.Arrow or ScreenshotTool.Watermark or ScreenshotTool.Number } value
+                ? value
+                : null;
             if (target is null && Tool != ScreenshotTool.Watermark) return false;
             StartTextEdit(target, target?.Points[0] ?? default, false,
                 target?.Tool == ScreenshotTool.Watermark || target is null);
@@ -49,14 +52,7 @@ namespace RitsukageGif.Desktop
         private void StartTextEdit(ScreenshotAnnotation? target, Point position, bool canvas, bool watermarkText)
         {
             CancelGesture();
-            if (target is not null)
-            {
-                Properties = target.Properties;
-                Color = target.Color;
-                Thickness = target.Thickness;
-                FontSize = target.FontSize;
-                MosaicSize = target.MosaicSize;
-            }
+            if (target is not null) LoadObjectStyle(target);
 
             _textEditPreviousStyle = new()
             {
@@ -98,6 +94,8 @@ namespace RitsukageGif.Desktop
             _textEditOriginal = null;
             _textEditPreviousStyle = null;
             Text = TextEditValue;
+            if (_textEditWatermarkText)
+                Properties = Properties with { WatermarkText = TextEditValue, WatermarkImagePath = null };
             if (original is not null)
             {
                 if (original.Tool == ScreenshotTool.Text && string.IsNullOrWhiteSpace(TextEditValue))
@@ -127,13 +125,15 @@ namespace RitsukageGif.Desktop
                 };
                 annotation.Points.Add(new(TextEditPosition.X, TextEditPosition.Y));
                 Commit(annotation);
-                _selected = annotation;
             }
+
+            if (_behavior.SecondaryEditing == AnnotationSecondaryEditingMode.CompletelyDisabled) _selected = null;
 
             if (_textEditWatermarkText)
             {
                 _watermarkSource?.Dispose();
                 _watermarkSource = null;
+                _watermarkSourcePath = null;
             }
 
             NotifyTextEditState();

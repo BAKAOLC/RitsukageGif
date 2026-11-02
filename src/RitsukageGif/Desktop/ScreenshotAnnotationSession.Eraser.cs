@@ -5,19 +5,25 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotAnnotationSession
     {
-        private static ushort[] CreateEraserCoverage(ScreenshotAnnotation annotation, PixelRect region,
+        private static ushort[] CreateBrushCoverage(ScreenshotAnnotation annotation, PixelRect region,
             CancellationToken token)
         {
             var coverage = new ushort[checked(region.Width * region.Height)];
             var radius = annotation.Thickness / 2;
             var squared = radius * radius;
+            var previous = annotation.Points[0];
             foreach (var center in EraserSamples(annotation))
             {
                 token.ThrowIfCancellationRequested();
-                var left = Math.Max(region.X, (int)Math.Floor(center.X - radius));
-                var right = Math.Min(region.Right, (int)Math.Ceiling(center.X + radius));
-                var top = Math.Max(region.Y, (int)Math.Floor(center.Y - radius));
-                var bottom = Math.Min(region.Bottom, (int)Math.Ceiling(center.Y + radius));
+                var start = previous;
+                previous = center;
+                var dx = center.X - start.X;
+                var dy = center.Y - start.Y;
+                var lengthSquared = dx * dx + dy * dy;
+                var left = Math.Max(region.X, (int)Math.Floor(Math.Min(start.X, center.X) - radius));
+                var right = Math.Min(region.Right, (int)Math.Ceiling(Math.Max(start.X, center.X) + radius));
+                var top = Math.Max(region.Y, (int)Math.Floor(Math.Min(start.Y, center.Y) - radius));
+                var bottom = Math.Min(region.Bottom, (int)Math.Ceiling(Math.Max(start.Y, center.Y) + radius));
                 for (var y = top; y < bottom; y++)
                 {
                     token.ThrowIfCancellationRequested();
@@ -25,9 +31,7 @@ namespace RitsukageGif.Desktop
                     {
                         var index = (y - region.Y) * region.Width + x - region.X;
                         if (coverage[index] == ushort.MaxValue) continue;
-                        var farX = Math.Max(Math.Abs(x - center.X), Math.Abs(x + 1 - center.X));
-                        var farY = Math.Max(Math.Abs(y - center.Y), Math.Abs(y + 1 - center.Y));
-                        if (farX * farX + farY * farY <= squared)
+                        if (Contains(x, y) && Contains(x + 1, y) && Contains(x, y + 1) && Contains(x + 1, y + 1))
                         {
                             coverage[index] = ushort.MaxValue;
                             continue;
@@ -35,13 +39,21 @@ namespace RitsukageGif.Desktop
 
                         for (var subY = 0; subY < 4; subY++)
                         for (var subX = 0; subX < 4; subX++)
-                        {
-                            var dx = x + (subX + .5) / 4 - center.X;
-                            var dy = y + (subY + .5) / 4 - center.Y;
-                            if (dx * dx + dy * dy <= squared)
+                            if (Contains(x + (subX + .5) / 4, y + (subY + .5) / 4))
                                 coverage[index] |= (ushort)(1 << (subY * 4 + subX));
-                        }
                     }
+                }
+
+                continue;
+
+                bool Contains(double x, double y)
+                {
+                    var parameter = lengthSquared > 0
+                        ? Math.Clamp(((x - start.X) * dx + (y - start.Y) * dy) / lengthSquared, 0, 1)
+                        : 0;
+                    var distanceX = x - start.X - dx * parameter;
+                    var distanceY = y - start.Y - dy * parameter;
+                    return distanceX * distanceX + distanceY * distanceY <= squared;
                 }
             }
 
@@ -62,7 +74,7 @@ namespace RitsukageGif.Desktop
             {
                 var tile = new PixelRect(left, top, Math.Min(tileSize, region.Right - left),
                     Math.Min(tileSize, region.Bottom - top));
-                var coverage = CreateEraserCoverage(annotation, tile, token);
+                var coverage = CreatePixelCoverage(annotation, tile, token);
                 for (var y = 0; y < tile.Height; y++)
                 {
                     token.ThrowIfCancellationRequested();

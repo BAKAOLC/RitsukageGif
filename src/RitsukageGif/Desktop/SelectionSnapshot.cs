@@ -8,5 +8,7 @@ namespace RitsukageGif.Desktop
         bool Controls,
         bool FollowsWindow,
         bool CanConfirm,
-        bool Cursor = false);
+        bool Cursor = false,
+        SelectionShape? Shape = null,
+        SelectionShapeMode ShapeMode = SelectionShapeMode.Rectangle);
 }

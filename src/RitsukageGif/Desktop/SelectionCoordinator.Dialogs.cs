@@ -10,10 +10,12 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.VerifyAccess();
             _selectionDialogDepth++;
+            RefreshWindowsKeyGuard();
             return new SelectionDialogScope(() =>
             {
                 Dispatcher.UIThread.VerifyAccess();
                 _selectionDialogDepth--;
+                RefreshWindowsKeyGuard();
                 FocusChanged();
             });
         }

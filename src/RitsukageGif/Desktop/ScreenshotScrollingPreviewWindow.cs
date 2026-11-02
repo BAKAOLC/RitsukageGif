@@ -23,7 +23,7 @@ namespace RitsukageGif.Desktop
         {
             _preview = preview;
             _toolbar = toolbar;
-            SystemDecorations = SystemDecorations.None;
+            WindowDecorations = WindowDecorations.None;
             ShowActivated = false;
             ShowInTaskbar = false;
             Topmost = true;

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Threading;
+using SkiaSharp;
 using Avalonia_PixelPoint = Avalonia.PixelPoint;
 
 namespace RitsukageGif.Desktop
@@ -29,6 +30,7 @@ namespace RitsukageGif.Desktop
         private PixelPoint _controlPoint;
         private nint _controlWindow;
         private bool _cursor;
+        private bool _portalSeparateCursor;
         private PixelRect _hovered;
         private WindowTarget? _hoveredTarget, _selectedTarget;
         private SelectionSnapshot? _lastSnapshot;
@@ -53,6 +55,7 @@ namespace RitsukageGif.Desktop
                 throw new ArgumentOutOfRangeException(nameof(screenshotColorMode));
             _screenshotToneMap = screenshotToneMap;
             _screens = screens;
+            NativeDisplayCatalog.Update(screens);
             WindowSource = windowSource;
             _cursor = cursor;
             _fps = fps;
@@ -76,13 +79,17 @@ namespace RitsukageGif.Desktop
         internal bool WindowSource { get; private set; }
 
         internal bool CanSwitchSource => !UsesLocalSource;
-        internal bool CanDetectControls => CanSwitchSource && OperatingSystem.IsWindows();
+
+        internal bool CanDetectControls => CanSwitchSource && (OperatingSystem.IsWindows() ||
+                                                               OperatingSystem.IsMacOS() ||
+                                                               LinuxAccessibilityLocator.Available);
 
         internal SelectionSnapshot Snapshot
         {
             get
             {
-                var committed = !_state.Selected.IsEmpty || _state.Dragging;
+                EnsureShapePreview();
+                var committed = !_state.Selected.IsEmpty || _state.Dragging || ShapeDrawing;
                 var target = committed ? _selectedTarget : _hoveredTarget;
                 var display = committed ? _state.Selected : _hovered;
                 display = _state switch
@@ -92,33 +99,39 @@ namespace RitsukageGif.Desktop
                 };
                 if (!_state.Dragging && _selectionIsWholeTarget && target is not null)
                     display = WindowSource ? target.Client : target.Bounds;
-                if (WindowSource && !UsesLocalSource)
+                if (WindowSource && !UsesLocalSource && ShapeMode != SelectionShapeMode.MultiWindow)
                     display = target is not null ? display.Intersect(target.Client) : default;
                 var phase = _pendingFinish || _screenshotCompleting
                     ? SelectionPhase.Confirming
-                    : ManipulationPhase ?? (_state.Dragging
-                        ? _state.DragThresholdReached ? SelectionPhase.Dragging : SelectionPhase.Pressed
-                        : committed
-                            ? SelectionPhase.Selected
-                            : SelectionPhase.Candidate);
+                    : ShapeDrawing
+                        ? SelectionPhase.Dragging
+                        : ManipulationPhase ?? (_state.Dragging
+                            ? _state.DragThresholdReached ? SelectionPhase.Dragging : SelectionPhase.Pressed
+                            : committed
+                                ? SelectionPhase.Selected
+                                : SelectionPhase.Candidate);
                 return new(phase, display, target, WindowSource, Controls,
-                    WindowSource && target is not null && !UsesLocalSource, !display.IsEmpty && !_screenshotCompleting,
-                    _cursor);
+                    WindowSource && target is not null && !UsesLocalSource,
+                    !display.IsEmpty && !_screenshotCompleting && !ShapeDrawing,
+                    _cursor, _selectionShape, DisplayShapeMode);
             }
         }
 
         public void Dispose()
         {
             Cancel();
+            DisposeWindowsKeyGuard();
             DisposeFrameDecorationPreview();
             _sourceSelection?.Dispose();
             _sourceSelection = null;
             _screenshots.Clear();
+            _nativeScreenshots.Clear();
             _hdrScreenshots.Clear();
             _frozenWindow?.Dispose();
             _frozenWindow = null;
             ScreenshotCursor?.Dispose();
             ScreenshotCursor = null;
+            _shapeModeTimer?.Dispose();
             Annotations?.Dispose();
         }
 
@@ -131,6 +144,7 @@ namespace RitsukageGif.Desktop
             Dispatcher.UIThread.VerifyAccess();
             if (_started) throw new InvalidOperationException();
             _started = true;
+            using var shortcuts = CreateSelectionShortcutScope();
             _screens.Changed += ScreensChanged;
             try
             {
@@ -151,36 +165,71 @@ namespace RitsukageGif.Desktop
             finally
             {
                 Finish(null);
-                if (_screenshotTask is { } screenshotTask) await screenshotTask;
-                if (_scrollingTask is { } scrollingTask) await scrollingTask;
-                _screens.Changed -= ScreensChanged;
-                _cancel.Dispose();
+                try
+                {
+                    await Task.WhenAll(_screenshotTask ?? Task.CompletedTask,
+                        _scrollingTask ?? Task.CompletedTask, _codeDetection?.Pending ?? Task.CompletedTask);
+                }
+                finally
+                {
+                    await WaitForWindowsKeyGuardsAsync();
+                    _screens.Changed -= ScreensChanged;
+                    _cancel.Dispose();
+                }
             }
         }
 
         private async Task InitializeAsync()
         {
-            if (ScreenshotMode && OperatingSystem.IsWindows()) ScreenshotCursor = FrozenScreenshotCursor.Capture();
+            if (ScreenshotMode && !DesktopCapture.UsesSourceSelection)
+                ScreenshotCursor = FrozenScreenshotCursor.Capture();
             if (DesktopCapture.UsesSourceSelection)
             {
                 _sourceSelection =
-                    await DesktopCapture.BeginSourceSelectionAsync(WindowSource, _cursor, _fps, _cancel.Token);
+                    await DesktopCapture.BeginSourceSelectionAsync(WindowSource, !ScreenshotMode && _cursor, _fps,
+                        _retainHdr, _cancel.Token);
                 var source = _sourceSelection.Frame;
                 if (_finished) return;
-                var region = new PixelRect(0, 0, source.Width, source.Height);
-                if (ScreenshotMode) _screenshots.Add((region, source.Pixels));
+                var region = source.Bounds;
+                var (sourceFrames, _, cursor, cursorPixels, capabilities, _) =
+                    _sourceSelection.ReadSnapshot(_cancel.Token);
+                _portalSeparateCursor = capabilities?.SeparateCursor == true;
+                var logicalFrames = NativeFrameComposition.Compose([(region, sourceFrames)], region, 1, _cancel.Token);
+                var sourcePixels = PackScreenshotFrame(logicalFrames, _cancel.Token);
+                if (ScreenshotMode)
+                {
+                    _screenshots.Add((region, sourcePixels));
+                    _nativeScreenshots.Add((region, sourceFrames));
+                    _hdrScreenshots.Add((region, sourceFrames.Hdr));
+                    ScreenshotCursor =
+                        FrozenScreenshotCursor.FromNative(cursor, cursorPixels);
+                }
+
                 _hovered = region;
-                var working = _screens.Primary?.WorkingArea;
-                var scale = Math.Max(1, Math.Max(region.Width / ((working?.Width ?? 1280) * .9),
-                    region.Height / ((working?.Height ?? 800) * .85)));
-                _windows.Add(new(this, region, scale, source.Pixels, _radius, _threshold, true));
+                var previewScreen = _screens.Primary;
+                var working = previewScreen?.WorkingArea;
+                var displayScale = previewScreen?.Scaling ?? 1;
+                var scale = Math.Max(1, Math.Max(region.Width / ((working?.Width ?? 1280) / displayScale * .9),
+                    region.Height / ((working?.Height ?? 800) / displayScale * .85)));
+                _windows.Add(new(this, region, scale, sourcePixels, _radius, _threshold, true));
             }
             else
             {
                 if (OperatingSystem.IsMacOS()) await Task.Run(MacWindowSystem.EnsurePermission, _cancel.Token);
                 if (_finished) return;
-                _targets = await Task.Run(WindowLocator.List,
-                    _cancel.Token);
+                _targets = await Task.Run(WindowLocator.List, _cancel.Token);
+                if (OperatingSystem.IsMacOS())
+                {
+                    var controlsAvailable =
+                        await Task.Run(() => MacWindowSystem.CheckControlPermission(), _cancel.Token);
+                    if (!controlsAvailable) Controls = false;
+                }
+                else if (OperatingSystem.IsLinux())
+                {
+                    await LinuxAccessibilityLocator.EnsureAvailableAsync(_cancel.Token);
+                    Controls = DetectionMode == CaptureDetectionMode.Controls && LinuxAccessibilityLocator.Available;
+                }
+
                 if (_finished) return;
                 foreach (var screen in _screens.All.ToArray())
                 {
@@ -193,8 +242,9 @@ namespace RitsukageGif.Desktop
                                                          .Hdr);
                     var frames = await Task.Run(() =>
                     {
-                        using var capture = new DesktopCapture(new(region, Divisor: 1,
-                            Cursor: ScreenshotMode && _cursor && !OperatingSystem.IsWindows()));
+                        var captureOptions = new RecordingOptions(region, Divisor: 1, Cursor: false)
+                            { PixelDensity = ScreenshotMode ? NativeDisplayCatalog.Density(region) : 1 };
+                        using var capture = new DesktopCapture(captureOptions);
                         if (retainColor)
                             try
                             {
@@ -205,10 +255,14 @@ namespace RitsukageGif.Desktop
                                 _cancel.Token.ThrowIfCancellationRequested();
                             }
 
-                        return CreateSdrFrames(region.Width, region.Height, capture.Capture());
+                        return CreateSdrFrames(captureOptions.Width, captureOptions.Height, capture.Capture());
                     }, _cancel.Token);
                     if (_finished) return;
-                    var pixels = PackScreenshotFrame(frames, _cancel.Token);
+                    var logicalFrames = frames.Sdr.Width == region.Width && frames.Sdr.Height == region.Height
+                        ? frames
+                        : NativeFrameComposition.Compose([(region, frames)], region, 1, _cancel.Token);
+                    var pixels = PackScreenshotFrame(logicalFrames, _cancel.Token);
+                    if (ScreenshotMode && OperatingSystem.IsMacOS()) _nativeScreenshots.Add((region, frames));
                     if (retainColor) _hdrScreenshots.Add((region, frames.Hdr));
                     if (ScreenshotMode) _screenshots.Add((region, pixels));
                     _windows.Add(new(this, region, screen.Scaling, pixels, _radius, _threshold));
@@ -245,6 +299,8 @@ namespace RitsukageGif.Desktop
                     Refresh();
                 }
 
+                await StartWindowsKeyGuardAsync();
+                if (_finished) return;
                 (active ?? _windows[0]).Activate();
                 PrepareWindowScreenshot();
                 SelectionLogger.ZLogInformation(
@@ -269,13 +325,14 @@ namespace RitsukageGif.Desktop
             if (!_showing) StopFrameRefresh();
             CancelModifierTap();
             AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always;
-            if (_finished || _showing || _screenshotCompleting || _focusCheckPending) return;
+            if (!CapturePreferences.QuitOnForeignActivation || _scrolling ||
+                _finished || _showing || _screenshotCompleting || _focusCheckPending) return;
             _focusCheckPending = true;
             Dispatcher.UIThread.Post(() =>
             {
                 _focusCheckPending = false;
-                if (!_finished && !_showing && !_screenshotCompleting && _selectionDialogDepth == 0 &&
-                    !_windows.Any(window => window.IsActive))
+                if (!_finished && !_showing && !_scrolling && !_screenshotCompleting && _selectionDialogDepth == 0 &&
+                    !_windows.Any(window => window.IsActive) && IsForeignCaptureWindowActivated())
                 {
                     SelectionLogger.ZLogInformation(
                         $"Selection cancelled after losing application focus. SelectionId={_selectionId} Scrolling={_scrolling} OverlayCount={_windows.Count}");
@@ -325,6 +382,7 @@ namespace RitsukageGif.Desktop
                 _pointer = point;
                 UpdateShift(shift);
                 UpdatePoint();
+                if (HandleShapePointer(point, left, right, pressed, clickCount)) return;
                 if (pressed && left && clickCount >= 2)
                 {
                     _left = left;
@@ -345,6 +403,7 @@ namespace RitsukageGif.Desktop
 
                 if (pressed && left && !_left)
                 {
+                    _selectionShape = null;
                     PrepareOutsideExpansion();
                     UpdatePoint(true);
                     _selectedTarget = _hoveredTarget;
@@ -369,6 +428,12 @@ namespace RitsukageGif.Desktop
                 if (!right) _rightConfirm = false;
                 if (confirm)
                 {
+                    if (CancelShapeDrawing())
+                    {
+                        Refresh();
+                        return;
+                    }
+
                     if (_state.Selected.IsEmpty && !_state.Dragging) RequestFinish(null);
                     else ClearSelection();
                 }
@@ -395,6 +460,7 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
+                if (HandleShapeModeKey(down, modifiers)) return;
                 UpdateShift(modifiers.HasFlag(KeyModifiers.Shift));
                 AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always ||
                                    (modifiers.HasFlag(KeyModifiers.Alt) &&
@@ -426,6 +492,11 @@ namespace RitsukageGif.Desktop
             _autoConfirmPending = false;
             CancelSelectionManipulation();
             _state.Clear();
+            _selectionShape = null;
+            _shapePoints.Clear();
+            _shapePreviewDirty = false;
+            _regionEditBase = null;
+            _selectionWindows.Clear();
             _selectedTarget = null;
             MeasurementControlBounds = default;
             _selectionIsWholeTarget = false;
@@ -467,6 +538,12 @@ namespace RitsukageGif.Desktop
         private void ToggleControls()
         {
             if (!CanDetectControls || _state.Dragging || SelectionManipulating || _finished) return;
+            if (!Controls && OperatingSystem.IsMacOS() && !MacWindowSystem.ControlDetectionAvailable)
+            {
+                _ = EnableMacControlsAsync();
+                return;
+            }
+
             Controls = !Controls;
             DetectionMode = Controls ? CaptureDetectionMode.Controls : CaptureDetectionMode.Windows;
             PreferencesChanged?.Invoke();
@@ -495,13 +572,14 @@ namespace RitsukageGif.Desktop
 
         private void UpdatePoint(bool forceCandidate = false)
         {
+            ApplyPendingInitialGeometry();
             if (!UsesLocalSource && (forceCandidate || _state is { Dragging: false, Selected.IsEmpty: true }))
             {
                 _hoveredTarget = _targets.FirstOrDefault(candidate => candidate.Bounds.Contains(_pointer));
                 _hovered = _hoveredTarget is { } target
                     ? WindowSource ? target.Client : target.Bounds
                     : default;
-                if (Controls && _hoveredTarget is { } controlTarget)
+                if (Controls && ShapeMode != SelectionShapeMode.MultiWindow && _hoveredTarget is { } controlTarget)
                 {
                     if (TryHierarchyCandidate(controlTarget, out var candidate)) _hovered = candidate;
                     else if (_controlWindow == controlTarget.Handle && _controlPoint == _pointer &&
@@ -511,6 +589,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 _hovered = DetectionMode == CaptureDetectionMode.None ? default : ApplyDetectionMargin(_hovered);
+                if (ShapeMode is SelectionShapeMode.Free or SelectionShapeMode.Polygon) _hovered = default;
             }
 
             if (AuxiliaryVisible && CapturePreferences.GuideMeasurements && Controls && !UsesLocalSource &&
@@ -537,7 +616,9 @@ namespace RitsukageGif.Desktop
                 _controlHierarchy = hierarchy;
                 var result = hierarchy.Count == 0 ? null : hierarchy[^1];
                 _controlBounds = result is not null &&
-                                 NativeMethods.IsWindowVisible(result.Handle == 0 ? target.Handle : result.Handle) != 0
+                                 (!OperatingSystem.IsWindows() ||
+                                  NativeMethods.IsWindowVisible(result.Handle == 0 ? target.Handle : result.Handle) !=
+                                  0)
                     ? result.Bounds
                     : default;
                 if (Controls && _state is { Dragging: false, Selected.IsEmpty: true } && _pointer == point &&
@@ -577,6 +658,8 @@ namespace RitsukageGif.Desktop
 
         private PixelRect ResolveClickTarget(WindowTarget? target)
         {
+            if (ShapeMode == SelectionShapeMode.MultiWindow && target is not null)
+                return WindowSource ? target.Client : target.Bounds;
             if (!Controls || target is null) return _hovered;
             if (TryHierarchyCandidate(target, out var candidate)) return ApplyDetectionMargin(candidate);
             var basis = WindowSource ? target.Client : target.Bounds;
@@ -603,6 +686,22 @@ namespace RitsukageGif.Desktop
             _state.End(_mouse, _pointer, _pressRegion);
             if (dragged && GeometrySizeFixed) _state.Set(FitFixedGeometry(_state.Selected));
             CompleteOutsideExpansion(dragged);
+            if (ShapeMode == SelectionShapeMode.MultiWindow && _regionEditBase is null && !_state.Selected.IsEmpty)
+            {
+                _selectionShape = CurrentSelectionShape();
+                if (_selectedTarget is { } selected && _selectionWindows.All(item => item.Handle != selected.Handle))
+                    _selectionWindows.Add(selected);
+            }
+
+            if (_regionEditBase is not null)
+            {
+                using var path = new SKPath();
+                var region = _state.Selected;
+                path.AddRect(new(region.X, region.Y, region.Right, region.Bottom));
+                CommitShape(path);
+                return;
+            }
+
             PrepareWindowScreenshot();
             QueueAutoConfirm();
         }
@@ -614,7 +713,9 @@ namespace RitsukageGif.Desktop
             if (_state.Selected.IsEmpty) _hovered = ResolveClickTarget(_hoveredTarget);
             var snapshot = Snapshot;
             var result =
-                SelectionResult.Create(snapshot.Region, WindowSource, snapshot.Target, UsesLocalSource, _cursor);
+                SelectionResult.Create(snapshot.Region, WindowSource, snapshot.Target, UsesLocalSource, _cursor,
+                    _selectionShape,
+                    ShapeMode == SelectionShapeMode.MultiWindow ? SelectedShapeWindows() : null);
             if (result is not null) RequestFinish(result);
         }
 
@@ -642,6 +743,7 @@ namespace RitsukageGif.Desktop
             }
 
             UpdateFrameDecorationPreview();
+            UpdateCodeDetection();
             foreach (var window in _windows) window.Refresh(snapshot.Region, _mouse, Mode);
         }
 
@@ -677,6 +779,8 @@ namespace RitsukageGif.Desktop
             if (error is not null)
                 SelectionLogger.ZLogError(error, $"Selection completion failure. SelectionId={_selectionId}");
             _finished = true;
+            DisposeCodeDetection();
+            DisposeWindowsKeyGuard();
             StopFrameRefresh();
             _shiftTimer?.Dispose();
             _shiftTimer = null;

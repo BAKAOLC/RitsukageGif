@@ -1,11 +1,12 @@
 namespace RitsukageGif.Desktop
 {
-    internal sealed class CaptureHistoryStore
+    internal sealed partial class CaptureHistoryStore : IAsyncDisposable
     {
         private readonly Lock _gate = new();
         private readonly List<CaptureImageHistoryEntry> _images = [];
         private readonly List<CaptureRegionHistoryEntry> _regions = [];
         private long _imageBytes;
+        private long _revision;
         private int _imageCapacity;
         private long _maximumBytes;
         private int _regionCapacity;
@@ -23,10 +24,17 @@ namespace RitsukageGif.Desktop
             ArgumentOutOfRangeException.ThrowIfNegative(maximumBytes);
             lock (_gate)
             {
-                _regionCapacity = Math.Min(regionCapacity, 1000);
-                _imageCapacity = Math.Min(imageCapacity, 1000);
-                _maximumBytes = Math.Min(maximumBytes, 512L * 1024 * 1024);
+                regionCapacity = Math.Min(regionCapacity, 1000);
+                imageCapacity = Math.Min(imageCapacity, 1000);
+                maximumBytes = Math.Min(maximumBytes, 512L * 1024 * 1024);
+                if (_regionCapacity == regionCapacity && _imageCapacity == imageCapacity &&
+                    _maximumBytes == maximumBytes) return;
+                _regionCapacity = regionCapacity;
+                _imageCapacity = imageCapacity;
+                _maximumBytes = maximumBytes;
                 Trim();
+                _revision++;
+                QueuePersistenceLocked();
             }
         }
 
@@ -38,9 +46,13 @@ namespace RitsukageGif.Desktop
                 if (_regionCapacity == 0) return;
                 _regions.RemoveAll(item => item.Selection.Region == selection.Region &&
                                            item.Selection.WindowSource == selection.WindowSource &&
-                                           item.Selection.Target == selection.Target);
+                                           item.Selection.Target == selection.Target &&
+                                           item.Selection.Shape == selection.Shape &&
+                                           (item.Selection.Windows ?? []).SequenceEqual(selection.Windows ?? []));
                 _regions.Insert(0, new(selection, DateTimeOffset.UtcNow));
                 Trim();
+                _revision++;
+                QueuePersistenceLocked();
             }
         }
 
@@ -58,20 +70,27 @@ namespace RitsukageGif.Desktop
             {
                 var size = (long)png.Length + (hdr?.Pixels.Length ?? 0);
                 if (_imageCapacity == 0 || size > _maximumBytes) return false;
-                if (hdr is not null && (hdr.Width != region.Width || hdr.Height != region.Height))
-                    throw new ArgumentException(null, nameof(hdr));
+                var owned = png.ToArray();
+                if (hdr is not null)
+                {
+                    var dimensions = PngImageCodec.ReadDimensions(owned);
+                    if (hdr.Width != dimensions.Width || hdr.Height != dimensions.Height)
+                        throw new ArgumentException(null, nameof(hdr));
+                }
+
                 var ownedHdr = hdr is null
                     ? null
                     : hdr with
                     {
                         Pixels = hdr.Pixels.ToArray(), ColorRegions = Array.AsReadOnly([.. hdr.ColorRegions]),
                     };
-                var owned = png.ToArray();
                 _images.Insert(0,
                     new(owned, region, source, DateTimeOffset.UtcNow, ownedHdr)
                         { CaptureScaling = captureScaling, Decoration = decoration, OutputOrigin = outputOrigin });
                 _imageBytes += size;
                 Trim();
+                _revision++;
+                QueuePersistenceLocked();
                 return true;
             }
         }
@@ -86,14 +105,20 @@ namespace RitsukageGif.Desktop
             lock (_gate) return [.. _images];
         }
 
-        // ReSharper disable once UnusedMember.Global
-        internal void Clear()
+        private void Clear(bool screenshots, bool regions)
         {
             lock (_gate)
             {
-                _regions.Clear();
-                _images.Clear();
-                _imageBytes = 0;
+                _clearRevision++;
+                _revision++;
+                if (regions) _regions.Clear();
+                if (screenshots)
+                {
+                    _images.Clear();
+                    _imageBytes = 0;
+                }
+
+                QueuePersistenceLocked(true);
             }
         }
 

@@ -1,4 +1,4 @@
-﻿namespace RitsukageGif.Desktop
+namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
@@ -11,19 +11,26 @@
 
         private void RefreshScreenshot()
         {
-            if (!ScreenshotMode || UsesLocalSource || _screenshotCompleting || _state.Dragging ||
+            if (!ScreenshotMode || ScreenshotPreview || _screenshotCompleting || _state.Dragging ||
                 Annotations is not { IsBusy: false, IsDrawing: false }) return;
             _historyWork = _screenshotTask = RefreshFrozenFramesAsync();
         }
 
-        private async Task<(byte[] Pixels, CapturedFrame? Hdr)> CaptureRefreshFrameAsync(SelectionResult selection,
+        private async Task<FrozenCaptureResult> CaptureRefreshFrameAsync(SelectionResult selection,
             CancellationToken token)
         {
-            if (RefreshCapture is { } provider) return await provider(selection, token);
+            if (RefreshCapture is { } provider)
+            {
+                var provided = await provider(selection, token);
+                return new(provided.Pixels, provided.Hdr);
+            }
+
             return await Task.Run(() =>
             {
                 if (selection.WindowSource) return CaptureWindowPixels(selection, token);
-                using var capture = new DesktopCapture(new(selection.Region, Divisor: 1, Cursor: selection.Cursor));
+                var options = new RecordingOptions(selection.Region, Divisor: 1, Cursor: false)
+                    { PixelDensity = NativeDisplayCatalog.Density(selection.Region) };
+                using var capture = new DesktopCapture(options);
                 var retainColor = _retainHdr || (OperatingSystem.IsWindows() &&
                                                  WindowsDisplayColor
                                                      .Read(WindowsDisplayColor.ForRegion(selection.Region)).Hdr);
@@ -38,8 +45,12 @@
                         token.ThrowIfCancellationRequested();
                     }
 
-                frames ??= CreateSdrFrames(selection.Region.Width, selection.Region.Height, capture.Capture());
-                return (PackScreenshotFrame(frames, token), frames.Hdr);
+                frames ??= CreateSdrFrames(options.Width, options.Height, capture.Capture());
+                var logical = options.PixelDensity.Equals(1d)
+                    ? frames
+                    : NativeFrameComposition.Compose([(selection.Region, frames)], selection.Region, 1, token);
+                return new(PackScreenshotFrame(logical, token), logical.Hdr,
+                    OperatingSystem.IsMacOS() || DesktopCapture.UsesSourceSelection ? frames : null);
             }, token);
         }
 
@@ -72,15 +83,15 @@
                 foreach (var window in _windows) await CaptureWindowVisibility.HideAsync(window, work.Token);
                 if (released is not null) await released.WaitAsync(work.Token);
                 work.Token.ThrowIfCancellationRequested();
-                if (RefreshCapture is null && OperatingSystem.IsWindows())
+                if (RefreshCapture is null && !DesktopCapture.UsesSourceSelection)
                     refreshedCursor = FrozenScreenshotCursor.Capture();
-                if (WindowSource)
+                if (WindowSource && !UsesLocalSource)
                 {
                     var target = Snapshot.Target ?? throw new CaptureSourceLostException();
-                    var frame = await CaptureRefreshFrameAsync(new(target.Client, true, target,
-                        !OperatingSystem.IsWindows() && _cursor), work.Token);
+                    var frame = await CaptureRefreshFrameAsync(new(target.Client, true, target), work.Token);
                     work.Token.ThrowIfCancellationRequested();
-                    var replacement = new FrozenWindowScreenshot(target, target.Client, frame.Pixels, frame.Hdr);
+                    var replacement = new FrozenWindowScreenshot(target, target.Client, frame.Pixels, frame.Hdr,
+                        frame.NativeFrames);
                     try
                     {
                         await annotations.SetOverlayFrameAsync(target.Client, frame.Pixels, work.Token);
@@ -99,18 +110,21 @@
                 {
                     var frames = new List<(PixelRect Region, byte[] Pixels)>();
                     var hdr = new List<(PixelRect Region, CapturedFrame? Frame)>();
+                    var native = new List<(PixelRect Region, CapturedFrameSet Frames)>();
                     foreach (var window in _windows)
                     {
-                        var frame = await CaptureRefreshFrameAsync(new(window.Region, false, null,
-                            !OperatingSystem.IsWindows() && _cursor), work.Token);
+                        var frame = await CaptureRefreshFrameAsync(new(window.Region, false, null), work.Token);
                         if (frame.Pixels.Length != checked(window.Region.Width * window.Region.Height * 4))
                             throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
                         frames.Add((window.Region, frame.Pixels));
-                        hdr.Add((window.Region, frame.Hdr));
+                        hdr.Add((window.Region, frame.NativeFrames?.Hdr ?? frame.Hdr));
+                        if (frame.NativeFrames is { } retained) native.Add((window.Region, retained));
                     }
 
+                    if (DesktopCapture.UsesSourceSelection) refreshedCursor = FrozenScreenshotCursor.Capture();
                     var previous = _screenshots.ToArray();
                     var previousHdr = _hdrScreenshots.ToArray();
+                    var previousNative = _nativeScreenshots.ToArray();
                     await annotations.ReplaceFramesAsync(frames, work.Token);
                     try
                     {
@@ -119,6 +133,8 @@
                         _screenshots.AddRange(frames);
                         _hdrScreenshots.Clear();
                         _hdrScreenshots.AddRange(hdr);
+                        _nativeScreenshots.Clear();
+                        _nativeScreenshots.AddRange(native);
                         for (var index = 0; index < _windows.Count; index++)
                             _windows[index].ReplacePixels(frames[index].Pixels);
                     }
@@ -129,6 +145,8 @@
                         _screenshots.AddRange(previous);
                         _hdrScreenshots.Clear();
                         _hdrScreenshots.AddRange(previousHdr);
+                        _nativeScreenshots.Clear();
+                        _nativeScreenshots.AddRange(previousNative);
                         await annotations.ReplaceFramesAsync(previous, CancellationToken.None);
                         for (var index = 0; index < _windows.Count; index++)
                             _windows[index].ReplacePixels(previous[index].Pixels);
