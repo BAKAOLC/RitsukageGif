@@ -6,12 +6,17 @@ namespace RitsukageGif.Scripting
 
         public static void Register(ScriptBindingRegistry bindings, ITextRecognitionService? textService = null,
             IBarcodeRecognitionService? barcodeService = null, string? baseDirectory = null,
-            IPrivacyDetectionService? privacyService = null)
+            IPrivacyDetectionService? privacyService = null, ITableRecognitionService? tableService = null,
+            IFormulaRecognitionService? formulaService = null, IFormulaOutputService? formulaOutputService = null,
+            ITableOutputService? tableOutputService = null, IFormulaDocumentService? formulaDocumentService = null,
+            ITableDataService? tableDataService = null, ITableEditService? tableEditService = null)
         {
             var root = Path.GetFullPath(baseDirectory ?? Environment.CurrentDirectory);
             ScriptServiceErrors.Register(bindings);
             RegisterSchemas(bindings);
             RegisterPrivacy(bindings, privacyService, root);
+            RegisterStructuredRecognition(bindings, tableService, formulaService, root, formulaOutputService,
+                tableOutputService, formulaDocumentService, tableDataService, tableEditService);
             var ocr = bindings.RegisterTable("ocr");
             ocr.Function("capabilities", async (_, token) =>
             {

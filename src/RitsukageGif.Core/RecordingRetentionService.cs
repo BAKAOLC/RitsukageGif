@@ -168,7 +168,7 @@ namespace RitsukageGif.Core
         private static bool SafeFile(string path)
         {
             if (Path.GetExtension(path).ToLowerInvariant() is not (".gif" or ".webp" or ".png" or ".jpg" or ".jpeg"
-                or ".bmp" or ".exr" or ".mp4" or ".webm"))
+                or ".bmp" or ".avif" or ".pdf" or ".exr" or ".mp4" or ".webm"))
                 return false;
             for (var current = path; current is not null; current = Path.GetDirectoryName(current))
             {

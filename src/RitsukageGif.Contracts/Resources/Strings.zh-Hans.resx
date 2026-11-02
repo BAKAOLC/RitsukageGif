@@ -1394,9 +1394,6 @@ X {0}, Y {1}</value>
   <data name="PinnedImage" xml:space="preserve">
     <value>贴图</value>
   </data>
-  <data name="PinnedImageHelp" xml:space="preserve">
-    <value>拖动移动 · 滚轮缩放 · Ctrl+滚轮透明度 · 右键操作 · Esc 隐藏或最小化</value>
-  </data>
   <data name="PinnedImageActualSize" xml:space="preserve">
     <value>实际大小</value>
   </data>
@@ -1551,7 +1548,7 @@ X {0}, Y {1}</value>
     <value>默认设备</value>
   </data>
   <data name="VideoAudioUnavailable" xml:space="preserve">
-    <value>当前平台不支持音频捕获</value>
+    <value>音频捕获不可用，请检查音频服务和权限。</value>
   </data>
   <data name="VideoOutputDirectory" xml:space="preserve">
     <value>保存目录</value>
@@ -2215,18 +2212,6 @@ X {0}, Y {1}</value>
   <data name="CaptureMagnifierColorFormat" xml:space="preserve">
     <value>放大镜颜色格式</value>
   </data>
-  <data name="CaptureColorRgb" xml:space="preserve">
-    <value>RGB</value>
-  </data>
-  <data name="CaptureColorHex" xml:space="preserve">
-    <value>HEX</value>
-  </data>
-  <data name="CaptureColorHsv" xml:space="preserve">
-    <value>HSV</value>
-  </data>
-  <data name="CaptureColorHsl" xml:space="preserve">
-    <value>HSL</value>
-  </data>
   <data name="CaptureMagnifierSmooth" xml:space="preserve">
     <value>平滑缩放放大镜内容</value>
   </data>
@@ -2265,9 +2250,6 @@ X {0}, Y {1}</value>
   </data>
   <data name="AnnotationFilled" xml:space="preserve">
     <value>填充</value>
-  </data>
-  <data name="AnnotationDashed" xml:space="preserve">
-    <value>虚线</value>
   </data>
   <data name="AnnotationStrikeThrough" xml:space="preserve">
     <value>删除线</value>
@@ -2543,10 +2525,10 @@ X {0}, Y {1}</value>
     <value>忽略程序列表</value>
   </data>
   <data name="HotkeyIgnoredProgramsHint" xml:space="preserve">
-    <value>程序名称或完整路径</value>
+    <value>程序名、路径或通配符</value>
   </data>
   <data name="HotkeyIgnoredProgramInvalid" xml:space="preserve">
-    <value>请输入有效的程序名称或路径</value>
+    <value>请输入有效的匹配规则</value>
   </data>
   <data name="HotkeyIgnoredProgramAdd" xml:space="preserve">
     <value>添加</value>
@@ -2677,18 +2659,6 @@ X {0}, Y {1}</value>
   <data name="PinnedImageLockMove" xml:space="preserve">
     <value>移动</value>
   </data>
-  <data name="PinnedImageLockResize" xml:space="preserve">
-    <value>缩放</value>
-  </data>
-  <data name="PinnedImageLockClose" xml:space="preserve">
-    <value>关闭</value>
-  </data>
-  <data name="PinnedImageLockShortcuts" xml:space="preserve">
-    <value>快捷键</value>
-  </data>
-  <data name="PinnedImageLockAnnotation" xml:space="preserve">
-    <value>标注</value>
-  </data>
   <data name="PinnedImageLockedOperations" xml:space="preserve">
     <value>锁定时禁止</value>
   </data>
@@ -2729,7 +2699,7 @@ X {0}, Y {1}</value>
     <value>滚轮切换父级或子级</value>
   </data>
   <data name="SystemStartWithWindows" xml:space="preserve">
-    <value>开机后自动启动</value>
+    <value>登录时自动启动</value>
   </data>
   <data name="SystemRunAsAdministrator" xml:space="preserve">
     <value>以管理员身份运行</value>
@@ -3294,4 +3264,1163 @@ X {0}, Y {1}</value>
   <data name="WindowSourceLostTitle" xml:space="preserve"><value>窗口捕获源已丢失</value></data>
   <data name="WindowSourceLostStopped" xml:space="preserve"><value>捕获窗口或选定范围已不可用，已停止录制。请重新选择区域后继续。</value></data>
   <data name="WindowSourceReselect" xml:space="preserve"><value>重新选择区域</value></data>
+  <data name="HotkeyRegistered" xml:space="preserve">
+    <value>已注册</value>
+  </data>
+  <data name="HotkeyRegistrationPending" xml:space="preserve">
+    <value>尚未注册</value>
+  </data>
+  <data name="RecorderTitle" xml:space="preserve">
+    <value>录制</value>
+  </data>
+  <data name="ScreenshotRecord" xml:space="preserve">
+    <value>录制屏幕</value>
+  </data>
+  <data name="AnnotationCornerRadius" xml:space="preserve">
+    <value>圆角半径</value>
+  </data>
+  <data name="AnnotationCurved" xml:space="preserve">
+    <value>曲线</value>
+  </data>
+  <data name="AnnotationStartEndpoint" xml:space="preserve">
+    <value>起点样式</value>
+  </data>
+  <data name="AnnotationEndEndpoint" xml:space="preserve">
+    <value>终点样式</value>
+  </data>
+  <data name="AnnotationEndpointNone" xml:space="preserve">
+    <value>无</value>
+  </data>
+  <data name="AnnotationEndpointLineArrow" xml:space="preserve">
+    <value>线箭头</value>
+  </data>
+  <data name="AnnotationEndpointSolidArrow" xml:space="preserve">
+    <value>实心箭头</value>
+  </data>
+  <data name="AnnotationEndpointUnfilledArrow" xml:space="preserve">
+    <value>空心箭头</value>
+  </data>
+  <data name="AnnotationEndpointSolidDot" xml:space="preserve">
+    <value>实心圆</value>
+  </data>
+  <data name="AnnotationEndpointOpenCircle" xml:space="preserve">
+    <value>空心圆</value>
+  </data>
+  <data name="AnnotationEndpointSolidDiamond" xml:space="preserve">
+    <value>实心菱形</value>
+  </data>
+  <data name="AnnotationEndpointOpenDiamond" xml:space="preserve">
+    <value>空心菱形</value>
+  </data>
+  <data name="AnnotationEndpointArchitecturalTick" xml:space="preserve">
+    <value>斜线</value>
+  </data>
+  <data name="AnnotationEndpointCross" xml:space="preserve">
+    <value>交叉线</value>
+  </data>
+  <data name="AnnotationSpotlightEllipse" xml:space="preserve">
+    <value>椭圆聚光灯</value>
+  </data>
+  <data name="AnnotationSpotlightStroke" xml:space="preserve">
+    <value>聚光灯描边</value>
+  </data>
+  <data name="ToolbarAdjust" xml:space="preserve">
+    <value>调整</value>
+  </data>
+  <data name="AnnotationEndpointOpenArrow" xml:space="preserve">
+    <value>细线箭头</value>
+  </data>
+  <data name="AnnotationEndpointClosedFilledArrow" xml:space="preserve">
+    <value>闭合实心箭头</value>
+  </data>
+  <data name="AnnotationEndpointNotchedArrow" xml:space="preserve">
+    <value>凹尾箭头</value>
+  </data>
+  <data name="AnnotationToggleSecondaryEditing" xml:space="preserve">
+    <value>启用/禁用标注二次编辑</value>
+  </data>
+  <data name="AnnotationToggleToolbar" xml:space="preserve">
+    <value>显示/隐藏标注工具栏</value>
+  </data>
+  <data name="PinnedTextTooLarge" xml:space="preserve">
+    <value>文本过长，无法贴图</value>
+  </data>
+  <data name="PinnedFileCopy" xml:space="preserve">
+    <value>复制此文件</value>
+  </data>
+  <data name="PinnedFileCopyPath" xml:space="preserve">
+    <value>复制文件路径</value>
+  </data>
+  <data name="PinnedDocumentCopyImage" xml:space="preserve">
+    <value>复制为图像</value>
+  </data>
+  <data name="PinnedDocumentSaveImage" xml:space="preserve">
+    <value>另存为图像</value>
+  </data>
+  <data name="PinnedTextSelectable" xml:space="preserve">
+    <value>文本选择模式</value>
+  </data>
+  <data name="PinnedTextSelectAll" xml:space="preserve">
+    <value>全选文本</value>
+  </data>
+  <data name="PinnedTextIgnoreFormat" xml:space="preserve">
+    <value>忽略格式</value>
+  </data>
+  <data name="PinnedDocumentImageTooLarge" xml:space="preserve">
+    <value>内容过大，无法导出为单张图像，请保存原始文档。</value>
+  </data>
+  <data name="SelectionCoordinateMode" xml:space="preserve">
+    <value>切换坐标模式</value>
+  </data>
+  <data name="PinnedContentSupportedTypes" xml:space="preserve">
+    <value>支持的贴图类型</value>
+  </data>
+  <data name="PinnedContentImages" xml:space="preserve">
+    <value>图像</value>
+  </data>
+  <data name="PinnedContentText" xml:space="preserve">
+    <value>文本</value>
+  </data>
+  <data name="PinnedContentFiles" xml:space="preserve">
+    <value>文件</value>
+  </data>
+  <data name="PinnedContentColor" xml:space="preserve">
+    <value>颜色</value>
+  </data>
+  <data name="AnnotationCompletelyDisabled" xml:space="preserve">
+    <value>完全禁用</value>
+  </data>
+  <data name="AnnotationTextOnly" xml:space="preserve">
+    <value>仅文字标注</value>
+  </data>
+  <data name="AnnotationMagnifierEllipse" xml:space="preserve">
+    <value>椭圆</value>
+  </data>
+  <data name="AnnotationMagnifierOptions" xml:space="preserve">
+    <value>放大镜选项</value>
+  </data>
+  <data name="AnnotationMagnifierLink" xml:space="preserve">
+    <value>连接线</value>
+  </data>
+  <data name="AnnotationMagnifierLinkLine" xml:space="preserve">
+    <value>线段</value>
+  </data>
+  <data name="AnnotationMagnifierLinkDotLine" xml:space="preserve">
+    <value>点线</value>
+  </data>
+  <data name="AnnotationMagnifierLinkOutline" xml:space="preserve">
+    <value>框线</value>
+  </data>
+  <data name="AnnotationMagnifierLinkNone" xml:space="preserve">
+    <value>无</value>
+  </data>
+  <data name="AnnotationMagnifierAntialias" xml:space="preserve">
+    <value>抗锯齿</value>
+  </data>
+  <data name="AnnotationMagnifierAnnotations" xml:space="preserve">
+    <value>显示下层标注</value>
+  </data>
+  <data name="AnnotationMagnifierShadow" xml:space="preserve">
+    <value>阴影</value>
+  </data>
+  <data name="AnnotationNumberStyle" xml:space="preserve">
+    <value>编号样式</value>
+  </data>
+  <data name="AnnotationNumberStyleFilledCircle" xml:space="preserve">
+    <value>实心圆</value>
+  </data>
+  <data name="AnnotationNumberStyleBorderedCircle" xml:space="preserve">
+    <value>描边圆</value>
+  </data>
+  <data name="AnnotationNumberStyleOutlineCircle" xml:space="preserve">
+    <value>空心圆</value>
+  </data>
+  <data name="AnnotationNumberStylePlain" xml:space="preserve">
+    <value>仅文字</value>
+  </data>
+  <data name="AnnotationNumberStyleRoundedSquare" xml:space="preserve">
+    <value>圆角方框</value>
+  </data>
+  <data name="AnnotationNumberFormat" xml:space="preserve">
+    <value>编号格式</value>
+  </data>
+  <data name="AnnotationNumberSize" xml:space="preserve">
+    <value>大小</value>
+  </data>
+  <data name="AnnotationNumberAutomaticOutline" xml:space="preserve">
+    <value>自动文字和描边颜色</value>
+  </data>
+  <data name="AnnotationNumberOutlineColor" xml:space="preserve">
+    <value>文字和描边颜色</value>
+  </data>
+  <data name="AnnotationNumberLeader" xml:space="preserve">
+    <value>引导线</value>
+  </data>
+  <data name="AnnotationNumberCallout" xml:space="preserve">
+    <value>三角引导</value>
+  </data>
+  <data name="AnnotationNumberCaption" xml:space="preserve">
+    <value>说明文字</value>
+  </data>
+  <data name="AnnotationNumberCaptionScale" xml:space="preserve">
+    <value>文字大小（%）</value>
+  </data>
+  <data name="AnnotationNumberCaptionGuide" xml:space="preserve">
+    <value>文字引导线</value>
+  </data>
+  <data name="AnnotationNumberCaptionOutline" xml:space="preserve">
+    <value>文字描边</value>
+  </data>
+  <data name="DocumentExport" xml:space="preserve">
+    <value>导出 PDF</value>
+  </data>
+  <data name="DocumentPaperSize" xml:space="preserve">
+    <value>纸张</value>
+  </data>
+  <data name="DocumentOriginalSize" xml:space="preserve">
+    <value>原尺寸</value>
+  </data>
+  <data name="DocumentCustomSize" xml:space="preserve">
+    <value>自定义</value>
+  </data>
+  <data name="DocumentOrientation" xml:space="preserve">
+    <value>方向</value>
+  </data>
+  <data name="DocumentAutomatic" xml:space="preserve">
+    <value>自动</value>
+  </data>
+  <data name="DocumentPortrait" xml:space="preserve">
+    <value>纵向</value>
+  </data>
+  <data name="DocumentLandscape" xml:space="preserve">
+    <value>横向</value>
+  </data>
+  <data name="DocumentPageMode" xml:space="preserve">
+    <value>分页</value>
+  </data>
+  <data name="DocumentFitPage" xml:space="preserve">
+    <value>单页适应</value>
+  </data>
+  <data name="DocumentPaginate" xml:space="preserve">
+    <value>多页</value>
+  </data>
+  <data name="DocumentPaginationDirection" xml:space="preserve">
+    <value>分页方向</value>
+  </data>
+  <data name="DocumentVertical" xml:space="preserve">
+    <value>纵向</value>
+  </data>
+  <data name="DocumentHorizontal" xml:space="preserve">
+    <value>横向</value>
+  </data>
+  <data name="DocumentMargins" xml:space="preserve">
+    <value>边距（毫米）</value>
+  </data>
+  <data name="DocumentDpi" xml:space="preserve">
+    <value>DPI</value>
+  </data>
+  <data name="DocumentWidth" xml:space="preserve">
+    <value>宽（毫米）</value>
+  </data>
+  <data name="DocumentHeight" xml:space="preserve">
+    <value>高（毫米）</value>
+  </data>
+  <data name="DocumentLossless" xml:space="preserve">
+    <value>无损图像</value>
+  </data>
+  <data name="DocumentExporting" xml:space="preserve">
+    <value>正在导出…</value>
+  </data>
+  <data name="Print" xml:space="preserve">
+    <value>打印</value>
+  </data>
+  <data name="PrintUnavailable" xml:space="preserve">
+    <value>打印服务不可用。</value>
+  </data>
+  <data name="TableRecognition" xml:space="preserve">
+    <value>识别表格</value>
+  </data>
+  <data name="FormulaRecognition" xml:space="preserve">
+    <value>识别公式</value>
+  </data>
+  <data name="RecognitionComponents" xml:space="preserve">
+    <value>离线识别组件</value>
+  </data>
+  <data name="RecognitionInstallComponents" xml:space="preserve">
+    <value>安装组件</value>
+  </data>
+  <data name="RecognitionComponentMissing" xml:space="preserve">
+    <value>尚未安装所需离线识别组件。</value>
+  </data>
+  <data name="TableMergeCells" xml:space="preserve">
+    <value>合并单元格</value>
+  </data>
+  <data name="TableSplitCells" xml:space="preserve">
+    <value>拆分单元格</value>
+  </data>
+  <data name="TableInsertRow" xml:space="preserve">
+    <value>插入行</value>
+  </data>
+  <data name="TableDeleteRow" xml:space="preserve">
+    <value>删除所选行</value>
+  </data>
+  <data name="TableInsertColumn" xml:space="preserve">
+    <value>插入列</value>
+  </data>
+  <data name="TableDeleteColumn" xml:space="preserve">
+    <value>删除所选列</value>
+  </data>
+  <data name="TableClearCells" xml:space="preserve">
+    <value>清空内容</value>
+  </data>
+  <data name="RecognitionOriginalImage" xml:space="preserve">
+    <value>显示原图</value>
+  </data>
+  <data name="AnnotationPixelRectangle" xml:space="preserve">
+    <value>矩形区域</value>
+  </data>
+  <data name="AnnotationPixelBrush" xml:space="preserve">
+    <value>涂抹区域</value>
+  </data>
+  <data name="AnnotationMarkerLine" xml:space="preserve">
+    <value>线条</value>
+  </data>
+  <data name="AnnotationMarkerRectangle" xml:space="preserve">
+    <value>矩形</value>
+  </data>
+  <data name="AnnotationMarkerBlend" xml:space="preserve">
+    <value>混合模式</value>
+  </data>
+  <data name="AnnotationMarkerMultiply" xml:space="preserve">
+    <value>正片叠底</value>
+  </data>
+  <data name="AnnotationMarkerTranslucent" xml:space="preserve">
+    <value>半透明</value>
+  </data>
+  <data name="PinnedContentFormula" xml:space="preserve">
+    <value>LaTeX 公式</value>
+  </data>
+  <data name="AnnotationArrowShape" xml:space="preserve">
+    <value>箭头样式</value>
+  </data>
+  <data name="AnnotationArrowStraight" xml:space="preserve">
+    <value>直箭头</value>
+  </data>
+  <data name="AnnotationArrowStraightBilateral" xml:space="preserve">
+    <value>双向箭头</value>
+  </data>
+  <data name="AnnotationArrowOutline" xml:space="preserve">
+    <value>轮廓箭头</value>
+  </data>
+  <data name="AnnotationArrowFill" xml:space="preserve">
+    <value>填充箭头</value>
+  </data>
+  <data name="AnnotationArrowDimensionLine" xml:space="preserve">
+    <value>尺寸线</value>
+  </data>
+  <data name="AnnotationArrowSolid" xml:space="preserve">
+    <value>实心箭头</value>
+  </data>
+  <data name="AnnotationArrowSolidBilateral" xml:space="preserve">
+    <value>实心双向箭头</value>
+  </data>
+  <data name="AnnotationArrowDimensionArrow" xml:space="preserve">
+    <value>尺寸箭头</value>
+  </data>
+  <data name="AnnotationArrowLine" xml:space="preserve">
+    <value>线型箭头</value>
+  </data>
+  <data name="AnnotationArrowLineBilateral" xml:space="preserve">
+    <value>线型双向箭头</value>
+  </data>
+  <data name="BuiltinShortcutPinnedTextContext" xml:space="preserve">
+    <value>文本贴图</value>
+  </data>
+  <data name="SelectionAddArea" xml:space="preserve">
+    <value>添加捕获区域</value>
+  </data>
+  <data name="SelectionRemoveArea" xml:space="preserve">
+    <value>移除捕获区域</value>
+  </data>
+  <data name="FileOperationFailed" xml:space="preserve">
+    <value>文件操作失败。</value>
+  </data>
+  <data name="AnnotationStrokeStyle" xml:space="preserve">
+    <value>线型</value>
+  </data>
+  <data name="AnnotationStrokeSolid" xml:space="preserve">
+    <value>实线</value>
+  </data>
+  <data name="AnnotationStrokeDash" xml:space="preserve">
+    <value>虚线</value>
+  </data>
+  <data name="AnnotationStrokeDot" xml:space="preserve">
+    <value>点线</value>
+  </data>
+  <data name="AnnotationStrokeDashDot" xml:space="preserve">
+    <value>点划线</value>
+  </data>
+  <data name="AnnotationStrokeDashDotDot" xml:space="preserve">
+    <value>双点划线</value>
+  </data>
+  <data name="AnnotationStrokeFilled" xml:space="preserve">
+    <value>填充路径</value>
+  </data>
+  <data name="SelectionModeNext" xml:space="preserve">
+    <value>下一个选区模式</value>
+  </data>
+  <data name="SelectionModePrevious" xml:space="preserve">
+    <value>上一个选区模式</value>
+  </data>
+  <data name="SelectionModeRectangle" xml:space="preserve">
+    <value>矩形截图</value>
+  </data>
+  <data name="SelectionModeFree" xml:space="preserve">
+    <value>自由截图</value>
+  </data>
+  <data name="SelectionModePolygon" xml:space="preserve">
+    <value>多边形截图</value>
+  </data>
+  <data name="SelectionModeMultiWindow" xml:space="preserve">
+    <value>多窗口截图</value>
+  </data>
+  <data name="ScreenshotWindowPin" xml:space="preserve">
+    <value>窗口贴图</value>
+  </data>
+  <data name="PinnedLiveConvert" xml:space="preserve">
+    <value>转为普通贴图</value>
+  </data>
+  <data name="PinnedLiveMinimized" xml:space="preserve">
+    <value>源窗口已最小化，恢复后继续更新。</value>
+  </data>
+  <data name="PinnedLiveClosed" xml:space="preserve">
+    <value>源窗口已关闭。</value>
+  </data>
+  <data name="PinnedLiveRegionUnavailable" xml:space="preserve">
+    <value>所选区域不在源窗口内。</value>
+  </data>
+  <data name="FormulaCopyText" xml:space="preserve">
+    <value>文本</value>
+  </data>
+  <data name="FormulaCopyImage" xml:space="preserve">
+    <value>公式图片</value>
+  </data>
+  <data name="AnnotationSmartErase" xml:space="preserve">
+    <value>智能擦除</value>
+  </data>
+  <data name="AnnotationInpaintingRadius" xml:space="preserve">
+    <value>采样半径</value>
+  </data>
+  <data name="HotkeyCapturingInput" xml:space="preserve">
+    <value>正在设置快捷键</value>
+  </data>
+  <data name="HotkeyManuallySuspended" xml:space="preserve">
+    <value>快捷键已停用</value>
+  </data>
+  <data name="HotkeyFullscreenDisabled" xml:space="preserve">
+    <value>全屏时停用</value>
+  </data>
+  <data name="HotkeyExcludedProgram" xml:space="preserve">
+    <value>此程序中停用</value>
+  </data>
+  <data name="CaptureDoubleClickAction" xml:space="preserve">
+    <value>左键双击动作</value>
+  </data>
+  <data name="CaptureDoubleClickNone" xml:space="preserve">
+    <value>无动作</value>
+  </data>
+  <data name="CaptureDoubleClickOcrCopy" xml:space="preserve">
+    <value>识别文字并复制</value>
+  </data>
+  <data name="FormulaList" xml:space="preserve">
+    <value>公式列表</value>
+  </data>
+  <data name="FormulaAll" xml:space="preserve">
+    <value>全部（{0}）</value>
+  </data>
+  <data name="FormulaEntry" xml:space="preserve">
+    <value>公式 {0}</value>
+  </data>
+  <data name="FormulaRemove" xml:space="preserve">
+    <value>移除此公式</value>
+  </data>
+  <data name="FormulaEmpty" xml:space="preserve">
+    <value>未识别到公式。</value>
+  </data>
+  <data name="TranslationMode" xml:space="preserve">
+    <value>翻译模式</value>
+  </data>
+  <data name="TranslationImageToText" xml:space="preserve">
+    <value>图片到文本</value>
+  </data>
+  <data name="TranslationImageToImage" xml:space="preserve">
+    <value>图片到图片</value>
+  </data>
+  <data name="TranslationImageDisplayMode" xml:space="preserve">
+    <value>图片翻译视图</value>
+  </data>
+  <data name="TranslationTextAndImage" xml:space="preserve">
+    <value>文本和图片</value>
+  </data>
+  <data name="TranslationImageOnly" xml:space="preserve">
+    <value>仅图片</value>
+  </data>
+  <data name="TranslationTextOnly" xml:space="preserve">
+    <value>仅文本</value>
+  </data>
+  <data name="TranslationShowOriginalText" xml:space="preserve">
+    <value>显示原文</value>
+  </data>
+  <data name="TranslationOriginalImage" xml:space="preserve">
+    <value>原图</value>
+  </data>
+  <data name="TranslationTranslatedImage" xml:space="preserve">
+    <value>译图</value>
+  </data>
+  <data name="TranslationSwapLanguages" xml:space="preserve">
+    <value>交换语言</value>
+  </data>
+  <data name="TranslationFitToWindow" xml:space="preserve">
+    <value>适应窗口</value>
+  </data>
+  <data name="TranslationNoTextRegions" xml:space="preserve">
+    <value>未检测到文字区域。</value>
+  </data>
+  <data name="TranslationPreparingImage" xml:space="preserve">
+    <value>正在生成译图…</value>
+  </data>
+  <data name="TranslationImageUnavailable" xml:space="preserve">
+    <value>无法翻译此图片。</value>
+  </data>
+  <data name="ImageEditorEdit" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="ImageEditorModeHint" xml:space="preserve">
+    <value>空格：切换编辑与拖动</value>
+  </data>
+  <data name="FormulaEditHint" xml:space="preserve">
+    <value>选择单项可编辑；全部结果为只读。</value>
+  </data>
+  <data name="GlobalActionScreenshotAndRecognizeText" xml:space="preserve">
+    <value>截图并识别文字</value>
+  </data>
+  <data name="GlobalActionScreenshotAndRecognizeTable" xml:space="preserve">
+    <value>截图并识别表格</value>
+  </data>
+  <data name="GlobalActionScreenshotAndRecognizeFormula" xml:space="preserve">
+    <value>截图并识别公式</value>
+  </data>
+  <data name="GlobalActionOpenAnimationEditor" xml:space="preserve">
+    <value>打开动图编辑器</value>
+  </data>
+  <data name="SystemIgnoreCopyMacros" xml:space="preserve">
+    <value>忽略复制按键宏</value>
+  </data>
+  <data name="SystemExplorerContextMode" xml:space="preserve">
+    <value>右键菜单模式</value>
+  </data>
+  <data name="SystemExplorerImagesOnly" xml:space="preserve">
+    <value>仅图像文件</value>
+  </data>
+  <data name="SystemExplorerAllFiles" xml:space="preserve">
+    <value>所有文件</value>
+  </data>
+  <data name="SystemFeatureDisabled" xml:space="preserve">
+    <value>已禁用</value>
+  </data>
+  <data name="SystemDesktopToolbarMode" xml:space="preserve">
+    <value>桌面工具栏显示</value>
+  </data>
+  <data name="SystemDesktopFloatingBall" xml:space="preserve">
+    <value>悬浮球</value>
+  </data>
+  <data name="SystemDesktopToolbar" xml:space="preserve">
+    <value>工具栏</value>
+  </data>
+  <data name="DesktopToolbarAdjust" xml:space="preserve">
+    <value>调整</value>
+  </data>
+  <data name="DesktopToolbarPrimary" xml:space="preserve">
+    <value>工具栏</value>
+  </data>
+  <data name="DesktopToolbarMore" xml:space="preserve">
+    <value>更多</value>
+  </data>
+  <data name="DesktopToolbarHidden" xml:space="preserve">
+    <value>隐藏</value>
+  </data>
+  <data name="DesktopToolbarClose" xml:space="preserve">
+    <value>关闭桌面工具栏</value>
+  </data>
+  <data name="DesktopToolbarHideToday" xml:space="preserve">
+    <value>今天隐藏</value>
+  </data>
+  <data name="DesktopToolbarMove" xml:space="preserve">
+    <value>拖动工具栏</value>
+  </data>
+  <data name="DesktopToolbarDelayed" xml:space="preserve">
+    <value>延时截图</value>
+  </data>
+  <data name="ExplorerPinCaption" xml:space="preserve">
+    <value>使用 RitsukageGif 贴图</value>
+  </data>
+  <data name="DesktopToolbarDropUnsupported" xml:space="preserve">
+    <value>不支持此内容</value>
+  </data>
+  <data name="SpeechSpeakSource" xml:space="preserve">
+    <value>朗读原文</value>
+  </data>
+  <data name="SpeechSpeakTranslation" xml:space="preserve">
+    <value>朗读译文</value>
+  </data>
+  <data name="SpeechStop" xml:space="preserve">
+    <value>停止朗读</value>
+  </data>
+  <data name="SpeechChecking" xml:space="preserve">
+    <value>正在检查系统语音…</value>
+  </data>
+  <data name="SpeechUnavailable" xml:space="preserve">
+    <value>系统语音不可用</value>
+  </data>
+  <data name="SpeechVoiceUnavailable" xml:space="preserve">
+    <value>未安装 {0} 语言的系统语音</value>
+  </data>
+  <data name="SpeechNoVoices" xml:space="preserve">
+    <value>未找到系统语音</value>
+  </data>
+  <data name="SpeechEngineMissing" xml:space="preserve">
+    <value>未找到 {0}</value>
+  </data>
+  <data name="NetworkProxyHeading" xml:space="preserve">
+    <value>网络代理</value>
+  </data>
+  <data name="NetworkProxyNone" xml:space="preserve">
+    <value>无代理</value>
+  </data>
+  <data name="NetworkProxyConfigure" xml:space="preserve">
+    <value>配置</value>
+  </data>
+  <data name="NetworkProxyType" xml:space="preserve">
+    <value>代理类型</value>
+  </data>
+  <data name="NetworkProxyAddress" xml:space="preserve">
+    <value>主机 / 端口</value>
+  </data>
+  <data name="NetworkProxyUsername" xml:space="preserve">
+    <value>用户名</value>
+  </data>
+  <data name="NetworkProxyPassword" xml:space="preserve">
+    <value>密码</value>
+  </data>
+  <data name="NetworkProxyVerify" xml:space="preserve">
+    <value>验证</value>
+  </data>
+  <data name="NetworkProxyInvalid" xml:space="preserve">
+    <value>请输入有效的主机和端口。</value>
+  </data>
+  <data name="NetworkProxyVerifying" xml:space="preserve">
+    <value>正在验证…</value>
+  </data>
+  <data name="NetworkProxyFailed" xml:space="preserve">
+    <value>验证失败，请检查代理和凭据。</value>
+  </data>
+  <data name="NetworkProxyCredentialUnavailable" xml:space="preserve">
+    <value>无法读取已保存的密码，请重新输入。</value>
+  </data>
+  <data name="ImageEditorDeleteRows" xml:space="preserve">
+    <value>删除行</value>
+  </data>
+  <data name="ImageEditorDeleteColumns" xml:space="preserve">
+    <value>删除列</value>
+  </data>
+  <data name="NetworkProxyPending" xml:space="preserve">
+    <value>待验证</value>
+  </data>
+  <data name="NetworkProxySaveFailed" xml:space="preserve">
+    <value>无法保存代理设置。</value>
+  </data>
+  <data name="NetworkProxyNeedsVerification" xml:space="preserve">
+    <value>请先验证代理。</value>
+  </data>
+  <data name="FormulaLatexFormat" xml:space="preserve">
+    <value>LaTeX 格式</value>
+  </data>
+  <data name="FormulaLatexOnly" xml:space="preserve">
+    <value>仅公式</value>
+  </data>
+  <data name="FormulaLatexInlineDollar" xml:space="preserve">
+    <value>$ ... $ 行内公式</value>
+  </data>
+  <data name="FormulaLatexDisplayDollar" xml:space="preserve">
+    <value>$$ ... $$ 独立公式</value>
+  </data>
+  <data name="FormulaLatexDisplayBrackets" xml:space="preserve">
+    <value>\[ ... \] 独立公式</value>
+  </data>
+  <data name="FormulaLatexInlineBrackets" xml:space="preserve">
+    <value>\( ... \) 行内公式</value>
+  </data>
+  <data name="FormulaLatexEquation" xml:space="preserve">
+    <value>{equation} 编号公式</value>
+  </data>
+  <data name="FormulaLatexEquationStar" xml:space="preserve">
+    <value>{equation*} 无编号公式</value>
+  </data>
+  <data name="DesktopToolbarAdministratorDrop" xml:space="preserve">
+    <value>管理员权限下无法接收其他程序的拖放内容。</value>
+  </data>
+  <data name="ImageEditorStripCrop" xml:space="preserve">
+    <value>裁剪</value>
+  </data>
+  <data name="CaptureColorFormatsManage" xml:space="preserve">
+    <value>管理颜色格式</value>
+  </data>
+  <data name="CaptureColorFormatsHint" xml:space="preserve">
+    <value>勾选启用，双击编辑，拖动手柄排序。</value>
+  </data>
+  <data name="CaptureColorFormatAdd" xml:space="preserve">
+    <value>添加格式</value>
+  </data>
+  <data name="CaptureColorFormatEdit" xml:space="preserve">
+    <value>编辑颜色格式</value>
+  </data>
+  <data name="CaptureColorFormatDelete" xml:space="preserve">
+    <value>删除格式</value>
+  </data>
+  <data name="CaptureColorFormatName" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="CaptureColorFormatTemplate" xml:space="preserve">
+    <value>模板</value>
+  </data>
+  <data name="CaptureColorFormatPreview" xml:space="preserve">
+    <value>预览</value>
+  </data>
+  <data name="CaptureColorFormatParameters" xml:space="preserve">
+    <value>参数</value>
+  </data>
+  <data name="CaptureColorFormatParameterHint" xml:space="preserve">
+    <value>点击参数插入。RGB 后缀：x/X 为两位十六进制，h/H 为一位十六进制，f/F 为 0–1 小数。例如：#%ReX%GrX%BlX。</value>
+  </data>
+  <data name="CaptureColorFormatRequired" xml:space="preserve">
+    <value>请填写名称和模板。</value>
+  </data>
+  <data name="AnnotationAutoWatermark" xml:space="preserve">
+    <value>截图时自动添加当前水印</value>
+  </data>
+  <data name="AnnotationWatermarkInsertTime" xml:space="preserve">
+    <value>插入时间</value>
+  </data>
+  <data name="AnnotationWatermarkDate" xml:space="preserve">
+    <value>日期</value>
+  </data>
+  <data name="AnnotationWatermarkTime" xml:space="preserve">
+    <value>时间</value>
+  </data>
+  <data name="AnnotationWatermarkDateTime" xml:space="preserve">
+    <value>日期和时间</value>
+  </data>
+  <data name="AnnotationWatermarkTimeHint" xml:space="preserve">
+    <value>用 $yyyy-MM-dd HH:mm:ss$ 插入捕获时间；$$ 表示美元符号。</value>
+  </data>
+  <data name="CaptureColorTokenRe" xml:space="preserve">
+    <value>红色（0–255）</value>
+  </data>
+  <data name="CaptureColorTokenGr" xml:space="preserve">
+    <value>绿色（0–255）</value>
+  </data>
+  <data name="CaptureColorTokenBl" xml:space="preserve">
+    <value>蓝色（0–255）</value>
+  </data>
+  <data name="CaptureColorTokenAl" xml:space="preserve">
+    <value>透明度（0–255）</value>
+  </data>
+  <data name="CaptureColorTokenCy" xml:space="preserve">
+    <value>青色（%）</value>
+  </data>
+  <data name="CaptureColorTokenMa" xml:space="preserve">
+    <value>品红（%）</value>
+  </data>
+  <data name="CaptureColorTokenYe" xml:space="preserve">
+    <value>黄色（%）</value>
+  </data>
+  <data name="CaptureColorTokenBk" xml:space="preserve">
+    <value>黑色（%）</value>
+  </data>
+  <data name="CaptureColorTokenHu" xml:space="preserve">
+    <value>色相（度）</value>
+  </data>
+  <data name="CaptureColorTokenHn" xml:space="preserve">
+    <value>自然色相（R/Y/G/C/B/M）</value>
+  </data>
+  <data name="CaptureColorTokenSi" xml:space="preserve">
+    <value>HSI 饱和度（%）</value>
+  </data>
+  <data name="CaptureColorTokenIn" xml:space="preserve">
+    <value>强度（%）</value>
+  </data>
+  <data name="CaptureColorTokenSl" xml:space="preserve">
+    <value>HSL 饱和度（%）</value>
+  </data>
+  <data name="CaptureColorTokenLl" xml:space="preserve">
+    <value>HSL 亮度（%）</value>
+  </data>
+  <data name="CaptureColorTokenLi" xml:space="preserve">
+    <value>亮度（%）</value>
+  </data>
+  <data name="CaptureColorTokenSb" xml:space="preserve">
+    <value>HSV 饱和度（%）</value>
+  </data>
+  <data name="CaptureColorTokenVa" xml:space="preserve">
+    <value>明度（%）</value>
+  </data>
+  <data name="CaptureColorTokenBr" xml:space="preserve">
+    <value>明亮度（%）</value>
+  </data>
+  <data name="CaptureColorTokenWh" xml:space="preserve">
+    <value>白度（%）</value>
+  </data>
+  <data name="CaptureColorTokenBn" xml:space="preserve">
+    <value>黑度（%）</value>
+  </data>
+  <data name="CaptureColorTokenLc" xml:space="preserve">
+    <value>CIE Lab 亮度</value>
+  </data>
+  <data name="CaptureColorTokenCa" xml:space="preserve">
+    <value>CIE Lab a 分量</value>
+  </data>
+  <data name="CaptureColorTokenCb" xml:space="preserve">
+    <value>CIE Lab b 分量</value>
+  </data>
+  <data name="CaptureColorTokenLo" xml:space="preserve">
+    <value>Oklab 亮度</value>
+  </data>
+  <data name="CaptureColorTokenOa" xml:space="preserve">
+    <value>Oklab a 分量</value>
+  </data>
+  <data name="CaptureColorTokenOb" xml:space="preserve">
+    <value>Oklab b 分量</value>
+  </data>
+  <data name="CaptureColorTokenOc" xml:space="preserve">
+    <value>Oklch 色度</value>
+  </data>
+  <data name="CaptureColorTokenOh" xml:space="preserve">
+    <value>Oklch 色相（度）</value>
+  </data>
+  <data name="CaptureColorTokenXv" xml:space="preserve">
+    <value>CIE XYZ X（D65）</value>
+  </data>
+  <data name="CaptureColorTokenYv" xml:space="preserve">
+    <value>CIE XYZ Y（D65）</value>
+  </data>
+  <data name="CaptureColorTokenZv" xml:space="preserve">
+    <value>CIE XYZ Z（D65）</value>
+  </data>
+  <data name="CaptureColorTokenDr" xml:space="preserve">
+    <value>RGB 十进制整数</value>
+  </data>
+  <data name="CaptureColorTokenDv" xml:space="preserve">
+    <value>BGR 十进制整数</value>
+  </data>
+  <data name="CaptureColorTokenNa" xml:space="preserve">
+    <value>颜色名称，未匹配时用十六进制</value>
+  </data>
+  <data name="CaptureColorTokenMx" xml:space="preserve">
+    <value>光标 X（像素）</value>
+  </data>
+  <data name="CaptureColorTokenMy" xml:space="preserve">
+    <value>光标 Y（像素）</value>
+  </data>
+  <data name="CaptureColorTokenRx" xml:space="preserve">
+    <value>选区 X（像素）</value>
+  </data>
+  <data name="CaptureColorTokenRy" xml:space="preserve">
+    <value>选区 Y（像素）</value>
+  </data>
+  <data name="CaptureColorTokenRw" xml:space="preserve">
+    <value>选区宽度（像素）</value>
+  </data>
+  <data name="CaptureColorTokenRh" xml:space="preserve">
+    <value>选区高度（像素）</value>
+  </data>
+  <data name="TableRows" xml:space="preserve">
+    <value>行</value>
+  </data>
+  <data name="TableColumns" xml:space="preserve">
+    <value>列</value>
+  </data>
+  <data name="TableInsertRowAbove" xml:space="preserve">
+    <value>在上方插入行</value>
+  </data>
+  <data name="TableInsertRowBelow" xml:space="preserve">
+    <value>在下方插入行</value>
+  </data>
+  <data name="TableInsertColumnLeft" xml:space="preserve">
+    <value>在左侧插入列</value>
+  </data>
+  <data name="TableInsertColumnRight" xml:space="preserve">
+    <value>在右侧插入列</value>
+  </data>
+  <data name="TableOpenExcel" xml:space="preserve">
+    <value>在 Excel 中打开</value>
+  </data>
+  <data name="FormulaOpenWord" xml:space="preserve">
+    <value>在 Word 中打开</value>
+  </data>
+  <data name="FormulaDocxFilter" xml:space="preserve">
+    <value>Word 文档</value>
+  </data>
+  <data name="DocumentOpenFailed" xml:space="preserve">
+    <value>文档已保存，但无法在默认应用中打开。{0}</value>
+  </data>
+  <data name="TableEditor" xml:space="preserve">
+    <value>表格编辑</value>
+  </data>
+  <data name="TableInvalidNumber" xml:space="preserve">
+    <value>请输入有效数字。</value>
+  </data>
+  <data name="MixingKeypadMainKeyboard" xml:space="preserve">
+    <value>混用小键盘和主键盘</value>
+  </data>
+  <data name="CaptureScrollAutoCrop" xml:space="preserve">
+    <value>滚动方向改变时自动裁剪</value>
+  </data>
+  <data name="BuiltinShortcutWheelUp" xml:space="preserve">
+    <value>模拟滚轮上滚</value>
+  </data>
+  <data name="BuiltinShortcutWheelDown" xml:space="preserve">
+    <value>模拟滚轮下滚</value>
+  </data>
+  <data name="ScrollCaptureAutoCrop" xml:space="preserve">
+    <value>自动裁剪</value>
+  </data>
+  <data name="GlobalMouseShowMask" xml:space="preserve">
+    <value>使用全局鼠标截图时显示遮罩</value>
+  </data>
+  <data name="NonDefaultConfigItemsFontNotBold" xml:space="preserve">
+    <value>不加粗非默认设置</value>
+  </data>
+  <data name="PinnedGroupsManageTitle" xml:space="preserve"><value>管理贴图分组</value></data>
+  <data name="PinnedGroupCreateTitle" xml:space="preserve"><value>创建贴图分组</value></data>
+  <data name="PinnedGroupNewName" xml:space="preserve"><value>新分组名称：</value></data>
+  <data name="PinnedGroupName" xml:space="preserve"><value>分组名称：</value></data>
+  <data name="PinnedGroupEnterName" xml:space="preserve"><value>输入分组名称</value></data>
+  <data name="PinnedGroupSetColor" xml:space="preserve"><value>设置分组颜色</value></data>
+  <data name="PinnedGroupSwitchNew" xml:space="preserve"><value>切换到新分组</value></data>
+  <data name="PinnedGroupCreate" xml:space="preserve"><value>创建</value></data>
+  <data name="PinnedGroupApply" xml:space="preserve"><value>应用更改</value></data>
+  <data name="PinnedGroupRemove" xml:space="preserve"><value>删除分组</value></data>
+  <data name="PinnedGroupClear" xml:space="preserve"><value>清空分组贴图</value></data>
+  <data name="PinnedGroupDefault" xml:space="preserve"><value>默认分组</value></data>
+  <data name="PinnedGroupDefaultCannotRemove" xml:space="preserve"><value>默认分组不能删除</value></data>
+  <data name="PinnedGroupNameEmpty" xml:space="preserve"><value>分组名称不能为空</value></data>
+  <data name="PinnedGroupNameExists" xml:space="preserve"><value>分组名称已存在</value></data>
+  <data name="PinnedGroupClearConfirm" xml:space="preserve"><value>确认清空</value></data>
+  <data name="PinnedGroupRemoveConfirm" xml:space="preserve"><value>确认删除</value></data>
+  <data name="PinnedGroupClearQuestion" xml:space="preserve"><value>确定清空分组 [{0}] 中的所有贴图吗？</value></data>
+  <data name="PinnedGroupRemoveQuestion" xml:space="preserve"><value>确定删除分组 [{0}] 吗？</value></data>
+  <data name="PinnedGroupRemovePinsWarning" xml:space="preserve"><value>相关贴图将被删除，且无法撤销！</value></data>
+  <data name="PinnedGroupMovePins" xml:space="preserve"><value>将此分组中的全部贴图移动到</value></data>
+  <data name="PinnedGroupClearNamed" xml:space="preserve"><value>清空 [{0}]</value></data>
+  <data name="PinnedGroupRemoveNamed" xml:space="preserve"><value>删除 [{0}]</value></data>
+  <data name="PinnedTitlePlaceholder" xml:space="preserve"><value>输入标题</value></data>
+  <data name="PinnedTitleEdit" xml:space="preserve"><value>设置标题</value></data>
+  <data name="PinnedHideOthers" xml:space="preserve"><value>隐藏 / 显示其他贴图</value></data>
+  <data name="PinnedSwitchNext" xml:space="preserve"><value>切换到下一个贴图</value></data>
+  <data name="PinnedNoSelection" xml:space="preserve"><value>请先选中贴图。</value></data>
+  <data name="PinnedTitlePosition" xml:space="preserve"><value>标题位置</value></data>
+  <data name="PinnedTitleBottom" xml:space="preserve"><value>底部居中</value></data>
+  <data name="PinnedTitleTop" xml:space="preserve"><value>顶部居中</value></data>
+  <data name="PinnedHideOthersOnShake" xml:space="preserve"><value>摇动时隐藏 / 显示其他贴图</value></data>
+  <data name="PinnedKeepOthersHiddenOnNewPin" xml:space="preserve"><value>新建贴图时保持其他贴图隐藏</value></data>
+  <data name="GlobalActionToggleOtherPinnedImages" xml:space="preserve"><value>隐藏 / 显示未选中的贴图</value></data>
+  <data name="GlobalActionSwitchPinnedGroup" xml:space="preserve"><value>切换贴图分组</value></data>
+  <data name="GlobalActionRunScript" xml:space="preserve">
+    <value>运行脚本</value>
+  </data>
+  <data name="ActionScriptRequired" xml:space="preserve">
+    <value>请输入脚本。</value>
+  </data>
+  <data name="ActionScriptTest" xml:space="preserve">
+    <value>测试</value>
+  </data>
+  <data name="ActionScriptStop" xml:space="preserve">
+    <value>停止脚本</value>
+  </data>
+  <data name="ActionScriptTestFinished" xml:space="preserve">
+    <value>脚本执行完成。</value>
+  </data>
+  <data name="ActionScriptTestCancelled" xml:space="preserve">
+    <value>脚本已停止。</value>
+  </data>
+  <data name="GlobalActionFixedPosition" xml:space="preserve">
+    <value>固定位置</value>
+  </data>
+  <data name="GlobalActionInvalidGeometry" xml:space="preserve">
+    <value>截图区域参数无效。</value>
+  </data>
+  <data name="PinnedSessionRecovered" xml:space="preserve"><value>已保留原贴图数据：{0}</value></data>
+  <data name="DiagnosticsOpenPinRecovery" xml:space="preserve"><value>打开保留的贴图数据</value></data>
+  <data name="CaptureCodeDetection" xml:space="preserve">
+    <value>二维/条形码检测</value>
+  </data>
+  <data name="CaptureCodeDisabled" xml:space="preserve">
+    <value>完全禁用</value>
+  </data>
+  <data name="CaptureCodeManual" xml:space="preserve">
+    <value>手动启用</value>
+  </data>
+  <data name="CaptureCodeAutomatic" xml:space="preserve">
+    <value>自动启用</value>
+  </data>
+  <data name="CaptureCodeContents" xml:space="preserve">
+    <value>直接显示内容</value>
+  </data>
+  <data name="CaptureCodeToggle" xml:space="preserve">
+    <value>显示或隐藏识别结果</value>
+  </data>
+  <data name="CaptureCodeCopyText" xml:space="preserve">
+    <value>识别并复制码内容</value>
+  </data>
+  <data name="GlobalActionScreenshotAndCopyCodeText" xml:space="preserve">
+    <value>截图并复制码内容</value>
+  </data>
+  <data name="QrCodeTitle" xml:space="preserve">
+    <value>识别结果</value>
+  </data>
+  <data name="QrCodeCopy" xml:space="preserve">
+    <value>复制内容</value>
+  </data>
+  <data name="QrCodeOpenLink" xml:space="preserve">
+    <value>打开链接</value>
+  </data>
+  <data name="QrCodeOpenLinkFailed" xml:space="preserve">
+    <value>无法打开链接</value>
+  </data>
+  <data name="BarcodeRecognitionEmpty" xml:space="preserve">
+    <value>没有识别到码</value>
+  </data>
+  <data name="CaptureQuitOnForeignActivation" xml:space="preserve">
+    <value>其他程序激活时退出选区</value>
+  </data>
+  <data name="CaptureDisableMouseWheel" xml:space="preserve">
+    <value>选区时禁用鼠标滚轮</value>
+  </data>
+  <data name="CaptureBlockedWindowsKeys" xml:space="preserve">
+    <value>选区时屏蔽 Windows 键</value>
+  </data>
+  <data name="CaptureWindowsKeyLeft" xml:space="preserve">
+    <value>左</value>
+  </data>
+  <data name="CaptureWindowsKeyRight" xml:space="preserve">
+    <value>右</value>
+  </data>
+  <data name="CapturePersistHistory" xml:space="preserve">
+    <value>跨启动保留截图历史</value>
+  </data>
+  <data name="CaptureCycleRegionHistory" xml:space="preserve">
+    <value>循环切换历史选区</value>
+  </data>
+  <data name="PinnedImageReplacementAction" xml:space="preserve">
+    <value>替换后对源贴图的操作</value>
+  </data>
+  <data name="PinnedImageReplacementKeepSource" xml:space="preserve">
+    <value>无操作</value>
+  </data>
+  <data name="PinnedImageReplacementCloseSource" xml:space="preserve">
+    <value>关闭源贴图</value>
+  </data>
+  <data name="PinnedImageReplacementDestroySource" xml:space="preserve">
+    <value>销毁源贴图</value>
+  </data>
+  <data name="PinnedImageLockPointerClose" xml:space="preserve">
+    <value>鼠标关闭</value>
+  </data>
+  <data name="PinnedImageLockKeyboardClose" xml:space="preserve">
+    <value>按键关闭</value>
+  </data>
+  <data name="PinnedImageLockIncomingDrop" xml:space="preserve">
+    <value>接收拖放内容</value>
+  </data>
+  <data name="PinnedActivateOnNewPin" xml:space="preserve">
+    <value>新建贴图时激活窗口</value>
+  </data>
+  <data name="PinnedFlashOnNewPin" xml:space="preserve">
+    <value>新建贴图时闪烁边框</value>
+  </data>
+  <data name="PinnedFlashAfterGroupSwitch" xml:space="preserve">
+    <value>切换贴图组时闪烁边框</value>
+  </data>
+  <data name="PinnedTranslucentOnAttention" xml:space="preserve">
+    <value>闪烁时临时半透明</value>
+  </data>
+  <data name="PinnedMaximumWindowSize" xml:space="preserve">
+    <value>最大窗口边长（像素）</value>
+  </data>
+  <data name="PinnedQuickThumbnailSize" xml:space="preserve">
+    <value>快速缩略区域（图像像素）</value>
+  </data>
+  <data name="PinnedQuickThumbnailWidth" xml:space="preserve">
+    <value>宽度（图像像素）</value>
+  </data>
+  <data name="PinnedQuickThumbnailHeight" xml:space="preserve">
+    <value>高度（图像像素）</value>
+  </data>
+  <data name="SystemStartupNextLogin" xml:space="preserve">
+    <value>下次登录时启动到托盘。</value>
+  </data>
+  <data name="SystemStartupApprovalRequired" xml:space="preserve">
+    <value>请在系统设置的登录项中允许 RitsukageGif。</value>
+  </data>
+  <data name="SystemStartupDisabled" xml:space="preserve">
+    <value>系统登录项已停用。</value>
+  </data>
+  <data name="SystemStartupEnabled" xml:space="preserve">
+    <value>系统登录项已启用。</value>
+  </data>
+  <data name="SystemTrayGestureUnavailable" xml:space="preserve">
+    <value>当前托盘无法接收此鼠标操作。</value>
+  </data>
+  <data name="SystemTrayDoubleUnavailable" xml:space="preserve">
+    <value>当前托盘不支持双击。</value>
+  </data>
+  <data name="HotkeyPolicyPermissionRequired" xml:space="preserve">
+    <value>允许辅助功能访问后才能识别全屏窗口</value>
+  </data>
+  <data name="HotkeyPolicyObserverUnavailable" xml:space="preserve">
+    <value>无法获取前台窗口状态</value>
+  </data>
+  <data name="PlatformAccessibilityPermission" xml:space="preserve">
+    <value>请在系统设置中允许辅助功能访问以检测控件。</value>
+  </data>
+  <data name="PortalWindowMatchingUnavailable" xml:space="preserve">
+    <value>仅可捕获系统对话框中已授权的窗口，此会话不能匹配其他窗口。</value>
+  </data>
+  <data name="PortalCaptureSourceMismatch" xml:space="preserve">
+    <value>请先在系统捕获对话框中选择所需的屏幕或窗口。</value>
+  </data>
+  <data name="CaptureCursorReselect" xml:space="preserve">
+    <value>此系统需要重新选择捕获源才能更改光标捕获。</value>
+  </data>
+  <data name="ClearRecords" xml:space="preserve">
+    <value>清除记录</value>
+  </data>
+  <data name="ClearScreenshotHistory" xml:space="preserve">
+    <value>截图历史</value>
+  </data>
+  <data name="ClearRegionHistory" xml:space="preserve">
+    <value>选区历史</value>
+  </data>
+  <data name="ClearPinHistory" xml:space="preserve">
+    <value>贴图历史</value>
+  </data>
+  <data name="ClearPinsOnScreen" xml:space="preserve">
+    <value>当前贴图</value>
+  </data>
+  <data name="ClearRecordsAction" xml:space="preserve">
+    <value>清除</value>
+  </data>
+  <data name="ClearRecordsCompleted" xml:space="preserve">
+    <value>记录已清除</value>
+  </data>
 </root>

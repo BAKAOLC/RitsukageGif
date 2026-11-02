@@ -25,6 +25,7 @@ namespace RitsukageGif.Core
                         continue;
                     }
 
+                    if (count == 0) InitializeCanvasColor(canvas, frame);
                     using var previous = frame.GifDisposeMethod == GifDisposeMethod.Previous
                         ? MagickImageCloner.Clone(canvas, token)
                         : null;

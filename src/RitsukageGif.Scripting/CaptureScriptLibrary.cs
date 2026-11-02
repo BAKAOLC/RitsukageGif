@@ -14,8 +14,11 @@ namespace RitsukageGif.Scripting
             StaticCaptureScriptLibrary.Register(bindings, host?.StaticCaptureService,
                 baseDirectory ?? host?.SourceDirectory);
             VideoScriptLibrary.Register(bindings, host?.VideoService, baseDirectory ?? host?.SourceDirectory);
+            DocumentScriptLibrary.Register(bindings, host?.DocumentService, baseDirectory ?? host?.SourceDirectory);
             RecognitionScriptLibrary.Register(bindings, host?.TextRecognitionService, host?.BarcodeRecognitionService,
-                baseDirectory ?? host?.SourceDirectory, host?.PrivacyService);
+                baseDirectory ?? host?.SourceDirectory, host?.PrivacyService, host?.TableService, host?.FormulaService,
+                host?.FormulaOutputService, host?.TableOutputService, host?.FormulaDocumentService,
+                host?.TableDataService, host?.TableEditService);
             var settings = new RecordingSettingsBinding(bindings);
             settings.Register();
             var outputs = new RecordingOutputsBinding(bindings, settings,

@@ -2,7 +2,7 @@ using ImageMagick;
 
 namespace RitsukageGif.Core
 {
-    public sealed class ImageCompositionService : IImageCompositionService
+    public sealed partial class ImageCompositionService : IImageCompositionService
     {
         private const long PixelBudget = 256L * 1024 * 1024;
         private static readonly SemaphoreSlim Gate = new(2);
@@ -21,6 +21,7 @@ namespace RitsukageGif.Core
                 if (options.Layers.Count > 128) throw new ArgumentOutOfRangeException(nameof(options));
                 using var canvas = new MagickImage(new MagickColor(options.Background), (uint)options.Width,
                     (uint)options.Height);
+                canvas.SetProfile(ColorProfiles.SRGB);
                 foreach (var layer in options.Layers)
                 {
                     token.ThrowIfCancellationRequested();
@@ -31,6 +32,7 @@ namespace RitsukageGif.Core
                     if (layer.FrameIndex < 0 || layer.FrameIndex >= images.Count)
                         throw new ArgumentOutOfRangeException(nameof(options));
                     using var image = MagickImageCloner.Clone(images[layer.FrameIndex], token);
+                    NormalizeSdrWorkingImage(image);
                     var crop = layer.CropX.HasValue || layer.CropY.HasValue || layer.CropWidth.HasValue ||
                                layer.CropHeight.HasValue;
                     if (crop)
@@ -89,11 +91,13 @@ namespace RitsukageGif.Core
                 var height = checked((count + columns - 1) / columns * options.ThumbnailHeight);
                 Budget(width, height);
                 using var canvas = new MagickImage(new MagickColor(options.Background), (uint)width, (uint)height);
+                canvas.SetProfile(ColorProfiles.SRGB);
                 for (var index = 0; index < count; index++)
                 {
                     token.ThrowIfCancellationRequested();
                     using var frame =
                         MagickImageCloner.Clone(images[checked(options.FirstFrame + index * options.FrameStep)], token);
+                    NormalizeSdrWorkingImage(frame);
                     frame.Resize((uint)options.ThumbnailWidth, (uint)options.ThumbnailHeight);
                     canvas.Composite(frame, index % columns * options.ThumbnailWidth +
                                             (options.ThumbnailWidth - (int)frame.Width) / 2,
@@ -173,7 +177,7 @@ namespace RitsukageGif.Core
             }
         }
 
-        private async Task<MediaInfo> Write(MagickImage canvas, string output, string? format, int quality,
+        private async Task<MediaInfo> Write(IMagickImage<byte> canvas, string output, string? format, int quality,
             bool lossless, bool overwrite, CancellationToken token)
         {
             output = Path.GetFullPath(output);
@@ -182,6 +186,7 @@ namespace RitsukageGif.Core
             var target = format switch
             {
                 "png" => MagickFormat.Png, "webp" => MagickFormat.WebP, "gif" => MagickFormat.Gif,
+                "jpg" or "jpeg" => MagickFormat.Jpeg, "bmp" => MagickFormat.Bmp,
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
             if (!overwrite && File.Exists(output)) throw new IOException(output);

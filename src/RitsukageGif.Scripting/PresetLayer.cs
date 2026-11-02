@@ -12,5 +12,6 @@ namespace RitsukageGif.Scripting
         PresetFallback Missing,
         bool Follow = true,
         bool Absolute = false,
-        PresetMediaSource? Media = null);
+        PresetMediaSource? Media = null,
+        long FixedHandle = 0);
 }

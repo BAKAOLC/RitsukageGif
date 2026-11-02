@@ -23,7 +23,8 @@ namespace RitsukageGif.Scripting
         IReadOnlyDictionary<string, object>? InitialValues = null,
         IReadOnlyList<PresetFunction>? Functions = null,
         ScriptNode? Program = null,
-        string? SourceFile = null)
+        string? SourceFile = null,
+        PresetShape? Shape = null)
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Scripting.PresetParser");
 

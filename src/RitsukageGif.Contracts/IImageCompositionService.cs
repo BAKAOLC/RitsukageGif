@@ -6,5 +6,8 @@ namespace RitsukageGif.Contracts
 
         Task<MediaInfo> ContactSheetAsync(string input, string output, ImageContactSheetOptions options,
             CancellationToken token = default);
+
+        Task<MediaInfo> InpaintAsync(string input, string output, ImageInpaintingOptions options,
+            CancellationToken token = default);
     }
 }

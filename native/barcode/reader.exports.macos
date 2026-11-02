@@ -1,0 +1,17 @@
+_ZXing_ImageView_new_checked
+_ZXing_ImageView_delete
+_ZXing_ReaderOptions_new
+_ZXing_ReaderOptions_delete
+_ZXing_ReaderOptions_setFormats
+_ZXing_ReadBarcodes
+_ZXing_Barcodes_delete
+_ZXing_Barcodes_size
+_ZXing_Barcodes_at
+_ZXing_Barcode_isValid
+_ZXing_Barcode_text
+_ZXing_Barcode_format
+_ZXing_Barcode_position
+_ZXing_BarcodeFormatToString
+_ZXing_LastErrorMsg
+_ZXing_free
+_ZXing_ReaderOptions_setMaxNumberOfSymbols
