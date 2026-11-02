@@ -7,6 +7,13 @@ namespace RitsukageGif.Desktop
     {
         private void DrawHdrDim(DrawingContext context, Rect all)
         {
+            if (SelectionGeometry() is { } shape)
+            {
+                context.DrawGeometry(_dimBrush, null,
+                    new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(all), shape));
+                return;
+            }
+
             var selected = Selected.Intersect(_monitor);
             if (selected.IsEmpty)
             {

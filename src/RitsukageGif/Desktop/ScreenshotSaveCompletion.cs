@@ -39,7 +39,7 @@ namespace RitsukageGif.Desktop
                     await clipboard.FlushAsync();
                     break;
                 case ScreenshotAfterSaveAction.OpenFolder:
-                    PlatformShell.RevealFile(paths[0]);
+                    await PlatformShell.RevealFileAsync(paths[0]);
                     break;
                 default: throw new ArgumentOutOfRangeException(nameof(profile));
             }

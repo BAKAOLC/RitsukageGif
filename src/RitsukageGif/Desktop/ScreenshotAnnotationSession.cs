@@ -16,6 +16,8 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _gestureWork;
         private (PixelRect Region, byte[] Pixels)? _overlayFrame;
 
+        private ScreenshotTool _tool;
+
         public bool CanAnnotate
         {
             get;
@@ -45,15 +47,16 @@ namespace RitsukageGif.Desktop
 
         public ScreenshotTool Tool
         {
-            get;
+            get => _tool;
             set
             {
-                if (field == value) return;
+                if (_tool == value) return;
                 CommitTextEdit();
-                CancelGesture();
+                if (IsDrawingPolyline) FinishPolyline();
+                else CancelGesture();
                 _selected = null;
-                StoreToolStyle(field);
-                field = value;
+                StoreToolStyle(_styleTool);
+                _tool = value;
                 RestoreToolStyle(value);
                 Changed?.Invoke();
             }
@@ -73,11 +76,11 @@ namespace RitsukageGif.Desktop
         public bool HasAnnotations => _annotations.Count > 0;
 
         public bool HasMosaicAnnotations => _annotations.Any(annotation => annotation.Tool is ScreenshotTool.Mosaic
-            or ScreenshotTool.Blur or
+            or ScreenshotTool.Blur or ScreenshotTool.SmartErase or
             ScreenshotTool.Magnifier or ScreenshotTool.Eraser);
 
-        public bool CanUndo => _undo.Count > 0;
-        public bool CanRedo => _redo.Count > 0;
+        public bool CanUndo => _undo.Count > 0 || DocumentCanUndo?.Invoke() == true;
+        public bool CanRedo => _redo.Count > 0 || DocumentCanRedo?.Invoke() == true;
         public string? Error { get; private set; }
 
         public void Dispose()
@@ -87,6 +90,9 @@ namespace RitsukageGif.Desktop
             Logger.ZLogDebug(
                 $"Annotation session disposed. SessionId={_logSessionId} Annotations={_annotations.Count} RetainedObjects={_retained.Count}");
             _disposed = true;
+            _pixelPreviewWork?.Cancel();
+            _pixelPreviewFrames = [];
+            _pixelPreviewState = [];
             CancelPrivacyDetection();
             CancelMove();
             _cancel.Cancel();
@@ -101,6 +107,7 @@ namespace RitsukageGif.Desktop
             _watermarkSource = null;
             _frames.Clear();
             _overlayFrame = null;
+            ClearImagePreviewCache();
         }
 
         public event Action? Changed;
@@ -141,10 +148,11 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public void Begin(PixelPoint point)
+        private void Begin(PixelPoint point)
         {
             if (_disposed || !CanAnnotate || IsBusy || Tool == ScreenshotTool.Select ||
                 !AnnotationBounds.Contains(point)) return;
+            if (Tool == ScreenshotTool.Watermark && !WatermarkResourceReady) return;
             if (Tool == ScreenshotTool.Eraser && (!AnnotationsVisible || _annotations.Count == 0)) return;
             if (string.IsNullOrWhiteSpace(Text) && (Tool == ScreenshotTool.Text ||
                                                     (Tool == ScreenshotTool.Watermark && _watermarkSource is null)))
@@ -156,10 +164,15 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
+            if (IsDrawingPointLine)
+            {
+                ConfirmPointLine(point, _shiftPressed);
+                return;
+            }
+
             if (Tool == ScreenshotTool.Polyline && _gesture is { Tool: ScreenshotTool.Polyline } polyline)
             {
-                polyline.Points.Add(new(point.X, point.Y));
-                Changed?.Invoke();
+                AppendPolylinePoint(polyline, point);
                 return;
             }
 
@@ -170,24 +183,21 @@ namespace RitsukageGif.Desktop
             {
                 Tool = Tool, Color = Color, Thickness = Thickness,
                 Text = Tool is ScreenshotTool.Text or ScreenshotTool.Watermark ? Text : "", FontSize = FontSize,
-                MosaicSize = Math.Clamp(MosaicSize, 2, 256), Properties =
-                    Tool == ScreenshotTool.Number && _behavior.GlobalNumberCounter
-                        ? Properties.Normalize() with
-                        {
-                            Number = Math.Max(0,
-                                Interlocked.Increment(ref _globalNumber) - (_behavior.NumberStartsAtZero ? 1 : 0)),
-                        }
-                        : Properties.Normalize(),
+                MosaicSize = Math.Clamp(MosaicSize, 2, 256),
+                Properties = Properties.Normalize() with
+                {
+                    Number = Tool == ScreenshotTool.Number ? NextNumber : Properties.Number,
+                },
                 WatermarkImage = Tool == ScreenshotTool.Watermark ? _watermarkSource?.Retain() : null,
+                WatermarkTimestamp = Tool == ScreenshotTool.Watermark ? DateTimeOffset.Now : default,
             };
             _gesture.Points.Add(new(point.X, point.Y));
+            if (Tool == ScreenshotTool.Polyline) _gesture.Points.Add(_gesture.Points[0]);
             if (Tool == ScreenshotTool.StrokeEraser) EraseAt(new(point.X, point.Y));
-            if (Tool is ScreenshotTool.Text or ScreenshotTool.Number or ScreenshotTool.Watermark)
+            if (Tool is ScreenshotTool.Text or ScreenshotTool.Watermark)
             {
                 Commit(_gesture);
                 _gesture = null;
-                if (Tool == ScreenshotTool.Number)
-                    Properties = Properties with { Number = Math.Min(999999, Properties.Number + 1) };
             }
 
             Changed?.Invoke();
@@ -210,10 +220,14 @@ namespace RitsukageGif.Desktop
                     Changed?.Invoke();
                     return;
                 case ScreenshotTool.Polyline:
+                    MovePolylinePreview(point, _shiftPressed);
                     return;
             }
 
-            if (annotation.Tool is ScreenshotTool.Brush or ScreenshotTool.Highlight or ScreenshotTool.Eraser)
+            if (IsMarkerLine(annotation) || annotation.Tool == ScreenshotTool.Number)
+                current = ConstrainSegmentPoint(annotation.Points[0], point, _shiftPressed);
+
+            if (annotation.Tool == ScreenshotTool.Brush || IsPixelBrush(annotation))
             {
                 if (annotation.Tool == ScreenshotTool.Brush && _shiftPressed)
                 {
@@ -254,7 +268,18 @@ namespace RitsukageGif.Desktop
         {
             if (_gesture is not { } annotation) return;
             Move(point);
-            if (annotation.Tool == ScreenshotTool.Polyline) return;
+            if (annotation.Tool == ScreenshotTool.Polyline)
+            {
+                EndPolylineStroke(annotation);
+                return;
+            }
+
+            if (IsPointLine(annotation))
+            {
+                FinishPointLine();
+                return;
+            }
+
             _gesture = null;
             // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
             switch (annotation.Tool)
@@ -271,7 +296,8 @@ namespace RitsukageGif.Desktop
 
             try
             {
-                if (annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.Magnifier
+                if (annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase
+                    or ScreenshotTool.Magnifier
                     or ScreenshotTool.Eraser)
                 {
                     IsBusy = true;
@@ -297,6 +323,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 Commit(annotation);
+                if (annotation.Tool == ScreenshotTool.Number) CompleteNumber(annotation.Properties.Number);
             }
             catch (OperationCanceledException)
             {
@@ -316,10 +343,14 @@ namespace RitsukageGif.Desktop
 
         private void Commit(ScreenshotAnnotation annotation)
         {
+            NormalizeGeometryPoints(annotation);
             SaveHistory();
             _annotations.Add(annotation);
             _retained.Add(annotation);
-            _selected = _behavior.SecondaryEditingEnabled ? annotation : null;
+            _selected = _behavior.SecondaryEditing != AnnotationSecondaryEditingMode.CompletelyDisabled &&
+                        CanEditAnnotation(annotation)
+                ? annotation
+                : null;
             Error = null;
         }
 
@@ -327,6 +358,7 @@ namespace RitsukageGif.Desktop
         {
             CancelTextEdit();
             _sourceWork?.Cancel();
+            _watermarkLoadWork?.Cancel();
             _gestureWork?.Cancel();
             CancelGesture();
         }
@@ -351,6 +383,12 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
+            if (_undo.Count == 0)
+            {
+                if (DocumentCanUndo?.Invoke() == true) DocumentUndo?.Invoke();
+                return;
+            }
+
             if (CanUndo)
                 Logger.ZLogDebug($"Annotation undo applied. SessionId={_logSessionId} UndoStates={_undo.Count}");
             RestoreHistory(_undo, _redo);
@@ -361,6 +399,12 @@ namespace RitsukageGif.Desktop
             if (IsBusy) return;
             CommitTextEdit();
             CancelGesture();
+            if (_redo.Count == 0)
+            {
+                if (DocumentCanRedo?.Invoke() == true) DocumentRedo?.Invoke();
+                return;
+            }
+
             if (CanRedo)
                 Logger.ZLogDebug($"Annotation redo applied. SessionId={_logSessionId} RedoStates={_redo.Count}");
             RestoreHistory(_redo, _undo);
@@ -369,6 +413,7 @@ namespace RitsukageGif.Desktop
         public void Render(DrawingContext context)
         {
             if (Selection.IsEmpty || !AnnotationsVisible) return;
+            RefreshPixelPreviews();
             using var clip = context.PushClip(new(AnnotationBounds.X, AnnotationBounds.Y, AnnotationBounds.Width,
                 AnnotationBounds.Height));
             foreach (var annotation in _annotations) Draw(context, annotation);
@@ -384,11 +429,14 @@ namespace RitsukageGif.Desktop
         {
             if (annotation.Points.Count == 0) return;
             var first = annotation.Points[0];
-            var last = annotation.Points[^1];
             var brush = new SolidColorBrush(annotation.Color);
-            var pen = new Pen(brush, annotation.Thickness, annotation.Properties.Dashed ? DashStyle.Dash : null,
-                annotation.Tool == ScreenshotTool.Polyline ? _behavior.PolylineCap : PenLineCap.Round,
-                annotation.Tool == ScreenshotTool.Polyline ? _behavior.PolylineJoin : PenLineJoin.Round);
+            var pen = new Pen(brush, annotation.Thickness, AnnotationStroke.Dashes(annotation.Properties.StrokeStyle),
+                annotation.Tool is ScreenshotTool.Line or ScreenshotTool.Polyline
+                    ? _behavior.PolylineCap
+                    : PenLineCap.Round,
+                annotation.Tool is ScreenshotTool.Line or ScreenshotTool.Polyline
+                    ? _behavior.PolylineJoin
+                    : PenLineJoin.Round);
             switch (annotation.Tool)
             {
                 case ScreenshotTool.Text:
@@ -397,103 +445,48 @@ namespace RitsukageGif.Desktop
                     DrawLabel(context, annotation);
                     break;
                 case ScreenshotTool.Spotlight:
-                    DrawSpotlight(context, annotation);
+                    DrawSpotlightGeometry(context, annotation);
                     break;
                 case ScreenshotTool.Eraser:
-                    DrawPixelEraser(context, annotation);
+                    DrawPixelTool(context, annotation);
                     break;
                 case ScreenshotTool.StrokeEraser:
                     break;
                 case ScreenshotTool.Line:
-                    context.DrawLine(pen, first, last);
-                    break;
                 case ScreenshotTool.Polyline:
-                    var path = new StreamGeometry();
-                    using (var line = path.Open())
-                    {
-                        line.BeginFigure(first, false);
-                        for (var index = 1; index < annotation.Points.Count; index++)
-                            line.LineTo(annotation.Points[index]);
-                        line.EndFigure(false);
-                    }
-
-                    context.DrawGeometry(null, pen, path);
+                    DrawLineGeometry(context, annotation, brush, pen);
                     break;
                 case ScreenshotTool.Rectangle:
-                    context.DrawRectangle(annotation.Properties.Filled ? brush : null, pen, annotation.Bounds); break;
                 case ScreenshotTool.Ellipse:
-                    context.DrawEllipse(annotation.Properties.Filled ? brush : null, pen, annotation.Bounds); break;
+                    context.DrawGeometry(annotation.Properties.Filled ? brush : null, pen,
+                        GeometryFor(annotation).Path);
+                    break;
                 case ScreenshotTool.Magnifier:
-                    using (context.PushClip(annotation.Bounds))
-                    {
-                        var center = annotation.Bounds.Center;
-                        var scale = annotation.Properties.Magnification;
-                        using var magnify = context.PushTransform(new(scale, 0, 0, scale,
-                            center.X * (1 - scale), center.Y * (1 - scale)));
-                        if (sampleImages)
-                            foreach (var tile in annotation.ImageTiles)
-                                context.DrawImage(tile.Image, tile.Bounds);
-                    }
-
-                    context.DrawRectangle(null, pen, annotation.Bounds);
+                    DrawMagnifier(context, annotation, sampleImages);
                     break;
                 case ScreenshotTool.Mosaic:
                 case ScreenshotTool.Blur:
-                    if (annotation.ImageTiles.Count > 0)
-                        foreach (var tile in annotation.ImageTiles)
-                            context.DrawImage(tile.Image, tile.Bounds);
-                    else
-                        context.DrawRectangle(null, new Pen(Brushes.DeepSkyBlue, 1, DashStyle.Dash), annotation.Bounds);
+                case ScreenshotTool.SmartErase:
+                    DrawPixelTool(context, annotation);
                     break;
                 case ScreenshotTool.Arrow:
-                    if (annotation.Points.Count > 2)
-                    {
-                        var arrow = new StreamGeometry();
-                        using (var curve = arrow.Open())
-                        {
-                            curve.BeginFigure(first, false);
-                            curve.QuadraticBezierTo(annotation.Points[1], last);
-                            curve.EndFigure(false);
-                        }
-
-                        context.DrawGeometry(null, pen, arrow);
-                    }
-                    else
-                    {
-                        context.DrawLine(pen, first, last);
-                    }
-
-                    var tangent = annotation.Points.Count > 2 ? annotation.Points[1] : first;
-                    var direction = new Vector(last.X - tangent.X, last.Y - tangent.Y);
-                    if (direction.Length > .1)
-                    {
-                        var unit = direction / direction.Length;
-                        var wing = Math.Max(10, annotation.Thickness * 3);
-                        var perpendicular = new Vector(-unit.Y, unit.X);
-                        context.DrawLine(pen, last, last - unit * wing + perpendicular * wing * .5);
-                        context.DrawLine(pen, last, last - unit * wing - perpendicular * wing * .5);
-                    }
-
+                    DrawArrowShape(context, annotation, brush, pen);
                     if (!string.IsNullOrWhiteSpace(annotation.Text))
                     {
                         var comment = FormatLabel(annotation, brush);
-                        context.DrawText(comment, last + new Vector(8, 8));
+                        context.DrawText(comment, annotation.Points[^1] + new Vector(8, 8));
                     }
 
                     break;
-                case ScreenshotTool.Brush:
                 case ScreenshotTool.Highlight:
-                    using (context.PushOpacity(annotation.Tool == ScreenshotTool.Highlight ? .35 : 1))
-                    {
+                    DrawMarker(context, annotation);
+                    break;
+                case ScreenshotTool.Brush:
+                    using (context.PushOpacity(1))
                         if (annotation.Points.Count == 1)
                             context.DrawEllipse(brush, null, first, annotation.Thickness / 2, annotation.Thickness / 2);
-                        if (annotation.Tool == ScreenshotTool.Brush && _behavior.SmoothBrush &&
-                            annotation.Points.Count > 2)
-                            DrawSmoothStroke(context, annotation, pen);
                         else
-                            for (var i = 1; i < annotation.Points.Count; i++)
-                                context.DrawLine(pen, annotation.Points[i - 1], annotation.Points[i]);
-                    }
+                            context.DrawGeometry(null, pen, BrushGeometryFor(annotation).Path);
 
                     break;
                 case ScreenshotTool.Select:

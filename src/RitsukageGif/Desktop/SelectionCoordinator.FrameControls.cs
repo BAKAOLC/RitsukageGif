@@ -1,4 +1,4 @@
-﻿using Avalonia.Threading;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -44,7 +44,7 @@ namespace RitsukageGif.Desktop
         }
 
         internal CaptureDecoration RememberedDecoration => Decoration with { CornerRadius = 0 };
-        internal bool CanRefreshFrame => ScreenshotMode && !UsesLocalSource;
+        internal bool CanRefreshFrame => ScreenshotMode && !ScreenshotPreview;
         private bool FrameRefreshHeld => _frameRefreshRelease is not null;
 
         internal Func<Action, Action, Action<Exception>, CancellationToken, Task<IDisposable>>?

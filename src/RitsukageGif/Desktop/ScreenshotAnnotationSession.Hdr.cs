@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Media.Imaging;
 using ImageMagick;
 
@@ -15,7 +15,8 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task<CapturedFrame> ComposeHdrCoreAsync(PixelRect globalRegion, CapturedFrame source,
-            CapturedFrame? sampleSource, PixelRect? sampleGlobalBounds, CancellationToken token)
+            CapturedFrame? sampleSource, PixelRect? sampleGlobalBounds, CancellationToken token,
+            IReadOnlyList<ScreenshotAnnotation>? snapshot = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             HdrAnnotationBlender.Validate(source);
@@ -31,10 +32,10 @@ namespace RitsukageGif.Desktop
                 sampleRegion.Intersect(globalRegion) != globalRegion)
                 throw new ArgumentException(UiText.Get("InvalidFrameBuffer"), nameof(sampleSource));
             token.ThrowIfCancellationRequested();
-            CommitTextEdit();
-            if (!HasAnnotations || !AnnotationsVisible) return source;
+            if (snapshot is null) CommitTextEdit();
+            var annotations = snapshot ?? [.. _annotations];
+            if (annotations.Count == 0 || !AnnotationsVisible) return source;
             var output = await Task.Run(() => source.Pixels[..checked(source.Stride * source.Height)].ToArray(), token);
-            var annotations = _annotations.ToArray();
             foreach (var annotation in annotations)
             {
                 token.ThrowIfCancellationRequested();
@@ -42,6 +43,9 @@ namespace RitsukageGif.Desktop
                 // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
                 switch (annotation.Tool)
                 {
+                    case ScreenshotTool.Highlight:
+                        await ApplyHdrMarkerAsync(output, source, globalRegion, annotation, token);
+                        continue;
                     case ScreenshotTool.Magnifier:
                     case ScreenshotTool.Eraser:
                         await Task.Run(() => RestoreHdrSamples(output, source, globalRegion, samples, sampleRegion,
@@ -49,15 +53,13 @@ namespace RitsukageGif.Desktop
                         if (annotation.Tool == ScreenshotTool.Eraser) continue;
                         break;
                     case ScreenshotTool.Mosaic:
-                        var bounds = annotation.Bounds;
-                        var mosaic = new PixelRect((int)bounds.X, (int)bounds.Y, Math.Max(1, (int)bounds.Width),
-                            Math.Max(1, (int)bounds.Height));
-                        await Task.Run(() => HdrAnnotationBlender.Mosaic(output, source, globalRegion, samples,
-                            sampleRegion, mosaic, annotation.MosaicSize, token), token);
-                        continue;
                     case ScreenshotTool.Blur:
-                        await Task.Run(() => BlurHdrSamples(output, source, globalRegion, samples, sampleRegion,
-                            annotation, token), token);
+                        await Task.Run(() => ApplyPixelLayerHdr(output, source, globalRegion, annotation, token),
+                            token);
+                        continue;
+                    case ScreenshotTool.SmartErase:
+                        await Task.Run(() => ApplyInpaintingLayerHdr(output, source, globalRegion, annotation,
+                            annotation.Properties.InpaintingRadius, token), token);
                         continue;
                 }
 
@@ -86,7 +88,7 @@ namespace RitsukageGif.Desktop
                     {
                         token.ThrowIfCancellationRequested();
                         using var stream = new MemoryStream();
-                        tile.Save(stream);
+                        tile.Save(stream, PngBitmapEncoderOptions.Default);
                         using var overlay = new MagickImage(stream.ToArray());
                         using var pixels = overlay.GetPixels();
                         var bgra = pixels.ToByteArray(PixelMapping.BGRA)!;

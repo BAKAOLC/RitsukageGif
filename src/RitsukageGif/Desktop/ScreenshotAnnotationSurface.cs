@@ -8,9 +8,18 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotAnnotationSurface : Canvas, IDisposable, ICustomHitTest
     {
-        private static readonly Cursor ArrowCursor = new(StandardCursorType.Arrow);
-        private static readonly Cursor CrossCursor = new(StandardCursorType.Cross);
-        private static readonly Cursor PencilCursor = new(StandardCursorType.None);
+        private static readonly Dictionary<StandardCursorType, Cursor> AnnotationCursors =
+            new()
+            {
+                [StandardCursorType.Arrow] = new(StandardCursorType.Arrow),
+                [StandardCursorType.Cross] = new(StandardCursorType.Cross),
+                [StandardCursorType.None] = new(StandardCursorType.None),
+                [StandardCursorType.SizeAll] = new(StandardCursorType.SizeAll),
+                [StandardCursorType.SizeNorthSouth] = new(StandardCursorType.SizeNorthSouth),
+                [StandardCursorType.TopLeftCorner] = new(StandardCursorType.TopLeftCorner),
+                [StandardCursorType.TopRightCorner] = new(StandardCursorType.TopRightCorner),
+            };
+
         private readonly ScreenshotAnnotationDrawingSurface _drawingSurface;
         private readonly PixelRect _monitor;
         private readonly ScreenshotAnnotationSession _session;
@@ -26,16 +35,21 @@ namespace RitsukageGif.Desktop
             Scale = scale;
             _drawingSurface = new(RenderAnnotations) { IsHitTestVisible = false };
             Children.Add(_drawingSurface);
-            Cursor = CrossCursor;
+            RefreshCursor();
             _session.Changed += Refresh;
             _session.TextEditStateChanged += RefreshTextEditor;
             Refresh();
-            ConfigureMouseInput(sourcePoint, coordinator);
+            ConfigureMouseInput(args =>
+            {
+                _session.InteractionScale = EffectiveControlScale;
+                return sourcePoint(args);
+            }, coordinator);
             RefreshTextEditor();
             PointerExited += (_, _) =>
             {
                 _pointerPosition = null;
                 _session.NotifyHover(null);
+                RefreshCursor();
                 InvalidateAnnotations();
             };
             PointerCaptureLost += (_, _) =>
@@ -50,11 +64,45 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        public double Scale { get; set; }
-        public bool RenderContent { get; set; } = true;
+        public double Scale
+        {
+            get;
+            set
+            {
+                field = value;
+                _session.InteractionScale = EffectiveControlScale;
+            }
+        }
+
+        public double? ControlScale
+        {
+            get;
+            set
+            {
+                if (field.Equals(value)) return;
+                field = value;
+                _session.InteractionScale = EffectiveControlScale;
+                InvalidateAnnotations();
+            }
+        }
+
+        private double EffectiveControlScale => ControlScale ?? Scale;
+        private double DragThreshold => 4 * EffectiveControlScale / Scale;
+
+        public bool RenderContent
+        {
+            get;
+            set
+            {
+                if (field.Equals(value)) return;
+                field = value;
+                InvalidateAnnotations();
+            }
+        } = true;
 
         public bool HitTest(Point point)
         {
+            _session.InteractionScale = EffectiveControlScale;
             return _session.Tool != ScreenshotTool.Select || _session.HasSelectedAnnotation ||
                    _session.HitTestAnnotation(new((int)(point.X * Scale + _monitor.X),
                        (int)(point.Y * Scale + _monitor.Y)));
@@ -75,13 +123,13 @@ namespace RitsukageGif.Desktop
         private void Refresh()
         {
             IsHitTestVisible = _session.CanAnnotate;
-            Cursor = _session.Tool switch
-            {
-                ScreenshotTool.Select => ArrowCursor,
-                ScreenshotTool.Brush or ScreenshotTool.Highlight or ScreenshotTool.Eraser => PencilCursor,
-                _ => CrossCursor,
-            };
+            RefreshCursor();
             InvalidateAnnotations();
+        }
+
+        private void RefreshCursor()
+        {
+            Cursor = AnnotationCursors[_session.PointerCursor];
         }
 
         protected override Size ArrangeOverride(Size finalSize)
@@ -103,8 +151,9 @@ namespace RitsukageGif.Desktop
             using var transform =
                 context.PushTransform(new(1 / Scale, 0, 0, 1 / Scale, -_monitor.X / Scale, -_monitor.Y / Scale));
             if (RenderContent) _session.Render(context);
-            _session.RenderSelection(context);
-            if (_pointerPosition is { } point) _session.RenderPencilCursor(context, new(point.X, point.Y));
+            _session.RenderSelection(context, EffectiveControlScale);
+            if (_pointerPosition is { } point)
+                _session.RenderPencilCursor(context, new(point.X, point.Y), EffectiveControlScale);
         }
     }
 }

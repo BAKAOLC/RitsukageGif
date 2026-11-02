@@ -2,32 +2,56 @@ using System.Diagnostics;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed partial class ScreenshotScrollingSession(
-        PixelRect initialRegion,
-        ScrollCaptureAxis axis,
-        PixelRect[] monitors,
-        WindowTarget? target,
-        HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression,
-        FrozenScreenshotCursor? cursor = null)
+    internal sealed partial class ScreenshotScrollingSession
     {
+        private readonly PixelRect[] _monitors;
+        private readonly WindowTarget? _target;
+        private readonly HdrToneMapMode _toneMap;
+        private readonly FrozenScreenshotCursor? _cursor;
+        private readonly bool _retainHdr;
+        private readonly double _density;
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.ScrollCapture");
         private static long _sessionSequence;
         private readonly long _logSessionId = Interlocked.Increment(ref _sessionSequence);
         private readonly Lock _sync = new();
-        private ScrollCaptureAxis _axis = axis;
+        private ScrollCaptureAxis _axis;
         private int _captureEpoch;
         private bool _configured;
         private PixelRect? _firstRegion;
         private int _generation;
-        private PixelRect _initialRegion = initialRegion;
+        private PixelRect _initialRegion;
         private long _lastPreview;
         private ScrollCaptureResult? _lastResult;
         private int _leadingInset, _trailingInset;
         private int _obstructed;
         private int _paused = 1;
-        private int _position = axis == ScrollCaptureAxis.Vertical ? initialRegion.Y : initialRegion.X;
+        private int _position;
         private bool _previewDirty;
-        private ScrollCaptureSession _stitching = new(initialRegion.Width, initialRegion.Height, new() { Axis = axis });
+
+        private ScrollCaptureSession _stitching;
+
+        internal ScreenshotScrollingSession(PixelRect initialRegion, ScrollCaptureAxis axis, PixelRect[] monitors,
+            WindowTarget? target, HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression,
+            FrozenScreenshotCursor? cursor = null, bool autoCropOnReverse = false, bool retainHdr = false,
+            double? pixelDensity = null)
+        {
+            _monitors = monitors;
+            _target = target;
+            _toneMap = toneMap;
+            _cursor = cursor;
+            _retainHdr = retainHdr;
+            _density = pixelDensity ?? NativeDisplayCatalog.Density(initialRegion);
+            var options = new RecordingOptions(initialRegion, Divisor: 1) { PixelDensity = _density };
+            options.Validate();
+            _axis = axis;
+            _previewMaximumHeight = axis == ScrollCaptureAxis.Vertical ? 1600 : 400;
+            _previewMaximumWidth = axis == ScrollCaptureAxis.Vertical ? 400 : 1600;
+            _initialRegion = initialRegion;
+            _position = axis == ScrollCaptureAxis.Vertical ? initialRegion.Y : initialRegion.X;
+            _stitching = new(options.Width, options.Height,
+                new() { Axis = axis, AutoCropOnReverse = autoCropOnReverse, RetainHdr = retainHdr });
+        }
+
         internal int Generation => Volatile.Read(ref _generation);
 
 
@@ -79,7 +103,8 @@ namespace RitsukageGif.Desktop
                 _axis = newAxis;
                 _initialRegion = region;
                 _position = _axis == ScrollCaptureAxis.Vertical ? region.Y : region.X;
-                _stitching = new(region.Width, region.Height, new() { Axis = _axis });
+                _stitching = new(PhysicalSize(region.Width), PhysicalSize(region.Height),
+                    new() { Axis = _axis, AutoCropOnReverse = AutoCropOnReverse, RetainHdr = _retainHdr });
                 _firstRegion = null;
                 _configured = false;
                 _leadingInset = _trailingInset = 0;
@@ -102,10 +127,15 @@ namespace RitsukageGif.Desktop
                     (_axis == ScrollCaptureAxis.Vertical ? _stitching.Height : _stitching.Width) > 0)
                     throw new InvalidOperationException();
                 if (leading != 0 || trailing != 0)
-                    _stitching = new(_initialRegion.Width, _initialRegion.Height,
-                        new() { Axis = _axis, LeadingInset = leading, TrailingInset = trailing });
-                _leadingInset = leading;
-                _trailingInset = trailing;
+                    _stitching = new(PhysicalSize(_initialRegion.Width), PhysicalSize(_initialRegion.Height),
+                        new()
+                        {
+                            Axis = _axis, LeadingInset = PhysicalOffset(leading),
+                            TrailingInset = PhysicalOffset(trailing),
+                            AutoCropOnReverse = AutoCropOnReverse, RetainHdr = _retainHdr,
+                        });
+                _leadingInset = PhysicalOffset(leading);
+                _trailingInset = PhysicalOffset(trailing);
                 _configured = true;
             }
         }
@@ -135,7 +165,7 @@ namespace RitsukageGif.Desktop
             long capturedFrames = 0, appendedFrames = 0, addedPixels = 0, unmatchedFrames = 0, failures = 0;
             var recovering = false;
             Logger.ZLogInformation(
-                $"Scroll capture session started. SessionId={_logSessionId} Axis={_axis.ToString()} Width={_initialRegion.Width} Height={_initialRegion.Height} WindowSource={target is not null}");
+                $"Scroll capture session started. SessionId={_logSessionId} Axis={_axis.ToString()} Width={_initialRegion.Width} Height={_initialRegion.Height} WindowSource={_target is not null} RetainHdr={_retainHdr}");
             ScreenshotScrollingSource? capture = null;
             try
             {
@@ -161,12 +191,32 @@ namespace RitsukageGif.Desktop
                             }
                         }
 
+                        if (pendingRegion is null) capture?.Suspend();
                         if (pendingRegion is { } region)
                         {
+                            CapturedFrameSet? frames = null;
                             byte[] pixels;
-                            if (provider is null)
+                            if (_retainHdr)
                             {
-                                capture ??= new(region, monitors, target, toneMap);
+                                capture ??= CaptureFrameSet is null
+                                    ? new(region, _monitors, _target, _toneMap, _density)
+                                    : null;
+                                frames = CaptureFrameSet is { } provide
+                                    ? provide(region, token)
+                                    : capture!.CaptureFrames(region, token);
+                                pixels = CapturedFramePixels.ToStraightBgra(frames.Sdr, token);
+                                frames = frames with
+                                {
+                                    Sdr = frames.Sdr with
+                                    {
+                                        Pixels = pixels, Stride = checked(PhysicalSize(region.Width) * 4),
+                                        AlphaMode = CaptureAlphaMode.Straight,
+                                    },
+                                };
+                            }
+                            else if (provider is null)
+                            {
+                                capture ??= new(region, _monitors, _target, _toneMap, _density);
                                 pixels = capture.Capture(region, token);
                             }
                             else
@@ -178,7 +228,17 @@ namespace RitsukageGif.Desktop
                                 if (generation == _generation && captureEpoch == _captureEpoch && !Paused &&
                                     Volatile.Read(ref _obstructed) == 0)
                                 {
-                                    var result = _stitching.TryAppend(pixels, region.X, region.Y, token);
+                                    if (frames?.Hdr is { } firstHdr && _firstRegion is null &&
+                                        !(firstHdr.ColorRegions.Count == 0
+                                            ? firstHdr.ColorInfo.IsHdrSource
+                                            : firstHdr.ColorRegions.Any(part => part.ColorInfo.IsHdrSource)))
+                                        throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable"));
+                                    var previousSize = (_stitching.Width, _stitching.Height);
+                                    var result = frames is null
+                                        ? _stitching.TryAppend(pixels, PhysicalOffset(region.X - _initialRegion.X),
+                                            PhysicalOffset(region.Y - _initialRegion.Y), token)
+                                        : _stitching.TryAppend(frames, PhysicalOffset(region.X - _initialRegion.X),
+                                            PhysicalOffset(region.Y - _initialRegion.Y), token);
                                     _viewportMatched = result.Status is ScrollCaptureStatus.Started or
                                         ScrollCaptureStatus.Appended or ScrollCaptureStatus.AlreadyCovered;
                                     capturedFrames++;
@@ -213,8 +273,9 @@ namespace RitsukageGif.Desktop
                                     }
 
                                     ObserveAutomatic(result, pixels, region, token);
-                                    Publish(result,
-                                        result.Status is ScrollCaptureStatus.Started or ScrollCaptureStatus.Appended);
+                                    Publish(result, previousSize != (_stitching.Width, _stitching.Height) ||
+                                                    result.Status is ScrollCaptureStatus.Started
+                                                        or ScrollCaptureStatus.Appended);
                                 }
                         }
                     }
@@ -279,36 +340,27 @@ namespace RitsukageGif.Desktop
             Updated?.Invoke(result, preview, _stitching.CanUndo, _stitching.StartOffset);
         }
 
-        public ScrollCaptureImage Export(CancellationToken token)
+        private ScrollCaptureImage Export(CancellationToken token)
         {
             lock (_sync)
             {
                 var image = _stitching.ExportPixels(token);
                 Logger.ZLogInformation(
-                    $"Scroll capture image exported. SessionId={_logSessionId} Width={image.Width} Height={image.Height} Bytes={image.Pixels.Length}");
-                if (cursor is null || _firstRegion is not { } first) return image;
-                var vertical = _axis == ScrollCaptureAxis.Vertical;
-                var content = vertical
-                    ? new PixelRect(first.X, first.Y + _leadingInset, first.Width,
-                        first.Height - _leadingInset - _trailingInset)
-                    : new PixelRect(first.X + _leadingInset, first.Y,
-                        first.Width - _leadingInset - _trailingInset, first.Height);
-                var output = vertical
-                    ? new PixelRect(content.X, content.Y + _stitching.StartOffset, image.Width, image.Height)
-                    : new PixelRect(content.X + _stitching.StartOffset, content.Y, image.Width, image.Height);
-                var clipped = cursor.Bounds.Intersect(content).Intersect(output);
-                if (clipped.IsEmpty) return image;
-                var pixels = new byte[checked(clipped.Width * clipped.Height * 4)];
-                var stride = checked(clipped.Width * 4);
-                for (var row = 0; row < clipped.Height; row++)
-                    image.Pixels.AsSpan(((clipped.Y - output.Y + row) * image.Width + clipped.X - output.X) * 4,
-                        stride).CopyTo(pixels.AsSpan(row * stride, stride));
-                cursor.Draw(pixels, clipped);
-                for (var row = 0; row < clipped.Height; row++)
-                    pixels.AsSpan(row * stride, stride).CopyTo(image.Pixels.AsSpan(
-                        ((clipped.Y - output.Y + row) * image.Width + clipped.X - output.X) * 4, stride));
+                    $"Scroll capture image exported. SessionId={_logSessionId} Width={image.Width} Height={image.Height} CombinedBytes={image.Pixels.LongLength + (image.Hdr?.Pixels.Length ?? 0)} HasHdr={image.Hdr is not null}");
+                if (CursorOverlay(image.Width, image.Height) is not { } overlay) return image;
+                BlendCursor(image.Pixels, image.Width, overlay.Area, overlay.Pixels, token);
                 return image;
             }
+        }
+
+        private int PhysicalSize(int value)
+        {
+            return checked((int)Math.Ceiling(value * _density));
+        }
+
+        private int PhysicalOffset(int value)
+        {
+            return checked((int)Math.Round(value * _density));
         }
     }
 }

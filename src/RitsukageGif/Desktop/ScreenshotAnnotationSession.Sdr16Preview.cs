@@ -26,21 +26,30 @@ namespace RitsukageGif.Desktop
             try
             {
                 var sampling = previewRegion;
-                foreach (var annotation in annotations)
+                foreach (var annotation in annotations.AsEnumerable().Reverse())
                 {
-                    var rectangle = annotation.Bounds;
+                    var rectangle = IsPixelTool(annotation.Tool) ? PixelEffectBounds(annotation) : annotation.Bounds;
                     var area = new PixelRect((int)Math.Floor(rectangle.X), (int)Math.Floor(rectangle.Y),
                             Math.Max(1, (int)Math.Ceiling(rectangle.Right) - (int)Math.Floor(rectangle.X)),
                             Math.Max(1, (int)Math.Ceiling(rectangle.Bottom) - (int)Math.Floor(rectangle.Y)))
                         .Intersect(originalRegion).Intersect(AnnotationBounds);
-                    if (area.Intersect(previewRegion).IsEmpty) continue;
+                    if (annotation.Tool == ScreenshotTool.Magnifier)
+                    {
+                        if (!MagnifierPixelBounds(MagnifierLensBounds(annotation)).Intersect(sampling).IsEmpty)
+                            sampling = Union(sampling, area);
+                        continue;
+                    }
+
+                    if (area.Intersect(sampling).IsEmpty) continue;
                     // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithDefault
                     sampling = annotation.Tool switch
                     {
                         ScreenshotTool.Mosaic or ScreenshotTool.Magnifier => Union(sampling, area),
-                        ScreenshotTool.Blur => Union(sampling, ExpandSampleRegion(area.Intersect(previewRegion),
+                        ScreenshotTool.Blur => Union(sampling, ExpandSampleRegion(area,
                             originalRegion,
                             annotation.Properties.BlurRadius)),
+                        ScreenshotTool.SmartErase => Union(sampling,
+                            PixelSamplingArea(annotation, area, originalRegion)),
                         _ => sampling,
                     };
                 }
@@ -70,7 +79,8 @@ namespace RitsukageGif.Desktop
         private static bool CanComposeHighPrecisionOffThread(IReadOnlyList<ScreenshotAnnotation> annotations)
         {
             return annotations.All(annotation =>
-                annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.Eraser ||
+                annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase
+                    or ScreenshotTool.Eraser ||
                 (annotation is { Tool: ScreenshotTool.Watermark, WatermarkImage.Encoded: { } encoded } &&
                  IsHighPrecisionPng(encoded)));
         }

@@ -13,7 +13,11 @@ namespace RitsukageGif.Desktop
             PixelPoint point, CancellationToken token)
         {
             var nativeTask = Task.Run(() => WindowControlLocator.FindHierarchy(target, point, token), token);
-            var accessibilityTask = WindowsAccessibilityLocator.FindHierarchyAsync(target, point, token);
+            var accessibilityTask = OperatingSystem.IsWindows()
+                ? WindowsAccessibilityLocator.FindHierarchyAsync(target, point, token)
+                : OperatingSystem.IsLinux()
+                    ? LinuxAccessibilityLocator.FindHierarchyAsync(target, point, token)
+                    : Task.FromResult<IReadOnlyList<WindowControlTarget>>([]);
             await Task.WhenAll(nativeTask, accessibilityTask);
             token.ThrowIfCancellationRequested();
             var limit = WindowSource ? target.Client : target.Bounds;
@@ -29,6 +33,39 @@ namespace RitsukageGif.Desktop
             }
 
             return hierarchy;
+        }
+
+        private async Task EnableMacControlsAsync()
+        {
+            try
+            {
+                var granted = await Task.Run(() => MacWindowSystem.CheckControlPermission(true), _cancel.Token);
+                if (_finished) return;
+                if (!granted)
+                {
+                    CompletionNotice = UiText.Get("PlatformAccessibilityPermission");
+                    Refresh();
+                    return;
+                }
+
+                Controls = true;
+                DetectionMode = CaptureDetectionMode.Controls;
+                PreferencesChanged?.Invoke();
+                InvalidateControlDetection();
+                UpdatePoint();
+                Refresh();
+            }
+            catch (OperationCanceledException) when (_cancel.IsCancellationRequested)
+            {
+            }
+            catch (IOException error)
+            {
+                if (!_finished)
+                {
+                    CompletionNotice = error.Message;
+                    Refresh();
+                }
+            }
         }
 
         private void InvalidateControlDetection()

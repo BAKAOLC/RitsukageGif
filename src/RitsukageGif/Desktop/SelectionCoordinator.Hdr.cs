@@ -74,10 +74,16 @@ namespace RitsukageGif.Desktop
             if (bounds.Intersect(region).IsEmpty) return false;
             if (frame.ColorRegions.Count == 0) return frame.ColorInfo.IsHdrSource;
             foreach (var part in frame.ColorRegions)
+            {
+                var left = bounds.X + (int)Math.Floor((double)part.Region.X * bounds.Width / frame.Width);
+                var top = bounds.Y + (int)Math.Floor((double)part.Region.Y * bounds.Height / frame.Height);
+                var right = bounds.X + (int)Math.Ceiling((double)part.Region.Right * bounds.Width / frame.Width);
+                var bottom = bounds.Y + (int)Math.Ceiling((double)part.Region.Bottom * bounds.Height / frame.Height);
                 if (part.ColorInfo.IsHdrSource &&
-                    !new PixelRect(bounds.X + part.Region.X, bounds.Y + part.Region.Y,
-                        part.Region.Width, part.Region.Height).Intersect(region).IsEmpty)
+                    !new PixelRect(left, top, right - left, bottom - top).Intersect(region).IsEmpty)
                     return true;
+            }
+
             return false;
         }
 
@@ -127,6 +133,13 @@ namespace RitsukageGif.Desktop
             var frames = selection.WindowSource && !UsesLocalSource && _frozenWindow is { } window
                 ? [(window.Region, window.Hdr)]
                 : _hdrScreenshots;
+            return MergeHdrScreenshot(region, frames, token);
+        }
+
+        private static (CapturedFrame? Frame, string? Reason) MergeHdrScreenshot(PixelRect region,
+            IReadOnlyList<(PixelRect Region, CapturedFrame? Frame)> frames, CancellationToken token,
+            bool opaqueBackground = true)
+        {
             var intersecting = frames.Where(item => !item.Region.Intersect(region).IsEmpty).ToArray();
             if (intersecting.Length == 0 || intersecting.Any(item => item.Frame is null) ||
                 !intersecting.Any(item => item.Frame!.ColorRegions.Count == 0
@@ -139,8 +152,9 @@ namespace RitsukageGif.Desktop
                                                               .IsEmpty)))
                 return (null, UiText.Get("HdrCaptureUnavailable"));
             var pixels = new byte[checked(region.Width * region.Height * 8)];
-            for (var alpha = 6; alpha < pixels.Length; alpha += 8)
-                BinaryPrimitives.WriteHalfLittleEndian(pixels.AsSpan(alpha, 2), (Half)1);
+            if (opaqueBackground)
+                for (var alpha = 6; alpha < pixels.Length; alpha += 8)
+                    BinaryPrimitives.WriteHalfLittleEndian(pixels.AsSpan(alpha, 2), (Half)1);
             var colors = new List<FrameColorRegion>();
             foreach (var item in intersecting)
             {
@@ -173,7 +187,7 @@ namespace RitsukageGif.Desktop
                         case CaptureAlphaMode.Premultiplied:
                             break;
                         default:
-                            throw new ArgumentOutOfRangeException(nameof(selection));
+                            throw new ArgumentOutOfRangeException(nameof(frames));
                     }
                 }
 

@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Input;
 
 namespace RitsukageGif.Desktop
@@ -39,7 +39,7 @@ namespace RitsukageGif.Desktop
         private void InitializeAnnotations()
         {
             if (!ScreenshotMode) return;
-            Annotations = new();
+            Annotations = new() { AllowUnrestrictedSelection = false };
             Annotations.ToolbarPreferencesChanged +=
                 (preferences, tools) => AnnotationToolbarChanged?.Invoke(preferences, tools);
             Annotations.QuickMarkBoundsProvider = FindQuickMarkBounds;
@@ -48,6 +48,8 @@ namespace RitsukageGif.Desktop
             Annotations.RecognitionRequested += mode => RecognizeSelection(mode);
             Annotations.TranslationRequested += () => RecognizeSelection(RecognitionMode.Text, translate: true);
             Annotations.StartScrollingRequested += vertical => _scrollingTask = StartScrollingAsync(vertical);
+            Annotations.RecordingRequested += RequestRecording;
+            Annotations.WindowPinRequested += RequestWindowPin;
             Annotations.CompleteRequested += action =>
             {
                 if (_finished || _screenshotCompleting) return;
@@ -60,6 +62,9 @@ namespace RitsukageGif.Desktop
             SelectionChanged += snapshot =>
             {
                 if (Annotations.Selection != snapshot.Region) Annotations.NotifySelection(snapshot.Region);
+                if (snapshot is { CanConfirm: true, Phase: SelectionPhase.Selected } && !UsesLocalSource &&
+                    !_screenshotCompleting && !NeedsWindowScreenshot && Annotations.CanAnnotate)
+                    Annotations.AddAutomaticWatermark();
             };
         }
 
@@ -130,9 +135,15 @@ namespace RitsukageGif.Desktop
 
         private void CompleteSelection(SelectionResult? result)
         {
-            if (!ScreenshotMode || result is null)
+            if (!ScreenshotMode || result is null || RecordingRequested || !TranslationRequestedPng.IsEmpty)
             {
                 Finish(result);
+                return;
+            }
+
+            if (Annotations is { AutomaticWatermarkTask.IsCompleted: false } waiting)
+            {
+                _screenshotTask = CompleteAfterAutomaticWatermarkAsync(result, waiting);
                 return;
             }
 
@@ -169,9 +180,16 @@ namespace RitsukageGif.Desktop
                 var png = await ComposeSelectedScreenshotAsync(result, annotations, token);
 
                 if (_finished) return;
-                var (hdr, hdrReason) = await ComposeSelectedHdrScreenshotAsync(result, annotations, token);
+                var paperOutput = ConfirmAction is ScreenshotOutputAction.ExportPdf or ScreenshotOutputAction.Print;
+                CapturedFrame? hdr = null;
+                string? hdrReason = null;
+                if (!paperOutput)
+                    (hdr, hdrReason) = await ComposeSelectedHdrScreenshotAsync(result, annotations, token);
                 var completed = new ScreenshotResult(png, ConfirmAction, hdr, hdrReason)
-                    { ColorMode = annotations.OutputColorMode, Decoration = decoration, OutputOrigin = outputOrigin };
+                {
+                    ColorMode = paperOutput ? OutputColorMode.Sdr : annotations.OutputColorMode,
+                    Decoration = decoration, OutputOrigin = outputOrigin,
+                };
                 if (ScreenshotOutputHandler is { } output)
                 {
                     foreach (var window in _windows) window.Topmost = false;

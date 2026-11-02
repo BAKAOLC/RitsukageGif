@@ -9,15 +9,10 @@ namespace RitsukageGif.Desktop
     {
         private readonly Dictionary<ToolbarActionId, Button> _actionButtons = [];
         private readonly WrapPanel _functionStrip = new() { Orientation = Orientation.Horizontal };
-        private readonly StackPanel _moreActions = new() { Spacing = 1 };
+        private readonly WrapPanel _moreActions = new() { Orientation = Orientation.Horizontal };
 
         private readonly ScrollViewer _moreScroll = new()
             { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
-
-        private readonly StackPanel _moreTools = new() { Spacing = 1 };
-
-        private readonly Border _moreToolsSeparator = new()
-            { Height = 1, Background = AppTheme.Outline, Margin = new(0, 4) };
 
         private readonly WrapPanel _toolStrip = new() { Orientation = Orientation.Horizontal };
         private object? _toolbarIdentity;
@@ -68,20 +63,24 @@ namespace RitsukageGif.Desktop
         private void InitializeCustomizationMenu()
         {
             var rows = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Stretch };
-            rows.Children.Add(_moreTools);
-            rows.Children.Add(_moreToolsSeparator);
             rows.Children.Add(_moreActions);
             _moreScroll.Content = rows;
-            var content = new StackPanel { Spacing = 2, Width = 240 };
+            var content = new StackPanel { Spacing = 2 };
             content.Children.Add(_moreScroll);
             content.Children.Add(new Border
                 { Height = 1, Background = AppTheme.Outline, Margin = new(0, 4) });
-            content.Children.Add(MenuButton("ToolbarToolsTitle", () => _ = EditToolbarAsync(true),
-                ToolbarIcon.TryGeometry("SettingsAnnotationHeading")));
-            content.Children.Add(MenuButton("ToolbarActionsTitle", () => _ = EditToolbarAsync(false),
-                ToolbarIcon.TryGeometry("GeneralHeading")));
+            content.Children.Add(AdjustmentButton(false));
             _moreCommands.Content = new ThemeVariantScope
                 { Child = content };
+        }
+
+        private Button AdjustmentButton(bool tools)
+        {
+            var button = MenuButton("ToolbarAdjust", () => _ = EditToolbarAsync(tools),
+                ToolbarIcon.TryGeometry("GeneralHeading"));
+            button.HorizontalAlignment = HorizontalAlignment.Right;
+            button.Foreground = AppTheme.Muted;
+            return button;
         }
 
         private void ShowMoreMenu()
@@ -109,6 +108,7 @@ namespace RitsukageGif.Desktop
             RebuildToolColumns(preferences);
             _functionStrip.Children.Clear();
             _moreActions.Children.Clear();
+            _moreActions.ItemWidth = _moreActions.ItemHeight = _more.Height + 4;
             foreach (var item in preferences.Actions)
             {
                 if (!_actionButtons.TryGetValue(item.Id, out var button)) continue;
@@ -121,16 +121,10 @@ namespace RitsukageGif.Desktop
                         _functionStrip.Children.Add(button);
                         break;
                     case ToolbarButtonVisibility.MoreMenu:
-                        button.Width = double.NaN;
-                        button.Height = 30;
-                        button.Padding = new(3, 0);
-                        button.HorizontalAlignment = HorizontalAlignment.Stretch;
-                        button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                        SetToolButtonContent(button, definition.IconKey);
+                        button.Margin = new(2);
                         var command = ActionCommand(item.Id);
-                        button.Content = MenuContent(button, definition.NameKey, ActionGeometry(definition),
-                            command is { } value
-                                ? _shortcutBindings.FirstOrDefault(binding => binding.Command == value)?.Gesture
-                                : null);
+                        if (command is { } value) SetShortcutTip(button, value);
                         _moreActions.Children.Add(button);
                         break;
                     case ToolbarButtonVisibility.Hidden:
@@ -141,30 +135,12 @@ namespace RitsukageGif.Desktop
                 }
             }
 
-            _moreToolsSeparator.IsVisible = _moreTools.Children.Count > 0 && _moreActions.Children.Count > 0;
+            _moreActions.Width = _moreActions.ItemWidth * Math.Min(5, _moreActions.Children.Count);
         }
 
         private static SelectionCommand? ActionCommand(ToolbarActionId id)
         {
-            return id switch
-            {
-                ToolbarActionId.Undo => SelectionCommand.Undo,
-                ToolbarActionId.ScrollCapture => SelectionCommand.ScrollVertical,
-                ToolbarActionId.Pin => SelectionCommand.Pin,
-                ToolbarActionId.Save => SelectionCommand.Save,
-                ToolbarActionId.Copy => SelectionCommand.Copy,
-                ToolbarActionId.Cancel => SelectionCommand.Cancel,
-                ToolbarActionId.Redo => SelectionCommand.Redo,
-                ToolbarActionId.DeleteAnnotation => SelectionCommand.Clear,
-                ToolbarActionId.ToggleAnnotations => SelectionCommand.ToggleAnnotations,
-                ToolbarActionId.ClearAnnotations => SelectionCommand.ClearAnnotations,
-                ToolbarActionId.RenumberAnnotations => SelectionCommand.RenumberAnnotations,
-                ToolbarActionId.RecognizeText => SelectionCommand.RecognizeText,
-                ToolbarActionId.RecognizeBarcode => SelectionCommand.RecognizeQr,
-                ToolbarActionId.Translate => SelectionCommand.Translate,
-                ToolbarActionId.OutputColor => null,
-                _ => throw new ArgumentOutOfRangeException(nameof(id)),
-            };
+            return ToolbarActionCatalog.Get(id).Command;
         }
 
         private async Task EditToolbarAsync(bool tools)

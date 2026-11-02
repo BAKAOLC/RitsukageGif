@@ -15,6 +15,8 @@ namespace RitsukageGif.Desktop
         private static readonly ILogger ScrollingUiLogger = LogHub.GetLogger("Desktop.Capture.ScrollingWindow");
         private static long _nextScrollingOperation;
         private readonly AppearancePreferences _appearance;
+
+        private readonly Action<bool>? _autoCropChanged;
         private readonly List<Window> _borders = [];
 
         private readonly TaskCompletionSource<bool>
@@ -43,7 +45,6 @@ namespace RitsukageGif.Desktop
         private Avalonia.PixelPoint? _dragStart;
         private bool _excluded;
         private ScrollCaptureStatus? _lastCaptureStatus;
-        private int _leadingInset, _trailingInset;
         private bool _obstructed;
         private PixelRect _region;
         private string? _statusNoticeKey;
@@ -51,8 +52,11 @@ namespace RitsukageGif.Desktop
 
         private ScreenshotScrollingWindow(Screens screens, PixelRect region, ScrollCaptureAxis axis,
             WindowTarget? target, HdrToneMapMode toneMap, FrozenScreenshotCursor? cursor, bool respondShortcuts = true,
-            PixelRect? preferredPlacementScreen = null, AppearancePreferences? appearance = null)
+            PixelRect? preferredPlacementScreen = null, AppearancePreferences? appearance = null,
+            bool autoCropOnReverse = false, Action<bool>? autoCropChanged = null,
+            OutputColorMode colorMode = OutputColorMode.Sdr)
         {
+            _autoCropChanged = autoCropChanged;
             _screens = screens;
             _appearance = (appearance ?? new AppearancePreferences()).Normalize();
             _preferredPlacementScreen = preferredPlacementScreen;
@@ -62,14 +66,14 @@ namespace RitsukageGif.Desktop
             _session = new(region, axis, [
                 .. screens.All.Select(screen => new PixelRect(screen.Bounds.X,
                     screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height)),
-            ], target, toneMap, cursor);
+            ], target, toneMap, cursor, autoCropOnReverse, colorMode != OutputColorMode.Sdr);
             Bind(TitleProperty, LiveText.Resource("ScrollCaptureTitle"));
             var panelScreen = FindPanelScreen(region, [
                 .. screens.All.Select(screen => (new PixelRect(screen.WorkingArea.X, screen.WorkingArea.Y,
                     screen.WorkingArea.Width, screen.WorkingArea.Height), screen.Scaling)),
             ], _preferredPlacementScreen);
             MaxWidth = Math.Max(1, panelScreen.Area.Width / panelScreen.Scale - 24);
-            SystemDecorations = SystemDecorations.None;
+            WindowDecorations = WindowDecorations.None;
             SizeToContent = SizeToContent.WidthAndHeight;
             CanResize = false;
             Topmost = true;
@@ -132,6 +136,7 @@ namespace RitsukageGif.Desktop
                 foreach (var mask in _maskWindows) mask.Close();
                 _maskWindows.Clear();
                 _preview.Image = null;
+                _preview.DisposeHdr();
                 _bitmap?.Dispose();
                 _bitmap = null;
                 _session.Updated -= OnUpdated;
@@ -154,7 +159,7 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static void AddShortcutHint(Button button, string action)
+        private void AddShortcutHint(Button button, string action)
         {
             var content = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 18 };
             var label = new TextBlock { [!TextBlock.TextProperty] = button[!AutomationProperties.NameProperty] };
@@ -165,6 +170,7 @@ namespace RitsukageGif.Desktop
             button.ClearValue(ToolTip.TipProperty);
             ToolTip.SetTip(button, content);
             RefreshHint();
+            _shortcutHintRefreshers.Add(RefreshHint);
             button.PointerEntered += (_, _) => RefreshHint();
             return;
 
@@ -210,7 +216,8 @@ namespace RitsukageGif.Desktop
             bool respondShortcuts = true, PixelRect? preferredPlacementScreen = null,
             AppearancePreferences? appearance = null, Func<CancellationToken, Task>? prepareCapture = null,
             Func<Window, ScrollCaptureImage, ScrollingCaptureAction, CancellationToken, Task<bool>>? outputHandler =
-                null)
+                null, bool autoCropOnReverse = false, Action<bool>? autoCropChanged = null,
+            OutputColorMode colorMode = OutputColorMode.Sdr)
         {
             Dispatcher.UIThread.VerifyAccess();
             token.ThrowIfCancellationRequested();
@@ -220,7 +227,7 @@ namespace RitsukageGif.Desktop
                 $"Scrolling window initialization started. OperationId={operationId} Region={region} Axis={axis.ToString()} WindowSource={target is not null} PreferredScreen={preferredPlacementScreen}");
             var window =
                 new ScreenshotScrollingWindow(screens, region, axis, target, toneMap, cursor, respondShortcuts,
-                    preferredPlacementScreen, appearance);
+                    preferredPlacementScreen, appearance, autoCropOnReverse, autoCropChanged, colorMode);
             using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
             var captureToken = cancellation.Token;
             window._outputToken = captureToken;
@@ -344,14 +351,11 @@ namespace RitsukageGif.Desktop
                     SetPauseContent("ScrollCaptureResume", false);
                 _preview.ImageSize = new(result.Width, result.Height);
                 _preview.Matched = _session.HasMatchedViewport;
-                _preview.Viewport = _axis == ScrollCaptureAxis.Vertical
-                    ? new(0, result.Offset - startOffset, _region.Width,
-                        _region.Height - _leadingInset - _trailingInset)
-                    : new PixelRect(result.Offset - startOffset, 0, _region.Width - _leadingInset - _trailingInset,
-                        _region.Height);
+                _preview.Viewport = _session.PreviewViewport;
                 _preview.InvalidateVisual();
                 if (preview is null)
                 {
+                    _preview.UpdateHdr(null);
                     RefreshLivePreview();
                     return;
                 }
@@ -363,6 +367,7 @@ namespace RitsukageGif.Desktop
                         Marshal.Copy(preview.Pixels, y * preview.Width * 4, buffer.Address + y * buffer.RowBytes,
                             preview.Width * 4);
                 _preview.Image = bitmap;
+                _preview.UpdateHdr(preview);
                 _bitmap?.Dispose();
                 _bitmap = bitmap;
                 RefreshLivePreview();

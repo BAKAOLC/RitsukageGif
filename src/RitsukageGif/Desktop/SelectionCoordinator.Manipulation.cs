@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
         private PixelPoint _manipulationAnchor;
         private bool _manipulationMoved, _manipulationWasWholeTarget, _manipulationRightRelease;
         private PixelRect _manipulationOriginal, _manipulationLimits;
+        private SelectionShape? _manipulationShape;
         private double _manipulationThreshold;
         private int _selectionManipulation;
 
@@ -80,6 +81,7 @@ namespace RitsukageGif.Desktop
                     transformed = ConstrainGeometryResize(transformed, _manipulationLimits, _selectionManipulation);
                     _selectionIsWholeTarget = transformed == _manipulationOriginal && _manipulationWasWholeTarget;
                     _state.Set(transformed);
+                    TransformShape(_manipulationShape, _manipulationOriginal, transformed);
                 }
 
                 if (!left) _selectionManipulation = 0;
@@ -93,10 +95,13 @@ namespace RitsukageGif.Desktop
             var handle = HitSelectionHandle(snapshot.Region, point, 6 * scale);
             if (handle == 0) return false;
             if (GeometrySizeFixed) handle = MoveSelection;
-            var limits = WindowSource && !UsesLocalSource ? snapshot.Target?.Client ?? default : SelectionBounds();
+            var limits = WindowSource && !UsesLocalSource && ShapeMode != SelectionShapeMode.MultiWindow
+                ? snapshot.Target?.Client ?? default
+                : SelectionBounds();
             if (limits.IsEmpty) return false;
             _selectionManipulation = handle;
             _manipulationOriginal = snapshot.Region;
+            _manipulationShape = _selectionShape;
             _manipulationAnchor = point;
             _manipulationLimits = limits;
             _manipulationThreshold = 4 * scale;
@@ -110,6 +115,7 @@ namespace RitsukageGif.Desktop
             if (!SelectionManipulating) return false;
             _selectionManipulation = 0;
             _state.Set(_manipulationOriginal);
+            _selectionShape = _manipulationShape;
             _selectionIsWholeTarget = _manipulationWasWholeTarget;
             _manipulationMoved = false;
             return true;

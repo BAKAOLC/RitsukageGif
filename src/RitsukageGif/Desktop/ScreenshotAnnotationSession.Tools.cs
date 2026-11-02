@@ -2,7 +2,6 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using ImageMagick;
 using FontWeight = Avalonia.Media.FontWeight;
 
 namespace RitsukageGif.Desktop
@@ -10,27 +9,32 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotAnnotationSession
     {
         private ScreenshotAnnotation[]? _eraseOriginal;
+        private int _nextNumber = 1;
         private ScreenshotAnnotationImage? _watermarkSource;
         public ScreenshotAnnotationProperties Properties { get; private set; } = new();
         public bool AnnotationsVisible { get; private set; } = true;
         public bool IsDrawingPolyline => _gesture?.Tool == ScreenshotTool.Polyline;
 
-        public void SetWatermarkImage(byte[]? image)
+        public int NextNumber => _behavior.GlobalNumberCounter
+            ? Math.Clamp(Volatile.Read(ref _globalNumber) + (_behavior.NumberStartsAtZero ? 0 : 1), 0, 999999)
+            : _nextNumber;
+
+        public void SetNextNumber(int number)
         {
             if (_disposed || IsBusy || IsDrawing) return;
-            if (image is not null)
-            {
-                if (image.Length > 16 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(image));
-                var info = new MagickImageInfo(image);
-                if (info.Width == 0 || info.Height == 0 || (long)info.Width * info.Height > 16L * 1024 * 1024)
-                    throw new ArgumentOutOfRangeException(nameof(image));
-                var retainedBytes = _retained.Select(mark => mark.WatermarkImage)
-                    .Where(value => value is not null).Distinct()
-                    .Sum(value => (long)value!.Bitmap.PixelSize.Width * value.Bitmap.PixelSize.Height * 4 +
-                                  (value.Encoded?.Length ?? 0));
-                if (retainedBytes + (long)info.Width * info.Height * 4 + image.Length > 128L * 1024 * 1024)
-                    throw new InvalidOperationException(UiText.Get("RecordingTooLarge"));
-            }
+            _nextNumber = Math.Clamp(number, 0, 999999);
+            if (_behavior.GlobalNumberCounter)
+                Interlocked.Exchange(ref _globalNumber, _nextNumber - (_behavior.NumberStartsAtZero ? 0 : 1));
+            var style = StyleFor(ScreenshotTool.Number);
+            _toolStyles[nameof(ScreenshotTool.Number)] =
+                style with { Properties = style.Properties with { Number = NextNumber } };
+            Changed?.Invoke();
+        }
+
+        public void SetWatermarkImage(byte[]? image, string? sourcePath = null)
+        {
+            if (_disposed || IsBusy || IsDrawing) return;
+            if (image is not null) ValidateWatermarkImage(image);
 
             ScreenshotAnnotationImage? replacementSource = null;
             if (image is not null)
@@ -39,11 +43,16 @@ namespace RitsukageGif.Desktop
                 replacementSource = new(new(stream), [.. image]);
             }
 
+            _watermarkLoadWork?.Cancel();
             _watermarkSource?.Dispose();
             _watermarkSource = replacementSource;
+            _watermarkSourcePath = image is null ? null : sourcePath;
+            Properties = Properties with { WatermarkImagePath = _watermarkSourcePath };
+            Error = null;
             if (_selected is { Tool: ScreenshotTool.Watermark } annotation)
             {
-                var replacement = CloneAnnotation(annotation, watermarkImage: _watermarkSource, replaceImage: true);
+                var replacement = CloneAnnotation(annotation, properties: Properties, watermarkImage: _watermarkSource,
+                    replaceImage: true);
                 SaveHistory();
                 _retained.Add(replacement);
                 _annotations[_annotations.IndexOf(annotation)] = replacement;
@@ -56,7 +65,14 @@ namespace RitsukageGif.Desktop
         public Task UpdateSelectedPropertiesAsync(ScreenshotAnnotationProperties properties)
         {
             if (_disposed || !CanAnnotate || IsBusy || IsDrawing) return Task.CompletedTask;
+            var numberFormatChanged = Properties.NumberFormat != properties.NumberFormat;
             Properties = properties.Normalize();
+            if (numberFormatChanged && (_selected?.Tool ?? Tool) == ScreenshotTool.Number)
+            {
+                StoreToolStyle(ScreenshotTool.Number);
+                SynchronizeNumberCounter();
+            }
+
             if (IsEditingText)
             {
                 NotifyTextEditState();
@@ -69,13 +85,18 @@ namespace RitsukageGif.Desktop
                 return Task.CompletedTask;
             }
 
-            return ReplaceAnnotationAsync(_annotations.IndexOf(annotation), CloneAnnotation(annotation,
-                properties: Properties));
+            var replacement = CloneAnnotation(annotation, properties: Properties);
+            NormalizeGeometryPoints(replacement);
+            StoreToolStyle(annotation.Tool);
+            return numberFormatChanged && annotation.Tool == ScreenshotTool.Number
+                ? ReplaceNumberPropertiesAsync(annotation, replacement)
+                : ReplaceAnnotationAsync(_annotations.IndexOf(annotation), replacement);
         }
 
         public void FinishPolyline()
         {
             if (_gesture is not { Tool: ScreenshotTool.Polyline } annotation) return;
+            annotation.Points.RemoveAt(annotation.Points.Count - 1);
             _gesture = null;
             if (annotation.Points.Count >= 2) Commit(annotation);
             else annotation.Dispose();
@@ -116,6 +137,7 @@ namespace RitsukageGif.Desktop
 
             Properties = Properties with { Number = start };
             _selected = null;
+            SynchronizeNumberCounter();
             Changed?.Invoke();
         }
 
@@ -149,12 +171,19 @@ namespace RitsukageGif.Desktop
         }
 
         private Task<IReadOnlyList<(Bitmap Image, Rect Bounds)>> CreateImageEffectAsync(
-            ScreenshotAnnotation annotation, CancellationToken token)
+            ScreenshotAnnotation annotation, CancellationToken token, int? layerIndex = null)
         {
-            return CreateMosaicAsync(
-                annotation.Tool == ScreenshotTool.Eraser ? RenderBounds(annotation) : annotation.Bounds,
-                annotation.Tool == ScreenshotTool.Mosaic ? annotation.MosaicSize : 1, token,
-                blurRadius: annotation.Tool == ScreenshotTool.Blur ? annotation.Properties.BlurRadius : 0);
+            return annotation.Tool switch
+            {
+                ScreenshotTool.Magnifier => Task.FromResult<IReadOnlyList<(Bitmap Image, Rect Bounds)>>([]),
+                ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase =>
+                    CreatePixelPreviewAsync(annotation,
+                        [.. _annotations.Take(layerIndex ?? _annotations.Count)], token),
+                _ => CreateMosaicAsync(
+                    IsPixelTool(annotation.Tool) ? PixelEffectBounds(annotation) : annotation.Bounds,
+                    annotation.Tool == ScreenshotTool.Mosaic ? annotation.MosaicSize : 1, token,
+                    blurRadius: annotation.Tool == ScreenshotTool.Blur ? annotation.Properties.BlurRadius : 0),
+            };
         }
 
         private static Typeface CreateTypeface(ScreenshotAnnotationProperties properties)
@@ -167,11 +196,10 @@ namespace RitsukageGif.Desktop
 
         private FormattedText FormatLabel(ScreenshotAnnotation annotation, IBrush brush)
         {
-            var text = new FormattedText(annotation.Tool == ScreenshotTool.Number
-                    ? annotation.Properties.Number.ToString(CultureInfo.CurrentCulture)
-                    : annotation.Text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+            var text = new FormattedText(annotation.DisplayText, CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
                 CreateTypeface(annotation.Properties), annotation.FontSize, brush);
-            if (annotation.Tool != ScreenshotTool.Number && _behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap)
+            if (_behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap)
                 text.MaxTextWidth = annotation.Properties.WrapWidth > 0
                     ? annotation.Properties.WrapWidth
                     : Math.Max(1,
@@ -181,6 +209,12 @@ namespace RitsukageGif.Desktop
 
         private void DrawLabel(DrawingContext context, ScreenshotAnnotation annotation)
         {
+            if (annotation.Tool == ScreenshotTool.Number)
+            {
+                DrawNumber(context, annotation);
+                return;
+            }
+
             var properties = annotation.Properties;
             if (annotation is { Tool: ScreenshotTool.Watermark, WatermarkImage: not null })
             {
@@ -191,17 +225,6 @@ namespace RitsukageGif.Desktop
             var text = FormatLabel(annotation, new SolidColorBrush(annotation.Color));
             var padding = properties.TextPadding;
             var size = new Size(text.Width + padding * 2, text.Height + padding * 2);
-            if (annotation.Tool == ScreenshotTool.Number)
-            {
-                var diameter = Math.Max(annotation.FontSize * 1.7, size.Width);
-                var bounds = new Rect(annotation.Points[0] - new Vector(diameter / 2, diameter / 2),
-                    new Size(diameter, diameter));
-                context.DrawEllipse(new SolidColorBrush(annotation.Color), null, bounds);
-                text.SetForegroundBrush(Brushes.White);
-                context.DrawText(text, new(bounds.Center.X - text.Width / 2, bounds.Center.Y - text.Height / 2));
-                return;
-            }
-
             using var opacity =
                 context.PushOpacity(annotation.Tool == ScreenshotTool.Watermark ? properties.Opacity : 1);
             if (annotation.Tool == ScreenshotTool.Watermark && properties.Tiled)
@@ -255,6 +278,19 @@ namespace RitsukageGif.Desktop
             // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (annotation.Tool)
             {
+                case ScreenshotTool.Rectangle:
+                case ScreenshotTool.Ellipse:
+                    return GeometryFor(annotation).Path.Bounds;
+                case ScreenshotTool.Arrow:
+                case ScreenshotTool.Line:
+                case ScreenshotTool.Polyline:
+                    return LineObjectBounds(annotation);
+                case ScreenshotTool.Brush:
+                    return (annotation.Points.Count == 1
+                        ? new(annotation.Points[0], default(Size))
+                        : BrushGeometryFor(annotation).Path.Bounds).Inflate(annotation.Thickness / 2);
+                case ScreenshotTool.Magnifier:
+                    return MagnifierLensBounds(annotation).Union(annotation.Bounds);
                 case ScreenshotTool.Spotlight:
                     return annotation.Bounds;
                 case ScreenshotTool.Watermark:
@@ -302,44 +338,9 @@ namespace RitsukageGif.Desktop
                     : annotation.Points[0], size));
         }
 
-        private void DrawSpotlight(DrawingContext context, ScreenshotAnnotation annotation)
-        {
-            var whole = new Rect(AnnotationBounds.X, AnnotationBounds.Y, AnnotationBounds.Width,
-                AnnotationBounds.Height);
-            var hole = annotation.Bounds.Intersect(whole);
-            var shade = new SolidColorBrush(Colors.Black);
-            using var opacity = context.PushOpacity(annotation.Properties.Opacity);
-            if (hole.Width <= 0 || hole.Height <= 0)
-            {
-                context.DrawRectangle(shade, null, whole);
-            }
-            else
-            {
-                context.DrawRectangle(shade, null, new(whole.X, whole.Y, whole.Width, hole.Y - whole.Y));
-                context.DrawRectangle(shade, null, new(whole.X, hole.Bottom, whole.Width, whole.Bottom - hole.Bottom));
-                context.DrawRectangle(shade, null, new(whole.X, hole.Y, hole.X - whole.X, hole.Height));
-                context.DrawRectangle(shade, null, new(hole.Right, hole.Y, whole.Right - hole.Right, hole.Height));
-            }
-        }
-
-        private static void DrawPixelEraser(DrawingContext context, ScreenshotAnnotation annotation)
-        {
-            var radius = annotation.Thickness / 2;
-            foreach (var center in EraserSamples(annotation))
-            {
-                using var clip = context.PushGeometryClip(new EllipseGeometry(new(center.X - radius,
-                    center.Y - radius, radius * 2, radius * 2)));
-                foreach (var tile in annotation.ImageTiles) context.DrawImage(tile.Image, tile.Bounds);
-            }
-        }
-
         private bool HasErasableOverlap(ScreenshotAnnotation eraser)
         {
-            var left = eraser.Points.Min(point => point.X);
-            var top = eraser.Points.Min(point => point.Y);
-            var right = eraser.Points.Max(point => point.X);
-            var bottom = eraser.Points.Max(point => point.Y);
-            var footprint = new Rect(left, top, right - left, bottom - top).Inflate(eraser.Thickness / 2 + 1);
+            var footprint = PixelEffectBounds(eraser);
             return _annotations.Any(annotation => annotation.Tool != ScreenshotTool.Eraser &&
                                                   RenderBounds(annotation).Intersects(footprint));
         }

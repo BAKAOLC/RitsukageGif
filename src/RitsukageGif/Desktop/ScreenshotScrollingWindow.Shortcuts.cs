@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace RitsukageGif.Desktop
@@ -9,6 +10,7 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class ScreenshotScrollingWindow
     {
+        private readonly List<Action> _shortcutHintRefreshers = [];
         private readonly HashSet<Key> _shortcutKeys = [];
         private IReadOnlyList<BuiltinShortcutBinding> _longshotBindings = [];
         private bool _respondShortcuts;
@@ -18,6 +20,7 @@ namespace RitsukageGif.Desktop
         {
             _respondShortcuts = respondShortcuts;
             _longshotBindings = BuiltinShortcuts.Snapshot();
+            SelectionCommands.BindingsChanged += ShortcutBindingsChanged;
             // ReSharper disable once AsyncVoidLambda
             AddHandler(KeyDownEvent, async (_, args) =>
             {
@@ -38,6 +41,24 @@ namespace RitsukageGif.Desktop
             Deactivated += ShortcutsDeactivated;
         }
 
+        private void ShortcutBindingsChanged()
+        {
+            if (_closed || _completed.Task.IsCompleted) return;
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(ShortcutBindingsChanged);
+                return;
+            }
+
+            _longshotBindings = BuiltinShortcuts.Snapshot();
+            _shortcutKeys.Clear();
+            foreach (var refresh in _shortcutHintRefreshers) refresh();
+            if (_shortcutScope is not { } previous) return;
+            _shortcutScope = null;
+            previous.Dispose();
+            EnsureShortcutScope();
+        }
+
         private void EnsureShortcutScope()
         {
             if (_shortcutScope is not null) return;
@@ -55,7 +76,7 @@ namespace RitsukageGif.Desktop
             }
 
             _shortcutScope = new(bindings,
-                !_outputting && !IsActive && !_direction.IsDropDownOpen);
+                !_outputting && !IsActive && !_direction.IsDropDownOpen, true);
         }
 
         private void ShortcutActivationChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
@@ -82,6 +103,8 @@ namespace RitsukageGif.Desktop
 
         private void DisposeShortcutScope()
         {
+            SelectionCommands.BindingsChanged -= ShortcutBindingsChanged;
+            _shortcutHintRefreshers.Clear();
             PropertyChanged -= ShortcutActivationChanged;
             _direction.PropertyChanged -= ShortcutPopupChanged;
             Deactivated -= ShortcutsDeactivated;

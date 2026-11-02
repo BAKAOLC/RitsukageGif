@@ -1,8 +1,9 @@
-﻿namespace RitsukageGif.Desktop
+namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
         private FrozenWindowScreenshot? _frozenWindow;
+        private int _windowShapeRevision, _frozenShapeRevision;
 
         internal FrozenWindowScreenshot? FrozenWindow => WindowSource && !UsesLocalSource &&
                                                          _frozenWindow?.Target.Handle == Snapshot.Target?.Handle
@@ -11,7 +12,9 @@
 
         private bool NeedsWindowScreenshot => ScreenshotMode && WindowSource && !UsesLocalSource &&
                                               Snapshot.Target is { } target &&
-                                              _frozenWindow?.Target.Handle != target.Handle;
+                                              (_frozenWindow?.Target.Handle != target.Handle ||
+                                               (ShapeMode == SelectionShapeMode.MultiWindow &&
+                                                _frozenShapeRevision != _windowShapeRevision));
 
         private void PrepareWindowScreenshot()
         {
@@ -25,6 +28,8 @@
             UpdateHdrAvailability();
             if (Annotations is { } annotations)
             {
+                annotations.RecordingEnabled = AllowRecording && !ScreenshotPreview;
+                annotations.WindowPinEnabled = WindowPinOutputHandler is not null && LivePinTarget is not null;
                 annotations.CanAnnotate = !NeedsWindowScreenshot;
                 if (!annotations.CanAnnotate && annotations.Tool != ScreenshotTool.Select)
                     annotations.Tool = ScreenshotTool.Select;
@@ -40,13 +45,17 @@
             Refresh();
             try
             {
-                var pixels = await Task.Run(() => CaptureWindowPixels(new(target.Client, true, target,
-                    !OperatingSystem.IsWindows() && _cursor), work.Token), work.Token);
+                var targets = ShapeMode == SelectionShapeMode.MultiWindow && _selectionWindows.Count > 1
+                    ? SelectedShapeWindows()
+                    : [target];
+                var revision = _windowShapeRevision;
+                var region = targets.Length > 1 ? _state.Selected : target.Client;
+                var pixels = await Task.Run(() => CaptureSelectedWindows(targets, region, work.Token), work.Token);
                 work.Token.ThrowIfCancellationRequested();
-                var next = new FrozenWindowScreenshot(target, target.Client, pixels.Pixels, pixels.Hdr);
+                var next = new FrozenWindowScreenshot(target, region, pixels.Pixels, pixels.Hdr, pixels.NativeFrames);
                 try
                 {
-                    await Annotations.SetOverlayFrameAsync(target.Client, pixels.Pixels, work.Token);
+                    await Annotations.SetOverlayFrameAsync(region, pixels.Pixels, work.Token);
                 }
                 catch
                 {
@@ -56,6 +65,7 @@
 
                 _frozenWindow?.Dispose();
                 _frozenWindow = next;
+                _frozenShapeRevision = revision;
             }
             catch (OperationCanceledException) when (work.IsCancellationRequested)
             {

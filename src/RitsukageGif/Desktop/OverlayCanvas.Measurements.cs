@@ -8,7 +8,8 @@ namespace RitsukageGif.Desktop
         private static readonly IPen MeasurementPen = new Pen(Brushes.White, 1, DashStyle.Dash);
         private readonly List<Rect> _measurementLabels = [];
 
-        private (PixelRect Region, PixelRect Reference, string Kind, bool Right, bool Bottom, string Culture)
+        private (PixelRect Region, PixelRect Reference, string Kind, bool Right, bool Bottom, string Culture, string
+            Unit)
             _measurementKey;
 
         private IReadOnlyList<(SelectionMeasurement Line, FormattedText Text)> _measurements = [];
@@ -22,14 +23,14 @@ namespace RitsukageGif.Desktop
                 MeasurementScreenBounds.IsEmpty ? _monitor : MeasurementScreenBounds,
                 MeasurementWindowBounds, MeasurementControlBounds, Mouse);
             var key = (Selected, reference.Bounds, reference.Kind, reference.Right, reference.Bottom,
-                UiText.Get("MeasurementScreen"));
+                UiText.Get("MeasurementScreen"), CoordinateUnit);
             if (key != _measurementKey)
             {
                 _measurementKey = key;
                 _measurements =
                 [
                     .. SelectionMeasurements.Create(Selected, reference.Bounds, reference.Kind,
-                            reference.Right, reference.Bottom)
+                            reference.Right, reference.Bottom, CoordinateUnit)
                         .Select(line => (line, HintText(line.Label, 220, Brushes.White, 12, 20))),
                 ];
             }
@@ -65,7 +66,9 @@ namespace RitsukageGif.Desktop
                         Math.Clamp(originY + (horizontal ? 0 : offset * 22), 0, Math.Max(0, Bounds.Height - height)),
                         width, height);
                     if (label.Intersects(ReservedBounds) || label.Intersects(SecondaryReservedBounds) ||
-                        label.Intersects(FrameReservedBounds) || MeasurementHintOverlaps(label, _hintStatusBounds) ||
+                        label.Intersects(FrameReservedBounds) || label.Intersects(ModePickerReservedBounds) ||
+                        label.Intersects(InformationReservedBounds) || !CodePanelsClear(label) ||
+                        MeasurementHintOverlaps(label, _hintStatusBounds) ||
                         MeasurementHintOverlaps(label, _hintActionsBounds) ||
                         MeasurementHintOverlaps(label, _hintMagnifierBounds) ||
                         MeasurementLabelOverlaps(label)) continue;

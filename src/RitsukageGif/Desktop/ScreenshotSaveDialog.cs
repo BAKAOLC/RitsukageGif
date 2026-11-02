@@ -25,7 +25,7 @@ namespace RitsukageGif.Desktop
             var name = new TextBox { Text = Path.GetFileNameWithoutExtension(profile.CreateFileName(context)) };
             var extensions = mode switch
             {
-                OutputColorMode.Sdr => new[] { ".png", ".jpg", ".bmp", ".webp" },
+                OutputColorMode.Sdr => new[] { ".png", ".jpg", ".bmp", ".webp", ".avif" },
                 OutputColorMode.Hdr => [".png", ".exr"],
                 OutputColorMode.Both => [".png"],
                 _ => throw new ArgumentOutOfRangeException(nameof(mode)),

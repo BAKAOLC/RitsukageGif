@@ -200,13 +200,13 @@ namespace RitsukageGif.Desktop
                    _privacyCancel is { IsCancellationRequested: false };
         }
 
-        private void RenderPrivacyCandidates(DrawingContext context)
+        private void RenderPrivacyCandidates(DrawingContext context, double scale)
         {
             if (!IsPrivacyDetectionActive || PrivacyDetectionPending) return;
             using var clip = context.PushClip(new(Selection.X, Selection.Y, Selection.Width, Selection.Height));
             var fill = new SolidColorBrush(Color.FromArgb(48, 0, 191, 255));
-            var selected = new Pen(Brushes.DeepSkyBlue, 2);
-            var unselected = new Pen(Brushes.White, 1, DashStyle.Dash);
+            var selected = new Pen(Brushes.DeepSkyBlue, 2 * scale);
+            var unselected = new Pen(Brushes.White, scale, DashStyle.Dash);
             for (var index = 0; index < _privacyCandidates.Length; index++)
             {
                 var bounds = _privacyCandidates[index].Bounds;

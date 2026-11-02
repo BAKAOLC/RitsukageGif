@@ -5,21 +5,17 @@ namespace RitsukageGif.Desktop
     public sealed record AnnotationPreferences
     {
         public string Color { get; set; } = "#ffff0000";
-        public double Thickness { get; set; } = 4;
-        public double FontSize { get; set; } = 24;
-        public int MosaicSize { get; set; } = 12;
         public bool RememberLastTool { get; set; }
         public bool LimitToSelection { get; set; } = true;
         public string LastTool { get; set; } = "Select";
         public bool SharedColor { get; set; } = true;
-        public ScreenshotAnnotationProperties Properties { get; set; } = new();
         public Dictionary<string, AnnotationToolStyle> ToolStyles { get; set; } = [];
 
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
         public List<string> ColorPalette { get; set; } =
             ["#ffff0000", "#ffffa500", "#ffffff00", "#ff008000", "#ff00bfff", "#ff800080", "#ffffffff", "#ff000000"];
 
-        public bool SecondaryEditingEnabled { get; set; } = true;
+        public AnnotationSecondaryEditingMode SecondaryEditing { get; set; } = AnnotationSecondaryEditingMode.Enabled;
         public bool QuickSettingsEnabled { get; set; } = true;
         public AnnotationPencilCursor PencilCursor { get; set; }
         public double MaximumBrushThickness { get; set; } = 100;
@@ -40,16 +36,17 @@ namespace RitsukageGif.Desktop
         public AnnotationTextWrapMode TextWrapMode { get; set; }
         public bool EraserSecondaryEditingEnabled { get; set; } = true;
         public bool AutoSelectPrivacyMosaic { get; set; } = true;
+        public bool AutoAddWatermark { get; set; }
         public ToolbarPreferences Toolbar { get; set; } = new();
 
         public AnnotationPreferences Normalize()
         {
             return this with
             {
+                SecondaryEditing = Enum.IsDefined(SecondaryEditing)
+                    ? SecondaryEditing
+                    : AnnotationSecondaryEditingMode.Enabled,
                 Color = Avalonia.Media.Color.TryParse(Color, out var color) ? color.ToString() : Colors.Red.ToString(),
-                Thickness = double.IsFinite(Thickness) ? Math.Clamp(Thickness, 1, 1024) : 4,
-                FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 1, 1024) : 24,
-                MosaicSize = Math.Clamp(MosaicSize, 2, 256),
                 MaximumBrushThickness = double.IsFinite(MaximumBrushThickness)
                     ? Math.Clamp(MaximumBrushThickness, 1, 1024)
                     : 100,
@@ -70,11 +67,9 @@ namespace RitsukageGif.Desktop
                 PolylineJoin = Enum.IsDefined(PolylineJoin) ? PolylineJoin : PenLineJoin.Round,
                 PolylineCap = Enum.IsDefined(PolylineCap) ? PolylineCap : PenLineCap.Round,
                 TextWrapMode = Enum.IsDefined(TextWrapMode) ? TextWrapMode : AnnotationTextWrapMode.WordOrCharacter,
-                Properties = Properties.Normalize(),
-                ToolStyles = ToolStyles.Where(pair => Enum.TryParse<ScreenshotTool>(pair.Key, out var key) &&
-                                                      Enum.IsDefined(key) && pair.Key == key.ToString() &&
+                ToolStyles = ToolStyles.Where(pair => ScreenshotToolCatalog.IsStyleKey(pair.Key) &&
                                                       pair.Value is not null)
-                    .ToDictionary(pair => Enum.Parse<ScreenshotTool>(pair.Key).ToString(),
+                    .ToDictionary(pair => pair.Key,
                         pair => pair.Value.Normalize()),
                 LastTool = Enum.TryParse<ScreenshotTool>(LastTool, out var tool) && Enum.IsDefined(tool)
                     ? tool.ToString()

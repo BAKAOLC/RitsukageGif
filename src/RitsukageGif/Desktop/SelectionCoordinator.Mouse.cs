@@ -1,4 +1,4 @@
-using Avalonia.Input;
+﻿using Avalonia.Input;
 
 namespace RitsukageGif.Desktop
 {
@@ -53,6 +53,12 @@ namespace RitsukageGif.Desktop
 
         internal void ExecuteMouseAction(MouseAction action, PixelPoint point)
         {
+            if (ScreenshotMode && action == MouseAction.Confirm)
+            {
+                ExecuteScreenshotDoubleClick(point);
+                return;
+            }
+
             if (_finished) return;
             try
             {

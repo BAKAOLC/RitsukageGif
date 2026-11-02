@@ -150,7 +150,8 @@ namespace RitsukageGif.Desktop
             };
             var flyout = new Flyout
             {
-                Content = text, Placement = PlacementMode.Bottom, OverlayDismissEventPassThrough = true,
+                Content = WatermarkTextEditorContent(text), Placement = PlacementMode.Bottom,
+                OverlayDismissEventPassThrough = true,
             };
             _flyouts.Add(flyout);
             text.TextChanged += (_, _) =>

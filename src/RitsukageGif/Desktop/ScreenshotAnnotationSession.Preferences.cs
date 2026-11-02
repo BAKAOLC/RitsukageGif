@@ -5,9 +5,10 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotAnnotationSession
     {
         private readonly Dictionary<string, AnnotationToolStyle> _toolStyles = [];
-        private AnnotationToolStyle _defaultStyle = new();
         private bool _limitToSelection = true;
+        private Color _masterColor = Colors.Red;
         private bool _sharedColor = true;
+        private ScreenshotTool _styleTool;
 
         public Func<ToolbarPreferences>? ToolbarPreferencesProvider { get; set; }
         internal object ToolbarPreferencesIdentity => ToolbarPreferencesProvider?.Invoke() ?? _behavior.Toolbar;
@@ -43,25 +44,59 @@ namespace RitsukageGif.Desktop
             Changed?.Invoke();
         }
 
+        private AnnotationToolStyle StyleFor(ScreenshotTool tool)
+        {
+            var definition = ScreenshotToolCatalog.Get(tool);
+            return _toolStyles.GetValueOrDefault(definition.StyleKey, definition.DefaultStyle);
+        }
+
         private void StoreToolStyle(ScreenshotTool tool)
         {
-            _toolStyles[tool.ToString()] = new()
+            // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
+            switch (tool)
+            {
+                case ScreenshotTool.Select: return;
+                case ScreenshotTool.Watermark:
+                    Properties = Properties with { WatermarkText = Text, WatermarkImagePath = _watermarkSourcePath };
+                    break;
+            }
+
+            _toolStyles[ScreenshotToolCatalog.Get(tool).StyleKey] = new()
             {
                 Color = Color.ToString(), Thickness = Thickness, FontSize = FontSize, MosaicSize = MosaicSize,
-                Properties = Properties,
+                Properties = tool == ScreenshotTool.Number ? Properties with { Number = NextNumber } : Properties,
             };
         }
 
         private void RestoreToolStyle(ScreenshotTool tool)
         {
-            var style = _toolStyles.GetValueOrDefault(tool.ToString(), _defaultStyle);
-            if (!_sharedColor) Color = Color.Parse(style.Color);
+            var style = StyleFor(tool);
+            _styleTool = tool;
+            Color = _sharedColor ? _masterColor : Color.Parse(style.Color);
             Thickness = tool == ScreenshotTool.Brush
                 ? Math.Min(style.Thickness, MaximumBrushThickness)
                 : style.Thickness;
             FontSize = style.FontSize;
             MosaicSize = style.MosaicSize;
-            Properties = style.Properties;
+            Properties = tool is ScreenshotTool.Rectangle or ScreenshotTool.Ellipse
+                ? style.Properties with
+                {
+                    GeometryShape = ScreenshotToolCatalog.Get(tool).DefaultStyle.Properties.GeometryShape,
+                }
+                : style.Properties;
+            RestoreWatermarkStyle(tool);
+        }
+
+        private void LoadObjectStyle(ScreenshotAnnotation annotation)
+        {
+            StoreToolStyle(_styleTool);
+            _styleTool = annotation.Tool;
+            Properties = annotation.Properties;
+            Color = annotation.Color;
+            Thickness = annotation.Thickness;
+            FontSize = annotation.FontSize;
+            MosaicSize = annotation.MosaicSize;
+            LoadWatermarkObjectStyle(annotation);
         }
 
         public void ApplyPreferences(AnnotationPreferences preferences)
@@ -73,38 +108,38 @@ namespace RitsukageGif.Desktop
         {
             var value = preferences.Normalize();
             _behavior = value;
+            _secondaryEditingOverride = null;
             ToolbarRevision++;
             ColorPalette = [.. value.ColorPalette.Select(Color.Parse)];
-            Color = Color.Parse(value.Color);
-            Thickness = value.Thickness;
-            FontSize = value.FontSize;
-            MosaicSize = value.MosaicSize;
+            _masterColor = Color.Parse(value.Color);
             _limitToSelection = value.LimitToSelection;
             _sharedColor = value.SharedColor;
-            _defaultStyle = new()
-            {
-                Color = value.Color, Thickness = value.Thickness, FontSize = value.FontSize,
-                MosaicSize = value.MosaicSize, Properties = value.Properties,
-            };
-            Tool = value.RememberLastTool ? Enum.Parse<ScreenshotTool>(value.LastTool) : ScreenshotTool.Select;
+            _selected = null;
             _toolStyles.Clear();
-            foreach (var pair in value.ToolStyles) _toolStyles.Add(pair.Key, pair.Value);
-            if (value.NumberStartsAtZero && !value.ToolStyles.ContainsKey(nameof(ScreenshotTool.Number)))
-                _toolStyles[nameof(ScreenshotTool.Number)] =
-                    _defaultStyle with { Properties = value.Properties with { Number = 0 } };
-            RestoreToolStyle(Tool);
+            foreach (var definition in ScreenshotToolCatalog.All)
+            {
+                if (definition.Tool == ScreenshotTool.Select || _toolStyles.ContainsKey(definition.StyleKey)) continue;
+                var style = value.ToolStyles.GetValueOrDefault(definition.StyleKey, definition.DefaultStyle);
+                if (definition.Tool == ScreenshotTool.Number && value.NumberStartsAtZero &&
+                    !value.ToolStyles.ContainsKey(definition.StyleKey))
+                    style = style with { Properties = style.Properties with { Number = 0 } };
+                _toolStyles.Add(definition.StyleKey, style);
+            }
+
+            _tool = value.RememberLastTool ? Enum.Parse<ScreenshotTool>(value.LastTool) : ScreenshotTool.Select;
+            RestoreToolStyle(_tool);
+            _nextNumber = StyleFor(ScreenshotTool.Number).Properties.Number;
             Changed?.Invoke();
         }
 
         public AnnotationPreferences CapturePreferences(AnnotationPreferences preferences)
         {
             var value = preferences.Normalize();
-            StoreToolStyle(Tool);
+            StoreToolStyle(_styleTool);
             return value with
             {
                 LastTool = value.RememberLastTool ? Tool.ToString() : value.LastTool,
-                Color = Color.ToString(), Thickness = Thickness, FontSize = FontSize, MosaicSize = MosaicSize,
-                Properties = Properties, ToolStyles = new(_toolStyles),
+                Color = _masterColor.ToString(), ToolStyles = new(_toolStyles),
             };
         }
     }

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -19,7 +19,8 @@ namespace RitsukageGif.Desktop
 
         private SolidColorBrush? _magnifierColorBrush;
         private FormattedText? _magnifierColorText;
-        private SampleColorFormat _magnifierFormat;
+        private SampleColorContext _magnifierContext;
+        private SampleColorTemplate? _magnifierFormat;
 
         private IPen _magnifierGrid = new Pen(new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)), .5);
         private string? _magnifierGridColor;
@@ -30,7 +31,12 @@ namespace RitsukageGif.Desktop
         private string? _magnifierShortcutLabel;
         private FormattedText? _magnifierShortcutText;
 
-        internal SampleColorFormat SampleColorFormat { get; set; }
+        internal SampleColorTemplate SampleColorTemplate { get; set; } = SampleColorFormats.DefaultTemplate;
+        internal bool RelativeCoordinates { get; set; }
+
+        private PixelPoint SamplePosition => RelativeCoordinates && !Selected.IsEmpty
+            ? new(Mouse.X - Selected.X, Mouse.Y - Selected.Y)
+            : Mouse;
 
         private void DrawMagnifiedSelection(DrawingContext context, Rect lens, double factor)
         {
@@ -124,23 +130,30 @@ namespace RitsukageGif.Desktop
 
         private void DrawMagnifierDetails(DrawingContext context, Rect frame)
         {
-            if (_magnifierPositionText is null || _magnifierPosition != Mouse)
+            var coordinates = SamplePosition;
+            if (_magnifierPositionText is null || _magnifierPosition != coordinates)
             {
-                _magnifierPosition = Mouse;
+                _magnifierPosition = coordinates;
                 _magnifierPositionText =
-                    HintText($"({Mouse.X}, {Mouse.Y})", MagnifierWidth - 12, Brushes.White, 12, 22);
+                    HintText($"({coordinates.X}, {coordinates.Y})", MagnifierWidth - 12, Brushes.White, 12, 22);
             }
 
             var position = _magnifierPositionText;
             if (CapturePreferences.MagnifierCoordinates)
                 context.DrawText(position, new(frame.Center.X - position.Width / 2, frame.Top + MagnifierHeight + 5));
             if (!TryGetSampleColor(Mouse, out var color)) return;
+            var sample = new SampleColorContext(color.R, color.G, color.B, color.A, Mouse, Selected);
+            var inputs = SampleColorTemplate.Inputs;
+            var contextChanged =
+                (inputs.HasFlag(SampleColorTokenInputs.Pointer) && _magnifierContext.Pointer != Mouse) ||
+                (inputs.HasFlag(SampleColorTokenInputs.Selection) && _magnifierContext.Selection != Selected);
             if (_magnifierColorBrush is null || _magnifierColorBrush.Color != color ||
-                _magnifierFormat != SampleColorFormat)
+                !ReferenceEquals(_magnifierFormat, SampleColorTemplate) || contextChanged)
             {
                 _magnifierColorBrush = new(color);
-                _magnifierFormat = SampleColorFormat;
-                _magnifierColorText = HintText(SampleColorText.Format(color, SampleColorFormat), MagnifierWidth - 34,
+                _magnifierFormat = SampleColorTemplate;
+                _magnifierContext = sample;
+                _magnifierColorText = HintText(SampleColorTemplate.Format(sample), MagnifierWidth - 34,
                     Brushes.White, 12, 22);
             }
 

@@ -20,7 +20,10 @@ namespace RitsukageGif.Desktop
                 _candidateHierarchy = _controlPoint == point && _controlWindow == target.Handle &&
                                       _controlHierarchy.Count > 0
                     ? _controlHierarchy
-                    : WindowControlLocator.FindHierarchy(target, point, _cancel.Token);
+                    : OperatingSystem.IsWindows()
+                        ? WindowControlLocator.FindHierarchy(target, point, _cancel.Token)
+                        : [];
+                if (_candidateHierarchy.Count == 0) return false;
                 _candidatePoint = point;
                 _candidateWindow = target.Handle;
                 _candidateIndex = _candidateHierarchy.Count - 1;

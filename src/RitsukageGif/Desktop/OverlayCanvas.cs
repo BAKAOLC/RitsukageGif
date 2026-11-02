@@ -82,8 +82,18 @@ namespace RitsukageGif.Desktop
 
         public override void Render(DrawingContext context)
         {
+            RenderCore(context, !NativeHdrBackground);
+        }
+
+        internal void RenderHdrOverlay(DrawingContext context)
+        {
+            RenderCore(context, false);
+        }
+
+        private void RenderCore(DrawingContext context, bool renderImage)
+        {
             var all = new Rect(Bounds.Size);
-            if (!NativeHdrBackground)
+            if (renderImage)
             {
                 context.DrawImage(_bitmap, new(0, 0, _monitor.Width, _monitor.Height), all);
                 context.FillRectangle(_dimBrush, all);
@@ -100,9 +110,15 @@ namespace RitsukageGif.Desktop
                 var destination = new Rect(local.X, local.Y, local.Width, local.Height);
                 var source = new Rect(intersection.X - _monitor.X, intersection.Y - _monitor.Y, intersection.Width,
                     intersection.Height);
-                if (!NativeHdrBackground)
+                if (renderImage)
                 {
-                    if (_frameDecoration.CornerRadius > 0 && !IsCandidate)
+                    if (SelectionGeometry() is { } shapeGeometry)
+                    {
+                        using var shapeClip = context.PushGeometryClip(shapeGeometry);
+                        context.DrawImage(_bitmap, source, destination);
+                        DrawWindowFrame(context, intersection);
+                    }
+                    else if (_frameDecoration.CornerRadius > 0 && !IsCandidate)
                     {
                         PrepareFrameDecoration();
                         using var rounded = context.PushGeometryClip(_frameClip!);
@@ -118,13 +134,21 @@ namespace RitsukageGif.Desktop
 
                 var pen = IsCandidate ? _candidatePen : _selectedPen;
                 using var borderOpacity = context.PushOpacity(SelectionBorderOpacity());
-                // Only draw actual selection edges, never artificial seams between monitors.
-                if (intersection.X == Selected.X) context.DrawLine(pen, destination.TopLeft, destination.BottomLeft);
-                if (intersection.Right == Selected.Right)
-                    context.DrawLine(pen, destination.TopRight, destination.BottomRight);
-                if (intersection.Y == Selected.Y) context.DrawLine(pen, destination.TopLeft, destination.TopRight);
-                if (intersection.Bottom == Selected.Bottom)
-                    context.DrawLine(pen, destination.BottomLeft, destination.BottomRight);
+                if (SelectionGeometry() is { } shapeBorder)
+                {
+                    context.DrawGeometry(null, pen, shapeBorder);
+                }
+                else
+                {
+                    // Only draw actual selection edges, never artificial seams between monitors.
+                    if (intersection.X == Selected.X)
+                        context.DrawLine(pen, destination.TopLeft, destination.BottomLeft);
+                    if (intersection.Right == Selected.Right)
+                        context.DrawLine(pen, destination.TopRight, destination.BottomRight);
+                    if (intersection.Y == Selected.Y) context.DrawLine(pen, destination.TopLeft, destination.TopRight);
+                    if (intersection.Bottom == Selected.Bottom)
+                        context.DrawLine(pen, destination.BottomLeft, destination.BottomRight);
+                }
             }
 
             // The scrollable screenshot preview has its own fixed toolbar; screen HUD coordinates do not apply to the full image.

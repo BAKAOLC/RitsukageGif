@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -9,9 +10,16 @@ namespace RitsukageGif.Desktop
         private bool _scrolling;
         private Task? _scrollingTask;
         internal ScrollCapturePreferences ScrollCapturePreferences { get; set; } = new();
+        internal Action<bool>? ScrollAutoCropChanged { get; set; }
         internal bool ScreenshotPreview { get; private set; }
         internal bool WasScrollingScreenshot { get; private set; }
         private bool UsesLocalSource => ScreenshotPreview || DesktopCapture.UsesSourceSelection;
+
+        private void SetScrollAutoCrop(bool enabled)
+        {
+            ScrollCapturePreferences = ScrollCapturePreferences with { AutoCropOnReverse = enabled };
+            ScrollAutoCropChanged?.Invoke(enabled);
+        }
 
         internal void OverlayClosed()
         {
@@ -24,8 +32,7 @@ namespace RitsukageGif.Desktop
                 $"Scrolling capture requested. SelectionId={_selectionId} Region={Snapshot.Region} Finished={_finished} Scrolling={_scrolling} Busy={Annotations?.IsBusy} ColorMode={Annotations?.OutputColorMode.ToString()}");
             var vertical = requestedVertical ?? ScrollCapturePreferences.InitialAxis == ScrollCaptureAxis.Vertical;
             if (_finished || _scrolling || _screenshotCompleting || ScreenshotPreview ||
-                Annotations is not { IsBusy: false, IsDrawing: false } annotations || Snapshot.Region.IsEmpty ||
-                annotations.OutputColorMode != OutputColorMode.Sdr) return;
+                Annotations is not { IsBusy: false, IsDrawing: false } annotations || Snapshot.Region.IsEmpty) return;
             if (annotations.HasAnnotations)
             {
                 annotations.SetExportState(false, UiText.Get("ScrollCaptureAnnotationsPresent"));
@@ -38,6 +45,7 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
+            var colorMode = annotations.OutputColorMode;
             var selected = Snapshot.Region;
             if (vertical ? selected.Height < 16 || selected.Width < 8 : selected.Width < 16 || selected.Height < 8)
             {
@@ -45,7 +53,8 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            if ((long)selected.Width * selected.Height * 12 > 256L * 1024 * 1024 ||
+            if ((long)selected.Width * selected.Height * (colorMode == OutputColorMode.Sdr ? 12 : 36) >
+                256L * 1024 * 1024 ||
                 (vertical ? selected.Height : selected.Width) > 32768)
             {
                 annotations.SetExportState(false, UiText.Get("SelectionTooLarge"));
@@ -53,6 +62,7 @@ namespace RitsukageGif.Desktop
             }
 
             _scrolling = true;
+            StopWindowsKeyGuard();
             _showing = true;
             annotations.SetExportState(true);
             ReleaseCaptures();
@@ -78,10 +88,11 @@ namespace RitsukageGif.Desktop
                     AppearancePreferences,
                     HideScreenshotOverlaysForScrollingAsync,
                     (owner, image, action, token) => OutputScrollingCaptureAsync(owner, image, action,
-                        captureScaling,
+                        captureScaling, colorMode,
                         DesktopCapture.UsesSourceSelection
                             ? null
-                            : (owner as ScreenshotScrollingWindow)?.CaptureOutputOrigin ?? outputOrigin, token));
+                            : (owner as ScreenshotScrollingWindow)?.CaptureOutputOrigin ?? outputOrigin, token),
+                    ScrollCapturePreferences.AutoCropOnReverse, SetScrollAutoCrop, colorMode);
                 SelectionLogger.ZLogInformation(
                     $"Scrolling capture returned. SelectionId={_selectionId} Finished={_finished} HasFrame={captured is not null} Action={captured?.Action.ToString()}");
                 if (_finished) return;
@@ -98,7 +109,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 ReplaceScreenshotPreview(captured.Image, captureScaling,
-                    DesktopCapture.UsesSourceSelection ? null : captured.OutputOrigin ?? outputOrigin);
+                    DesktopCapture.UsesSourceSelection ? null : captured.OutputOrigin ?? outputOrigin, colorMode);
                 WasScrollingScreenshot = true;
             }
             catch (OperationCanceledException) when (_finished || _cancel.IsCancellationRequested)
@@ -116,6 +127,7 @@ namespace RitsukageGif.Desktop
                 {
                     if (Annotations is { IsBusy: true }) Annotations.SetExportState(false);
                     foreach (var window in _windows) window.Show();
+                    await StartWindowsKeyGuardAsync();
                     _windows.FirstOrDefault()?.Activate();
                     Refresh();
                 }
@@ -125,12 +137,17 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task<bool> OutputScrollingCaptureAsync(Window owner,
-            ScrollCaptureImage image, ScrollingCaptureAction action, double captureScaling,
+            ScrollCaptureImage image, ScrollingCaptureAction action, double captureScaling, OutputColorMode colorMode,
             PixelPoint? outputOrigin, CancellationToken token)
         {
             if (_finished) return false;
             var bounds = new PixelRect(0, 0, image.Width, image.Height);
             var png = await Annotations!.ComposeAsync(bounds, image, token);
+            var hdr = colorMode == OutputColorMode.Sdr
+                ? null
+                : image.Hdr is { } source
+                    ? await Annotations.ComposeHdrAsync(bounds, source, token: token)
+                    : throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable"));
             token.ThrowIfCancellationRequested();
             WasScrollingScreenshot = true;
             if (action == ScrollingCaptureAction.OcrCopy)
@@ -168,9 +185,9 @@ namespace RitsukageGif.Desktop
                     throw new InvalidOperationException("This scrolling action does not produce an image output."),
                 _ => throw new ArgumentOutOfRangeException(nameof(action)),
             };
-            var result = new ScreenshotResult(png, outputAction)
+            var result = new ScreenshotResult(png, outputAction, hdr)
             {
-                ColorMode = OutputColorMode.Sdr, CaptureScaling = captureScaling,
+                ColorMode = colorMode, CaptureScaling = captureScaling,
                 OutputOrigin = outputOrigin, Decoration = Decoration,
                 OutputRegion = bounds,
             };
@@ -186,8 +203,13 @@ namespace RitsukageGif.Desktop
         }
 
         private void ReplaceScreenshotPreview(ScrollCaptureImage frame, double captureScaling = 1,
-            PixelPoint? outputOrigin = null)
+            PixelPoint? outputOrigin = null, OutputColorMode colorMode = OutputColorMode.Sdr)
         {
+            _selectionShape = null;
+            _shapePoints.Clear();
+            _regionEditBase = null;
+            _selectionWindows.Clear();
+            ShapeMode = SelectionShapeMode.Rectangle;
             Dispatcher.UIThread.VerifyAccess();
             var oldAnnotations = Annotations;
             var region = new PixelRect(0, 0, frame.Width, frame.Height);
@@ -201,6 +223,8 @@ namespace RitsukageGif.Desktop
             {
                 InitializeAnnotations();
                 Annotations!.CanScroll = false;
+                Annotations.CanOutputHdr = frame.Hdr is not null;
+                Annotations.OutputColorMode = colorMode;
                 replacement = new(this, region, scale, frame.Pixels, _radius, _threshold, true);
             }
             catch
@@ -229,11 +253,15 @@ namespace RitsukageGif.Desktop
 
             oldAnnotations?.Dispose();
             _screenshots.Clear();
+            _nativeScreenshots.Clear();
             _previewOriginalPng = null;
             _previewOutputOrigin = outputOrigin;
             _previewCaptureScaling =
                 double.IsFinite(captureScaling) && captureScaling is >= 1 and <= 16 ? captureScaling : 1;
             _screenshots.Add((region, frame.Pixels));
+            _hdrScreenshots.Clear();
+            _historyPreviewHdr = frame.Hdr is not null;
+            if (frame.Hdr is { } hdr) _hdrScreenshots.Add((region, hdr));
             WasScrollingScreenshot = false;
             ScreenshotPreview = true;
             WindowSource = false;

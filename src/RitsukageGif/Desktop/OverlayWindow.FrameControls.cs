@@ -7,6 +7,7 @@ namespace RitsukageGif.Desktop
         private double _frameClipRadius = -1;
         private PixelRect _frameClipRegion;
         private double _frameClipScale;
+        private SelectionShape? _frameClipShape;
 
         private void UpdateFrameClip(PixelRect selected, CaptureDecoration decoration)
         {
@@ -16,11 +17,19 @@ namespace RitsukageGif.Desktop
                 : Math.Min(decoration.CornerRadius,
                     Math.Min(selected.Width, selected.Height) / 2.0);
             // ReSharper disable CompareOfFloatsByEqualityOperator
-            if (_frameClipRegion == selected && _frameClipRadius == radius && _frameClipScale == _canvas.Scale) return;
+            if (_frameClipRegion == selected && _frameClipRadius == radius && _frameClipScale == _canvas.Scale &&
+                _frameClipShape == _coordinator.Snapshot.Shape) return;
             // ReSharper restore CompareOfFloatsByEqualityOperator
             _frameClipRegion = selected;
             _frameClipRadius = radius;
             _frameClipScale = _canvas.Scale;
+            _frameClipShape = _coordinator.Snapshot.Shape;
+            if (_canvas.SelectionGeometry() is { } shape)
+            {
+                _annotationSurface.Clip = shape;
+                return;
+            }
+
             if (radius <= 0)
             {
                 _annotationSurface.Clip = null;

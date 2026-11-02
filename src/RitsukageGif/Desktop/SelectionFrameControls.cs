@@ -35,6 +35,7 @@ namespace RitsukageGif.Desktop
             _decoration = Toggle("SelectionFrameDecoration",
                 "M12,3 A9,9 0 1 0 12,21 Z M12,3 L12,21 M12,7 L18,7 M12,11 L20,11 M12,15 L19,15",
                 coordinator.SetFrameDecoration);
+            InitializeCodeToggle();
             _refresh = new()
             {
                 Width = 32, Height = 32, MinWidth = 0, MinHeight = 0, Padding = new(7), CornerRadius = new(16),
@@ -110,6 +111,7 @@ namespace RitsukageGif.Desktop
                 _round.Foreground = _round.IsChecked == true ? Brushes.White : AppTheme.Ink;
                 _ratio.Foreground = _ratio.IsChecked == true ? Brushes.White : AppTheme.Ink;
                 _decoration.Foreground = _decoration.IsChecked == true ? Brushes.White : AppTheme.Ink;
+                UpdateCodeToggle();
                 _refresh.IsEnabled = _coordinator.CanRefreshFrame;
                 UpdateProperties();
             }
@@ -123,7 +125,8 @@ namespace RitsukageGif.Desktop
             _optionsBounds = options;
             var region = new Rect((selected.X - monitor.X) / scale, (selected.Y - monitor.Y) / scale,
                 selected.Width / scale, selected.Height / scale);
-            _buttonsBounds = SelectionFrameLayout.Place(_viewport, region, new(32, 140), toolbar, options);
+            _buttons.Measure(new(double.PositiveInfinity, double.PositiveInfinity));
+            _buttonsBounds = SelectionFrameLayout.Place(_viewport, region, _buttons.DesiredSize, toolbar, options);
             SetLeft(_buttons, _buttonsBounds.X);
             SetTop(_buttons, _buttonsBounds.Y);
             PlacePopup();

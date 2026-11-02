@@ -6,6 +6,8 @@ namespace RitsukageGif.Desktop
     {
         private static readonly SelectionCommandDefinition[] DefaultDefinitions =
         [
+            new(SelectionCommand.SimulateWheelUp, Key.OemPlus, KeyModifiers.None, "BuiltinShortcutWheelUp"),
+            new(SelectionCommand.SimulateWheelDown, Key.OemMinus, KeyModifiers.None, "BuiltinShortcutWheelDown"),
             new(SelectionCommand.SelectScreenOrAll, Key.A, KeyModifiers.Control, "SelectionScreenOrAll"),
             new(SelectionCommand.PreviousRegion, Key.R, KeyModifiers.None, "SelectionPreviousRegion"),
             new(SelectionCommand.NextRegion, Key.R, KeyModifiers.Shift, "SelectionNextRegion"),
@@ -20,17 +22,29 @@ namespace RitsukageGif.Desktop
                 DirectionKey: Key.Left),
             new(SelectionCommand.MovePointer, Key.D, KeyModifiers.None, "SelectionMovePointer", true,
                 DirectionKey: Key.Right),
+            new(SelectionCommand.NextShapeMode, Key.Tab, KeyModifiers.Control, "SelectionModeNext"),
+            new(SelectionCommand.PreviousShapeMode, Key.Tab, KeyModifiers.Control | KeyModifiers.Shift,
+                "SelectionModePrevious"),
             new(SelectionCommand.Confirm, Key.Enter, KeyModifiers.None, "SelectionCommandConfirm"),
             new(SelectionCommand.Copy, Key.C, KeyModifiers.Control, "ScreenshotCopy"),
+            new(SelectionCommand.Print, Key.P, KeyModifiers.Control, "Print"),
             new(SelectionCommand.Save, Key.S, KeyModifiers.Control, "ScreenshotSave"),
+            new(SelectionCommand.QuickSave, Key.S, KeyModifiers.Control | KeyModifiers.Shift, "ScreenshotQuickSave"),
+            new(SelectionCommand.WindowPin, Key.W, KeyModifiers.Alt, "ScreenshotWindowPin"),
             new(SelectionCommand.Pin, Key.T, KeyModifiers.Control, "ScreenshotPin"),
             new(SelectionCommand.ScrollVertical, Key.L, KeyModifiers.None, "ScreenshotScrollVertical"),
+            new(SelectionCommand.Record, Key.G, KeyModifiers.None, "ScreenshotRecord"),
             new(SelectionCommand.ScrollHorizontal, Key.None, KeyModifiers.None, "ScreenshotScrollHorizontal"),
             new(SelectionCommand.RecognizeText, Key.None, KeyModifiers.None, "RecognizeText"),
-            new(SelectionCommand.Translate, Key.None, KeyModifiers.None, "TranslationRun"),
+            new(SelectionCommand.Translate, Key.Q, KeyModifiers.Control, "TranslationRun"),
+            new(SelectionCommand.RecognizeTable, Key.Q, KeyModifiers.Shift, "TableRecognition"),
+            new(SelectionCommand.RecognizeFormula, Key.F, KeyModifiers.Shift, "FormulaRecognition"),
             new(SelectionCommand.RecognizeQr, Key.None, KeyModifiers.None, "RecognizeBarcode"),
+            new(SelectionCommand.ToggleCodeDetection, Key.Q, KeyModifiers.None, "CaptureCodeToggle"),
+            new(SelectionCommand.CopyCodeText, Key.None, KeyModifiers.None, "CaptureCodeCopyText"),
             new(SelectionCommand.RecognizeTextAndCopy, Key.C, KeyModifiers.Shift, "RecognizeTextAndCopy"),
             new(SelectionCommand.CopyColor, Key.C, KeyModifiers.None, "SelectionCopyColor"),
+            new(SelectionCommand.ToggleCoordinateMode, Key.P, KeyModifiers.None, "SelectionCoordinateMode"),
             new(SelectionCommand.CycleColorFormat, Key.LeftShift, KeyModifiers.None, "SelectionColorFormat"),
             new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationSelection",
                 Tool: ScreenshotTool.Select),
@@ -47,6 +61,8 @@ namespace RitsukageGif.Desktop
                 Tool: ScreenshotTool.Mosaic),
             new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationBlur",
                 Tool: ScreenshotTool.Blur),
+            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnnotationSmartErase",
+                Tool: ScreenshotTool.SmartErase),
             new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnnotationToolLine",
                 Tool: ScreenshotTool.Line),
             new(SelectionCommand.SelectTool, Key.D2, KeyModifiers.Shift, "AnnotationToolPolyline",
@@ -64,6 +80,9 @@ namespace RitsukageGif.Desktop
             new(SelectionCommand.SelectTool, Key.OemPlus, KeyModifiers.Shift, "AnnotationToolMagnifier",
                 Tool: ScreenshotTool.Magnifier),
             new(SelectionCommand.ToggleAnnotations, Key.None, KeyModifiers.None, "AnnotationToggleVisibility"),
+            new(SelectionCommand.ToggleSecondaryEditing, Key.E, KeyModifiers.Control,
+                "AnnotationToggleSecondaryEditing"),
+            new(SelectionCommand.ToggleAnnotationToolbar, Key.Space, KeyModifiers.None, "AnnotationToggleToolbar"),
             new(SelectionCommand.ClearAnnotations, Key.Z, KeyModifiers.Control | KeyModifiers.Shift,
                 "AnnotationClearAll"),
             new(SelectionCommand.RenumberAnnotations, Key.None, KeyModifiers.None, "AnnotationRenumber"),
@@ -111,7 +130,7 @@ namespace RitsukageGif.Desktop
         {
             foreach (var item in bindings ?? _definitions)
             {
-                if (item.Modifiers != modifiers || item.Key != key) continue;
+                if (item.Modifiers != modifiers || !BuiltinKeys.Matches(item.Key, key)) continue;
                 definition = item;
                 return true;
             }
@@ -141,21 +160,33 @@ namespace RitsukageGif.Desktop
                 SelectionCommand.PreviousScreenshot or SelectionCommand.NextScreenshot
                     or SelectionCommand.RefreshScreenshot => screenshot && !drawing,
                 SelectionCommand.MovePointer => !drawing && !editing,
+                SelectionCommand.SimulateWheelUp or SelectionCommand.SimulateWheelDown => screenshot && !drawing,
                 SelectionCommand.ToggleControls => controls && idle,
+                SelectionCommand.NextShapeMode or SelectionCommand.PreviousShapeMode => screenshot && !drawing,
                 SelectionCommand.ToggleSource => source && idle,
                 SelectionCommand.ToggleCursor => cursor && !drawing,
                 SelectionCommand.CycleHints => true,
                 SelectionCommand.CycleSnapping => !drawing,
                 SelectionCommand.Move or SelectionCommand.Expand or SelectionCommand.Shrink => adjusting,
                 SelectionCommand.Confirm => snapshot.CanConfirm && !drawing,
-                SelectionCommand.Copy or SelectionCommand.Save or SelectionCommand.Pin or SelectionCommand.RecognizeText
-                    or SelectionCommand.RecognizeQr or SelectionCommand.RecognizeTextAndCopy
-                    or SelectionCommand.Translate
+                SelectionCommand.Print => ScreenshotPrintService.IsAvailable && screenshot && snapshot.CanConfirm &&
+                                          !drawing,
+                SelectionCommand.WindowPin => screenshot && snapshot.CanConfirm && !drawing &&
+                                              !DesktopCapture.UsesSourceSelection,
+                SelectionCommand.Copy or SelectionCommand.Save or SelectionCommand.QuickSave or SelectionCommand.Pin
+                    or SelectionCommand.RecognizeText
+                    or SelectionCommand.RecognizeQr or SelectionCommand.RecognizeTable
+                    or SelectionCommand.ToggleCodeDetection or SelectionCommand.CopyCodeText
+                    or SelectionCommand.RecognizeFormula
+                    or SelectionCommand.RecognizeTextAndCopy
+                    or SelectionCommand.Translate or SelectionCommand.Record
                     or SelectionCommand.ScrollVertical or SelectionCommand.ScrollHorizontal =>
                     screenshot && snapshot.CanConfirm && !drawing,
                 SelectionCommand.CopyColor or SelectionCommand.CycleColorFormat => !drawing && !editing,
+                SelectionCommand.ToggleCoordinateMode => screenshot && !snapshot.Region.IsEmpty && !drawing,
                 SelectionCommand.Undo or SelectionCommand.Redo => screenshot,
-                SelectionCommand.ToggleAnnotations or SelectionCommand.ClearAnnotations
+                SelectionCommand.ToggleAnnotations or SelectionCommand.ToggleSecondaryEditing
+                    or SelectionCommand.ToggleAnnotationToolbar or SelectionCommand.ClearAnnotations
                     or SelectionCommand.RenumberAnnotations => screenshot && !drawing,
                 SelectionCommand.FinishPolyline => screenshot,
                 SelectionCommand.SelectTool => screenshot && snapshot.Phase == SelectionPhase.Selected && !drawing,

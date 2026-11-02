@@ -29,13 +29,14 @@ namespace RitsukageGif.Desktop
             {
                 var frames = pixels is null ? _frames.ToArray() : _frames.Append((region, pixels)).ToArray();
                 var annotations = _annotations.Concat(_retained).Concat(_undo.Concat(_redo).SelectMany(state => state))
-                    .Distinct().Where(annotation => annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or
+                    .Distinct().Where(annotation => annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur
+                        or ScreenshotTool.SmartErase or
                         ScreenshotTool.Magnifier or ScreenshotTool.Eraser).ToArray();
                 long bytes = 0;
                 foreach (var annotation in annotations)
                 {
-                    var tiles = await CreateMosaicAsync(annotation.Tool == ScreenshotTool.Eraser
-                            ? RenderBounds(annotation)
+                    var tiles = await CreateMosaicAsync(IsPixelTool(annotation.Tool)
+                            ? PixelEffectBounds(annotation)
                             : annotation.Bounds,
                         annotation.Tool == ScreenshotTool.Mosaic ? annotation.MosaicSize : 1, work.Token, frames,
                         annotation.Tool == ScreenshotTool.Blur ? annotation.Properties.BlurRadius : 0);
@@ -93,11 +94,11 @@ namespace RitsukageGif.Desktop
                 var sampling = _overlayFrame is { } overlay ? [.. snapshot, overlay] : snapshot;
                 long bytes = 0;
                 foreach (var annotation in _retained.Where(annotation => annotation.Tool is ScreenshotTool.Mosaic
-                             or ScreenshotTool.Blur or
+                             or ScreenshotTool.Blur or ScreenshotTool.SmartErase or
                              ScreenshotTool.Magnifier or ScreenshotTool.Eraser))
                 {
-                    var tiles = await CreateMosaicAsync(annotation.Tool == ScreenshotTool.Eraser
-                            ? RenderBounds(annotation)
+                    var tiles = await CreateMosaicAsync(IsPixelTool(annotation.Tool)
+                            ? PixelEffectBounds(annotation)
                             : annotation.Bounds,
                         annotation.Tool == ScreenshotTool.Mosaic ? annotation.MosaicSize : 1, work.Token, sampling,
                         annotation.Tool == ScreenshotTool.Blur ? annotation.Properties.BlurRadius : 0);

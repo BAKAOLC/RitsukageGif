@@ -12,13 +12,19 @@ namespace RitsukageGif.Desktop
                     .Select(group => new SelectionShortcutDefinition(group.Key, group.First().DescriptionKey,
                         group.First().Command is SelectionCommand.SelectTool or SelectionCommand.Undo
                             or SelectionCommand.Redo or SelectionCommand.Copy or SelectionCommand.Save
-                            or SelectionCommand.Pin
+                            or SelectionCommand.Print or SelectionCommand.QuickSave
+                            or SelectionCommand.Pin or SelectionCommand.WindowPin or SelectionCommand.Record
                             or SelectionCommand.ScrollVertical or SelectionCommand.ScrollHorizontal
                             or SelectionCommand.RecognizeText or SelectionCommand.RecognizeQr
+                            or SelectionCommand.RecognizeTable or SelectionCommand.RecognizeFormula
                             or SelectionCommand.RecognizeTextAndCopy
                             or SelectionCommand.PreviousScreenshot or SelectionCommand.NextScreenshot
                             or SelectionCommand.RefreshScreenshot
-                            or SelectionCommand.ToggleAnnotations or SelectionCommand.ClearAnnotations
+                            or SelectionCommand.ToggleAnnotations or SelectionCommand.ToggleSecondaryEditing
+                            or SelectionCommand.ToggleAnnotationToolbar or SelectionCommand.Translate
+                            or SelectionCommand.SimulateWheelUp or SelectionCommand.SimulateWheelDown
+                            or SelectionCommand.ToggleCoordinateMode
+                            or SelectionCommand.ClearAnnotations
                             or SelectionCommand.RenumberAnnotations or SelectionCommand.FinishPolyline
                             ? "BuiltinShortcutScreenshotContext"
                             : "BuiltinShortcutSelectionContext",
@@ -31,44 +37,51 @@ namespace RitsukageGif.Desktop
 
         internal static IReadOnlyList<SelectionShortcutDefinition> Catalog { get; }
 
+        internal static event Action? BindingsChanged;
+
         internal static IReadOnlyList<SelectionCommandDefinition> SnapshotBindings()
         {
             return Array.AsReadOnly(_definitions);
         }
 
-        internal static IReadOnlyList<string> Validate(Dictionary<string, string[]>? overrides)
+        internal static IReadOnlyList<string> Validate(Dictionary<string, string[]>? overrides, bool mixing = false)
         {
-            return [.. BuildBindings(overrides, out _).Select(issue => issue.Message)];
+            return [.. BuildBindings(overrides, out _, mixing).Select(issue => issue.Message)];
         }
 
-        internal static IReadOnlyList<string> Configure(Dictionary<string, string[]>? overrides)
+        internal static IReadOnlyList<string> Configure(Dictionary<string, string[]>? overrides, bool mixing = false)
         {
-            var errors = BuildBindings(overrides, out var definitions);
+            var errors = BuildBindings(overrides, out var definitions, mixing);
             if (errors.Count == 0)
             {
                 _definitions = definitions;
-                BuiltinShortcuts.ConfigureExternal(overrides);
+                BuiltinShortcuts.ConfigureExternal(overrides, mixing);
+                BuiltinKeys.Configure(mixing);
+                BindingsChanged?.Invoke();
             }
 
             return [.. errors.Select(issue => issue.Message)];
         }
 
-        internal static IReadOnlyList<SelectionShortcutIssue> ValidateIssues(Dictionary<string, string[]>? overrides)
+        internal static IReadOnlyList<SelectionShortcutIssue> ValidateIssues(Dictionary<string, string[]>? overrides,
+            bool mixing = false)
         {
-            return BuildBindings(overrides, out _);
+            return BuildBindings(overrides, out _, mixing);
         }
 
         private static string ShortcutLabel(SelectionShortcutDefinition definition)
         {
-            return UiText.Get(definition.DescriptionKey) + (definition.DirectionKey == Key.None
-                ? string.Empty
-                : " · " + UiText.Get("SelectionShortcut" + definition.DirectionKey));
+            return definition.DirectionKey == Key.None
+                ? UiText.Get(definition.DescriptionKey)
+                : UiText.Format("BuiltinShortcutDirectionalOperation",
+                    UiText.Get("SelectionShortcut" + definition.DirectionKey),
+                    UiText.Get(definition.DescriptionKey));
         }
 
         private static List<SelectionShortcutIssue> BuildBindings(Dictionary<string, string[]>? overrides,
-            out SelectionCommandDefinition[] definitions)
+            out SelectionCommandDefinition[] definitions, bool mixing)
         {
-            var errors = new List<SelectionShortcutIssue>(BuiltinShortcuts.ValidateExternal(overrides));
+            var errors = new List<SelectionShortcutIssue>(BuiltinShortcuts.ValidateExternal(overrides, mixing));
             var result = new List<SelectionCommandDefinition>();
             var gestures = new Dictionary<(Key, KeyModifiers), string>();
             foreach (var item in Catalog)
@@ -100,7 +113,8 @@ namespace RitsukageGif.Desktop
                         continue;
                     }
 
-                    if (gestures.TryGetValue((gesture.Key, gesture.KeyModifiers), out var existing))
+                    var key = BuiltinKeys.Normalize(gesture.Key, mixing);
+                    if (gestures.TryGetValue((key, gesture.KeyModifiers), out var existing))
                     {
                         if (existing != item.Id)
                             errors.Add(new(item.Id, existing, UiText.Get("SelectionShortcutConflict") + ": " + value +
@@ -111,7 +125,7 @@ namespace RitsukageGif.Desktop
                         continue;
                     }
 
-                    gestures.Add((gesture.Key, gesture.KeyModifiers), item.Id);
+                    gestures.Add((key, gesture.KeyModifiers), item.Id);
                     result.Add(defaults[0] with { Key = gesture.Key, Modifiers = gesture.KeyModifiers });
                 }
             }

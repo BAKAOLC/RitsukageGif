@@ -6,5 +6,6 @@ namespace RitsukageGif.Desktop
         Jpeg,
         Bmp,
         Webp,
+        Avif,
     }
 }

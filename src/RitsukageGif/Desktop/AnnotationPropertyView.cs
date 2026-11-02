@@ -53,6 +53,11 @@ namespace RitsukageGif.Desktop
             Children.Clear();
         }
 
+        public void HideFlyouts()
+        {
+            foreach (var flyout in _flyouts) flyout.Hide();
+        }
+
         public void Refresh()
         {
             if (_disposed) return;
@@ -226,47 +231,32 @@ namespace RitsukageGif.Desktop
                 (p, value) => p with { Opacity = value / 100 }, true);
         }
 
-        public Control Dashed()
-        {
-            return Toggle("AnnotationDashed", "┄", p => p.Dashed, (p, value) => p with { Dashed = value });
-        }
-
         public Control Filled()
         {
             return Toggle("AnnotationFilled", "■", p => p.Filled, (p, value) => p with { Filled = value },
                 "AnimationRectangle");
         }
 
-        public Control NextNumber()
+        private CompactNumberInput NextNumber()
         {
-            return PropertyNumber("AnnotationNextNumber", 0, 999999, p => p.Number,
-                (p, value) => p with { Number = (int)value }, true);
+            return NumberInput("AnnotationNextNumber", 0, 999999, () => _session.NextNumber,
+                value =>
+                {
+                    _session.SetNextNumber((int)value);
+                    return Task.CompletedTask;
+                }, integral: true);
         }
 
-        public Control Magnification()
-        {
-            return PropertyNumber("AnnotationMagnification", 1.1, 16, p => p.Magnification,
-                (p, value) => p with { Magnification = value });
-        }
-
-        public Control Mosaic()
+        private CompactNumberInput Mosaic()
         {
             return NumberInput("AnnotationMosaicSize", 2, 256, () => _session.MosaicSize,
                 value => _session.UpdateSelectedStyleAsync(mosaicSize: (int)value), integral: true);
         }
 
-        public Control Blur()
+        private CompactNumberInput Blur()
         {
             return PropertyNumber("AnnotationBlurRadius", 1, 256, p => p.BlurRadius,
                 (p, value) => p with { BlurRadius = (int)value }, true);
-        }
-
-        public Control FinishPolyline()
-        {
-            var button = Button("AnnotationFinishPolyline", icon: "ScreenshotApplyText");
-            button.Click += (_, _) => _session.FinishPolyline();
-            _refresh.Add(() => button.IsEnabled = _session.IsDrawingPolyline);
-            return button;
         }
     }
 }

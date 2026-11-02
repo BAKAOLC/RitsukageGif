@@ -2,8 +2,8 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotScrollingSession
     {
-        private int _previewMaximumHeight = axis == ScrollCaptureAxis.Vertical ? 1600 : 400;
-        private int _previewMaximumWidth = axis == ScrollCaptureAxis.Vertical ? 400 : 1600;
+        private int _previewMaximumHeight;
+        private int _previewMaximumWidth;
 
         internal void ConfigurePreviewSize(int maxWidth, int maxHeight)
         {

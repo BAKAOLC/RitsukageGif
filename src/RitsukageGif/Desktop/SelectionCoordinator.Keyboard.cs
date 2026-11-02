@@ -14,10 +14,11 @@ namespace RitsukageGif.Desktop
             SelectionCommands.SnapshotBindings();
 
         internal SelectionHintMode HintMode { get; private set; }
+        internal bool RelativeCoordinates { get; private set; }
         internal FrozenScreenshotCursor? ScreenshotCursor { get; private set; }
 
         internal bool CanToggleCursor =>
-            !UsesLocalSource && (!ScreenshotMode || OperatingSystem.IsWindows());
+            !ScreenshotPreview && (!DesktopCapture.UsesSourceSelection || _portalSeparateCursor);
 
         private void CancelModifierTap()
         {
@@ -120,11 +121,18 @@ namespace RitsukageGif.Desktop
 
         private void ExecuteSelectionCommand(SelectionCommandDefinition definition, bool keyboard = false)
         {
-            if (definition.Command == SelectionCommand.Confirm &&
-                Annotations is { IsBusy: false, IsDrawingPolyline: true } polyline)
+            // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
+            switch (definition.Command)
             {
-                polyline.FinishPolyline();
-                return;
+                case SelectionCommand.Confirm when ShapeDrawing:
+                    CompleteShapeDrawing();
+                    return;
+                case SelectionCommand.Cancel when CancelShapeDrawing():
+                    return;
+                case SelectionCommand.Confirm when
+                    Annotations is { IsBusy: false, IsDrawingPolyline: true } polyline:
+                    polyline.FinishPolyline();
+                    return;
             }
 
             if (HandleAnnotationCommand(definition)) return;
@@ -134,6 +142,8 @@ namespace RitsukageGif.Desktop
                     ScreenshotDrawing)) return;
             switch (definition.Command)
             {
+                case SelectionCommand.NextShapeMode: PreviewShapeMode(1, definition.Modifiers); break;
+                case SelectionCommand.PreviousShapeMode: PreviewShapeMode(-1, definition.Modifiers); break;
                 case SelectionCommand.SelectScreenOrAll: SelectScreenOrAll(); break;
                 case SelectionCommand.PreviousRegion: BrowseRegionHistory(true); break;
                 case SelectionCommand.NextRegion: BrowseRegionHistory(false); break;
@@ -141,6 +151,12 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.NextScreenshot: BrowseImageHistory(false); break;
                 case SelectionCommand.RefreshScreenshot: RefreshScreenshot(); break;
                 case SelectionCommand.MovePointer: MovePointer(definition.DirectionKey); break;
+                case SelectionCommand.SimulateWheelUp:
+                case SelectionCommand.SimulateWheelDown:
+                    foreach (var window in _windows)
+                        if (window.SimulateWheel(definition.Command == SelectionCommand.SimulateWheelUp ? 1 : -1))
+                            break;
+                    break;
                 case SelectionCommand.Confirm:
                     if (keyboard) _enter = true;
                     Confirm();
@@ -163,11 +179,23 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.Copy:
                     Annotations?.RequestComplete(ScreenshotOutputAction.Copy);
                     break;
+                case SelectionCommand.Print:
+                    Annotations?.RequestComplete(ScreenshotOutputAction.Print);
+                    break;
                 case SelectionCommand.Save:
                     Annotations?.RequestComplete(ScreenshotOutputAction.Save);
                     break;
+                case SelectionCommand.Record:
+                    Annotations?.RequestRecording();
+                    break;
+                case SelectionCommand.QuickSave:
+                    Annotations?.RequestComplete(ScreenshotOutputAction.QuickSave);
+                    break;
                 case SelectionCommand.Pin:
                     Annotations?.RequestComplete(ScreenshotOutputAction.Pin);
+                    break;
+                case SelectionCommand.WindowPin:
+                    Annotations?.RequestWindowPin();
                     break;
                 case SelectionCommand.ScrollVertical:
                 case SelectionCommand.ScrollHorizontal:
@@ -182,16 +210,34 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.RecognizeTextAndCopy:
                     RecognizeSelection(RecognitionMode.Text, true);
                     break;
+                case SelectionCommand.RecognizeTable:
+                    RecognizeSelection(RecognitionMode.Table);
+                    break;
+                case SelectionCommand.RecognizeFormula:
+                    RecognizeSelection(RecognitionMode.Formula);
+                    break;
                 case SelectionCommand.RecognizeQr:
                     RecognizeSelection(RecognitionMode.Barcode);
+                    break;
+                case SelectionCommand.CopyCodeText:
+                    RecognizeSelection(RecognitionMode.Barcode, true);
+                    break;
+                case SelectionCommand.ToggleCodeDetection:
+                    SetCodeDetectionEnabled(!CodeDetectionEnabled);
                     break;
                 case SelectionCommand.CopyColor:
                     _ = CopySampleColorAsync();
                     break;
+                case SelectionCommand.ToggleCoordinateMode:
+                    RelativeCoordinates = !RelativeCoordinates;
+                    PreferencesChanged?.Invoke();
+                    break;
                 case SelectionCommand.CycleColorFormat:
-                    SampleColorFormat = SampleColorText.Next(SampleColorFormat);
+                    CycleSampleColorFormat();
                     break;
                 case SelectionCommand.ToggleAnnotations: Annotations?.ToggleAnnotations(); break;
+                case SelectionCommand.ToggleSecondaryEditing: Annotations?.ToggleSecondaryEditing(); break;
+                case SelectionCommand.ToggleAnnotationToolbar: Annotations?.ToggleToolbar(); break;
                 case SelectionCommand.ClearAnnotations: Annotations?.ClearAnnotations(); break;
                 case SelectionCommand.RenumberAnnotations: Annotations?.RenumberAnnotations(); break;
                 case SelectionCommand.FinishPolyline: Annotations?.FinishPolyline(); break;
@@ -225,7 +271,7 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.Move:
                 case SelectionCommand.Expand:
                 case SelectionCommand.Shrink:
-                    var limits = WindowSource && !UsesLocalSource
+                    var limits = WindowSource && !UsesLocalSource && ShapeMode != SelectionShapeMode.MultiWindow
                         ? snapshot.Target?.Client ?? default
                         : SelectionBounds();
                     if (limits.IsEmpty) break;
@@ -235,6 +281,7 @@ namespace RitsukageGif.Desktop
                     _selectedTarget = snapshot.Target;
                     _selectionIsWholeTarget = false;
                     _state.Set(region);
+                    TransformShape(_selectionShape, snapshot.Region, region);
                     break;
                 default:
                     return;

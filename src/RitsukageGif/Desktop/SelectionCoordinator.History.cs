@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Input;
 using ImageMagick;
 
@@ -33,6 +33,10 @@ namespace RitsukageGif.Desktop
 
         private void SelectScreenOrAll()
         {
+            _selectionShape = null;
+            _shapePoints.Clear();
+            _regionEditBase = null;
+            _selectionWindows.Clear();
             var bounds = SelectionBounds();
             if (bounds.IsEmpty) return;
             var monitor = _windows.FirstOrDefault(window => window.Region.Contains(_pointer))?.Region ?? bounds;
@@ -91,69 +95,106 @@ namespace RitsukageGif.Desktop
 
         private void BrowseRegionHistory(bool previous)
         {
-            if (_regionHistory.Length == 0 || UsesLocalSource || Annotations is { HasAnnotations: true }) return;
-            var index = Math.Clamp(_regionHistoryIndex + (previous ? 1 : -1), 0, _regionHistory.Length - 1);
-            var entry = _regionHistory[index].Selection;
-            var region = entry.Region;
-            WindowTarget? target = null;
-            if (entry.WindowSource)
+            if (_regionHistory.Length == 0 || UsesLocalSource || _screenshotCompleting ||
+                Annotations is { HasAnnotations: true } or { IsBusy: true } or { IsDrawing: true }) return;
+            var step = _regionHistoryIndex < 0 || previous ? 1 : -1;
+            var index = _regionHistoryIndex < 0 ? 0 : _regionHistoryIndex + step;
+            for (var attempt = 0; attempt < _regionHistory.Length; attempt++, index += step)
             {
-                target = _targets.FirstOrDefault(item =>
-                    item.Handle == entry.Target?.Handle && item.Process == entry.Target?.Process);
-                if (target is null) return;
-                if (entry.Target is { } old)
-                    region = new(target.Client.X + entry.Region.X - old.Client.X,
-                        target.Client.Y + entry.Region.Y - old.Client.Y, entry.Region.Width, entry.Region.Height);
-                region = region.Intersect(target.Client);
-            }
-            else
-            {
-                region = region.Intersect(SelectionBounds());
-            }
+                if (index < 0 || index >= _regionHistory.Length)
+                {
+                    if (!CapturePreferences.CycleRegionHistory) break;
+                    index = (index + _regionHistory.Length) % _regionHistory.Length;
+                }
 
-            if (region.IsEmpty) return;
-            if (ScreenshotMode && (WindowSource != entry.WindowSource || entry.WindowSource))
-            {
-                _historyWork = _screenshotTask = RestoreRegionSourceAsync(index, region, target, entry.WindowSource);
+                if (index == _regionHistoryIndex) break;
+                if (!CaptureHistoryRegionResolver.TryResolve(_regionHistory[index].Selection, _targets,
+                        SelectionBounds(), out var selection) || selection is null) continue;
+                if (ScreenshotMode && (WindowSource != selection.WindowSource || selection.WindowSource))
+                {
+                    _historyWork = _screenshotTask = RestoreRegionSourceAsync(index, selection);
+                }
+                else
+                {
+                    SetHistorySelection(selection);
+                    CommitHistorySelection(index);
+                }
+
                 return;
             }
-
-            ApplyHistoryRegion(index, region, target, entry.WindowSource);
         }
 
-        private void ApplyHistoryRegion(int index, PixelRect region, WindowTarget? target, bool windowSource)
+        private void SetHistorySelection(SelectionResult selection)
         {
-            _regionHistoryIndex = index;
-            WindowSource = windowSource;
-            _selectedTarget = target;
+            _selectedTarget = selection.Target;
             _selectionIsWholeTarget = false;
-            _state.Set(region);
+            _state.Set(selection.Region);
+            _selectionShape = selection.Shape;
+            _shapePoints.Clear();
+            _regionEditBase = null;
+            _regionEditTarget = null;
+            _shapePreviewDirty = false;
+            _selectionWindows.Clear();
+            if (selection.Windows is { } windows) _selectionWindows.AddRange(windows);
+            ShapeMode = selection.Windows is { Count: > 1 } ? SelectionShapeMode.MultiWindow :
+                selection.Shape is not null ? SelectionShapeMode.Free : SelectionShapeMode.Rectangle;
+            _windowShapeRevision++;
+        }
+
+        private void CommitHistorySelection(int index)
+        {
+            _shapeModeTimer?.Dispose();
+            _shapeModeTimer = null;
+            _previewShapeMode = null;
+            _shapeHeldModifiers = KeyModifiers.None;
+            _regionHistoryIndex = index;
+            WindowSource = _regionHistory[index].Selection.WindowSource;
             PreferencesChanged?.Invoke();
-            Annotations?.NotifySelection(region);
+            Annotations?.NotifySelection(_state.Selected);
             Refresh();
         }
 
-        private async Task RestoreRegionSourceAsync(int index, PixelRect region, WindowTarget? target,
-            bool windowSource)
+        private async Task RestoreRegionSourceAsync(int index, SelectionResult selection)
         {
             var previousRegion = _state.Selected;
             var previousTarget = _selectedTarget;
             var previousWhole = _selectionIsWholeTarget;
-            _selectedTarget = target;
-            _selectionIsWholeTarget = false;
-            _state.Set(region);
-            await SwitchScreenshotSourceAsync(windowSource);
+            var previousSource = WindowSource;
+            var previousShape = _selectionShape;
+            var previousMode = ShapeMode;
+            var previousWindows = _selectionWindows.ToArray();
+            var previousPoints = _shapePoints.ToArray();
+            var previousEdit = _regionEditBase;
+            var previousEditTarget = _regionEditTarget;
+            var previousDirty = _shapePreviewDirty;
+            var previousRevision = _windowShapeRevision;
+            var previousFrozenRevision = _frozenShapeRevision;
+            SetHistorySelection(selection);
+            var succeeded = await SwitchScreenshotSourceCoreAsync(selection.WindowSource, true);
             if (_finished) return;
-            if (WindowSource != windowSource || (windowSource && _frozenWindow?.Target.Handle != target?.Handle))
+            if (!succeeded)
             {
                 _selectedTarget = previousTarget;
                 _selectionIsWholeTarget = previousWhole;
+                WindowSource = previousSource;
                 _state.Set(previousRegion);
+                _selectionShape = previousShape;
+                ShapeMode = previousMode;
+                _selectionWindows.Clear();
+                _selectionWindows.AddRange(previousWindows);
+                _shapePoints.Clear();
+                _shapePoints.AddRange(previousPoints);
+                _regionEditBase = previousEdit;
+                _regionEditTarget = previousEditTarget;
+                _shapePreviewDirty = previousDirty;
+                _windowShapeRevision = previousRevision;
+                _frozenShapeRevision = previousFrozenRevision;
+                Annotations?.NotifySelection(previousRegion);
                 Refresh();
                 return;
             }
 
-            ApplyHistoryRegion(index, region, target, windowSource);
+            CommitHistorySelection(index);
         }
 
         private void BrowseImageHistory(bool previous)
@@ -195,11 +236,16 @@ namespace RitsukageGif.Desktop
                 }, _cancel.Token);
                 if (_finished) return;
                 var outputMode = Annotations!.OutputColorMode;
+                _selectionShape = null;
+                _shapePoints.Clear();
+                _regionEditBase = null;
+                _selectionWindows.Clear();
                 ReplaceScreenshotPreview(frame, entry.CaptureScaling, entry.OutputOrigin);
                 RestoreFrameDecoration(entry.Decoration);
                 _previewOriginalPng = entry.Png.ToArray();
                 Annotations!.OutputColorMode = outputMode;
                 _hdrScreenshots.Clear();
+                _nativeScreenshots.Clear();
                 _historyPreviewHdr = entry.Hdr is not null;
                 if (entry.Hdr is { } hdr)
                 {
