@@ -170,8 +170,9 @@ namespace RitsukageGif.Desktop
 
         private static HttpClient CreateClient()
         {
-            var client = new HttpClient
-                { Timeout = TimeSpan.FromSeconds(10), MaxResponseContentBufferSize = 2 * 1024 * 1024 };
+            var client = ApplicationHttp.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.MaxResponseContentBufferSize = 2 * 1024 * 1024;
             client.DefaultRequestHeaders.UserAgent.ParseAdd($"RitsukageGif/{CurrentVersion}");
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
             return client;

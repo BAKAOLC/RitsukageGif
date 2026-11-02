@@ -95,62 +95,6 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        internal static void Mosaic(byte[] output, CapturedFrame destination, PixelRect globalFrameRegion,
-            CapturedFrame samples, PixelRect globalSampleRegion, PixelRect globalMosaicRegion, int blockSize,
-            CancellationToken token)
-        {
-            var clipped = globalMosaicRegion.Intersect(globalFrameRegion);
-            if (clipped.IsEmpty) return;
-            var firstX = globalMosaicRegion.X + (clipped.X - globalMosaicRegion.X) / blockSize * blockSize;
-            var firstY = globalMosaicRegion.Y + (clipped.Y - globalMosaicRegion.Y) / blockSize * blockSize;
-            var original = samples.Pixels.Span;
-            for (var by = firstY; by < clipped.Bottom; by += blockSize)
-            for (var bx = firstX; bx < clipped.Right; bx += blockSize)
-            {
-                token.ThrowIfCancellationRequested();
-                var block = new PixelRect(bx, by, Math.Min(blockSize, globalMosaicRegion.Right - bx),
-                    Math.Min(blockSize, globalMosaicRegion.Bottom - by)).Intersect(globalSampleRegion);
-                double red = 0, green = 0, blue = 0, alphaSum = 0;
-                for (var y = block.Y; y < block.Bottom; y++)
-                {
-                    token.ThrowIfCancellationRequested();
-                    var row = original.Slice((y - globalSampleRegion.Y) * samples.Stride, samples.Stride);
-                    for (var x = block.X; x < block.Right; x++)
-                    {
-                        var pixel = row.Slice((x - globalSampleRegion.X) * 8, 8);
-                        var alpha = samples.AlphaMode == CaptureAlphaMode.Opaque
-                            ? 1
-                            : Math.Clamp(Read(pixel[6..]), 0, 1);
-                        var factor = samples.AlphaMode == CaptureAlphaMode.Premultiplied ? alpha > 0 ? 1 : 0 : alpha;
-                        red += Read(pixel) * factor;
-                        green += Read(pixel[2..]) * factor;
-                        blue += Read(pixel[4..]) * factor;
-                        alphaSum += alpha;
-                    }
-                }
-
-                var count = (double)block.Width * block.Height;
-                var divisor = destination.AlphaMode == CaptureAlphaMode.Premultiplied ? count : alphaSum;
-                red = divisor > 0 ? red / divisor : 0;
-                green = divisor > 0 ? green / divisor : 0;
-                blue = divisor > 0 ? blue / divisor : 0;
-                var writeRegion = block.Intersect(globalFrameRegion);
-                for (var y = writeRegion.Y; y < writeRegion.Bottom; y++)
-                {
-                    token.ThrowIfCancellationRequested();
-                    var row = output.AsSpan((y - globalFrameRegion.Y) * destination.Stride, destination.Stride);
-                    for (var x = writeRegion.X; x < writeRegion.Right; x++)
-                    {
-                        var pixel = row.Slice((x - globalFrameRegion.X) * 8, 8);
-                        Write(pixel, red);
-                        Write(pixel[2..], green);
-                        Write(pixel[4..], blue);
-                        Write(pixel[6..], destination.AlphaMode == CaptureAlphaMode.Opaque ? 1 : alphaSum / count);
-                    }
-                }
-            }
-        }
-
         private static double ReferenceWhite(CapturedFrame source, int x, int y)
         {
             foreach (var region in source.ColorRegions)

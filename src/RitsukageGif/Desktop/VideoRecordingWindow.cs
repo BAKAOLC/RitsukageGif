@@ -10,6 +10,8 @@ namespace RitsukageGif.Desktop
     internal sealed partial class VideoRecordingWindow : Window
     {
         private static readonly int[] QualityValues = [18, 23, 28];
+
+        private readonly StackPanel _audioOptions = new() { Spacing = 6 };
         private readonly Button _cancel;
 
         private readonly TextBlock _colorStatus = new()
@@ -19,7 +21,7 @@ namespace RitsukageGif.Desktop
         private readonly TextBox _directory = new() { MinWidth = 0 };
 
         private readonly ComboBox _format = new()
-            { ItemsSource = new[] { "MP4 (H.264)", "WebM (VP9)" }, SelectedIndex = 0 };
+            { ItemsSource = new[] { "GIF", "WebP", "APNG", "MP4 (H.264)", "WebM (VP9)" }, SelectedIndex = 3 };
 
         private readonly CompactNumberInput _fps = new() { Minimum = 1, Maximum = 100, Width = 80, Height = 28 };
         private readonly ApplicationHost _host;
@@ -51,11 +53,11 @@ namespace RitsukageGif.Desktop
         private string? _systemDeviceError;
         private List<AudioCaptureDevice> _systemDevices = [];
 
-        public VideoRecordingWindow(ApplicationHost host)
+        public VideoRecordingWindow(ApplicationHost host, bool animation = false)
         {
             _host = host;
             var settings = host.Settings.VideoRecording;
-            Title = UiText.Get("VideoRecorderTitle");
+            Title = UiText.Get("RecorderTitle");
             Width = 650;
             Height = 540;
             MinWidth = 560;
@@ -64,27 +66,27 @@ namespace RitsukageGif.Desktop
             Foreground = AppTheme.Ink;
             FontSize = 14;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            _format.SelectedIndex = (int)settings.Container;
-            _fps.Value = Math.Clamp(settings.Fps, 1, 100);
-            _scale.Value = Math.Clamp(settings.Divisor, 1, 100);
-            _quality.ItemsSource = new[]
-                { UiText.Get("VideoQualityHigh"), UiText.Get("VideoQualityBalanced"), UiText.Get("VideoQualitySmall") };
-            _quality.SelectedIndex = Array.IndexOf(QualityValues, settings.Quality);
+            _format.SelectedIndex = animation ? (int)host.Settings.Format : (int)settings.Container + 3;
+            _fps.Value = animation ? host.Settings.Fps : Math.Clamp(settings.Fps, 1, 100);
+            _scale.Value = animation ? host.Settings.Divisor : Math.Clamp(settings.Divisor, 1, 100);
+            RefreshQualityLabels();
+            _quality.SelectedIndex =
+                animation ? 2 - (int)host.Settings.Quality : Array.IndexOf(QualityValues, settings.Quality);
             if (_quality.SelectedIndex < 0) _quality.SelectedIndex = 1;
-            _directory.Text = string.IsNullOrWhiteSpace(settings.OutputDirectory)
+            _directory.Text = animation || string.IsNullOrWhiteSpace(settings.OutputDirectory)
                 ? host.Settings.OutputDirectory
                 : settings.OutputDirectory;
-            _systemAudio.IsChecked = settings.SystemAudio && OperatingSystem.IsWindows();
-            _microphone.IsChecked = settings.Microphone && OperatingSystem.IsWindows();
+            _systemAudio.IsChecked = settings.SystemAudio && AudioCaptureBackend.IsSupported;
+            _microphone.IsChecked = settings.Microphone && AudioCaptureBackend.IsSupported;
             _cursor.IsChecked = host.Settings.Cursor;
             _cursor.IsCheckedChanged += (_, _) => _host.SetCaptureCursor(_cursor.IsChecked == true);
             _cursor.Bind(ContentProperty, LiveText.Resource("CaptureCursor"));
             _systemAudio.Bind(ContentProperty, LiveText.Resource("VideoSystemAudio"));
             _microphone.Bind(ContentProperty, LiveText.Resource("VideoMicrophone"));
-            _systemAudio.IsEnabled = _microphone.IsEnabled = OperatingSystem.IsWindows();
+            _systemAudio.IsEnabled = _microphone.IsEnabled = AudioCaptureBackend.IsSupported;
             _systemAudio.IsCheckedChanged += (_, _) => Refresh();
             _microphone.IsCheckedChanged += (_, _) => Refresh();
-            _format.SelectionChanged += (_, _) => Refresh();
+            _format.SelectionChanged += (_, _) => FormatChanged();
             _systemDevice.SelectionChanged += (_, _) => Refresh();
             _microphoneDevice.SelectionChanged += (_, _) => Refresh();
             var selection = new WrapPanel { Orientation = Orientation.Horizontal };
@@ -104,7 +106,7 @@ namespace RitsukageGif.Desktop
             };
             _parameters.Children.Add(Row("VideoFps", timing));
             _parameters.Children.Add(Row("VideoQuality", _quality));
-            _parameters.Children.Add(new Grid
+            _audioOptions.Children.Add(new Grid
             {
                 ColumnDefinitions = new("160,*"), Children =
                 {
@@ -112,7 +114,7 @@ namespace RitsukageGif.Desktop
                         { Spacing = 3, Children = { _systemDevice, _systemDeviceStatus } }, 1),
                 },
             });
-            _parameters.Children.Add(new Grid
+            _audioOptions.Children.Add(new Grid
             {
                 ColumnDefinitions = new("160,*"), Children =
                 {
@@ -120,7 +122,8 @@ namespace RitsukageGif.Desktop
                         { Spacing = 3, Children = { _microphoneDevice, _microphoneDeviceStatus } }, 1),
                 },
             });
-            if (!OperatingSystem.IsWindows()) _parameters.Children.Add(Label("VideoAudioUnavailable"));
+            if (!AudioCaptureBackend.IsSupported) _audioOptions.Children.Add(Label("VideoAudioUnavailable"));
+            _parameters.Children.Add(_audioOptions);
             var folder = new Grid { ColumnDefinitions = new("*,Auto") };
             folder.Children.Add(_directory);
             folder.Children.Add(InColumn(Button("VideoBrowse", BrowseAsync), 1));
@@ -236,10 +239,9 @@ namespace RitsukageGif.Desktop
 
         private void RefreshLanguage()
         {
-            Title = UiText.Get("VideoRecorderTitle");
+            Title = UiText.Get("RecorderTitle");
             var selected = _quality.SelectedIndex;
-            _quality.ItemsSource = new[]
-                { UiText.Get("VideoQualityHigh"), UiText.Get("VideoQualityBalanced"), UiText.Get("VideoQualitySmall") };
+            RefreshQualityLabels();
             _quality.SelectedIndex = selected < 0 ? 1 : selected;
             Refresh();
         }
@@ -247,6 +249,12 @@ namespace RitsukageGif.Desktop
         private async Task PrepareAsync(VideoRecordingPreferences settings)
         {
             if (_preparing || _closed) return;
+            if (IsAnimationOutput)
+            {
+                Refresh();
+                return;
+            }
+
             _preparing = true;
             _status.Text = UiText.Get("VideoChecking");
             settings = settings with
@@ -272,13 +280,15 @@ namespace RitsukageGif.Desktop
                 else
                     _format.SelectedIndex = (_format.SelectedIndex, _capabilities.Mp4, _capabilities.WebM) switch
                     {
-                        (0, false, _) => 1,
-                        (1, _, false) => 0,
+                        (3, false, _) => 4,
+                        (4, _, false) => 3,
                         _ => _format.SelectedIndex,
                     };
-                if (OperatingSystem.IsWindows())
+                if (AudioCaptureBackend.IsAvailable(_capabilities))
                     await Task.WhenAll(RefreshAudioDevicesAsync(true, settings.SystemDevice),
                         RefreshAudioDevicesAsync(false, settings.MicrophoneDevice));
+                else
+                    _systemDeviceError = _microphoneDeviceError = UiText.Get("VideoAudioUnavailable");
             }
             catch (OperationCanceledException) when (_closed)
             {
@@ -334,10 +344,22 @@ namespace RitsukageGif.Desktop
             if (!_start.IsEnabled || _host.Region is not { } region || _operation is { IsCompleted: false }) return;
             var capture = new RecordingOptions(region, (int)(_fps.Value ?? 30), (int)(_scale.Value ?? 1),
                 _cursor.IsChecked == true);
+            if (IsAnimationOutput)
+            {
+                capture = capture with
+                {
+                    Format = (OutputFormat)_format.SelectedIndex,
+                    Quality = (GifQuality)(2 - Math.Clamp(_quality.SelectedIndex, 0, 2)),
+                };
+                _operation = _host.StartAnimationRecordingAsync(capture, Path.GetFullPath(_directory.Text ?? ""));
+                await ObserveRecordingAsync(_operation, () => _host.LastPath);
+                return;
+            }
+
             var options = new VideoRecordingOptions(capture)
             {
                 ColorMode = _host.Settings.CaptureColorMode, ToneMap = _host.Settings.CaptureToneMap,
-                Container = (VideoContainer)_format.SelectedIndex,
+                Container = SelectedVideoContainer,
                 Quality = QualityValues[Math.Clamp(_quality.SelectedIndex, 0, QualityValues.Length - 1)],
             };
             var directory = Path.GetFullPath(_directory.Text ?? "");
@@ -354,9 +376,14 @@ namespace RitsukageGif.Desktop
             });
             _operation = _host.StartVideoRecordingAsync(options, path, _systemAudio.IsChecked == true, systemId,
                 _microphone.IsChecked == true, microphoneId, true);
+            await ObserveRecordingAsync(_operation, () => path);
+        }
+
+        private async Task ObserveRecordingAsync(Task<RecordingOutcome> operation, Func<string?> outputPath)
+        {
             _savedPath = null;
             Refresh();
-            var result = await _operation;
+            var result = await operation;
             if (result.Error is { } error)
             {
                 _status.Text = ApplicationHost.VideoErrorMessage(error);
@@ -367,8 +394,10 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                _savedPath = path;
-                _status.Text = UiText.Format("VideoSaved", path);
+                _savedPath = outputPath();
+                _status.Text = _savedPath is { } savedPath
+                    ? UiText.Format("VideoSaved", savedPath)
+                    : UiText.Get("RecordingComplete");
             }
 
             Refresh();
@@ -389,44 +418,55 @@ namespace RitsukageGif.Desktop
                             !_selecting;
             _parameters.IsEnabled = available;
             _region.Text = _host.Region is { } region
-                ? $"{region.X}, {region.Y} · {region.Width} × {region.Height}"
+                ? $"{region.X}, {region.Y} 路 {region.Width} 脳 {region.Height}"
                 : UiText.Get("VideoNoRegion");
             _systemDevice.IsEnabled = _systemAudio.IsChecked == true;
             _microphoneDevice.IsEnabled = _microphone.IsChecked == true;
             ToolTip.SetTip(_systemDevice, _systemDevice.SelectedItem);
             ToolTip.SetTip(_microphoneDevice, _microphoneDevice.SelectedItem);
-            var hasAudio = _systemAudio.IsChecked == true || _microphone.IsChecked == true;
-            var audioSupported = !hasAudio ||
-                                 (_format.SelectedIndex == 0 ? _capabilities?.Mp4Audio : _capabilities?.WebMAudio) ==
-                                 true;
-            var videoSupported = _host.Settings.CaptureColorMode == OutputColorMode.Hdr
-                ? _format.SelectedIndex == 0 ? _capabilities?.Mp4Hdr : _capabilities?.WebMHdr
-                : _format.SelectedIndex == 0
-                    ? _capabilities?.Mp4
-                    : _capabilities?.WebM;
-            var supported = videoSupported == true &&
-                            audioSupported;
-            var systemReady = _systemDevices.ElementAtOrDefault(_systemDevice.SelectedIndex)?.Available == true;
-            var microphoneReady =
-                _microphoneDevices.ElementAtOrDefault(_microphoneDevice.SelectedIndex)?.Available == true;
-            _systemDeviceStatus.IsVisible = _systemAudio.IsChecked == true && !systemReady;
-            _microphoneDeviceStatus.IsVisible = _microphone.IsChecked == true && !microphoneReady;
-            _systemDeviceStatus.Text = _systemDeviceError ??
-                                       UiText.Get(_preparing ? "VideoChecking" : "VideoDeviceUnavailable");
-            _microphoneDeviceStatus.Text = _microphoneDeviceError ??
+            _audioOptions.IsVisible = !IsAnimationOutput;
+            var audioReady = true;
+            var supported = true;
+            string? colorError = null;
+            if (!IsAnimationOutput)
+            {
+                var hasAudio = _systemAudio.IsChecked == true || _microphone.IsChecked == true;
+                var audioSupported = !hasAudio ||
+                                     (SelectedVideoContainer == VideoContainer.Mp4
+                                         ? _capabilities?.Mp4Audio
+                                         : _capabilities?.WebMAudio) == true;
+                var videoSupported = _host.Settings.CaptureColorMode == OutputColorMode.Hdr
+                    ? SelectedVideoContainer == VideoContainer.Mp4 ? _capabilities?.Mp4Hdr : _capabilities?.WebMHdr
+                    : SelectedVideoContainer == VideoContainer.Mp4
+                        ? _capabilities?.Mp4
+                        : _capabilities?.WebM;
+                supported = videoSupported == true && audioSupported;
+                var systemReady = _systemDevices.ElementAtOrDefault(_systemDevice.SelectedIndex)?.Available == true;
+                var microphoneReady =
+                    _microphoneDevices.ElementAtOrDefault(_microphoneDevice.SelectedIndex)?.Available == true;
+                _systemDeviceStatus.IsVisible = _systemAudio.IsChecked == true && !systemReady;
+                _microphoneDeviceStatus.IsVisible = _microphone.IsChecked == true && !microphoneReady;
+                _systemDeviceStatus.Text = _systemDeviceError ??
                                            UiText.Get(_preparing ? "VideoChecking" : "VideoDeviceUnavailable");
-            var audioReady = (_systemAudio.IsChecked != true || systemReady) &&
+                _microphoneDeviceStatus.Text = _microphoneDeviceError ??
+                                               UiText.Get(_preparing ? "VideoChecking" : "VideoDeviceUnavailable");
+                audioReady = (_systemAudio.IsChecked != true || systemReady) &&
                              (_microphone.IsChecked != true || microphoneReady);
-            var colorError = VideoCaptureSupport.ColorError(_host.Settings.CaptureColorMode,
-                (VideoContainer)_format.SelectedIndex, _capabilities);
+                colorError = VideoCaptureSupport.ColorError(_host.Settings.CaptureColorMode,
+                    SelectedVideoContainer, _capabilities);
+            }
+
             _colorStatus.Text = UiText.Get(colorError ?? "ColorMode" + _host.Settings.CaptureColorMode);
             _colorStatus.IsVisible = true;
-            _start.IsEnabled = available && !_preparing && audioReady && _host.Region is not null && supported &&
-                               colorError is null;
-            if (available && !_preparing && _capabilities?.Executable is not null)
+            _start.IsEnabled = available && (IsAnimationOutput || !_preparing) && audioReady &&
+                               _host.Region is not null && supported && colorError is null;
+            if (available && (IsAnimationOutput || !_preparing))
             {
-                if (!supported) _status.Text = UiText.Get("VideoEncoderUnavailable");
-                else if (_status.Text == UiText.Get("VideoChecking") ||
+                if (!supported)
+                    _status.Text = UiText.Get(_capabilities?.Executable is null
+                        ? "FfmpegMissing"
+                        : "VideoEncoderUnavailable");
+                else if (_status.Text == UiText.Get("VideoChecking") || _status.Text == UiText.Get("FfmpegMissing") ||
                          _status.Text == UiText.Get("VideoEncoderUnavailable")) _status.Text = UiText.Get("Ready");
             }
 

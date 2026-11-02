@@ -1,13 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.VisualTree;
-using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
@@ -34,13 +32,6 @@ namespace RitsukageGif.Desktop
             var file = ToolStrip();
             file.Children.Add(ActionButton("EditorNew", NewAsync));
             file.Children.Add(ActionButton("EditorOpen", OpenAsync));
-            if (_imageMode)
-            {
-                file.Children.Add(ActionButton("ImageSave", () => SaveImageAsync(false)));
-                file.Children.Add(ActionButton("ImageSaveAs", () => SaveImageAsync(true)));
-                file.Children.Add(ActionButton("ImageCopy", CopyImageAsync));
-            }
-
             file.Children.Add(PropertyButton("AnimationExport", "AnimationExport"));
 
             file.Children.Add(ActionButton("AnimationUndo", UndoAsync));
@@ -114,7 +105,6 @@ namespace RitsukageGif.Desktop
                 RibbonTab("AnimationInsert", insert), RibbonTab("AnimationDrawing", draw),
                 RibbonTab("AnimationImage", image), RibbonTab("AnimationView", view),
             };
-            if (_imageMode) tabs.RemoveAt(1);
             ribbon.ItemsSource = tabs;
             return new()
             {
@@ -149,16 +139,10 @@ namespace RitsukageGif.Desktop
                     button.Classes.Add("Secondary");
                     var tool = (string)button.Tag!;
                     var content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
-                    content.Children.Add(new Path
-                    {
-                        Data = Geometry.Parse(RibbonIcon(tool)), Stretch = Stretch.Uniform,
-                        [!WidthProperty] = new DynamicResourceExtension(IconSizeResource),
-                        [!HeightProperty] = new DynamicResourceExtension(IconSizeResource),
-                        [!Shape.StrokeProperty] =
-                            button[!ForegroundProperty],
-                        StrokeThickness = 1.5,
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                    });
+                    var icon = ToolbarIcon.Create(button, RibbonIcon(tool));
+                    icon[!WidthProperty] = new DynamicResourceExtension(IconSizeResource);
+                    icon[!HeightProperty] = new DynamicResourceExtension(IconSizeResource);
+                    content.Children.Add(icon);
                     content.Children.Add(new TextBlock
                         { [!TextBlock.TextProperty] = LiveText.Resource(tool), TextAlignment = TextAlignment.Center });
                     button.Content = content;
@@ -423,24 +407,22 @@ namespace RitsukageGif.Desktop
                 ? e.Key switch
                 {
                     Key.O => OpenAsync,
-                    Key.S => _imageMode
-                        ? () => SaveImageAsync(e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-                        : ExportAsync,
-                    Key.C when _imageMode => CopyImageAsync, Key.Z => UndoAsync, Key.Y => RedoAsync,
-                    Key.D when !_imageMode => DuplicateFramesAsync, Key.A when !_imageMode => SelectAllFramesAsync,
+                    Key.S => ExportAsync,
+                    Key.Z => UndoAsync, Key.Y => RedoAsync,
+                    Key.D => DuplicateFramesAsync, Key.A => SelectAllFramesAsync,
                     _ => null,
                 }
                 : e.Key switch
                 {
-                    Key.Space when !_imageMode => () =>
+                    Key.Space => () =>
                     {
                         TogglePlayback();
                         return Task.CompletedTask;
                     },
-                    Key.Left when !_imageMode => () => NavigateFrameAsync(CurrentFrame - 1),
-                    Key.Right when !_imageMode => () => NavigateFrameAsync(CurrentFrame + 1),
-                    Key.Home when !_imageMode => () => NavigateFrameAsync(0),
-                    Key.End when !_imageMode => () => NavigateFrameAsync((_document?.Frames.Count ?? 1) - 1),
+                    Key.Left => () => NavigateFrameAsync(CurrentFrame - 1),
+                    Key.Right => () => NavigateFrameAsync(CurrentFrame + 1),
+                    Key.Home => () => NavigateFrameAsync(0),
+                    Key.End => () => NavigateFrameAsync((_document?.Frames.Count ?? 1) - 1),
                     Key.Delete => () =>
                     {
                         var canvasFocused = e.Source is Visual sourceVisual &&
@@ -452,7 +434,7 @@ namespace RitsukageGif.Desktop
                             return Task.CompletedTask;
                         }
 
-                        return _imageMode ? Task.CompletedTask : DeleteFramesAsync();
+                        return DeleteFramesAsync();
                     },
                     _ => null,
                 };

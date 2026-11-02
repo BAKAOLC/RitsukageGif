@@ -38,22 +38,43 @@ namespace RitsukageGif.Desktop
                 var show = new NativeMenuItem(UiText.Get("PinnedImageShowGroup"));
                 var hide = new NativeMenuItem(UiText.Get("PinnedImageHideGroup"));
                 var close = new NativeMenuItem(UiText.Get("PinnedImageCloseGroup"));
-                show.Click += (_, _) => _pinnedImages.ShowGroup(group);
-                hide.Click += (_, _) => _pinnedImages.HideGroup(group);
-                close.Click += (_, _) => _pinnedImages.CloseGroup(group);
+                show.Click += (_, _) => _pinnedImages.ShowGroup(group.Id);
+                hide.Click += (_, _) => _pinnedImages.HideGroup(group.Id);
+                close.Click += (_, _) => _pinnedImages.CloseGroup(group.Id);
                 commands.Items.Add(show);
                 commands.Items.Add(hide);
                 commands.Items.Add(close);
-                menu.Items.Add(new NativeMenuItem(group) { Menu = commands });
+                menu.Items.Add(
+                    new NativeMenuItem(group.Name.Length == 0 ? UiText.Get("PinnedImageUngrouped") : group.Name)
+                        { Menu = commands });
             }
 
+            menu.Items.Add(new NativeMenuItemSeparator());
+            var create = new NativeMenuItem(UiText.Get("PinnedGroupCreateTitle"));
+            create.Click += async (_, _) =>
+            {
+                try
+                {
+                    await _pinnedImages.CreateGroupInteractiveAsync();
+                }
+                catch (Exception error)
+                {
+                    SetStatus(error.Message);
+                }
+            };
+            var manage = new NativeMenuItem(UiText.Get("PinnedGroupsManageTitle"));
+            manage.Click += (_, _) => _pinnedImages.OpenGroupManager();
+            menu.Items.Add(create);
+            menu.Items.Add(manage);
             _trayPinGroups.Menu = menu;
             var images = new NativeMenu();
             foreach (var window in _pinnedImages.Images)
             {
-                var item = new NativeMenuItem(window.Title ?? UiText.Get("ScreenshotPin"))
+                var item = new NativeMenuItem(window.Presentation.Title.Value.Length != 0
+                    ? window.Presentation.Title.Value
+                    : window.Title ?? UiText.Get("ScreenshotPin"))
                 {
-                    ToggleType = NativeMenuItemToggleType.CheckBox,
+                    ToggleType = MenuItemToggleType.CheckBox,
                     IsChecked = window.IsVisible,
                 };
                 item.Click += (_, _) => _pinnedImages.ShowImage(window);
@@ -140,6 +161,8 @@ namespace RitsukageGif.Desktop
                 await RunShutdownStageAsync("pinned image cancellation", _pinStartupCancellation.CancelAsync,
                     CancellationToken.None);
                 await RunShutdownStageAsync("pinned image initialization", () => _pinStartup, token);
+                await RunShutdownStageAsync("pinned history operations", _pinnedImages.StopHistoryAsync,
+                    CancellationToken.None);
                 if (_startServices)
                     await RunShutdownStageAsync("pinned image persistence",
                         () => _pinnedImages.FlushSessionAsync(CancellationToken.None), CancellationToken.None);

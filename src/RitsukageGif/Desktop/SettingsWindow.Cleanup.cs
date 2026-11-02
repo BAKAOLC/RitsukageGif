@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -14,14 +14,17 @@ namespace RitsukageGif.Desktop
                 Name = "CleanupEnabled", [!ContentProperty] = LiveText.Resource("CleanupEnabled"),
                 IsChecked = draft.CleanupEnabled,
             };
-            page.Children.Add(enabled);
+            page.Children.Add(Setting(enabled, static settings => settings.CleanupEnabled));
             var rules = new StackPanel { Spacing = 8, IsEnabled = enabled.IsChecked == true };
             enabled.IsCheckedChanged += (_, _) => rules.IsEnabled = enabled.IsChecked == true;
             page.Children.Add(rules);
 
-            var age = Rule("CleanupMaxAgeDays", draft.CleanupMaxAgeDays, 30);
-            var files = Rule("CleanupMaxFiles", draft.CleanupMaxFiles, 100);
-            var size = Rule("CleanupMaxSizeMiB", draft.CleanupMaxSizeMiB, 1024);
+            var age = Rule("CleanupMaxAgeDays", draft.CleanupMaxAgeDays, 30,
+                static settings => settings.CleanupMaxAgeDays);
+            var files = Rule("CleanupMaxFiles", draft.CleanupMaxFiles, 100,
+                static settings => settings.CleanupMaxFiles);
+            var size = Rule("CleanupMaxSizeMiB", draft.CleanupMaxSizeMiB, 1024,
+                static settings => settings.CleanupMaxSizeMiB);
             page.Children.Add(new TextBlock
             {
                 [!TextBlock.TextProperty] = LiveText.Resource("CleanupRulesHint"), FontSize = 12,
@@ -43,7 +46,7 @@ namespace RitsukageGif.Desktop
             };
             return page;
 
-            Func<int?> Rule(string key, int? value, int suggested)
+            Func<int?> Rule(string key, int? value, int suggested, Func<AppSettings, int?> getter)
             {
                 var checkbox = new CheckBox
                 {
@@ -64,7 +67,7 @@ namespace RitsukageGif.Desktop
                 row.Children.Add(checkbox);
                 Grid.SetColumn(number, 1);
                 row.Children.Add(number);
-                rules.Children.Add(row);
+                rules.Children.Add(SettingsField.Track(row, checkbox, getter));
                 return () => checkbox.IsChecked == true ? (int)ReadSettingsNumber(number) : null;
             }
         }

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -36,7 +36,7 @@ namespace RitsukageGif.Desktop
                 {
                     if (property == NumericUpDown.TextProperty && change.OldValue is null) return;
                     if (control is TextBox { TemplatedParent: not null }) return;
-                    if (token.IsCancellationRequested || GetTopLevel(control) != this) return;
+                    if (token.IsCancellationRequested || _applyingLiveSettings || GetTopLevel(control) != this) return;
                     _liveInputChanges.TryAdd((control, property), change.OldValue);
                     RequestLiveApply(false);
                 });
@@ -88,11 +88,13 @@ namespace RitsukageGif.Desktop
                     candidate.OutputDirectory = previous.OutputDirectory;
                 }
 
-                var localErrors = SelectionCommands.Validate(candidate.SelectionShortcuts);
+                var localErrors =
+                    SelectionCommands.Validate(candidate.SelectionShortcuts, candidate.MixingKeypadMainKeyboard);
                 if (localErrors.Count > 0)
                 {
                     errors.AddRange(localErrors);
                     candidate.SelectionShortcuts = previous.SelectionShortcuts;
+                    candidate.MixingKeypadMainKeyboard = previous.MixingKeypadMainKeyboard;
                 }
 
                 var mouseErrors = MouseCommands.Validate(candidate.MouseShortcuts);
@@ -141,6 +143,7 @@ namespace RitsukageGif.Desktop
             finally
             {
                 _applyingLiveSettings = false;
+                RefreshDefaultPresentation();
             }
         }
 
@@ -184,11 +187,27 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private void ReplaceLiveSettings(AppSettings settings)
+        private async Task ReplaceLiveSettingsAsync(AppSettings settings)
         {
-            var replacement = CloneDraft(settings);
-            ApplySettings?.Invoke(replacement);
-            BuildContent(CloneDraft(replacement), _currentPage);
+            var requestedNetwork = settings.Network;
+            var activeNetwork = ActiveNetworkPreferences;
+            var replacement = CloneDraft(settings) with { Network = activeNetwork };
+            _pendingNetwork = requestedNetwork.Proxy != NetworkProxyKind.None && requestedNetwork != activeNetwork
+                ? requestedNetwork
+                : null;
+            IsEnabled = false;
+            try
+            {
+                ApplySettings?.Invoke(replacement);
+                if (requestedNetwork.Proxy == NetworkProxyKind.None && activeNetwork.Proxy != NetworkProxyKind.None)
+                    replacement.Network = await CommitNetworkAsync(new(), "", ContentCancellationToken);
+                if (!ContentCancellationToken.IsCancellationRequested)
+                    BuildContent(CurrentSettingsSnapshot?.Invoke() ?? CloneDraft(replacement), _currentPage);
+            }
+            finally
+            {
+                IsEnabled = true;
+            }
         }
     }
 }

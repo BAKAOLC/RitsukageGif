@@ -33,7 +33,7 @@ namespace RitsukageGif.Desktop
         private void UpdateWindowTitle()
         {
             Title =
-                $"{UiText.Get(_imageMode ? "ImageEditorTitle" : "AnimationEditorTitle")} — {(_path is null ? UiText.Get("EditorNew") : Path.GetFileName(_path))}{(_dirty ? " *" : "")}";
+                $"{UiText.Get("AnimationEditorTitle")} — {(_path is null ? UiText.Get("EditorNew") : Path.GetFileName(_path))}{(_dirty ? " *" : "")}";
         }
 
         private void SetStatus(string key, params object[] arguments)

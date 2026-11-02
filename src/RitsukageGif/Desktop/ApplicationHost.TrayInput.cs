@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.Input;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -11,13 +13,37 @@ namespace RitsukageGif.Desktop
         {
             _trayClicks = new(gesture => Dispatcher.UIThread.Post(() =>
                     _ = RunTrayActionAsync(() => ExecuteTrayGestureAsync(gesture))),
-                (action, delay) => DispatcherTimer.RunOnce(action, delay), () => WindowsTrayInput.DoubleClickTime);
+                (action, delay) => DispatcherTimer.RunOnce(action, delay), () => OperatingSystem.IsWindows()
+                    ? WindowsTrayInput.DoubleClickTime
+                    : Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
+                      TimeSpan.FromMilliseconds(500));
             if (OperatingSystem.IsWindows())
+            {
                 _trayInput = WindowsTrayInput.Attach(message => _trayClicks.Process(message,
                     Settings.System.TrayDoubleClick != SystemTrayAction.None));
-            if (_trayInput is null && _tray is { } tray)
+                PortableTrayState.WindowsExtendedInput = _trayInput is not null;
+                PortableTrayState.Notify();
+            }
+
+            PortableTrayState.Gesture += PortableTrayGesture;
+            PortableTrayState.Changed += PortableTrayAvailabilityChanged;
+            if (_trayInput is null && PortableTrayState.Current is null && _tray is { } tray)
                 tray.Clicked += (_, _) => Dispatcher.UIThread.Post(() =>
                     _ = RunTrayActionAsync(() => ExecuteTrayGestureAsync(TrayMouseGesture.SingleClick)));
+        }
+
+        private void PortableTrayGesture(TrayMouseGesture gesture)
+        {
+            _trayClicks?.ProcessGesture(gesture, PortableTrayState.Supports(TrayMouseGesture.DoubleClick) &&
+                                                 Settings.System.TrayDoubleClick != SystemTrayAction.None);
+        }
+
+        private void PortableTrayAvailabilityChanged()
+        {
+            if (IsClosing) return;
+            RefreshTray();
+            if (!PortableTrayState.HostAvailable && View is { IsHiddenInTray: true } &&
+                !_desktop.Windows.Any(window => window.IsVisible)) ShowMainWindow();
         }
 
         private Task ExecuteTrayGestureAsync(TrayMouseGesture gesture)
@@ -45,8 +71,16 @@ namespace RitsukageGif.Desktop
 
         private void DisposeTrayInput()
         {
+            PortableTrayState.Gesture -= PortableTrayGesture;
+            PortableTrayState.Changed -= PortableTrayAvailabilityChanged;
             _trayInput?.Dispose();
             _trayInput = null;
+            if (OperatingSystem.IsWindows())
+            {
+                PortableTrayState.WindowsExtendedInput = false;
+                PortableTrayState.Notify();
+            }
+
             _trayClicks?.Dispose();
             _trayClicks = null;
         }

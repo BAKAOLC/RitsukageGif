@@ -43,7 +43,6 @@ namespace RitsukageGif.Desktop
             _hdrDrawing ??= new(_hdrCanvas);
             _hdrDrawing.Clear(LinearColor(_background));
             using var paint = new SKPaint();
-            paint.FilterQuality = SKFilterQuality.Medium;
             paint.IsAntialias = true;
             var isHdr = false;
             foreach (var layer in _layers)
@@ -55,7 +54,7 @@ namespace RitsukageGif.Desktop
                 var placement = state?.Motion?.At(_frameMotionTime) ?? state?.Placement ?? layer.Definition.Placement;
                 paint.ColorF = new(1, 1, 1, (float)Math.Clamp(state?.Opacity ?? 1, 0, 1));
                 var divisor = (float)_options.Divisor;
-                _hdrDrawing.DrawBitmap(hdr.Bitmap, new SKRect(placement.X / divisor, placement.Y / divisor,
+                _hdrDrawing.DrawSampledBitmap(hdr.Bitmap, new(placement.X / divisor, placement.Y / divisor,
                     placement.Right / divisor, placement.Bottom / divisor), paint);
                 isHdr |= hdr.IsHdrSource;
             }
@@ -86,16 +85,19 @@ namespace RitsukageGif.Desktop
                 else
                 {
                     WindowTarget? target = null;
-                    if (!definition.Absolute)
+                    if (!definition.Absolute || (DesktopCapture.UsesSourceSelection &&
+                                                 definition.Source == CaptureSourceKind.Window))
                     {
                         var match = _preset with
                         {
                             Process = definition.Process ?? _preset.Process,
                             Title = definition.Process is null ? _preset.Title : definition.Title,
                         };
-                        target = definition.Process is null && _preset.FixedHandle != 0
-                            ? _windows.SingleOrDefault(window => window.Handle == _preset.FixedHandle)
-                            : WindowLocator.Find(match, _windows, layer.Handle);
+                        target = definition.FixedHandle != 0
+                            ? _windows.SingleOrDefault(window => window.Handle == definition.FixedHandle)
+                            : definition.Process is null && _preset.FixedHandle != 0
+                                ? _windows.SingleOrDefault(window => window.Handle == _preset.FixedHandle)
+                                : WindowLocator.Find(match, _windows, layer.Handle);
                         if (target is not null) target = _context?.Refresh(target) ?? WindowLocator.Refresh(target);
                     }
 
@@ -167,7 +169,7 @@ namespace RitsukageGif.Desktop
             layer.InputHeight = area.Height;
             CapturedFrameSet frames;
             SKRect? source = null;
-            if (definition.Source == CaptureSourceKind.Screen || DesktopCapture.UsesSourceSelection)
+            if (definition.Source == CaptureSourceKind.Screen)
             {
                 if (!_topology.Covers(area)) return false;
                 if (layer.Screen is null || area.Width != layer.LastArea.Width || area.Height != layer.LastArea.Height)
@@ -186,19 +188,24 @@ namespace RitsukageGif.Desktop
             }
             else
             {
+                PixelRect? actualBounds;
                 if (_context is not null)
                 {
-                    var captured = _context.CaptureWindowFrames(target!.Handle, _options, token);
-                    if (captured is null) return false;
-                    frames = captured;
+                    var captured = _context.CaptureWindowFrames(target!.Handle, _options,
+                        area, output.Bitmap.Width, output.Bitmap.Height, token);
+                    if (captured.Frames is null) return false;
+                    frames = captured.Frames;
+                    actualBounds = captured.Bounds;
                 }
                 else
                 {
                     layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps);
+                    layer.Window.ConfigureRegion(area, output.Bitmap.Width, output.Bitmap.Height);
                     frames = layer.Window.CaptureFrames(token);
+                    actualBounds = layer.Window.CoordinateBounds;
                 }
 
-                var bounds = OperatingSystem.IsLinux() ? target!.Client : target!.Bounds;
+                var bounds = actualBounds ?? (OperatingSystem.IsLinux() ? target!.Client : target!.Bounds);
                 if (area.Intersect(bounds).IsEmpty) return false;
                 var sx = (float)frames.Sdr.Width / bounds.Width;
                 var sy = (float)frames.Sdr.Height / bounds.Height;
@@ -231,9 +238,8 @@ namespace RitsukageGif.Desktop
                     var other = _layers.Single(candidate => candidate.Definition.Name == fallback.Value);
                     var hdr = RenderHdrLayer(other, token);
                     using var paint = new SKPaint();
-                    paint.FilterQuality = SKFilterQuality.Medium;
-                    output.Drawing.DrawBitmap(hdr.Bitmap,
-                        new SKRect(0, 0, output.Bitmap.Width, output.Bitmap.Height), paint);
+                    output.Drawing.DrawSampledBitmap(hdr.Bitmap,
+                        new(0, 0, output.Bitmap.Width, output.Bitmap.Height), paint);
                     output.IsHdrSource = hdr.IsHdrSource;
                     break;
                 }

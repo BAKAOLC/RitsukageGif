@@ -45,15 +45,16 @@ namespace RitsukageGif.Desktop
             return result;
         }
 
-        internal static IReadOnlyList<SelectionShortcutIssue> ValidateExternal(Dictionary<string, string[]>? settings)
+        internal static IReadOnlyList<SelectionShortcutIssue> ValidateExternal(Dictionary<string, string[]>? settings,
+            bool mixing = false)
         {
-            BuildExternal(settings, out var issues);
+            BuildExternal(settings, out var issues, mixing);
             return issues;
         }
 
-        internal static void ConfigureExternal(Dictionary<string, string[]>? settings)
+        internal static void ConfigureExternal(Dictionary<string, string[]>? settings, bool mixing = false)
         {
-            var bindings = BuildExternal(settings, out var issues);
+            var bindings = BuildExternal(settings, out var issues, mixing);
             if (issues.Count == 0) _bindings = bindings;
         }
 
@@ -68,7 +69,7 @@ namespace RitsukageGif.Desktop
             if (args.Handled || args.Source is TextBox ||
                 (args.Source is Control source && source.FindAncestorOfType<TextBox>() is not null)) return null;
             foreach (var binding in bindings)
-                if (binding.ContextKey == context && binding.Gesture.Key == args.Key &&
+                if (binding.ContextKey == context && BuiltinKeys.Matches(binding.Gesture.Key, args.Key) &&
                     binding.Gesture.KeyModifiers == args.KeyModifiers)
                     return binding.Action;
             return null;
@@ -103,6 +104,23 @@ namespace RitsukageGif.Desktop
         {
             return
             [
+                new("builtin.pinned.text.selection", "BuiltinShortcutPinnedTextContext", "PinnedTextSelectable", "",
+                    "text-selection"),
+                new("builtin.pinned.text.ignore-format", "BuiltinShortcutPinnedTextContext", "PinnedTextIgnoreFormat",
+                    "", "text-ignore-format"),
+                new("builtin.pinned.text.select-all", "BuiltinShortcutPinnedTextContext", "PinnedTextSelectAll", "",
+                    "text-select-all"),
+                new("builtin.pinned.wheel-up", "BuiltinShortcutPinnedContext", "BuiltinShortcutWheelUp", "=",
+                    "wheel-up"),
+                new("builtin.pinned.wheel-down", "BuiltinShortcutPinnedContext", "BuiltinShortcutWheelDown", "-",
+                    "wheel-down"),
+                new("builtin.pinned.title", "BuiltinShortcutPinnedContext", "PinnedTitleEdit", "F2", "set-title"),
+                new("builtin.pinned.hide-others", "BuiltinShortcutPinnedContext", "PinnedHideOthers", "V",
+                    "hide-others"),
+                new("builtin.pinned.switch-next", "BuiltinShortcutPinnedContext", "PinnedSwitchNext", "Tab",
+                    "switch-next"),
+                new("builtin.pinned.new-group", "BuiltinShortcutPinnedContext", "PinnedImageNewGroup", "G",
+                    "new-group"),
                 new("builtin.pinned.lock", "BuiltinShortcutPinnedContext", "PinnedImageLock", "L", "lock"),
                 new("builtin.pinned.topmost", "BuiltinShortcutPinnedContext", "PinnedImageTopmost", "T", "topmost"),
                 new("builtin.pinned.through", "BuiltinShortcutPinnedContext", "PinnedImageMouseThrough", "", "through"),
@@ -114,6 +132,7 @@ namespace RitsukageGif.Desktop
                     "automatic"),
                 new("builtin.pinned.hide", "BuiltinShortcutPinnedContext", "PinnedImageHide", "", "hide"),
                 new("builtin.pinned.copy", "BuiltinShortcutPinnedContext", "ScreenshotCopy", "Ctrl+C", "copy"),
+                new("builtin.pinned.print", "BuiltinShortcutPinnedContext", "Print", "Ctrl+P", "print"),
                 new("builtin.pinned.save", "BuiltinShortcutPinnedContext", "ScreenshotSave", "Ctrl+S", "save"),
                 new("builtin.pinned.annotate", "BuiltinShortcutPinnedContext", "PinnedImageAnnotate", "Ctrl+E",
                     "annotate"),
@@ -169,7 +188,7 @@ namespace RitsukageGif.Desktop
         }
 
         private static ReadOnlyCollection<BuiltinShortcutBinding> BuildExternal(Dictionary<string, string[]>? settings,
-            out List<SelectionShortcutIssue> issues)
+            out List<SelectionShortcutIssue> issues, bool mixing = false)
         {
             issues = [];
             if (settings is not null)
@@ -213,7 +232,8 @@ namespace RitsukageGif.Desktop
                     continue;
                 }
 
-                if (used.TryGetValue((definition.ContextKey, gesture.Key, gesture.KeyModifiers), out var existing))
+                var key = BuiltinKeys.Normalize(gesture.Key, mixing);
+                if (used.TryGetValue((definition.ContextKey, key, gesture.KeyModifiers), out var existing))
                 {
                     issues.Add(new(definition.Id, existing.Id, UiText.Get("SelectionShortcutConflict") + ": " +
                                                                UiText.Get(existing.DescriptionKey) + " / " +
@@ -221,7 +241,7 @@ namespace RitsukageGif.Desktop
                     continue;
                 }
 
-                used.Add((definition.ContextKey, gesture.Key, gesture.KeyModifiers), definition);
+                used.Add((definition.ContextKey, key, gesture.KeyModifiers), definition);
                 result.Add(new(definition.ContextKey, definition.Action, gesture));
             }
 

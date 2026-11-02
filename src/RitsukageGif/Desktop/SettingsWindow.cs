@@ -29,6 +29,12 @@ namespace RitsukageGif.Desktop
 
         internal Action<AppSettings>? ApplySettings { private get; init; }
 
+        internal Func<GlobalActionBinding, PresetDebugger, CancellationToken, Task<ScriptDiagnostic?>>? RunActionScript
+        {
+            get;
+            init;
+        }
+
         private void BuildContent(AppSettings draft, string selectedPage)
         {
             DisposeContent();
@@ -75,9 +81,11 @@ namespace RitsukageGif.Desktop
             var panel = recording;
             var colorSettings = Page();
             var captureColor = ColorModeBox(draft.CaptureColorMode);
-            colorSettings.Children.Add(Labeled("OutputColorMode", captureColor));
+            colorSettings.Children.Add(SettingRow("OutputColorMode", captureColor,
+                static settings => settings.CaptureColorMode));
             var captureToneMap = ToneMapBox(draft.CaptureToneMap);
-            colorSettings.Children.Add(Labeled("HdrToneMap", captureToneMap));
+            colorSettings.Children.Add(SettingRow("HdrToneMap", captureToneMap,
+                static settings => settings.CaptureToneMap));
             var quality = new ComboBox
             {
                 ItemsSource = new[]
@@ -85,7 +93,7 @@ namespace RitsukageGif.Desktop
                 SelectedIndex = (int)draft.Quality,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
-            panel.Children.Add(Labeled("GifQuality", quality));
+            panel.Children.Add(SettingRow("GifQuality", quality, static settings => settings.Quality));
 
             SubscribeContentLanguage(RefreshLanguage);
             var ffmpeg = new CheckBox
@@ -119,9 +127,10 @@ namespace RitsukageGif.Desktop
             panel.Children.Add(showBackground);
             var background = new TextBox
             {
-                Text = draft.BackgroundImage, [!TextBox.WatermarkProperty] = LiveText.Resource("OriginalBackground"),
+                Text = draft.BackgroundImage,
+                [!TextBox.PlaceholderTextProperty] = LiveText.Resource("OriginalBackground"),
             };
-            panel.Children.Add(Labeled("BackgroundImage", WithButton(background, "Browse",
+            panel.Children.Add(SettingRow("BackgroundImage", WithButton(background, "Browse",
                 async () =>
                 {
                     var files = await StorageProvider.OpenFilePickerAsync(new()
@@ -140,7 +149,7 @@ namespace RitsukageGif.Desktop
                         ],
                     });
                     if (files.Count > 0) background.Text = files[0].TryGetLocalPath();
-                })));
+                }), static settings => settings.BackgroundImage));
             var resetBackground = new Button
             {
                 [!ContentProperty] = LiveText.Resource("ResetBackground"), Padding = new(6, 2),
@@ -150,13 +159,13 @@ namespace RitsukageGif.Desktop
             resetBackground.Click += (_, _) => background.Text = "";
             panel.Children.Add(resetBackground);
             var output = new TextBox { Text = draft.OutputDirectory, IsReadOnly = true };
-            storage.Children.Add(Labeled("OutputDirectory", WithButton(output, "Browse",
+            storage.Children.Add(SettingRow("OutputDirectory", WithButton(output, "Browse",
                 async () =>
                 {
                     var folders =
                         await StorageProvider.OpenFolderPickerAsync(new() { Title = UiText.Get("ChooseOutput") });
                     if (folders.Count > 0) output.Text = folders[0].TryGetLocalPath();
-                })));
+                }), static settings => settings.OutputDirectory));
             var openOutput = new Button
             {
                 Name = "OpenRecordingDirectory",
@@ -197,8 +206,8 @@ namespace RitsukageGif.Desktop
             panel.Children.Add(sound);
             var start = new TextBox { Text = draft.StartSound };
             var stop = new TextBox { Text = draft.StopSound };
-            panel.Children.Add(Labeled("StartSound", SoundPicker(start)));
-            panel.Children.Add(Labeled("StopSound", SoundPicker(stop)));
+            panel.Children.Add(SettingRow("StartSound", SoundPicker(start), static settings => settings.StartSound));
+            panel.Children.Add(SettingRow("StopSound", SoundPicker(stop), static settings => settings.StopSound));
             screenshots.Children.Add(SettingsSection("SettingsColorHeading", colorSettings));
             screenshots.Children.Add(SettingsSection("EncodingHeading", recording));
             var transfer = TransferPage(() =>
@@ -211,11 +220,16 @@ namespace RitsukageGif.Desktop
             var resetAll = new Button { Name = "ResetAllSettings", Foreground = AppTheme.Error };
             resetAll.Bind(ContentProperty, LiveText.Resource("SettingsResetAll"));
             resetAll.Bind(ToolTip.TipProperty, LiveText.Resource("SettingsResetAllHint"));
-            resetAll.Click += (_, _) => ResetAllSettings();
+            resetAll.Click += async (_, _) => await ResetAllSettingsAsync();
             var resetCurrent = new Button { Name = "ResetCurrentSettings" };
             resetCurrent.Bind(ContentProperty, LiveText.Resource("SettingsResetCurrent"));
-            resetCurrent.Click += (_, _) => ResetCurrentSettings();
-            var body = SettingsBody([
+            resetCurrent.Click += async (_, _) => await ResetCurrentSettingsAsync();
+            Setting(restorePins, static settings => settings.RestorePinnedImages);
+            Setting(ffmpeg, static settings => settings.UseFfmpeg);
+            Setting(sound, static settings => settings.Sound);
+            Setting(showBackground, static settings => settings.ShowBackground);
+            (string Label, Control Content)[] pages =
+            [
                 ("GeneralHeading", general),
                 ("AppearanceHeading", appearance),
                 ("ScreenshotHeading", screenshots),
@@ -228,7 +242,10 @@ namespace RitsukageGif.Desktop
                 ("GlobalMouseHeading", globalMouse),
                 ("SettingsTransferHeading", transfer),
                 ("AboutTitle", AboutWindow.CreateContent(draft)),
-            ], selectedPage, page =>
+            ];
+            _defaultPresentationPages = [.. pages.Select(page => page.Content)];
+            RegisterContentCleanup(() => _defaultPresentationPages = []);
+            var body = SettingsBody(pages, selectedPage, page =>
             {
                 _currentPage = page;
                 resetCurrent.IsEnabled = SettingsDefaults.CanResetPage(page);
@@ -269,6 +286,7 @@ namespace RitsukageGif.Desktop
             _readDraft = ReadDraft;
             _appliedSettings = CloneDraft(draft);
             SubscribeLiveSettings();
+            RefreshDefaultPresentation();
             return;
 
             void ReadDraft()
@@ -371,7 +389,7 @@ namespace RitsukageGif.Desktop
             var box = new TextBox
             {
                 Text = KeyGestureDisplay.Format(text), IsReadOnly = true, IsEnabled = HotkeyService.Supported,
-                [!TextBox.WatermarkProperty] = LiveText.Resource("EnterHotkey"),
+                [!TextBox.PlaceholderTextProperty] = LiveText.Resource("EnterHotkey"),
             };
             box.Bind(ToolTip.TipProperty, LiveText.Resource("HotkeyHint"));
             GlobalInputCapture.Observe(box);

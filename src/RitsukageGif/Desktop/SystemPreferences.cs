@@ -4,6 +4,9 @@ namespace RitsukageGif.Desktop
     {
         public bool StartWithWindows { get; set; }
         public bool RunAsAdministrator { get; set; }
+        public bool IgnoreCopyMacros { get; set; } = true;
+        public ExplorerContextMenuMode ExplorerContextMenu { get; set; }
+        public DesktopToolbarPreferences DesktopToolbar { get; set; } = new();
         public SystemTrayAction TraySingleClick { get; set; } = SystemTrayAction.ShowMainWindow;
         public SystemTrayAction TrayDoubleClick { get; set; }
         public SystemTrayAction TrayMiddleClick { get; set; }
@@ -13,6 +16,11 @@ namespace RitsukageGif.Desktop
         {
             return this with
             {
+                ExplorerContextMenu = Enum.IsDefined(ExplorerContextMenu)
+                    ? ExplorerContextMenu
+                    : ExplorerContextMenuMode.Disabled,
+                // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+                DesktopToolbar = (DesktopToolbar ?? new()).Normalize(),
                 TraySingleClick = Enum.IsDefined(TraySingleClick) ? TraySingleClick : SystemTrayAction.ShowMainWindow,
                 TrayDoubleClick = Enum.IsDefined(TrayDoubleClick) ? TrayDoubleClick : SystemTrayAction.None,
                 TrayMiddleClick = Enum.IsDefined(TrayMiddleClick) ? TrayMiddleClick : SystemTrayAction.None,

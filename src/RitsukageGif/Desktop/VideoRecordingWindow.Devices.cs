@@ -4,7 +4,7 @@ namespace RitsukageGif.Desktop
     {
         // ReSharper disable once AutoPropertyCanBeMadeGetOnly.Global, MemberCanBePrivate.Global
         internal Func<bool, IReadOnlyList<AudioCaptureDevice>> AudioDeviceEnumerator { get; init; } =
-            WindowsAudioCapture.EnumerateDevices;
+            AudioCaptureBackend.EnumerateDevices;
 
         private async Task RefreshAudioDevicesAsync(bool systemAudio, string? selectedId)
         {

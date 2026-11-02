@@ -6,12 +6,14 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class FrozenWindowScreenshot : IDisposable
     {
-        internal FrozenWindowScreenshot(WindowTarget target, PixelRect region, byte[] pixels, CapturedFrame? hdr = null)
+        internal FrozenWindowScreenshot(WindowTarget target, PixelRect region, byte[] pixels, CapturedFrame? hdr = null,
+            CapturedFrameSet? nativeFrames = null)
         {
             Target = target;
             Region = region;
             Pixels = pixels;
-            Hdr = hdr;
+            Hdr = nativeFrames?.Hdr ?? hdr;
+            NativeFrames = nativeFrames;
             Bitmap = new(new(region.Width, region.Height), new(96, 96), PixelFormat.Bgra8888, AlphaFormat.Opaque);
             using var buffer = Bitmap.Lock();
             for (var y = 0; y < region.Height; y++)
@@ -22,6 +24,7 @@ namespace RitsukageGif.Desktop
         internal PixelRect Region { get; }
         internal byte[] Pixels { get; }
         internal CapturedFrame? Hdr { get; }
+        internal CapturedFrameSet? NativeFrames { get; }
         internal WriteableBitmap Bitmap { get; }
 
         public void Dispose()

@@ -28,26 +28,42 @@ namespace RitsukageGif.Desktop
                         return;
                     }
 
-                    _pending?.Dispose();
-                    _pending = null;
-                    if (hasDoubleAction)
-                        _pending = schedule(() =>
-                        {
-                            _pending = null;
-                            if (!_disposed) execute(TrayMouseGesture.SingleClick);
-                        }, doubleClickTime());
-                    else execute(TrayMouseGesture.SingleClick);
+                    ProcessGesture(TrayMouseGesture.SingleClick, hasDoubleAction);
                     break;
                 case 0x203 when hasDoubleAction:
-                    _pending?.Dispose();
-                    _pending = null;
                     _suppressNextUp = true;
-                    execute(TrayMouseGesture.DoubleClick);
+                    ProcessGesture(TrayMouseGesture.DoubleClick, hasDoubleAction);
                     break;
                 case 0x208:
-                    execute(TrayMouseGesture.MiddleClick);
+                    ProcessGesture(TrayMouseGesture.MiddleClick, hasDoubleAction);
                     break;
             }
+        }
+
+        internal void ProcessGesture(TrayMouseGesture gesture, bool hasDoubleAction)
+        {
+            if (_disposed) return;
+            if (gesture == TrayMouseGesture.MiddleClick)
+            {
+                execute(gesture);
+                return;
+            }
+
+            _pending?.Dispose();
+            _pending = null;
+            if (gesture == TrayMouseGesture.DoubleClick && hasDoubleAction)
+            {
+                execute(gesture);
+                return;
+            }
+
+            if (!hasDoubleAction) execute(TrayMouseGesture.SingleClick);
+            else
+                _pending = schedule(() =>
+                {
+                    _pending = null;
+                    if (!_disposed) execute(TrayMouseGesture.SingleClick);
+                }, doubleClickTime());
         }
     }
 }

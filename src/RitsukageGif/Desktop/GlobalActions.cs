@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace RitsukageGif.Desktop
 {
-    internal static class GlobalActions
+    internal static partial class GlobalActions
     {
         internal static string Label(GlobalActionBinding action)
         {
@@ -11,31 +11,17 @@ namespace RitsukageGif.Desktop
 
         internal static bool IsScreenshot(GlobalActionKind kind)
         {
-            return kind is GlobalActionKind.Screenshot
-                or GlobalActionKind.ScreenshotAndCopy or GlobalActionKind.ScreenshotAndPin
-                or GlobalActionKind.ScreenshotAndSave or GlobalActionKind.ScreenshotQuickSave
-                or GlobalActionKind.CaptureActiveWindow or GlobalActionKind.CaptureLastRegion
-                or GlobalActionKind.ScreenshotAndCopyText or GlobalActionKind.ScreenshotAndScroll
-                or GlobalActionKind.ScreenshotAndTranslate;
+            return Definitions.TryGetValue(kind, out var definition) && definition.IsScreenshot;
         }
 
         internal static bool IsDirectScreenshot(GlobalActionKind kind)
         {
-            return kind is
-                GlobalActionKind.CaptureActiveWindow or GlobalActionKind.CaptureLastRegion;
+            return Definitions.TryGetValue(kind, out var definition) && definition.DirectScreenshot;
         }
 
         internal static ActionScreenshotOutput ScreenshotOutput(GlobalActionBinding action)
         {
-            var value = action.Kind switch
-            {
-                GlobalActionKind.ScreenshotAndPin => ActionScreenshotOutput.Pin,
-                GlobalActionKind.ScreenshotAndSave => ActionScreenshotOutput.Save,
-                GlobalActionKind.ScreenshotQuickSave => ActionScreenshotOutput.QuickSave,
-                GlobalActionKind.ScreenshotAndCopyText => ActionScreenshotOutput.CopyText,
-                GlobalActionKind.ScreenshotAndTranslate => ActionScreenshotOutput.Translate,
-                _ => ActionScreenshotOutput.Copy,
-            };
+            var value = Definition(action.Kind).ScreenshotOutput ?? ActionScreenshotOutput.Copy;
             if (!IsDirectScreenshot(action.Kind) || !action.Arguments.TryGetValue("output", out var output))
                 return value;
             if (Enum.TryParse<ActionScreenshotOutput>(output, true, out var parsed) && Enum.IsDefined(parsed) &&
@@ -48,11 +34,13 @@ namespace RitsukageGif.Desktop
             if (action.Parameter is not ("" or "screen" or "window"))
                 throw new ArgumentException(UiText.Get("GlobalActionInvalidSource"));
             var output = ScreenshotOutput(action);
+            _ = ScreenshotGeometry(action);
             foreach (var (key, value) in action.Arguments)
                 switch (key)
                 {
                     case "output" when IsDirectScreenshot(action.Kind): break;
                     case "delay": _ = ScreenshotDelay(action); break;
+                    case var _ when IsScreenshotGeometryArgument(key): break;
                     case "directory" when output == ActionScreenshotOutput.QuickSave:
                         if (!string.IsNullOrWhiteSpace(value)) _ = Path.GetFullPath(value);
                         break;
@@ -102,6 +90,8 @@ namespace RitsukageGif.Desktop
                     continue;
                 }
 
+                if (action.IgnoredPrograms.Any(rule => !HotkeyPolicyPreferences.TryNormalizeProgram(rule, out _)))
+                    errors.Add(label + ": " + UiText.Get("HotkeyIgnoredProgramInvalid"));
                 try
                 {
                     var gesture = HotkeyService.Parse(action.Shortcut);
@@ -111,6 +101,9 @@ namespace RitsukageGif.Desktop
                     // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
                     switch (action.Kind)
                     {
+                        case GlobalActionKind.RunScript:
+                            _ = ActionScriptCompilation.Compile(action.Script);
+                            break;
                         case GlobalActionKind.RunPreset:
                             if (string.IsNullOrWhiteSpace(action.Parameter))
                                 errors.Add(label + ": " + UiText.Get("GlobalActionFileRequired"));
@@ -119,7 +112,7 @@ namespace RitsukageGif.Desktop
                     }
                 }
                 catch (Exception error) when (error is ArgumentException or NotSupportedException
-                                                  or PathTooLongException)
+                                                  or PathTooLongException or PresetSyntaxException)
                 {
                     errors.Add(label + ": " + error.Message);
                 }

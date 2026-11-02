@@ -102,6 +102,7 @@ namespace RitsukageGif.Desktop
 
         private async Task SelectCoreAsync(CaptureSourceKind source, CancellationToken token)
         {
+            await WaitForCaptureHistoryAsync(token);
             var viewBeforeSelection = View;
             var wasVisible = viewBeforeSelection?.IsVisible == true;
             using var settingsVisibility = await CaptureWindowVisibilityLease.HideAsync(_settingsWindow,

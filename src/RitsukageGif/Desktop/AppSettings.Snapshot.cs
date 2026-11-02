@@ -13,16 +13,19 @@ namespace RitsukageGif.Desktop
                     .. GlobalActions.Select(action => action with
                     {
                         Arguments = new(action.Arguments, StringComparer.Ordinal),
+                        IgnoredPrograms = [.. action.IgnoredPrograms],
                     }),
                 ],
                 MouseShortcuts = MouseShortcuts.ToDictionary(pair => pair.Key,
                     pair => (string[])pair.Value.Clone(), StringComparer.Ordinal),
+                MixingKeypadMainKeyboard = MixingKeypadMainKeyboard,
                 SelectionShortcuts = SelectionShortcuts.ToDictionary(pair => pair.Key,
                     pair => (string[])pair.Value.Clone(), StringComparer.Ordinal),
                 Appearance = Appearance with { },
-                System = System with { }, Recognition = Recognition with { },
-                Translation = Translation with { },
-                CapturePreferences = CapturePreferences with { },
+                System = System with { DesktopToolbar = System.DesktopToolbar.Normalize() },
+                Recognition = Recognition with { },
+                Translation = Translation with { }, Network = Network with { },
+                CapturePreferences = CapturePreferences with { ColorFormats = [.. CapturePreferences.ColorFormats] },
                 ScrollCapture = ScrollCapture with { },
                 ScreenshotClipboard = ScreenshotClipboard with
                 {
@@ -37,7 +40,7 @@ namespace RitsukageGif.Desktop
                         OutputSize = ScreenshotSave.Automatic.OutputSize with { },
                     },
                 },
-                PinnedImages = PinnedImages with { },
+                PinnedImages = PinnedImages with { Groups = [.. PinnedImages.Groups.Select(group => group with { })] },
                 VideoRecording = VideoRecording with { },
                 HotkeyPolicy = HotkeyPolicy with
                 {
@@ -47,7 +50,6 @@ namespace RitsukageGif.Desktop
                 {
                     ColorPalette = [.. Annotation.ColorPalette],
                     Toolbar = Annotation.Toolbar.Normalize(),
-                    Properties = Annotation.Properties with { },
                     ToolStyles = Annotation.ToolStyles.ToDictionary(pair => pair.Key,
                         pair => pair.Value with { Properties = pair.Value.Properties with { } },
                         StringComparer.Ordinal),

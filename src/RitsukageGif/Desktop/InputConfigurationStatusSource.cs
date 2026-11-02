@@ -7,6 +7,7 @@ namespace RitsukageGif.Desktop
         MouseShortcuts,
         GlobalActions,
         GlobalHotkeys,
+        ForegroundHotkeys,
         GlobalMouse,
     }
 }

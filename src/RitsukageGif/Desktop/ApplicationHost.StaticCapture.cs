@@ -13,7 +13,8 @@ namespace RitsukageGif.Desktop
             ArgumentNullException.ThrowIfNull(options.Image);
             var (plan, toneMap) = await Dispatcher.UIThread.InvokeAsync(() =>
                 (PrepareStaticCapture(options, token), options.ToneMap ?? Settings.CaptureToneMap));
-            await PrepareStaticSourceAsync(plan, token).ConfigureAwait(false);
+            await PrepareStaticSourceAsync(plan, toneMap != HdrToneMapMode.HighlightCompression, token)
+                .ConfigureAwait(false);
             return await Task.Run(async () =>
             {
                 var frames = CaptureStaticFrames(plan, false, toneMap, token);
@@ -70,6 +71,12 @@ namespace RitsukageGif.Desktop
                     ? 1
                     : effective.Scale ?? Settings.Divisor,
                 Cursor: options.IncludeCursor ?? effective.Cursor ?? Settings.Cursor, Transparent: true);
+            recording = recording with
+            {
+                PixelDensity = (preset is null || ReferenceEquals(preset, _manualPreset)) && preset?.Layout is null
+                    ? NativeDisplayCatalog.Density(region)
+                    : 1,
+            };
             recording.Validate();
             var scale = options.ScalePercent ?? 100;
             if (recording.Width * (scale / 100d) * recording.Height * (scale / 100d) > 64 * 1024 * 1024)

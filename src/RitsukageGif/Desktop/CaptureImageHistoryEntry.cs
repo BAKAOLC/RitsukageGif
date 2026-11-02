@@ -10,6 +10,7 @@ namespace RitsukageGif.Desktop
         DateTimeOffset Timestamp,
         CapturedFrame? Hdr)
     {
+        internal Guid Id { get; init; } = Guid.NewGuid();
         internal double CaptureScaling { get; init; } = 1;
         internal CaptureDecoration Decoration { get; init; } = CaptureDecoration.None;
         internal PixelPoint? OutputOrigin { get; init; }

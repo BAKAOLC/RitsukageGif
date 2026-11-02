@@ -25,23 +25,30 @@ namespace RitsukageGif.Desktop
                 GlobalActionKind.Screenshot or GlobalActionKind.ScreenshotAndCopy or GlobalActionKind.ScreenshotAndPin
                     or GlobalActionKind.ScreenshotAndSave or GlobalActionKind.ScreenshotQuickSave
                     or GlobalActionKind.ScreenshotAndCopyText
+                    or GlobalActionKind.ScreenshotAndCopyCodeText
                     or GlobalActionKind.ScreenshotAndTranslate
+                    or GlobalActionKind.ScreenshotAndRecognizeText or GlobalActionKind.ScreenshotAndRecognizeTable
+                    or GlobalActionKind.ScreenshotAndRecognizeFormula
                     or GlobalActionKind.ScreenshotAndScroll => CanTakeScreenshot,
                 GlobalActionKind.CaptureActiveWindow => OperatingSystem.IsWindows() && CanTakeScreenshot,
                 GlobalActionKind.CaptureLastRegion => !DesktopCapture.UsesSourceSelection && CanTakeScreenshot &&
                                                       _lastScreenshotSelection is { Region.IsEmpty: false },
                 GlobalActionKind.SelectRegion => CanEditRecordingSettings && !IsSelecting && !IsConfiguring,
+                GlobalActionKind.RunScript => !IsSelecting && !IsConfiguring,
                 GlobalActionKind.RunPreset => !IsBusy && !IsSelecting && !IsConfiguring,
                 GlobalActionKind.HideMainWindow => CanHideToTray && !IsSelecting && !IsConfiguring,
                 GlobalActionKind.ShowPinnedImages or GlobalActionKind.HidePinnedImages
-                    or GlobalActionKind.ClosePinnedImages or GlobalActionKind.TogglePinnedImages =>
+                    or GlobalActionKind.ClosePinnedImages or GlobalActionKind.TogglePinnedImages
+                    or GlobalActionKind.ToggleOtherPinnedImages =>
                     _pinnedImages.HasImages && !IsSelecting,
+                GlobalActionKind.SwitchPinnedGroup => !IsSelecting,
                 GlobalActionKind.RestoreLastPinnedImage => _pinnedImages.CanRestoreClosed && !IsSelecting &&
                                                            !IsConfiguring,
                 GlobalActionKind.PinClipboard => !IsSelecting && !IsConfiguring,
                 GlobalActionKind.TranslateClipboard => !IsSelecting && !IsConfiguring,
                 GlobalActionKind.ToggleGlobalShortcuts => !IsConfiguring,
                 GlobalActionKind.OpenScriptEditor or GlobalActionKind.OpenImageEditor
+                    or GlobalActionKind.OpenAnimationEditor
                     or GlobalActionKind.OpenVideoRecorder or
                     GlobalActionKind.OpenOutputDirectory or GlobalActionKind.ShowMainWindow =>
                     !IsSelecting && !IsConfiguring,
@@ -61,94 +68,119 @@ namespace RitsukageGif.Desktop
             HostLogger.ZLogInformation($"Global action started. Kind={action.Kind.ToString()} State={CurrentState}");
             try
             {
-                switch (action.Kind)
-                {
-                    case GlobalActionKind.SelectRegion:
-                        await SelectAsync();
-                        break;
-                    case GlobalActionKind.ToggleRecording:
-                    case GlobalActionKind.StartRecording:
-                    case GlobalActionKind.StopRecording:
-                        await ToggleRecordingAsync();
-                        break;
-                    case GlobalActionKind.Screenshot:
-                    case GlobalActionKind.ScreenshotAndCopy:
-                    case GlobalActionKind.ScreenshotAndPin:
-                    case GlobalActionKind.ScreenshotAndSave:
-                    case GlobalActionKind.ScreenshotQuickSave:
-                    case GlobalActionKind.ScreenshotAndCopyText:
-                    case GlobalActionKind.ScreenshotAndTranslate:
-                    case GlobalActionKind.ScreenshotAndScroll:
-                    case GlobalActionKind.CaptureActiveWindow:
-                    case GlobalActionKind.CaptureLastRegion:
-                        await ExecuteScreenshotActionAsync(action);
-                        break;
-                    case GlobalActionKind.TranslateClipboard:
-                        await TranslateClipboardAsync();
-                        break;
-                    case GlobalActionKind.RunPreset:
-                        var presets = PresetCatalog.Load([action.Parameter]);
-                        var preset = string.IsNullOrWhiteSpace(action.PresetName)
-                            ? presets.Single()
-                            : presets.Single(item => item.Name == action.PresetName);
-                        ActivatePreset(preset,
-                            parameters: ScriptParameters.Parse(action.Arguments.Select(pair =>
-                                pair.Key + "=" + pair.Value)));
-                        break;
-                    case GlobalActionKind.OpenScriptEditor:
-                        await OpenEditorAsync(string.IsNullOrWhiteSpace(action.Parameter) ? null : action.Parameter);
-                        break;
-                    case GlobalActionKind.OpenImageEditor:
-                        await ShowAnimationEditorAsync(string.IsNullOrWhiteSpace(action.Parameter)
-                            ? null
-                            : action.Parameter);
-                        break;
-                    case GlobalActionKind.OpenVideoRecorder:
-                        await OpenVideoRecorderAsync();
-                        break;
-                    case GlobalActionKind.OpenOutputDirectory:
-                        PlatformShell.OpenDirectory(LatestOutputPath is { } output
-                            ? Path.GetDirectoryName(Path.GetFullPath(output))!
-                            : Settings.OutputDirectory);
-                        break;
-                    case GlobalActionKind.ShowMainWindow:
-                        ShowMainWindow();
-                        break;
-                    case GlobalActionKind.HideMainWindow:
-                        HideToTray();
-                        break;
-                    case GlobalActionKind.ShowPinnedImages:
-                        _pinnedImages.ShowAll();
-                        break;
-                    case GlobalActionKind.HidePinnedImages:
-                        _pinnedImages.HideAll();
-                        break;
-                    case GlobalActionKind.RestoreLastPinnedImage:
-                        _pinnedImages.RestoreLastClosed();
-                        break;
-                    case GlobalActionKind.PinClipboard:
-                        await PinActionClipboardAsync();
-                        break;
-                    case GlobalActionKind.ClosePinnedImages:
-                        _pinnedImages.CloseAll();
-                        break;
-                    case GlobalActionKind.TogglePinnedImages:
-                        if (_pinnedImages.HasVisibleImages) _pinnedImages.HideAll();
-                        else _pinnedImages.ShowAll();
-                        break;
-                    case GlobalActionKind.ToggleGlobalShortcuts:
-                        _globalShortcutsSuspended = !_globalShortcutsSuspended;
-                        RefreshActionMenus();
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException(nameof(action));
-                }
+                await ExecuteActionCoreAsync(action);
             }
             catch (Exception error)
             {
                 HostLogger.ZLogError(error,
                     $"Global action failed. Kind={action.Kind.ToString()} State={CurrentState}");
                 if (!IsClosing) SetStatus(error.Message);
+            }
+        }
+
+        private async Task ExecuteActionCoreAsync(GlobalActionBinding action)
+        {
+            switch (action.Kind)
+            {
+                case GlobalActionKind.SelectRegion:
+                    await SelectAsync();
+                    break;
+                case GlobalActionKind.ToggleRecording:
+                case GlobalActionKind.StartRecording:
+                case GlobalActionKind.StopRecording:
+                    await ToggleRecordingAsync();
+                    break;
+                case GlobalActionKind.Screenshot:
+                case GlobalActionKind.ScreenshotAndCopy:
+                case GlobalActionKind.ScreenshotAndPin:
+                case GlobalActionKind.ScreenshotAndSave:
+                case GlobalActionKind.ScreenshotQuickSave:
+                case GlobalActionKind.ScreenshotAndCopyText:
+                case GlobalActionKind.ScreenshotAndCopyCodeText:
+                case GlobalActionKind.ScreenshotAndTranslate:
+                case GlobalActionKind.ScreenshotAndRecognizeText:
+                case GlobalActionKind.ScreenshotAndRecognizeTable:
+                case GlobalActionKind.ScreenshotAndRecognizeFormula:
+                case GlobalActionKind.ScreenshotAndScroll:
+                case GlobalActionKind.CaptureActiveWindow:
+                case GlobalActionKind.CaptureLastRegion:
+                    await ExecuteScreenshotActionAsync(action);
+                    break;
+                case GlobalActionKind.TranslateClipboard:
+                    await TranslateClipboardAsync();
+                    break;
+                case GlobalActionKind.RunScript:
+                    var diagnostic = await RunActionScriptAsync(action, new(), CancellationToken.None);
+                    if (diagnostic is not null)
+                        throw new ScriptExecutionException(diagnostic.Line, diagnostic.Column, diagnostic.Message,
+                            sourceFile: diagnostic.Source);
+                    break;
+                case GlobalActionKind.RunPreset:
+                    var presets = PresetCatalog.Load([action.Parameter]);
+                    var preset = string.IsNullOrWhiteSpace(action.PresetName)
+                        ? presets.Single()
+                        : presets.Single(item => item.Name == action.PresetName);
+                    ActivatePreset(preset,
+                        parameters: ScriptParameters.Parse(action.Arguments.Select(pair =>
+                            pair.Key + "=" + pair.Value)));
+                    break;
+                case GlobalActionKind.OpenScriptEditor:
+                    await OpenEditorAsync(string.IsNullOrWhiteSpace(action.Parameter) ? null : action.Parameter);
+                    break;
+                case GlobalActionKind.OpenImageEditor:
+                    await ShowImageEditorAsync(string.IsNullOrWhiteSpace(action.Parameter)
+                        ? null
+                        : action.Parameter);
+                    break;
+                case GlobalActionKind.OpenAnimationEditor:
+                    await ShowAnimationEditorAsync(string.IsNullOrWhiteSpace(action.Parameter)
+                        ? null
+                        : action.Parameter);
+                    break;
+                case GlobalActionKind.OpenVideoRecorder:
+                    await OpenVideoRecorderAsync();
+                    break;
+                case GlobalActionKind.OpenOutputDirectory:
+                    PlatformShell.OpenDirectory(LatestOutputPath is { } output
+                        ? Path.GetDirectoryName(Path.GetFullPath(output))!
+                        : Settings.OutputDirectory);
+                    break;
+                case GlobalActionKind.ShowMainWindow:
+                    ShowMainWindow();
+                    break;
+                case GlobalActionKind.HideMainWindow:
+                    HideToTray();
+                    break;
+                case GlobalActionKind.ShowPinnedImages:
+                    _pinnedImages.ShowAll();
+                    break;
+                case GlobalActionKind.HidePinnedImages:
+                    _pinnedImages.HideAll();
+                    break;
+                case GlobalActionKind.RestoreLastPinnedImage:
+                    await _pinnedImages.RestoreLastClosedAsync();
+                    break;
+                case GlobalActionKind.PinClipboard:
+                    await PinActionClipboardAsync();
+                    break;
+                case GlobalActionKind.ClosePinnedImages:
+                    _pinnedImages.CloseAll();
+                    break;
+                case GlobalActionKind.TogglePinnedImages:
+                    if (_pinnedImages.HasVisibleImages) _pinnedImages.HideAll();
+                    else _pinnedImages.ShowAll();
+                    break;
+                case GlobalActionKind.ToggleOtherPinnedImages:
+                    if (!_pinnedImages.ToggleOtherPins()) SetStatusKey("PinnedNoSelection");
+                    break;
+                case GlobalActionKind.SwitchPinnedGroup:
+                    _pinnedImages.SwitchPinGroup();
+                    break;
+                case GlobalActionKind.ToggleGlobalShortcuts:
+                    ToggleGlobalShortcuts();
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(action));
             }
         }
 
@@ -161,7 +193,13 @@ namespace RitsukageGif.Desktop
             foreach (var action in Settings.GlobalActions)
             {
                 if (!action.Enabled || !action.ShowInTray) continue;
-                var item = new NativeMenuItem(action.Name) { Gesture = ParseTrayGesture(action.Shortcut) };
+                var item = new NativeMenuItem(action.Name)
+                {
+                    Gesture = ParseTrayGesture(action.Shortcut),
+                    ToggleType = action.Kind == GlobalActionKind.ToggleGlobalShortcuts
+                        ? MenuItemToggleType.CheckBox
+                        : MenuItemToggleType.None,
+                };
                 item.Click += async (_, _) => await ExecuteActionAsync(action);
                 menu.Items.Insert(index++, item);
                 _actionMenus.Add((action, item));
@@ -211,7 +249,16 @@ namespace RitsukageGif.Desktop
                 _trayPresets.IsEnabled = !IsBusy && !IsSelecting && !IsConfiguring && !IsClosing;
             }
 
-            _trayActionAnchor.IsVisible = _actionMenus.Count > 0;
+            if (_trayToggleShortcuts is { } toggle)
+            {
+                toggle.Header = UiText.Get("GlobalActionToggleGlobalShortcuts");
+                toggle.IsChecked = _globalShortcutsSuspended;
+                toggle.IsEnabled = !IsClosing && !IsConfiguring;
+                toggle.IsVisible =
+                    _actionMenus.All(pair => pair.Action.Kind != GlobalActionKind.ToggleGlobalShortcuts);
+            }
+
+            _trayActionAnchor.IsVisible = _actionMenus.Count > 0 || _trayToggleShortcuts is { IsVisible: true };
             foreach (var (action, item) in _actionMenus)
             {
                 item.Header = GlobalActions.Label(action);

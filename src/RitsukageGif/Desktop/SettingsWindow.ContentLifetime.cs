@@ -36,13 +36,14 @@
             Content = null;
         }
 
-        private void ResetCurrentSettings()
+        private async Task ResetCurrentSettingsAsync()
         {
             if (_draft is null || _readDraft is null || !SettingsDefaults.CanResetPage(_currentPage)) return;
             try
             {
                 ApplyLiveSettings();
-                ReplaceLiveSettings(SettingsDefaults.ResetPage(CloneDraft(_appliedSettings ?? _draft), _currentPage));
+                await ReplaceLiveSettingsAsync(SettingsDefaults.ResetPage(CloneDraft(_appliedSettings ?? _draft),
+                    _currentPage));
             }
             catch (Exception error)
             {
@@ -50,9 +51,18 @@
             }
         }
 
-        private void ResetAllSettings()
+        private async Task ResetAllSettingsAsync()
         {
-            ReplaceLiveSettings(new());
+            try
+            {
+                await ReplaceLiveSettingsAsync(new());
+            }
+            catch (Exception error)
+            {
+                NetworkLogger.ZLogWarning($"Settings reset failed. ExceptionType={error.GetType().Name}");
+                if (!ContentCancellationToken.IsCancellationRequested)
+                    _error.Text = UiText.Get("NetworkProxySaveFailed");
+            }
         }
 
         private static AppSettings CloneDraft(AppSettings settings)

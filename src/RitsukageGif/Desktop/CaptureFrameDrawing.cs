@@ -13,10 +13,10 @@ namespace RitsukageGif.Desktop
             var scaleY = (float)bitmap.Height / bounds.Height;
             var outputX = (float)width / region.Width;
             var outputY = (float)height / region.Height;
-            drawing.DrawBitmap(bitmap,
+            drawing.DrawSampledBitmap(bitmap,
                 new((clipped.X - bounds.X) * scaleX, (clipped.Y - bounds.Y) * scaleY,
                     (clipped.Right - bounds.X) * scaleX, (clipped.Bottom - bounds.Y) * scaleY),
-                new SKRect((clipped.X - region.X) * outputX, (clipped.Y - region.Y) * outputY,
+                new((clipped.X - region.X) * outputX, (clipped.Y - region.Y) * outputY,
                     (clipped.Right - region.X) * outputX, (clipped.Bottom - region.Y) * outputY), paint);
         }
     }

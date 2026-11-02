@@ -14,17 +14,34 @@ namespace RitsukageGif.Desktop
         private int _disposed;
 
         public HotkeyService(IReadOnlyList<(string Shortcut, Func<Task> Action)> bindings, Action<string> error,
-            Action<string> registrationError, Action registered)
+            Action<string> registrationError, Action registered,
+            Action<HotkeyRegistrationResult>? registrationChanged = null, Func<string, string>? describe = null)
         {
             HotkeyLogger.ZLogDebug($"Global hotkey registration requested. BindingCount={bindings.Count}");
             Validate(bindings.Select(b => b.Shortcut));
             var keys = bindings.Select(b => Parse(b.Shortcut)).ToArray();
+            var cancellation = _stop.Token;
+            var portal = OperatingSystem.IsLinux() && DesktopCapture.UsesSourceSelection;
+            var portalTriggers = portal ? new Dictionary<int, string>() : null;
+            var descriptions = portal
+                ? bindings.Select(binding => describe?.Invoke(binding.Shortcut) ?? binding.Shortcut).ToArray()
+                : null;
             if (OperatingSystem.IsMacOS())
             {
-                _native = PlatformHotkeys.RegisterMac(keys, index => Dispatcher.UIThread.Post(() =>
+                try
                 {
-                    if (!_stop.IsCancellationRequested) _ = ExecuteAsync(bindings[index].Action, error);
-                }), ReportRegistrationError, ReportRegistered);
+                    _native = PlatformHotkeys.RegisterMac(keys, index => Dispatcher.UIThread.Post(() =>
+                    {
+                        if (!cancellation.IsCancellationRequested) _ = ExecuteAsync(bindings[index].Action, error);
+                    }), ReportRegistrationError, ReportRegistered, ReportBinding);
+                }
+                catch
+                {
+                    _stop.Cancel();
+                    _stop.Dispose();
+                    throw;
+                }
+
                 return;
             }
 
@@ -35,13 +52,16 @@ namespace RitsukageGif.Desktop
                     try
                     {
                         PlatformHotkeys.Run(keys, index => Dispatcher.UIThread.Post(() =>
-                        {
-                            if (!_stop.IsCancellationRequested) _ = ExecuteAsync(bindings[index].Action, error);
-                        }), ReportRegistrationError, ReportRegistered, _stop.Token);
+                            {
+                                if (!cancellation.IsCancellationRequested)
+                                    _ = ExecuteAsync(bindings[index].Action, error);
+                            }), ReportRegistrationError, ReportRegistered, cancellation, ReportBinding,
+                            (index, trigger) => portalTriggers![index] = trigger, descriptions);
                     }
                     catch (Exception exception)
                     {
                         ReportRegistrationError(exception.Message);
+                        for (var index = 0; index < bindings.Count; index++) ReportBinding(index, exception.Message);
                     }
 
                     return;
@@ -49,12 +69,13 @@ namespace RitsukageGif.Desktop
 
                 try
                 {
-                    RunWindows(keys, bindings, error, ReportRegistrationError, ReportRegistered);
+                    RunWindows(keys, bindings, error, ReportRegistrationError, ReportRegistered, ReportBinding);
                 }
                 catch (Exception exception)
                 {
                     HotkeyLogger.ZLogError(exception, $"Global hotkey registration failed.");
                     ReportRegistrationError(exception.Message);
+                    for (var index = 0; index < bindings.Count; index++) ReportBinding(index, exception.Message);
                 }
             }) { IsBackground = true, Name = "Global hotkeys" };
             _thread.Start();
@@ -62,9 +83,22 @@ namespace RitsukageGif.Desktop
 
             void ReportRegistrationError(string message)
             {
+                HotkeyLogger.ZLogWarning($"Global hotkey registration unavailable. Error={message}");
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (!_stop.IsCancellationRequested) registrationError(message);
+                    if (!cancellation.IsCancellationRequested) registrationError(message);
+                });
+            }
+
+            void ReportBinding(int index, string? message)
+            {
+                if (registrationChanged is null) return;
+                var result = new HotkeyRegistrationResult(bindings[index].Shortcut,
+                        message is null ? HotkeyRegistrationState.Registered : HotkeyRegistrationState.Failed, message)
+                    { TriggerDescription = portalTriggers?.GetValueOrDefault(index) };
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!cancellation.IsCancellationRequested) registrationChanged(result);
                 });
             }
 
@@ -73,12 +107,13 @@ namespace RitsukageGif.Desktop
                 HotkeyLogger.ZLogDebug($"Global hotkeys registered. BindingCount={bindings.Count}");
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (!_stop.IsCancellationRequested) registered();
+                    if (!cancellation.IsCancellationRequested) registered();
                 });
             }
         }
 
-        internal static bool Supported => !DesktopCapture.UsesSourceSelection;
+        internal static bool Supported =>
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() || OperatingSystem.IsLinux();
 
         public void Dispose()
         {
@@ -98,7 +133,7 @@ namespace RitsukageGif.Desktop
 
         private unsafe void RunWindows((uint Modifiers, uint Key)[] keys,
             IReadOnlyList<(string Shortcut, Func<Task> Action)> bindings, Action<string> error,
-            Action<string> registrationError, Action ready)
+            Action<string> registrationError, Action ready, Action<int, string?> registrationChanged)
         {
             var registered = new HashSet<int>();
             var failed = false;
@@ -115,12 +150,17 @@ namespace RitsukageGif.Desktop
                             keys[index].Key) != 0)
                     {
                         registered.Add(index + 1);
+                        registrationChanged(index, null);
                     }
                     else
                     {
                         var shortcut = bindings[index].Shortcut;
+                        var nativeError = Marshal.GetLastPInvokeError();
                         failed = true;
-                        registrationError(UiText.Get("HotkeyOccupied") + " " + shortcut);
+                        var message = UiText.Get("HotkeyOccupied") + " " + shortcut + ": " +
+                                      new Win32Exception(nativeError).Message;
+                        registrationChanged(index, message);
+                        registrationError(message);
                     }
                 }
 

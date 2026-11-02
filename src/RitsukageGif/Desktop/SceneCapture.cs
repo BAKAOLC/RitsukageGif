@@ -52,25 +52,22 @@ namespace RitsukageGif.Desktop
             _frameDisplayProvider = () => _topology;
             _canvas = new(options.Width, options.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
             _drawing = new(_canvas);
-            _paint.FilterQuality = SKFilterQuality.Medium;
             _paint.IsAntialias = true;
             _background = preset.Layout is null ? SKColors.Transparent : ParseColor(preset.Layout.Background);
             var definitions = preset.Layout?.Layers ??
             [
                 new(preset.Name, null, preset.Title, preset.ClientArea,
                     preset.Area, new(0, 0, options.Region.Width, options.Region.Height),
-                    new("rect"),
+                    preset.Shape ?? new("rect"),
                     preset.Source, preset.Missing ?? new PresetFallback(), preset.Follow, preset.Absolute),
             ];
-            _needsWindowTargets = definitions.Any(definition => definition is { Absolute: false, Media: null });
+            _needsWindowTargets = definitions.Any(definition => definition is { Absolute: false, Media: null } ||
+                                                                (DesktopCapture.UsesSourceSelection && definition is
+                                                                    { Source: CaptureSourceKind.Window, Media: null }));
             var layers = new List<Layer>();
             try
             {
-                if (DesktopCapture.UsesSourceSelection &&
-                    (definitions.Any(definition => definition is { Absolute: false, Media: null }) ||
-                     definitions.Where(definition => definition.Media is null).Select(definition => definition.Source)
-                         .Distinct().Count() > 1))
-                    throw new NotSupportedException(UiText.Get("CapturePlatformUnsupported"));
+                ValidatePortalSources(definitions);
                 foreach (var definition in definitions) layers.Add(new(definition, options.Divisor));
                 _layers = [.. layers];
             }
@@ -134,8 +131,8 @@ namespace RitsukageGif.Desktop
                         state?.Placement ?? layer.Definition.Placement;
                 _paint.Color = SKColors.White.WithAlpha((byte)Math.Round(255 * (state?.Opacity ?? 1)));
                 var scale = (float)_options.Divisor;
-                _drawing.DrawBitmap(layer.Bitmap,
-                    new SKRect(p.X / scale, p.Y / scale, (p.X + p.Width) / scale, (p.Y + p.Height) / scale), _paint);
+                _drawing.DrawSampledBitmap(layer.Bitmap,
+                    new(p.X / scale, p.Y / scale, (p.X + p.Width) / scale, (p.Y + p.Height) / scale), _paint);
             }
 
             _paint.Color = SKColors.White;
@@ -196,16 +193,19 @@ namespace RitsukageGif.Desktop
             layer.Rendered = true;
             var definition = layer.Definition;
             WindowTarget? target = null;
-            if (definition is { Absolute: false, Media: null })
+            if (definition is { Absolute: false, Media: null } ||
+                (DesktopCapture.UsesSourceSelection && definition is { Source: CaptureSourceKind.Window, Media: null }))
             {
                 var match = _preset with
                 {
                     Process = definition.Process ?? _preset.Process,
                     Title = definition.Process is null ? _preset.Title : definition.Title,
                 };
-                target = definition.Process is null && _preset.FixedHandle != 0
-                    ? _windows.SingleOrDefault(w => w.Handle == _preset.FixedHandle)
-                    : WindowLocator.Find(match, _windows, layer.Handle);
+                target = definition.FixedHandle != 0
+                    ? _windows.SingleOrDefault(window => window.Handle == definition.FixedHandle)
+                    : definition.Process is null && _preset.FixedHandle != 0
+                        ? _windows.SingleOrDefault(w => w.Handle == _preset.FixedHandle)
+                        : WindowLocator.Find(match, _windows, layer.Handle);
                 if (target is not null)
                     target = _context is null ? WindowLocator.Refresh(target) : _context.Refresh(target);
             }
@@ -263,7 +263,7 @@ namespace RitsukageGif.Desktop
 
                     sourceWidth = layer.InputWidth = area.Width;
                     sourceHeight = layer.InputHeight = area.Height;
-                    if (definition.Source == CaptureSourceKind.Screen || DesktopCapture.UsesSourceSelection)
+                    if (definition.Source == CaptureSourceKind.Screen)
                     {
                         if (!_topology.Covers(area))
                         {
@@ -290,21 +290,26 @@ namespace RitsukageGif.Desktop
                     {
                         byte[]? pixels;
                         int width, height;
+                        PixelRect? actualBounds;
                         if (_context is not null)
                         {
-                            (pixels, width, height) = _context.CaptureWindow(target!.Handle, _options, token);
+                            (pixels, width, height, actualBounds) = _context.CaptureWindow(target!.Handle, _options,
+                                area, layer.Bitmap.Width, layer.Bitmap.Height, token);
                         }
                         else
                         {
                             layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps);
+                            layer.Window.ConfigureRegion(area, layer.Bitmap.Width, layer.Bitmap.Height);
                             pixels = layer.Window.Capture(token);
+                            actualBounds = layer.Window.CoordinateBounds;
                             width = layer.Window.Width;
                             height = layer.Window.Height;
                         }
 
                         if (pixels is not null)
                         {
-                            var captureBounds = OperatingSystem.IsLinux() ? target!.Client : target!.Bounds;
+                            var captureBounds = actualBounds ??
+                                                (OperatingSystem.IsLinux() ? target!.Client : target!.Bounds);
                             if (area.Intersect(captureBounds).IsEmpty)
                             {
                                 DrawFallback(layer, token);
@@ -362,7 +367,7 @@ namespace RitsukageGif.Desktop
                 throw new InvalidOperationException(UiText.Get("InvalidFrameBuffer"));
             pixels.CopyTo(new((void*)destination, layer.SourceBitmap.ByteCount));
             layer.SourceBitmap.NotifyPixelsChanged();
-            layer.Drawing.DrawBitmap(layer.SourceBitmap, source ?? new SKRect(0, 0, width, height),
+            layer.Drawing.DrawSampledBitmap(layer.SourceBitmap, source ?? new SKRect(0, 0, width, height),
                 new(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
         }
 
@@ -384,12 +389,12 @@ namespace RitsukageGif.Desktop
                     break;
                 case "image":
                     layer.FallbackImage ??= LoadImage(fallback.Value);
-                    layer.Drawing.DrawBitmap(layer.FallbackImage, rect, _paint);
+                    layer.Drawing.DrawSampledBitmap(layer.FallbackImage, rect, _paint);
                     break;
                 case "source":
                     var other = _layers.Single(l => l.Definition.Name == fallback.Value);
                     Render(other, token);
-                    layer.Drawing.DrawBitmap(other.Bitmap, rect, _paint);
+                    layer.Drawing.DrawSampledBitmap(other.Bitmap, rect, _paint);
                     break;
             }
         }
@@ -485,6 +490,16 @@ namespace RitsukageGif.Desktop
                 var rect = new SKRect(0, 0, Bitmap.Width, Bitmap.Height);
                 switch (definition.Shape.Kind)
                 {
+                    case "path":
+                        using (var path = SKPath.ParseSvgPathData(definition.Shape.PathData))
+                        {
+                            path.FillType = definition.Shape.EvenOdd ? SKPathFillType.EvenOdd : SKPathFillType.Winding;
+                            path.Transform(SKMatrix.CreateScale(scaleX, scaleY));
+                            Mask.AddPath(path);
+                            Mask.FillType = path.FillType;
+                        }
+
+                        break;
                     case "ellipse": Mask.AddOval(rect); break;
                     case "rounded":
                         Mask.AddRoundRect(rect, (float)definition.Shape.Radius * scaleX,

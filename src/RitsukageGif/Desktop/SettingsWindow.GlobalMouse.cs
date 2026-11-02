@@ -1,4 +1,4 @@
-﻿using Avalonia.Automation;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -10,6 +10,12 @@ namespace RitsukageGif.Desktop
         private StackPanel GlobalMousePage(AppSettings draft)
         {
             var page = Page();
+            var mask = new CheckBox
+            {
+                Name = "GlobalMouseShowMask", [!ContentProperty] = LiveText.Resource("GlobalMouseShowMask"),
+                IsChecked = draft.GlobalMouseShowMask, IsEnabled = GlobalMouseService.Supported,
+            };
+            mask.IsCheckedChanged += (_, _) => draft.GlobalMouseShowMask = mask.IsChecked == true;
             page.Children.Add(new TextBlock
             {
                 [!TextBlock.TextProperty] = LiveText.Resource("GlobalMouseHint"),
@@ -26,7 +32,10 @@ namespace RitsukageGif.Desktop
             var statuses = new Dictionary<string, ContentControl>(StringComparer.Ordinal);
             page.AttachedToVisualTree += (_, _) => Refresh();
             SubscribeContentLanguage(Refresh);
+            HotkeyRegistrationsChanged += Validate;
+            RegisterContentCleanup(() => HotkeyRegistrationsChanged -= Validate);
             Refresh();
+            page.Children.Add(Setting(mask, static settings => settings.GlobalMouseShowMask));
             return page;
 
             void Refresh()
@@ -55,6 +64,8 @@ namespace RitsukageGif.Desktop
                     var row = MouseSettingsRow(target.Id.StartsWith("builtin.mouse.", StringComparison.Ordinal)
                         ? UiText.Get("GlobalAction" + target.Kind)
                         : ActionLabel(target), modifiers, kindBox, status);
+                    SettingsField.Track(row, ((Grid)row.Child!).Children[0],
+                        settings => settings.GlobalMouseBindings.FirstOrDefault(item => item.ActionId == target.Id));
                     row.IsEnabled = GlobalMouseService.Supported;
                     rows.Children.Add(row);
                     modifiers.ValueChanged += Store;
@@ -99,6 +110,7 @@ namespace RitsukageGif.Desktop
                 {
                     GlobalActionKind.ScreenshotAndPin, GlobalActionKind.ScreenshotAndCopy,
                     GlobalActionKind.ScreenshotAndCopyText, GlobalActionKind.ScreenshotAndTranslate,
+                    GlobalActionKind.ScreenshotAndCopyCodeText,
                     GlobalActionKind.ScreenshotQuickSave,
                     GlobalActionKind.Screenshot, GlobalActionKind.ScreenshotAndScroll,
                     GlobalActionKind.StartRecording,
@@ -154,14 +166,23 @@ namespace RitsukageGif.Desktop
                     }
 
                     var action = draft.GlobalActions.FirstOrDefault(item => item.Id == id);
+                    var activeBinding = bindings.FirstOrDefault(item => item.Enabled);
+                    var configured = action is { Enabled: true } && activeBinding is not null;
+                    var registration = configured ? GlobalMouseRegistration?.Invoke(id, activeBinding!.Gesture) : null;
+                    error ??= registration is { State: HotkeyRegistrationState.Failed } ? registration.Error : null;
                     SetMouseBindingStatus(status, error,
-                        action is { Enabled: true } && bindings.Any(item => item.Enabled));
-                    if (error is null && action is { Enabled: false })
-                    {
-                        var description = UiText.Get("GlobalActionDisabledState");
-                        ToolTip.SetTip(status, description);
-                        AutomationProperties.SetName(status, description);
-                    }
+                        configured && registration?.State == HotkeyRegistrationState.Registered);
+                    var description = action is { Enabled: false }
+                        ? UiText.Get("GlobalActionDisabledState")
+                        : error ?? (registration is { State: HotkeyRegistrationState.Disabled, Error: { } reason }
+                            ? UiText.Get(reason)
+                            : UiText.Get(!configured
+                                ? "MouseBindingNotSet"
+                                : registration?.State == HotkeyRegistrationState.Registered
+                                    ? "MouseBindingReady"
+                                    : "HotkeyRegistrationPending"));
+                    ToolTip.SetTip(status, description);
+                    AutomationProperties.SetName(status, description);
                 }
             }
         }

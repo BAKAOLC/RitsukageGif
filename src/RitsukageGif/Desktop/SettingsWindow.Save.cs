@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -11,17 +11,20 @@ namespace RitsukageGif.Desktop
         {
             var page = Page();
             var value = draft.ScreenshotSave;
-            var manual = SaveProfileEditor(value, draft.OutputDirectory, out var readManual);
+            var manual = SaveProfileEditor(value, draft.OutputDirectory, out var readManual,
+                static settings => settings.ScreenshotSave);
             var remember = new CheckBox
             {
                 Name = "ScreenshotRememberExtension", IsChecked = value.RememberExtension,
                 [!ContentProperty] = LiveText.Resource("ScreenshotRememberExtension"),
             };
-            manual.Children.Add(remember);
+            manual.Children.Add(Setting(remember, static settings => settings.ScreenshotSave.RememberExtension));
             page.Children.Add(SettingsSection("ScreenshotManualSave", manual));
             page.Children.Add(SettingsSection("ScreenshotQuickSave",
-                SaveProfileEditor(value.Quick, draft.OutputDirectory, out var readQuick)));
-            var automatic = SaveProfileEditor(value.Automatic, draft.OutputDirectory, out var readAutomatic);
+                SaveProfileEditor(value.Quick, draft.OutputDirectory, out var readQuick,
+                    static settings => settings.ScreenshotSave.Quick)));
+            var automatic = SaveProfileEditor(value.Automatic, draft.OutputDirectory, out var readAutomatic,
+                static settings => settings.ScreenshotSave.Automatic);
             var triggers = new WrapPanel { Orientation = Orientation.Horizontal };
             var checks = new Dictionary<ScreenshotAutoSaveTriggers, CheckBox>();
             foreach (var trigger in new[]
@@ -40,7 +43,9 @@ namespace RitsukageGif.Desktop
                 triggers.Children.Add(check);
             }
 
-            automatic.Children.Insert(0, Labeled("ScreenshotAutoTriggers", triggers));
+            automatic.Children.Insert(0,
+                SettingRow("ScreenshotAutoTriggers", triggers,
+                    static settings => settings.ScreenshotSave.AutoSaveTriggers));
             page.Children.Add(SettingsSection("ScreenshotAutomaticSave", automatic));
             apply = () =>
             {
@@ -61,13 +66,13 @@ namespace RitsukageGif.Desktop
         }
 
         private StackPanel SaveProfileEditor(ScreenshotSaveProfile value, string fallbackDirectory,
-            out Func<ScreenshotSaveProfile> read)
+            out Func<ScreenshotSaveProfile> read, Func<AppSettings, ScreenshotSaveProfile> profileGetter)
         {
             var token = ContentCancellationToken;
             var page = Page();
-            var directory = new TextBox { Text = value.Directory, Watermark = fallbackDirectory };
+            var directory = new TextBox { Text = value.Directory, PlaceholderText = fallbackDirectory };
             var format = new ComboBox
-                { ItemsSource = new[] { "PNG", "JPEG", "BMP", "WebP" }, SelectedIndex = (int)value.Format };
+                { ItemsSource = new[] { "PNG", "JPEG", "BMP", "WebP", "AVIF" }, SelectedIndex = (int)value.Format };
             var quality = new CompactNumberInput { Minimum = 0, Maximum = 100, Value = value.Quality, Width = 100 };
             var name = new TextBox { Text = value.NameTemplate };
             var outputSize = OutputSizeEditor(value.OutputSize, out var readSize);
@@ -127,20 +132,25 @@ namespace RitsukageGif.Desktop
                     if (!token.IsCancellationRequested) open.IsEnabled = true;
                 }
             };
-            page.Children.Add(Labeled("OutputDirectory", directoryRow));
-            page.Children.Add(Labeled("ScreenshotSaveFormat", format));
-            page.Children.Add(Labeled("ScreenshotSaveQuality", quality));
-            page.Children.Add(Labeled("ScreenshotOutputSize", outputSize));
-            page.Children.Add(Labeled("ScreenshotNameTemplate", name));
+            page.Children.Add(
+                SettingRow("OutputDirectory", directoryRow, settings => profileGetter(settings).Directory));
+            page.Children.Add(SettingRow("ScreenshotSaveFormat", format, settings => profileGetter(settings).Format));
+            page.Children.Add(SettingRow("ScreenshotSaveQuality", quality,
+                settings => profileGetter(settings).Quality));
+            page.Children.Add(SettingRow("ScreenshotOutputSize", outputSize,
+                settings => profileGetter(settings).OutputSize));
+            page.Children.Add(SettingRow("ScreenshotNameTemplate", name,
+                settings => profileGetter(settings).NameTemplate));
             page.Children.Add(new TextBlock
             {
                 [!TextBlock.TextProperty] = LiveText.Resource("ScreenshotNameTemplateHint"),
                 TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted,
             });
             page.Children.Add(Labeled("ScreenshotNamePreview", preview));
-            page.Children.Add(Labeled("ScreenshotConflictPolicy", conflict));
-            page.Children.Add(Labeled("ScreenshotAfterSave", after));
-            page.Children.Add(notify);
+            page.Children.Add(SettingRow("ScreenshotConflictPolicy", conflict,
+                settings => profileGetter(settings).ConflictPolicy));
+            page.Children.Add(SettingRow("ScreenshotAfterSave", after, settings => profileGetter(settings).AfterSave));
+            page.Children.Add(Setting(notify, settings => profileGetter(settings).Notify));
 
             directory.TextChanged += (_, _) => Preview();
             name.TextChanged += (_, _) => Preview();

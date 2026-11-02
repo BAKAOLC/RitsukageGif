@@ -25,6 +25,29 @@ namespace RitsukageGif.Desktop
         {
             switch (args)
             {
+                case
+                    [
+                        "--speech-worker", ("capabilities" or "speak") and var speechMode, var speechDirectory,
+                        var speechParent,
+                    ]
+                    when int.TryParse(speechParent, out var speechParentId):
+                    return SpeechProcess.RunWorker(speechMode, speechDirectory, speechParentId);
+                case ["--speech-worker", ..]: return 2;
+                case ["--print-worker", var printInput, var printOwner, var printParent, var printTitle]
+                    when long.TryParse(printOwner, CultureInfo.InvariantCulture, out var printWindow) &&
+                         int.TryParse(printParent, out var printParentId) && OperatingSystem.IsWindows():
+                    return ScreenshotPrintProcess.RunWorker(printInput, (nint)printWindow, printParentId, printTitle);
+                case ["--print-worker", ..]: return 2;
+                case ["--table-print-worker", var printDirectory, var tableOwner, var tableParent, var tableTitle]
+                    when long.TryParse(tableOwner, CultureInfo.InvariantCulture, out var tableWindow) &&
+                         int.TryParse(tableParent, out var tableParentId) && OperatingSystem.IsWindows():
+                    return ScreenshotPrintProcess.RunTableWorker(printDirectory, (nint)tableWindow, tableParentId,
+                        tableTitle);
+                case ["--table-print-worker", ..]: return 2;
+                case ["--structured-recognition-worker", var models, var parent]
+                    when int.TryParse(parent, out var parentId):
+                    return StructuredRecognitionProcess.RunWorker(models, parentId);
+                case ["--structured-recognition-worker", ..]: return 2;
                 case ["--animation-import-worker", var input, var directory]:
                     return AnimationImportProcess.RunWorker(input, directory);
                 case ["--animation-import-worker", ..]: return 2;
@@ -105,12 +128,22 @@ namespace RitsukageGif.Desktop
             {
                 if (OperatingSystem.IsWindows() && AttachConsole(uint.MaxValue) != 0)
                     Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+                string? ownedShellList = null;
                 try
                 {
                     if (args is ["preset", "run", _, ..])
                         args[2] = Path.GetFullPath(args[2]);
                     if (args is ["editor" or "animation-editor", var editorFile])
                         args[1] = Path.GetFullPath(editorFile);
+                    if (args is ["pin-files", _, ..])
+                    {
+                        for (var index = 1; index < args.Length; index++)
+                            args[index] = Path.GetFullPath(args[index]);
+                        args = PreparePinFilesCommand(args);
+                    }
+
+                    if (args is ["pin-files-list", var shellList])
+                        args[1] = ownedShellList = ValidateShellFileListPath(shellList);
                     CommandReply reply;
                     if (args is ["--help"] or ["help"])
                     {
@@ -136,6 +169,10 @@ namespace RitsukageGif.Desktop
                     Console.WriteLine(JsonSerializer.Serialize(new(false, "error", ex.Message),
                         CommandJson.Default.CommandReply));
                     return 1;
+                }
+                finally
+                {
+                    if (ownedShellList is not null) File.Delete(ownedShellList);
                 }
             }
 

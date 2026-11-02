@@ -48,7 +48,7 @@ namespace RitsukageGif.Desktop
             var statuses = new Dictionary<string, ContentControl>(StringComparer.Ordinal);
             add.Click += async (_, _) =>
             {
-                var action = new GlobalActionBinding();
+                var action = new GlobalActionBinding { Kind = GlobalActionKind.RunScript };
                 if (!await EditGlobalActionAsync(action)) return;
                 draft.GlobalActions.Add(action);
                 Refresh();
@@ -71,6 +71,8 @@ namespace RitsukageGif.Desktop
             AddHotkeyPolicyControls(draft, footer, ignored);
             layout.AttachedToVisualTree += (_, _) => Refresh();
             SubscribeContentLanguage(Refresh);
+            HotkeyRegistrationsChanged += ValidateDraft;
+            RegisterContentCleanup(() => HotkeyRegistrationsChanged -= ValidateDraft);
             Refresh();
             return layout;
 
@@ -82,6 +84,9 @@ namespace RitsukageGif.Desktop
                 {
                     var label = ActionLabel(action);
                     var row = ActionSettingsRow(label);
+                    SettingsField.Track(row, row.Children[0],
+                        settings => settings.GlobalActions.FirstOrDefault(item => item.Id == action.Id),
+                        AppSettings.Same);
                     var editor = HotkeyBox(KeyGestureDisplay.Format(action.Shortcut));
                     editor.Name = "GlobalActionShortcut";
                     var shortcut = ActionHotkeyField(editor, label, out var status);
@@ -161,14 +166,8 @@ namespace RitsukageGif.Desktop
                     var reserved = ReservedKeys().Concat(draft.GlobalActions
                         .Where(other => other.Id != action.Id && other.Enabled).Select(other => other.Shortcut));
                     var rowErrors = GlobalActions.Validate([action], reserved, draft.GlobalMouseBindings);
-                    SetActionHotkeyStatus(status,
-                        rowErrors.Count > 0 ? string.Join(Environment.NewLine, rowErrors) : null,
-                        action.Enabled && !string.IsNullOrWhiteSpace(action.Shortcut));
-                    if (!action.Enabled)
-                    {
-                        ToolTip.SetTip(status, UiText.Get("GlobalActionDisabledState"));
-                        AutomationProperties.SetName(status, UiText.Get("GlobalActionDisabledState"));
-                    }
+                    SetActionHotkeyStatus(status, action,
+                        rowErrors.Count > 0 ? string.Join(Environment.NewLine, rowErrors) : null);
                 }
             }
         }
@@ -236,10 +235,27 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static void SetActionHotkeyStatus(ContentControl status, string? error, bool active)
+        private void SetActionHotkeyStatus(ContentControl status, GlobalActionBinding action, string? error)
         {
+            var hasShortcut = !string.IsNullOrWhiteSpace(action.Shortcut);
+            var registration = error is null && action.Enabled && hasShortcut
+                ? HotkeyRegistration?.Invoke(action)
+                : null;
+            error ??= registration is { State: HotkeyRegistrationState.Failed } ? registration.Error : null;
+            var active = error is null && action.Enabled &&
+                         registration?.State == HotkeyRegistrationState.Registered;
             SetMouseBindingStatus(status, error, active);
-            status.IsVisible = error is not null || active;
+            var description = !action.Enabled
+                ? UiText.Get("GlobalActionDisabledState")
+                : error ?? (registration is { State: HotkeyRegistrationState.Disabled, Error: { } reason }
+                    ? UiText.Get(reason)
+                    : UiText.Get(!hasShortcut ? "MouseBindingNotSet" :
+                        active ? "HotkeyRegistered" : "HotkeyRegistrationPending"));
+            if (active && registration?.TriggerDescription is { } trigger)
+                description += Environment.NewLine + trigger;
+            ToolTip.SetTip(status, description);
+            AutomationProperties.SetName(status, description);
+            status.IsVisible = error is not null || hasShortcut || !action.Enabled;
         }
 
         private static string ActionLabel(GlobalActionBinding action)

@@ -32,9 +32,7 @@ namespace RitsukageGif.Desktop
 
         private void ConfigureSelectionPreferences(SelectionCoordinator selection)
         {
-            _captureHistory.Configure(Settings.CapturePreferences.RegionHistoryCapacity,
-                Settings.CapturePreferences.ScreenshotHistoryCapacity,
-                (long)Settings.CapturePreferences.ScreenshotHistoryMaximumMiB * 1024 * 1024);
+            ConfigureCaptureHistoryBudget();
             selection.InitializeAnnotationPreferences(Settings.Annotation);
             if (selection.Annotations is { } annotations)
                 annotations.ToolbarPreferencesProvider = () => Settings.Annotation.Toolbar;
@@ -44,6 +42,7 @@ namespace RitsukageGif.Desktop
                     Toolbar = Settings.Annotation.Toolbar.Merge(preferences, tools),
                 });
             selection.ScrollCapturePreferences = Settings.ScrollCapture;
+            selection.ScrollAutoCropChanged = PersistScrollAutoCrop;
             selection.InitializePreferences(Settings.SelectionDetectControls, Settings.SelectionSnappingMode,
                 Settings.SelectionHints, Settings.CapturePreferences);
             selection.InitializeAppearancePreferences(Settings.Appearance);
@@ -55,6 +54,13 @@ namespace RitsukageGif.Desktop
             selection.FrameRoundInitialEnabled = capturePreferences.FrameRoundEnabled;
             selection.FrameRoundInitialRadius = capturePreferences.FrameRoundRadius;
             selection.RecognitionPreferences = Settings.Recognition;
+            selection.PinFormulaRequested = (_, source) =>
+            {
+                if (!IsClosing) _pinnedImages.PinFormulas(source);
+            };
+            selection.FormulaCopyFormatChanged = PersistFormulaCopyFormat;
+            selection.RecognitionOriginalImageVisibilityChanged = PersistRecognitionOriginalImage;
+            selection.FormulaLatexFormatChanged = PersistFormulaLatexFormat;
             selection.TranslationPreferences = Settings.Translation;
             selection.ConfigureHistory(_captureHistory);
             selection.PreferencesChanged += () =>
@@ -65,6 +71,7 @@ namespace RitsukageGif.Desktop
                 Settings.CapturePreferences = Settings.CapturePreferences with
                 {
                     DetectionMode = selection.DetectionMode,
+                    RelativeCoordinates = selection.RelativeCoordinates,
                 };
                 Settings.SelectionSnappingMode = selection.SnappingMode;
                 Settings.SelectionHints = selection.HintMode;
@@ -72,10 +79,38 @@ namespace RitsukageGif.Desktop
             };
         }
 
+        private void PersistScrollAutoCrop(bool enabled)
+        {
+            if (IsClosing || Settings.ScrollCapture.AutoCropOnReverse == enabled) return;
+            Settings.ScrollCapture = Settings.ScrollCapture with { AutoCropOnReverse = enabled };
+            SaveCapturePreferences();
+        }
+
+        private void PersistRecognitionOriginalImage(bool show)
+        {
+            if (IsClosing || Settings.Recognition.ShowOriginalImage == show) return;
+            Settings.Recognition = Settings.Recognition with { ShowOriginalImage = show };
+            QueueSettingsSave(Settings);
+        }
+
+        private void PersistFormulaLatexFormat(FormulaLatexFormat format)
+        {
+            if (IsClosing || Settings.Recognition.LatexFormat == format) return;
+            Settings.Recognition = Settings.Recognition with { LatexFormat = format };
+            QueueSettingsSave(Settings);
+        }
+
+        private void PersistFormulaCopyFormat(FormulaCopyFormat format)
+        {
+            if (IsClosing || Settings.Recognition.CopyFormat == format) return;
+            Settings.Recognition = Settings.Recognition with { CopyFormat = format };
+            QueueSettingsSave(Settings);
+        }
+
         private void RememberAnnotationPreferences(SelectionCoordinator selection)
         {
             var preferences = selection.CaptureAnnotationPreferences(Settings.Annotation);
-            if (preferences == Settings.Annotation) return;
+            if (AppSettings.Same(preferences, Settings.Annotation)) return;
             try
             {
                 PersistAnnotationPreferences(preferences);
@@ -95,7 +130,7 @@ namespace RitsukageGif.Desktop
                 FrameRoundEnabled = selection.FrameRoundEnabled,
                 FrameRoundRadius = selection.FrameCornerRadius,
             }).Normalize();
-            if (preferences == Settings.CapturePreferences) return;
+            if (AppSettings.Same(preferences, Settings.CapturePreferences)) return;
             try
             {
                 var updated = Settings with { CapturePreferences = preferences };

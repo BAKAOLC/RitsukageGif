@@ -24,7 +24,7 @@ namespace RitsukageGif.Desktop
             WindowTarget? initialTarget = null,
             Func<Window?, ScreenshotResult, CancellationToken, Task<bool>>? outputHandler = null,
             bool wholeInitialTarget = false, TimeSpan delay = default, bool startWithScrolling = false,
-            bool copyTextOutput = false)
+            bool copyTextOutput = false, bool translateOutput = false, ActionScreenshotGeometry? initialGeometry = null)
         {
             if (!CanTakeScreenshot) return Task.CompletedTask;
             if (!Enum.IsDefined(source)) throw new ArgumentOutOfRangeException(nameof(source));
@@ -32,15 +32,25 @@ namespace RitsukageGif.Desktop
             _screenshotOperation = completion.Task;
             _ = CompleteScreenshotAsync(completion, RunScreenshotAsync(source, initialRegion, confirmAction,
                 autoConfirm, initialTarget, outputHandler, wholeInitialTarget, delay, startWithScrolling,
-                copyTextOutput));
+                copyTextOutput, translateOutput, initialGeometry));
             return completion.Task;
         }
 
-        private async Task CompleteScreenshotAsync(TaskCompletionSource completion, Task operation)
+        private async Task CompleteScreenshotAsync(TaskCompletionSource completion,
+            Task<ScreenshotCompletion?> operation)
         {
             try
             {
-                await operation;
+                var completed = await operation;
+                if (ReferenceEquals(_screenshotOperation, completion.Task)) _screenshotOperation = null;
+                if (!IsClosing && completed is not null)
+                {
+                    if (completed.RecordingSelection is { } recordingSelection)
+                        await OpenScreenshotRecorderAsync(recordingSelection);
+                    else if (!completed.TranslationPng.IsEmpty)
+                        _ = OpenScreenshotTranslationAsync(completed.TranslationPng);
+                }
+
                 completion.TrySetResult();
             }
             catch (Exception error)
@@ -50,13 +60,15 @@ namespace RitsukageGif.Desktop
             finally
             {
                 if (ReferenceEquals(_screenshotOperation, completion.Task)) _screenshotOperation = null;
+                Notify();
             }
         }
 
-        private async Task RunScreenshotAsync(CaptureSourceKind source, PixelRect? initialRegion,
+        private async Task<ScreenshotCompletion?> RunScreenshotAsync(CaptureSourceKind source, PixelRect? initialRegion,
             ScreenshotOutputAction? confirmAction, bool autoConfirm, WindowTarget? initialTarget,
             Func<Window?, ScreenshotResult, CancellationToken, Task<bool>>? outputHandler,
-            bool wholeInitialTarget, TimeSpan delay, bool startWithScrolling, bool copyTextOutput)
+            bool wholeInitialTarget, TimeSpan delay, bool startWithScrolling, bool copyTextOutput, bool translateOutput,
+            ActionScreenshotGeometry? initialGeometry)
         {
             var operationId = Interlocked.Increment(ref _nextOperationId);
             using var scope = HostLogger.BeginScope("ScreenshotOperation {ScreenshotOperationId}", operationId);
@@ -66,13 +78,15 @@ namespace RitsukageGif.Desktop
             using var cancellation = new CancellationTokenSource();
             _screenshotCancellation = cancellation;
             IsSelecting = true;
+            RefreshDesktopToolbar();
+            ScreenshotCompletion? completed = null;
             try
             {
                 var operation = CaptureScreenshotAsync(source, cancellation.Token, initialRegion, confirmAction,
                     autoConfirm, initialTarget, outputHandler, wholeInitialTarget, delay, startWithScrolling,
-                    copyTextOutput);
+                    copyTextOutput, translateOutput, initialGeometry);
                 Notify();
-                await operation;
+                completed = await operation;
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -87,12 +101,13 @@ namespace RitsukageGif.Desktop
             {
                 _screenshotSelection = null;
                 _screenshotCancellation = null;
-                _screenshotOperation = null;
                 IsSelecting = false;
                 Notify();
                 HostLogger.ZLogInformation(
                     $"Screenshot operation ended. OperationId={operationId} ElapsedMilliseconds={Stopwatch.GetElapsedTime(started).TotalMilliseconds} Closing={IsClosing}");
             }
+
+            return completed;
         }
 
         private void CancelScreenshot()
@@ -109,18 +124,24 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async Task CaptureScreenshotAsync(CaptureSourceKind source, CancellationToken token,
+        private async Task<ScreenshotCompletion?> CaptureScreenshotAsync(CaptureSourceKind source,
+            CancellationToken token,
             PixelRect? initialRegion = null, ScreenshotOutputAction? confirmAction = null,
             bool autoConfirm = false, WindowTarget? initialTarget = null,
             Func<Window?, ScreenshotResult, CancellationToken, Task<bool>>? outputHandler = null,
             bool wholeInitialTarget = false, TimeSpan delay = default, bool startWithScrolling = false,
-            bool copyTextOutput = false)
+            bool copyTextOutput = false, bool translateOutput = false, ActionScreenshotGeometry? initialGeometry = null)
         {
+            await WaitForCaptureHistoryAsync(token);
             var previousView = View;
             var wasVisible = previousView?.IsVisible == true;
+            var recordingRequested = false;
+            var selectionAccepted = false;
+            ReadOnlyMemory<byte> translationPng = default;
             using var settingsVisibility = await CaptureWindowVisibilityLease.HideAsync(_settingsWindow,
                 () => !IsClosing, token);
-            var pasteTarget = Settings.ScreenshotClipboard.PasteAfterCopy && !copyTextOutput && outputHandler is null
+            var pasteTarget = Settings.ScreenshotClipboard.PasteAfterCopy && !copyTextOutput && !translateOutput &&
+                              outputHandler is null
                 ? await ScreenshotPasteGuard.CaptureTargetAsync(token)
                 : null;
             uint copiedSequence = 0;
@@ -131,19 +152,22 @@ namespace RitsukageGif.Desktop
                 if (delay > TimeSpan.Zero) await Task.Delay(delay, token);
                 token.ThrowIfCancellationRequested();
                 var action = confirmAction ?? ScreenshotOutputAction.Copy;
+                var allowRecording = CanEditRecordingSettings && !IsBusy;
                 using var selection = new SelectionCoordinator(Screens, Settings.SnapRadius,
                     Settings.EdgeThreshold, source == CaptureSourceKind.Window, Settings.Cursor,
                     retainScreenshot: true, retainHdr: true,
                     screenshotToneMap: Settings.CaptureToneMap,
                     screenshotColorMode: Settings.CaptureColorMode)
                 {
-                    InitialRegion = initialRegion, ConfirmAction = action, AutoConfirm = autoConfirm,
-                    InitialTarget = initialTarget, WholeInitialTarget = wholeInitialTarget,
-                    StartWithScrolling = startWithScrolling,
+                    InitialRegion = initialRegion, InitialGeometry = initialGeometry, ConfirmAction = action,
+                    AutoConfirm = autoConfirm, InitialTarget = initialTarget, WholeInitialTarget = wholeInitialTarget,
+                    StartWithScrolling = startWithScrolling, AllowRecording = allowRecording,
                 };
                 _screenshotSelection = selection;
                 HostLogger.ZLogDebug($"Screenshot selection coordinator created. Source={source.ToString()}");
                 ConfigureSelectionPreferences(selection);
+                selection.WindowPinOutputHandler = (target, region, cursor, scaling, captureToken) =>
+                    _pinnedImages.PinWindowRoiAsync(target, region, cursor, scaling, captureToken);
                 // ReSharper disable AccessToDisposedClosure
                 selection.RecognitionOutputHandler = async (result, cancellationToken) =>
                 {
@@ -169,7 +193,17 @@ namespace RitsukageGif.Desktop
                     result = copyTextOutput
                         ? raw
                         : await ScreenshotOutputDecoration.PrepareAsync(raw, cancellationToken);
-                    var success = await (outputHandler ?? OutputScreenshotAsync)(owner, result, cancellationToken);
+                    bool success;
+                    if (translateOutput && result.Action == ScreenshotOutputAction.Copy)
+                    {
+                        translationPng = result.Png;
+                        success = true;
+                    }
+                    else
+                    {
+                        success = await (outputHandler ?? OutputScreenshotAsync)(owner, result, cancellationToken);
+                    }
+
                     if (!success) return false;
                     if (pasteTarget is not null && result.Action == ScreenshotOutputAction.Copy)
                         copiedSequence = ScreenshotPasteGuard.ClipboardSequence;
@@ -180,11 +214,12 @@ namespace RitsukageGif.Desktop
                     {
                         ScreenshotOutputAction.Copy => ScreenshotAutoSaveTriggers.Copy,
                         ScreenshotOutputAction.Pin => ScreenshotAutoSaveTriggers.Pin,
-                        ScreenshotOutputAction.Save or ScreenshotOutputAction.QuickSave => ScreenshotAutoSaveTriggers
-                            .Save,
+                        ScreenshotOutputAction.Save or ScreenshotOutputAction.QuickSave
+                            or ScreenshotOutputAction.ExportPdf => ScreenshotAutoSaveTriggers
+                                .Save,
                         _ => ScreenshotAutoSaveTriggers.None,
                     };
-                    if (copyTextOutput && result.Action == ScreenshotOutputAction.Copy)
+                    if ((copyTextOutput || translateOutput) && result.Action == ScreenshotOutputAction.Copy)
                         trigger = ScreenshotAutoSaveTriggers.Recognize;
                     if (selection.WasScrollingScreenshot) trigger |= ScreenshotAutoSaveTriggers.Scrolling;
                     try
@@ -202,7 +237,15 @@ namespace RitsukageGif.Desktop
                 HostLogger.ZLogInformation($"Screenshot selection initialization requested.");
                 if (await selection.ShowAsync() is { } completed)
                 {
+                    selectionAccepted = true;
                     _lastScreenshotSelection = completed;
+                    if (selection.RecordingRequested)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        selection.CommitSource(token);
+                        recordingRequested = true;
+                    }
+
                     HostLogger.ZLogInformation($"Screenshot selection accepted. Region={completed.Region}");
                 }
                 else
@@ -210,15 +253,21 @@ namespace RitsukageGif.Desktop
                     HostLogger.ZLogDebug($"Screenshot selection returned without an accepted result.");
                 }
 
+                if (selection.CompletionNotice is { } notice && !token.IsCancellationRequested) SetStatus(notice);
+                if (selectionAccepted && !selection.TranslationRequestedPng.IsEmpty)
+                    translationPng = selection.TranslationRequestedPng;
                 RememberAnnotationPreferences(selection);
                 RememberFrameDecorationPreferences(selection);
                 token.ThrowIfCancellationRequested();
                 if (copiedSequence != 0 && !IsClosing)
                     await ScreenshotPasteGuard.TryPasteAsync(pasteTarget, copiedSequence, token);
+                return selectionAccepted && (recordingRequested || !translationPng.IsEmpty)
+                    ? new(recordingRequested ? _lastScreenshotSelection : null, translationPng)
+                    : null;
             }
             finally
             {
-                if (!IsClosing && wasVisible && previousView is not null)
+                if (!IsClosing && !recordingRequested && wasVisible && previousView is not null)
                 {
                     var activate = previousView.ShowActivated;
                     previousView.ShowActivated = false;
@@ -231,6 +280,8 @@ namespace RitsukageGif.Desktop
                         previousView.ShowActivated = activate;
                     }
                 }
+
+                ShowPendingImageEditor();
             }
         }
 
@@ -238,11 +289,25 @@ namespace RitsukageGif.Desktop
             CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            switch (result.Action)
+            {
+                case ScreenshotOutputAction.Edit:
+                    return await EditScreenshotAsync(result, token);
+                case ScreenshotOutputAction.ExportPdf:
+                    return await ExportScreenshotDocumentAsync(owner, result, token);
+                case ScreenshotOutputAction.Print:
+                    return await PrintScreenshotDocumentAsync(owner, result, token);
+                case ScreenshotOutputAction.Copy or ScreenshotOutputAction.Save or
+                    ScreenshotOutputAction.Pin or ScreenshotOutputAction.QuickSave:
+                    break;
+            }
+
             var mode = result.ColorMode;
             var sdrPng = result.Png;
             if (mode != OutputColorMode.Sdr && result.Hdr is not { ColorInfo.IsHdrSource: true })
                 throw new NotSupportedException(result.HdrUnavailableReason ?? UiText.Get("HdrCaptureUnavailable"));
             var context = owner ?? _services.Context;
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (result.Action)
             {
                 case ScreenshotOutputAction.Pin:

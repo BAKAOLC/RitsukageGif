@@ -69,8 +69,8 @@ namespace RitsukageGif.Desktop
                     playback?.Speed ?? media.Speed, playback?.Position ?? media.Position,
                     !(playback?.HoldLast ?? media.HoldLast));
                 if (bitmap is null) return false;
-                layer.Drawing.DrawBitmap(bitmap, new(area.X, area.Y, area.Right, area.Bottom),
-                    new SKRect(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
+                layer.Drawing.DrawSampledBitmap(bitmap, new(area.X, area.Y, area.Right, area.Bottom),
+                    new(0, 0, layer.Bitmap.Width, layer.Bitmap.Height), _paint);
                 return true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException

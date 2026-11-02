@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -14,10 +14,10 @@ namespace RitsukageGif.Desktop
             {
                 [!ContentProperty] = LiveText.Resource("HotkeyDisableInFullscreen"),
                 IsChecked = draft.HotkeyPolicy.DisableInFullscreen,
-                IsEnabled = OperatingSystem.IsWindows(),
+                IsEnabled = PortableForegroundPolicy.Supported,
             };
-            ignored.IsEnabled = OperatingSystem.IsWindows();
-            if (!OperatingSystem.IsWindows())
+            ignored.IsEnabled = PortableForegroundPolicy.Supported;
+            if (!PortableForegroundPolicy.Supported)
             {
                 fullscreen.Bind(ToolTip.TipProperty, LiveText.Resource("HotkeyPolicyUnavailable"));
                 ignored.Bind(ToolTip.TipProperty, LiveText.Resource("HotkeyPolicyUnavailable"));
@@ -27,7 +27,7 @@ namespace RitsukageGif.Desktop
             {
                 DisableInFullscreen = fullscreen.IsChecked == true,
             };
-            footer.Children.Add(fullscreen);
+            footer.Children.Add(Setting(fullscreen, static settings => settings.HotkeyPolicy.DisableInFullscreen));
             ignored.Click += async (_, _) =>
             {
                 var programs = await EditIgnoredProgramsAsync(draft.HotkeyPolicy.IgnoredPrograms);
@@ -47,7 +47,7 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async Task<List<string>?> EditIgnoredProgramsAsync(IReadOnlyList<string> programs)
+        private async Task<List<string>?> EditIgnoredProgramsAsync(IReadOnlyList<string> programs, Window? owner = null)
         {
             var pending = programs.ToList();
             var dialog = new Window
@@ -60,7 +60,7 @@ namespace RitsukageGif.Desktop
             dialog.Classes.Add("settings-window");
             var input = new TextBox
             {
-                Name = "IgnoredProgramInput", Watermark = UiText.Get("HotkeyIgnoredProgramsHint"),
+                Name = "IgnoredProgramInput", PlaceholderText = UiText.Get("HotkeyIgnoredProgramsHint"),
             };
             var add = ActionPageButton("HotkeyIgnoredProgramAdd");
             var browse = ActionPageButton("Browse");
@@ -98,26 +98,36 @@ namespace RitsukageGif.Desktop
                 var files = await dialog.StorageProvider.OpenFilePickerAsync(new()
                 {
                     Title = UiText.Get("HotkeyIgnoredProgramsTitle"), AllowMultiple = true,
-                    FileTypeFilter = [new(UiText.Get("HotkeyIgnoredProgramsTitle")) { Patterns = ["*.exe"] }],
+                    FileTypeFilter =
+                    [
+                        new(UiText.Get("HotkeyIgnoredProgramsTitle"))
+                            { Patterns = OperatingSystem.IsWindows() ? ["*.exe"] : ["*"] },
+                    ],
                 });
                 foreach (var file in files)
                     if (file.TryGetLocalPath() is { } path)
-                        AddProgram(path);
+                        AddProgram(OperatingSystem.IsMacOS() &&
+                                   path.EndsWith(".app", StringComparison.OrdinalIgnoreCase)
+                            ? Path.Combine(path, "*")
+                            : path);
             };
             save.Click += (_, _) => dialog.Close(pending.ToList());
             cancel.Click += (_, _) => dialog.Close();
             Refresh();
-            return await dialog.ShowDialog<List<string>?>(this);
+            return await dialog.ShowDialog<List<string>?>(owner ?? this);
 
             void AddProgram(string value)
             {
-                if (!HotkeyPolicyPreferences.TryNormalizeProgram(value, out var normalized))
+                var values = value.Split([',', ';', '，', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+                if (values.Length == 0 || values.Any(part => !HotkeyPolicyPreferences.TryNormalizeProgram(part, out _)))
                 {
                     error.Text = UiText.Get("HotkeyIgnoredProgramInvalid");
                     return;
                 }
 
-                if (!pending.Contains(normalized, StringComparer.OrdinalIgnoreCase)) pending.Add(normalized);
+                foreach (var normalized in ProgramExclusionRules.Normalize(values))
+                    if (!pending.Contains(normalized, ProgramExclusionRules.Comparer))
+                        pending.Add(normalized);
                 input.Text = "";
                 error.Text = "";
                 Refresh();

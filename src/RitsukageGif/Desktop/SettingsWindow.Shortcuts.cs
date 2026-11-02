@@ -20,12 +20,31 @@ namespace RitsukageGif.Desktop
             layout.Children.Add(tabs);
             var reset = new Button { HorizontalAlignment = HorizontalAlignment.Right };
             reset.Bind(ContentProperty, LiveText.Resource("BuiltinShortcutResetAll"));
-            Grid.SetRow(reset, 2);
-            layout.Children.Add(reset);
+            var mixing = new CheckBox
+            {
+                IsChecked = draft.MixingKeypadMainKeyboard, VerticalAlignment = VerticalAlignment.Center,
+            };
+            mixing.Bind(ContentProperty, LiveText.Resource("MixingKeypadMainKeyboard"));
+            var footer = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 8 };
+            footer.Children.Add(Setting(mixing, static settings => settings.MixingKeypadMainKeyboard));
+            Grid.SetColumn(reset, 1);
+            footer.Children.Add(reset);
+            Grid.SetRow(footer, 2);
+            layout.Children.Add(footer);
             var statuses = new List<(BuiltinShortcutDefinition Definition, ContentControl Status)>();
+            mixing.IsCheckedChanged += (_, _) =>
+            {
+                var enabled = mixing.IsChecked == true;
+                if (draft.MixingKeypadMainKeyboard == enabled) return;
+                draft.MixingKeypadMainKeyboard = enabled;
+                Validate();
+                RequestLiveApply();
+            };
             reset.Click += (_, _) =>
             {
                 draft.SelectionShortcuts.Clear();
+                draft.MixingKeypadMainKeyboard = false;
+                mixing.IsChecked = false;
                 Refresh();
                 RequestLiveApply();
             };
@@ -40,7 +59,8 @@ namespace RitsukageGif.Desktop
                 var contexts = new[]
                 {
                     "BuiltinShortcutSelectionContext", "BuiltinShortcutScreenshotContext",
-                    "BuiltinShortcutPinnedContext", "BuiltinShortcutLongshotContext",
+                    "BuiltinShortcutPinnedContext", "BuiltinShortcutPinnedTextContext",
+                    "BuiltinShortcutLongshotContext",
                 };
                 tabs.ItemsSource = contexts.Select(context =>
                 {
@@ -71,7 +91,7 @@ namespace RitsukageGif.Desktop
 
             void Validate()
             {
-                var issues = SelectionCommands.ValidateIssues(draft.SelectionShortcuts);
+                var issues = SelectionCommands.ValidateIssues(draft.SelectionShortcuts, draft.MixingKeypadMainKeyboard);
                 diagnostics.Text = string.Join(Environment.NewLine, issues.Select(issue => issue.Message));
                 diagnostics.IsVisible = issues.Count > 0;
                 foreach (var (definition, status) in statuses)
@@ -100,7 +120,7 @@ namespace RitsukageGif.Desktop
                 {
                     Text = KeyGestureDisplay.Format(BuiltinShortcuts.GetGesture(definition, draft.SelectionShortcuts)),
                     IsReadOnly = true,
-                    Watermark = UiText.Get("SelectionShortcutDisabled"),
+                    PlaceholderText = UiText.Get("SelectionShortcutDisabled"),
                     VerticalAlignment = VerticalAlignment.Center,
                     HorizontalContentAlignment = HorizontalAlignment.Center,
                 };
@@ -110,6 +130,9 @@ namespace RitsukageGif.Desktop
                 var clear = BindingButton("Clear", "M6,6 L18,18 M18,6 L6,18");
                 var row = new Grid { ColumnDefinitions = new("*,210,28,24"), ColumnSpacing = 8, MinHeight = 32 };
                 row.Children.Add(label);
+                SettingsField.Track(row, label.Children[0],
+                    settings => KeyGestureDisplay.Format(BuiltinShortcuts.GetGesture(definition,
+                        settings.SelectionShortcuts)));
                 Grid.SetColumn(editor, 1);
                 row.Children.Add(editor);
                 Grid.SetColumn(clear, 2);

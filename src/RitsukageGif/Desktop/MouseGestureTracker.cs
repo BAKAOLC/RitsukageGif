@@ -47,22 +47,26 @@ namespace RitsukageGif.Desktop
             gesture = default;
             if (!IsActive || button != _button) return false;
             var discrete = !IsDragging;
-            if (discrete)
-                gesture = new((_button, _doubleClick) switch
-                {
-                    (MouseButton.Left, false) => MouseGestureKind.LeftClick,
-                    (MouseButton.Left, true) => MouseGestureKind.LeftDoubleClick,
-                    (MouseButton.Right, false) => MouseGestureKind.RightClick,
-                    (MouseButton.Right, true) => MouseGestureKind.RightDoubleClick,
-                    (MouseButton.Middle, false) => MouseGestureKind.MiddleClick,
-                    (MouseButton.XButton1, false) => MouseGestureKind.X1Click,
-                    (MouseButton.XButton1, true) => MouseGestureKind.X1DoubleClick,
-                    (MouseButton.XButton2, false) => MouseGestureKind.X2Click,
-                    (MouseButton.XButton2, true) => MouseGestureKind.X2DoubleClick,
-                    _ => MouseGestureKind.MiddleDoubleClick,
-                }, _modifiers);
+            if (discrete) gesture = ClickGesture(_button, _modifiers, _doubleClick ? 2 : 1);
             Reset();
             return discrete;
+        }
+
+        internal static InputMouseGesture ClickGesture(MouseButton button, KeyModifiers modifiers, int clickCount)
+        {
+            return new((button, clickCount >= 2) switch
+            {
+                (MouseButton.Left, false) => MouseGestureKind.LeftClick,
+                (MouseButton.Left, true) => MouseGestureKind.LeftDoubleClick,
+                (MouseButton.Right, false) => MouseGestureKind.RightClick,
+                (MouseButton.Right, true) => MouseGestureKind.RightDoubleClick,
+                (MouseButton.Middle, false) => MouseGestureKind.MiddleClick,
+                (MouseButton.XButton1, false) => MouseGestureKind.X1Click,
+                (MouseButton.XButton1, true) => MouseGestureKind.X1DoubleClick,
+                (MouseButton.XButton2, false) => MouseGestureKind.X2Click,
+                (MouseButton.XButton2, true) => MouseGestureKind.X2DoubleClick,
+                _ => MouseGestureKind.MiddleDoubleClick,
+            }, modifiers);
         }
 
         internal void Reset()

@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
         {
             return key is "GeneralHeading" or "AppearanceHeading" or "ScreenshotHeading" or "SettingsAnnotationHeading"
                 or "SettingsPinsHeading" or "ScreenshotSaveHeading" or "GlobalActionsHeading" or "SettingsLocalInput"
-                or "MouseShortcutsHeading" or "GlobalMouseHeading";
+                or "MouseShortcutsHeading" or "GlobalMouseHeading" or "SettingsTransferHeading";
         }
 
         internal static AppSettings ResetPage(AppSettings value, string key)
@@ -16,7 +16,8 @@ namespace RitsukageGif.Desktop
             {
                 "GeneralHeading" => value with
                 {
-                    Language = defaults.Language, System = defaults.System, Recognition = defaults.Recognition,
+                    Language = defaults.Language, System = defaults.System, Network = defaults.Network,
+                    Recognition = defaults.Recognition,
                     Translation = defaults.Translation,
                     CheckForUpdates = defaults.CheckForUpdates, CloseToTray = defaults.CloseToTray,
                     MinimizeToTray = defaults.MinimizeToTray, Sound = defaults.Sound,
@@ -69,9 +70,21 @@ namespace RitsukageGif.Desktop
                     GlobalActions = defaults.GlobalActions,
                     GlobalMouseBindings = [], HotkeyPolicy = defaults.HotkeyPolicy,
                 },
-                "SettingsLocalInput" => value with { SelectionShortcuts = new(StringComparer.Ordinal) },
+                "SettingsLocalInput" => value with
+                {
+                    SelectionShortcuts = new(StringComparer.Ordinal),
+                    MixingKeypadMainKeyboard = defaults.MixingKeypadMainKeyboard,
+                },
                 "MouseShortcutsHeading" => value with { MouseShortcuts = defaults.MouseShortcuts },
-                "GlobalMouseHeading" => value with { GlobalMouseBindings = defaults.GlobalMouseBindings },
+                "GlobalMouseHeading" => value with
+                {
+                    GlobalMouseBindings = defaults.GlobalMouseBindings,
+                    GlobalMouseShowMask = defaults.GlobalMouseShowMask,
+                },
+                "SettingsTransferHeading" => value with
+                {
+                    NonDefaultConfigItemsFontNotBold = defaults.NonDefaultConfigItemsFontNotBold,
+                },
                 _ => value,
             };
         }
@@ -84,7 +97,7 @@ namespace RitsukageGif.Desktop
                 ColorPalette = defaults.ColorPalette, SharedColor = defaults.SharedColor,
                 RememberLastTool = defaults.RememberLastTool, RememberPinnedTool = defaults.RememberPinnedTool,
                 LimitToSelection = defaults.LimitToSelection,
-                SecondaryEditingEnabled = defaults.SecondaryEditingEnabled,
+                SecondaryEditing = defaults.SecondaryEditing,
                 QuickSettingsEnabled = defaults.QuickSettingsEnabled,
                 QuickSettingsPadding = defaults.QuickSettingsPadding,
                 PencilCursor = defaults.PencilCursor, MaximumBrushThickness = defaults.MaximumBrushThickness,

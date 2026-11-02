@@ -93,8 +93,15 @@ namespace RitsukageGif.Desktop
             _unavailable.Clear();
             _screens.Clear();
             foreach (var (key, entry) in _windows)
-                if (MotionTime - entry.LastUsed > 5) _expired.Add(key);
-                else entry.HasFrame = false;
+                if (MotionTime - entry.LastUsed > 5)
+                {
+                    _expired.Add(key);
+                }
+                else
+                {
+                    entry.HasFrame = false;
+                    entry.Region.BeginFrame();
+                }
 
             foreach (var key in _expired)
             {
@@ -160,17 +167,18 @@ namespace RitsukageGif.Desktop
             return current;
         }
 
-        public (byte[]? Pixels, int Width, int Height) CaptureWindow(nint handle, RecordingOptions options,
-            CancellationToken token)
+        public (byte[]? Pixels, int Width, int Height, PixelRect? Bounds) CaptureWindow(nint handle,
+            RecordingOptions options, PixelRect region, int outputWidth, int outputHeight, CancellationToken token)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
             var key = (handle, options.Cursor, _captureFps ?? options.Fps);
-            if (_unavailable.Contains(key)) return (null, 0, 0);
+            if (_unavailable.Contains(key)) return (null, 0, 0, null);
             if (!_windows.TryGetValue(key, out var entry))
             {
                 var fps = _captureFps ?? options.Fps;
-                var capture = _bufferSources && _windows.Count < MaximumBufferedSources
+                var capture = _bufferSources && !OperatingSystem.IsMacOS() && !DesktopCapture.UsesSourceSelection &&
+                              _windows.Count < MaximumBufferedSources
                     ? new BufferedSceneWindowSource(() => _windowFactory(handle, options.Cursor, fps), fps)
                     : _windowFactory(handle, options.Cursor, fps);
                 entry = new(capture);
@@ -178,31 +186,31 @@ namespace RitsukageGif.Desktop
             }
 
             entry.LastUsed = MotionTime;
-            if (!entry.HasFrame)
+            try
             {
-                try
+                if (PrepareWindowRegion(entry.Capture, entry.Region, region, outputWidth, outputHeight, entry.HasFrame))
                 {
                     entry.Pixels = entry.Capture.Capture(token);
+                    entry.HasFrame = true;
                 }
-                catch (COMException ex) when (ex.HResult == unchecked((int)0x80000013))
-                {
-                    entry.Capture.Dispose();
-                    _windows.Remove(key);
-                    _unavailable.Add(key);
-                    return (null, 0, 0);
-                }
-                catch (CaptureSourceLostException)
-                {
-                    entry.Capture.Dispose();
-                    _windows.Remove(key);
-                    _unavailable.Add(key);
-                    return (null, 0, 0);
-                }
-
-                entry.HasFrame = true;
+            }
+            catch (COMException ex) when (ex.HResult == unchecked((int)0x80000013))
+            {
+                entry.Capture.Dispose();
+                _windows.Remove(key);
+                _unavailable.Add(key);
+                return (null, 0, 0, null);
+            }
+            catch (CaptureSourceLostException)
+            {
+                entry.Capture.Dispose();
+                _windows.Remove(key);
+                _unavailable.Add(key);
+                return (null, 0, 0, null);
             }
 
-            return (entry.Pixels, entry.Capture.Width, entry.Capture.Height);
+            return (entry.Pixels, entry.Capture.Width, entry.Capture.Height,
+                (entry.Capture as ISceneRegionSource)?.CoordinateBounds);
         }
 
         public MediaFrameSource GetMedia(string path, CancellationToken token)
@@ -218,7 +226,8 @@ namespace RitsukageGif.Desktop
             return source;
         }
 
-        private sealed class WindowSource(nint handle, bool cursor, int fps) : ISceneWindowSource, IColorFrameSource
+        private sealed class WindowSource(nint handle, bool cursor, int fps)
+            : ISceneWindowSource, IColorFrameSource, ISceneRegionSource
         {
             // Scene consumers finish reading before the next capture; exported scene frames own their buffers.
             private readonly WindowContentCapture _capture = new(handle, cursor, fps, false);
@@ -226,6 +235,15 @@ namespace RitsukageGif.Desktop
             public CapturedFrameSet CaptureFrames(CancellationToken token = default)
             {
                 return _capture.CaptureFrames(token);
+            }
+
+            public bool RegionCaptureSupported => OperatingSystem.IsMacOS() || DesktopCapture.UsesSourceSelection;
+
+            public PixelRect? CoordinateBounds => _capture.CoordinateBounds;
+
+            public void ConfigureRegion(PixelRect region, int outputWidth, int outputHeight)
+            {
+                _capture.ConfigureRegion(region, outputWidth, outputHeight);
             }
 
             public int Width => _capture.Width;
@@ -246,6 +264,7 @@ namespace RitsukageGif.Desktop
         private sealed class WindowEntry(ISceneWindowSource capture)
         {
             public readonly ISceneWindowSource Capture = capture;
+            public readonly WindowRegionRequest Region = new();
             public bool HasFrame;
             public double LastUsed;
             public byte[]? Pixels;

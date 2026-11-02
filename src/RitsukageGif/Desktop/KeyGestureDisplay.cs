@@ -13,7 +13,7 @@ namespace RitsukageGif.Desktop
                 Key.Back => "Backspace",
                 Key.LeftShift or Key.RightShift => "Shift",
                 Key.OemTilde => "`",
-                Key.OemPlus => "+",
+                Key.OemPlus => "=",
                 Key.OemMinus => "-",
                 Key.OemComma => ",",
                 Key.OemPeriod => ".",
@@ -53,6 +53,7 @@ namespace RitsukageGif.Desktop
             {
                 [>= '0' and <= '9'] => "D" + key,
                 "`" => "OemTilde",
+                "=" => "OemPlus",
                 "-" => "OemMinus",
                 "," => "OemComma",
                 "." => "OemPeriod",

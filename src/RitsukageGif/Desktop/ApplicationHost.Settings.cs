@@ -24,6 +24,21 @@ namespace RitsukageGif.Desktop
                 var baseline = Settings.Snapshot();
                 var settingsWindow = new SettingsWindow(baseline)
                 {
+                    HotkeyRegistration = GetActionHotkeyRegistration,
+                    GlobalMouseRegistration = GetGlobalMouseRegistration,
+                    RunActionScript = RunActionScriptAsync,
+                    CurrentSettingsSnapshot = () => Settings.Snapshot(),
+                    StartupStatus = _startServices && StartupRegistrationFactory.Supported
+                        ? () => StartupRegistrationFactory.Create()
+                            .GetStatus(Environment.ProcessPath ?? throw new InvalidOperationException())
+                        : null,
+                    CurrentNetworkPreferences = () => Settings.Network,
+                    CommitNetworkPreferences = async (preferences, password, token) =>
+                    {
+                        var committed = await CommitNetworkPreferencesAsync(preferences, password, token);
+                        baseline = baseline with { Network = committed };
+                        return committed;
+                    },
                     ApplySettings = edited =>
                     {
                         UpdateSettings(Settings.MergeChanges(baseline, edited));

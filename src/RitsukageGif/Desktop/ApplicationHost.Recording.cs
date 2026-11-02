@@ -19,6 +19,11 @@ namespace RitsukageGif.Desktop
 
             if (IsSelecting || IsConfiguring || IsBusy || Region is not { } region) return;
             View?.SaveCommon();
+            await StartAnimationRecordingCore(region);
+        }
+
+        private Task<RecordingOutcome> StartAnimationRecordingCore(PixelRect region)
+        {
             View?.PausePreview();
             LatestProgress = null;
             _manualCaptureCompleted = false;
@@ -33,7 +38,7 @@ namespace RitsukageGif.Desktop
             _startOverrides = null;
             _operation = RecordAsync(region, _presets.ActivePreset ?? _manualPreset,
                 overrides, _stop.Token, _abort.Token);
-            await _operation;
+            return _operation;
         }
 
         private void UpdateRecordingProgress(RecordingProgress progress, bool manualRecording)
@@ -72,6 +77,12 @@ namespace RitsukageGif.Desktop
                 if (preset?.Layout is { } layout) region = new(0, 0, layout.Width, layout.Height);
                 var options = new RecordingOptions(region, settings.Fps, settings.Divisor, settings.Cursor,
                     settings.Format, settings.Quality, settings.UseFfmpeg, preset is not null);
+                options = options with
+                {
+                    PixelDensity = (preset is null || ReferenceEquals(preset, _manualPreset)) && preset?.Layout is null
+                        ? NativeDisplayCatalog.Density(region)
+                        : 1,
+                };
                 options.Validate();
                 var extension =
                     options.Format switch { OutputFormat.WebP => ".webp", OutputFormat.APng => ".png", _ => ".gif" };
@@ -99,7 +110,7 @@ namespace RitsukageGif.Desktop
                               CaptureSourceKind.Window;
                         using var prepareCancellation = CancellationTokenSource.CreateLinkedTokenSource(stop, abort);
                         await DesktopCapture.PrepareSourceAsync(windowSource, settings.Cursor, settings.Fps,
-                            prepareCancellation.Token);
+                            settings.CaptureColorMode != OutputColorMode.Sdr, prepareCancellation.Token);
                         monitors = [DesktopCapture.SourceBounds ?? throw new CaptureSourceLostException()];
                     }
 

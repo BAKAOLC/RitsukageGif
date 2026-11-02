@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
@@ -22,8 +22,8 @@ namespace RitsukageGif.Desktop
         private readonly Grid _editing = new() { RowDefinitions = new("Auto,*,Auto,Auto") };
         private readonly ListBox _frames = new() { SelectionMode = SelectionMode.Multiple, Height = 94 };
         private readonly CompactNumberInput _height = Number(480, 1, 16384);
+        private readonly CancellationTokenSource _lifetime = new();
 
-        private readonly bool _imageMode;
         private readonly CompactNumberInput _loops = Number(0, 0, 65535);
         private readonly Stopwatch _playClock = new();
         private readonly DispatcherTimer _playback = new();
@@ -40,18 +40,11 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _operation;
         private string? _path;
 
-        public AnimationEditorWindow(string? initialPath = null, bool imageMode = false, byte[]? initialImage = null)
+        public AnimationEditorWindow(string? initialPath = null)
         {
-            _imageMode = imageMode;
-            if (imageMode)
-            {
-                _format.ItemsSource = new[] { "PNG", "JPEG", "BMP" };
-                _format.SelectedIndex = 0;
-            }
-
             ConfigureTypography();
             Foreground = AppTheme.Ink;
-            Title = UiText.Get(imageMode ? "ImageEditorTitle" : "AnimationEditorTitle");
+            Title = UiText.Get("AnimationEditorTitle");
             Width = 1280;
             Height = 800;
             MinWidth = 1280;
@@ -103,22 +96,13 @@ namespace RitsukageGif.Desktop
             _frames.CornerRadius = new(6);
             Grid.SetRow(_frames, 2);
             _editing.Children.Add(_frames);
-            _frames.IsVisible = !imageMode;
             var frameTools = BuildTransport();
             Grid.SetRow(frameTools, 3);
             _editing.Children.Add(frameTools);
-            frameTools.IsVisible = !imageMode;
             _frames.ContextMenu = BuildFrameMenu();
             var root = new Grid { RowDefinitions = new("*,Auto") };
             root.Children.Add(_editing);
             var bottom = new DockPanel { Margin = new(10, 2, 10, 8) };
-            if (imageMode)
-            {
-                Detach(_zoomLabel);
-                DockPanel.SetDock(_zoomLabel, Dock.Right);
-                bottom.Children.Add(_zoomLabel);
-            }
-
             DockPanel.SetDock(_cancel, Dock.Right);
             bottom.Children.Add(_cancel);
             bottom.Children.Add(_status);
@@ -131,8 +115,10 @@ namespace RitsukageGif.Desktop
             Closing += OnClosing;
             Closed += (_, _) =>
             {
-                Logger.ZLogInformation($"Animation editor window closed. ImageMode={_imageMode}");
+                Logger.ZLogInformation($"Animation editor window closed.");
                 _languageClosed = true;
+                _lifetime.Cancel();
+                _lifetime.Dispose();
                 UiText.LanguageChanged -= RefreshLanguage;
                 _playback.Stop();
                 _canvas.Dispose();
@@ -142,9 +128,8 @@ namespace RitsukageGif.Desktop
             Opened += async (_, _) =>
             {
                 Logger.ZLogInformation(
-                    $"Animation editor window opened. ImageMode={_imageMode} HasInitialPath={initialPath is not null} HasInitialImage={initialImage is not null}");
-                if (initialImage is not null) await LoadScreenshotAsync(initialImage);
-                else if (initialPath is not null) await LoadAsync(initialPath);
+                    $"Animation editor window opened. HasInitialPath={initialPath is not null}");
+                if (initialPath is not null) await LoadAsync(initialPath);
                 else
                     await RunAsync(async token =>
                         {
@@ -327,10 +312,8 @@ namespace RitsukageGif.Desktop
             _delay.Value = frame.DelayMs;
             RequestThumbnailPrefetch();
             UpdateFrameSummary();
-            if (_imageMode) SetStatus("ImageFrameStatus", _document.Width, _document.Height);
-            else
-                SetStatus("AnimationFrameStatus", CurrentFrame + 1, _document.Frames.Count,
-                    _document.Width, _document.Height);
+            SetStatus("AnimationFrameStatus", CurrentFrame + 1, _document.Frames.Count,
+                _document.Width, _document.Height);
         }
 
         private void TogglePlayback()

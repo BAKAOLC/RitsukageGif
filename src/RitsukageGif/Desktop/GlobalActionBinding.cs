@@ -8,8 +8,12 @@ namespace RitsukageGif.Desktop
         public string Shortcut { get; set; } = "";
         public bool ShowInTray { get; set; } = true;
         public bool Enabled { get; set; } = true;
+
+        // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
+        public List<string> IgnoredPrograms { get; set; } = [];
         public string Parameter { get; set; } = "";
         public string PresetName { get; set; } = "";
         public Dictionary<string, string> Arguments { get; set; } = new(StringComparer.Ordinal);
+        public string Script { get; set; } = "";
     }
 }

@@ -53,6 +53,13 @@ namespace RitsukageGif.Desktop
                         if (IsSelecting) return new(false, CurrentState, UiText.Get("CommandNotReady"));
                         _pinnedImages.ShowAll();
                         break;
+                    case ["pin-files", _, ..]:
+                        if (IsSelecting) return new(false, CurrentState, UiText.Get("CommandNotReady"));
+                        if (!await _pinnedImages.PinFilesAsync(args[1..]))
+                            return new(false, CurrentState, UiText.Get("DesktopToolbarDropUnsupported"));
+                        break;
+                    case ["pin-files-list", var shellList]:
+                        return await ExecuteCommandAsync(Program.ReadShellFileList(shellList));
                     case ["pins", "hide"]:
                         if (IsSelecting) return new(false, CurrentState, UiText.Get("CommandNotReady"));
                         _pinnedImages.HideAll();
