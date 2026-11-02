@@ -13,10 +13,12 @@ namespace RitsukageGif.Desktop
     {
         private static readonly ConcurrentDictionary<nuint, WeakReference<HdrPreviewHost>> Subscriptions = new();
         private static long _nextSubscription;
+        private (nint Monitor, bool Hdr, float WhiteLevel)? _displayState;
         private bool _failed;
         private PreviewFrame? _frame;
         private nint _monitor;
         private WindowsHdrPresenter? _presenter;
+        private MacOsHdrPresenter? _macPresenter;
         private bool _refreshPending, _disposed;
         private nuint _subscription;
         private nint _window, _parent;
@@ -27,6 +29,8 @@ namespace RitsukageGif.Desktop
             IsVisible = false;
         }
 
+        internal static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
         public void Dispose()
         {
             if (_disposed) return;
@@ -34,10 +38,19 @@ namespace RitsukageGif.Desktop
             _disposed = true;
             _frame?.Dispose();
             _frame = null;
-            DestroyWindows();
+            if (OperatingSystem.IsMacOS()) DestroyMac();
+            else DestroyWindows();
+        }
+
+        internal static float DisplayWhiteLevel(nint window, float sourceReferenceWhite = 1)
+        {
+            return OperatingSystem.IsWindows()
+                ? WindowsDisplayColor.Read(WindowsDisplayColor.ForWindow(window)).WhiteLevel
+                : sourceReferenceWhite;
         }
 
         public event Action<bool>? PresentationChanged;
+        public event Action? DisplayColorChanged;
 
         private void SetPresentation(bool visible)
         {
@@ -56,6 +69,7 @@ namespace RitsukageGif.Desktop
 
         protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
         {
+            if (OperatingSystem.IsMacOS()) return CreateMac(parent);
             if (!OperatingSystem.IsWindows()) return base.CreateNativeControlCore(parent);
             _parent = TopLevel.GetTopLevel(this)?.TryGetPlatformHandle()?.Handle ?? parent.Handle;
             _window = CreateWindowEx(0, "STATIC", "", 0x40000000 | 0x04000000, 0, 0, 1, 1, parent.Handle, 0, 0, 0);
@@ -77,6 +91,7 @@ namespace RitsukageGif.Desktop
         protected override void DestroyNativeControlCore(IPlatformHandle control)
         {
             if (OperatingSystem.IsWindows()) DestroyWindows();
+            else if (OperatingSystem.IsMacOS() && _macPresenter is not null) DestroyMac();
             else base.DestroyNativeControlCore(control);
         }
 
@@ -116,6 +131,12 @@ namespace RitsukageGif.Desktop
         private void Refresh()
         {
             if (_disposed) return;
+            if (OperatingSystem.IsMacOS())
+            {
+                RefreshMac();
+                return;
+            }
+
             if (_window == 0 || _frame?.HdrPixels is not { } pixels || !OperatingSystem.IsWindows())
             {
                 SetPresentation(false);
@@ -131,7 +152,18 @@ namespace RitsukageGif.Desktop
                 _presenter = null;
             }
 
-            if (!WindowsDisplayColor.Read(monitor).Hdr || _failed)
+            var color = WindowsDisplayColor.Read(monitor);
+            if (_displayState is not { } previous || previous.Monitor != monitor ||
+                previous.Hdr != color.Hdr || !previous.WhiteLevel.Equals(color.WhiteLevel))
+            {
+                _displayState = (monitor, color.Hdr, color.WhiteLevel);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (!_disposed) DisplayColorChanged?.Invoke();
+                }, DispatcherPriority.Render);
+            }
+
+            if (!color.Hdr || _failed)
             {
                 SetPresentation(false);
                 return;

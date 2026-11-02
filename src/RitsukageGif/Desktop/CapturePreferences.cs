@@ -4,6 +4,12 @@ namespace RitsukageGif.Desktop
 {
     public sealed record CapturePreferences
     {
+        public bool QuitOnForeignActivation { get; set; }
+        public bool CycleRegionHistory { get; set; }
+        public bool DisableMouseWheel { get; set; }
+        public CaptureBlockedWindowsKeys BlockedWindowsKeys { get; set; }
+        public bool PersistHistory { get; set; } = true;
+        public CaptureDoubleClickAction DoubleClickAction { get; set; } = CaptureDoubleClickAction.Copy;
         public CaptureDetectionMode DetectionMode { get; set; } = CaptureDetectionMode.Windows;
         public int ElementMargin { get; set; }
         public bool ExpandOnOutsideClick { get; set; } = true;
@@ -15,9 +21,11 @@ namespace RitsukageGif.Desktop
         public bool GuideThirds { get; set; }
         public bool GuideMeasurements { get; set; } = true;
         public bool GuideMagnifier { get; set; } = true;
+        public bool RelativeCoordinates { get; set; }
         public bool ShowInformation { get; set; } = true;
         public bool ShowMagnifier { get; set; } = true;
         public bool ShowShortcutHints { get; set; } = true;
+        public CaptureCodeDetectionMode CodeDetection { get; set; }
         public int RegionHistoryCapacity { get; set; } = 100;
         public int ScreenshotHistoryCapacity { get; set; } = 100;
         public int ScreenshotHistoryMaximumMiB { get; set; } = 128;
@@ -30,7 +38,10 @@ namespace RitsukageGif.Desktop
         public bool MagnifierCoordinates { get; set; } = true;
         public bool MagnifierShortcuts { get; set; } = true;
         public string MagnifierGridColor { get; set; } = "#46FFFFFF";
-        public CaptureSampleColorFormat MagnifierColorFormat { get; set; }
+
+        // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
+        public List<ColorFormatDefinition> ColorFormats { get; set; } = SampleColorFormats.CreateDefaults();
+        public string MagnifierColorFormatId { get; set; } = "rgb";
         public bool SmoothMagnifier { get; set; }
         public bool KeepDecoration { get; set; }
         public CaptureDecoration RememberedDecoration { get; set; } = CaptureDecoration.None;
@@ -39,9 +50,13 @@ namespace RitsukageGif.Desktop
 
         public CapturePreferences Normalize()
         {
+            var formats = SampleColorFormats.Normalize(ColorFormats);
             return this with
             {
+                DoubleClickAction =
+                Enum.IsDefined(DoubleClickAction) ? DoubleClickAction : CaptureDoubleClickAction.Copy,
                 DetectionMode = Enum.IsDefined(DetectionMode) ? DetectionMode : CaptureDetectionMode.Windows,
+                CodeDetection = Enum.IsDefined(CodeDetection) ? CodeDetection : CaptureCodeDetectionMode.Disabled,
                 CursorPolicy = Enum.IsDefined(CursorPolicy) ? CursorPolicy : CaptureCursorPolicy.Hidden,
                 AuxiliaryPolicy = Enum.IsDefined(AuxiliaryPolicy) ? AuxiliaryPolicy : CaptureAuxiliaryPolicy.Alt,
                 RegionHistoryCapacity = Math.Clamp(RegionHistoryCapacity, 0, 1000),
@@ -50,9 +65,9 @@ namespace RitsukageGif.Desktop
                 ElementMargin = Math.Clamp(ElementMargin, -128, 128),
                 Magnification = Math.Clamp(Magnification, 2, 32),
                 MagnifierGridColor = Color.TryParse(MagnifierGridColor, out var color) ? color.ToString() : "#46FFFFFF",
-                MagnifierColorFormat = Enum.IsDefined(MagnifierColorFormat)
-                    ? MagnifierColorFormat
-                    : CaptureSampleColorFormat.Rgb,
+                BlockedWindowsKeys = BlockedWindowsKeys & CaptureBlockedWindowsKeys.All,
+                ColorFormats = formats,
+                MagnifierColorFormatId = SampleColorFormats.First(formats, MagnifierColorFormatId).Id,
                 RememberedDecoration = NormalizeDecoration(RememberedDecoration),
                 FrameRoundRadius = double.IsFinite(FrameRoundRadius) ? Math.Clamp(FrameRoundRadius, 0, 60) : 12,
             };

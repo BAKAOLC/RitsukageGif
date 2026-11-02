@@ -8,13 +8,14 @@ namespace RitsukageGif.Desktop
         // Cache source frames only within BeginFrame; each scene applies its own crop and tone mapping.
         private readonly Dictionary<(nint Handle, bool Cursor, int Fps), ColorWindowEntry> _colorWindows = [];
 
-        public CapturedFrameSet? CaptureWindowFrames(nint handle, RecordingOptions options, CancellationToken token)
+        public (CapturedFrameSet? Frames, PixelRect? Bounds) CaptureWindowFrames(nint handle, RecordingOptions options,
+            PixelRect region, int outputWidth, int outputHeight, CancellationToken token)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
             var fps = _captureFps ?? options.Fps;
             var key = (handle, options.Cursor, fps);
-            if (_unavailable.Contains(key)) return null;
+            if (_unavailable.Contains(key)) return (null, null);
             try
             {
                 if (!_colorWindows.TryGetValue(key, out var entry))
@@ -24,22 +25,24 @@ namespace RitsukageGif.Desktop
                 }
 
                 entry.LastUsed = MotionTime;
-                if (entry.HasFrame) return entry.Frame;
+                if (!PrepareWindowRegion(entry.Capture, entry.Region, region, outputWidth, outputHeight,
+                        entry.HasFrame))
+                    return (entry.Frame, (entry.Capture as ISceneRegionSource)?.CoordinateBounds);
                 entry.Frame = entry.Capture is IColorFrameSource color
                     ? color.CaptureFrames(token)
                     : SdrFrame(entry.Capture, token);
                 entry.HasFrame = true;
-                return entry.Frame;
+                return (entry.Frame, (entry.Capture as ISceneRegionSource)?.CoordinateBounds);
             }
             catch (COMException error) when (error.HResult == unchecked((int)0x80000013))
             {
                 DropColorWindow(key);
-                return null;
+                return (null, null);
             }
             catch (CaptureSourceLostException)
             {
                 DropColorWindow(key);
-                return null;
+                return (null, null);
             }
         }
 
@@ -72,6 +75,7 @@ namespace RitsukageGif.Desktop
                 {
                     entry.Frame = null;
                     entry.HasFrame = false;
+                    entry.Region.BeginFrame();
                 }
 
             foreach (var key in _expired)
@@ -92,6 +96,7 @@ namespace RitsukageGif.Desktop
         private sealed class ColorWindowEntry(ISceneWindowSource capture)
         {
             public readonly ISceneWindowSource Capture = capture;
+            public readonly WindowRegionRequest Region = new();
             public CapturedFrameSet? Frame;
             public bool HasFrame;
             public double LastUsed;

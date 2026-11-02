@@ -23,6 +23,13 @@ namespace RitsukageGif.Desktop
                 DiagnosticsActions.OpenLogs();
                 return Task.CompletedTask;
             });
+            var pinRecovery = Path.Combine(ApplicationStorage.DataDirectory, "pins.recovery");
+            if (Directory.Exists(pinRecovery))
+                Add("DiagnosticsOpenPinRecovery", () =>
+                {
+                    PlatformShell.OpenDirectory(pinRecovery);
+                    return Task.CompletedTask;
+                });
             Add("DiagnosticsExport", async () =>
             {
                 if (await DiagnosticsActions.ExportAsync(this, token)) status.Text = UiText.Get("DiagnosticsExported");

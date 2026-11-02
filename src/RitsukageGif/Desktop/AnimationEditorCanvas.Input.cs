@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Input;
-using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
@@ -32,7 +31,7 @@ namespace RitsukageGif.Desktop
                 }
 
             using var stream = new MemoryStream();
-            target.Save(stream);
+            target.Save(stream, PngBitmapEncoderOptions.Default);
             return stream.ToArray();
         }
 
@@ -222,7 +221,7 @@ namespace RitsukageGif.Desktop
             InvalidateVisual();
         }
 
-        protected override void OnLostFocus(RoutedEventArgs e)
+        protected override void OnLostFocus(FocusChangedEventArgs e)
         {
             base.OnLostFocus(e);
             CancelGesture();

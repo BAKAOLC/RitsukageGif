@@ -20,50 +20,70 @@ namespace RitsukageGif.Desktop
             paletteRow.Children.Add(sharedColor);
             Grid.SetColumn(paletteButton, 1);
             paletteRow.Children.Add(paletteButton);
-            common.Children.Add(paletteRow);
-            var secondary = Choice("AnnotationSecondaryEditing", value.SecondaryEditingEnabled ? 0 : 1,
-                "AnnotationEnabled", "AnnotationDisabled");
-            Add(common, "AnnotationSecondaryEditing", secondary);
+            common.Children.Add(SettingsField.Track(paletteRow, sharedColor,
+                static settings => (settings.Annotation.SharedColor, settings.Annotation.ColorPalette),
+                static (left, right) => left.SharedColor == right.SharedColor &&
+                                        SettingsField.SameColors(left.ColorPalette, right.ColorPalette)));
+            var secondaryModes = new[]
+            {
+                AnnotationSecondaryEditingMode.Disabled, AnnotationSecondaryEditingMode.Enabled,
+                AnnotationSecondaryEditingMode.CompletelyDisabled, AnnotationSecondaryEditingMode.TextOnly,
+            };
+            var secondary = Choice("AnnotationSecondaryEditing", Array.IndexOf(secondaryModes, value.SecondaryEditing),
+                "AnnotationDisabled", "AnnotationEnabled", "AnnotationCompletelyDisabled", "AnnotationTextOnly");
+            Add(common, "AnnotationSecondaryEditing", secondary,
+                static settings => settings.Annotation.SecondaryEditing);
             var quickMark = Choice("AnnotationQuickSettings", value.QuickSettingsEnabled ? 0 : 1,
                 "AnnotationEnabled", "AnnotationDisabled");
-            Add(common, "AnnotationQuickSettings", quickMark);
+            Add(common, "AnnotationQuickSettings", quickMark,
+                static settings => settings.Annotation.QuickSettingsEnabled);
             var cursor = Choice("AnnotationPencilCursor", (int)value.PencilCursor,
                 "AnnotationCursorCrosshairRing", "AnnotationCursorCrosshair", "AnnotationCursorRing");
-            Add(common, "AnnotationPencilCursor", cursor);
+            Add(common, "AnnotationPencilCursor", cursor, static settings => settings.Annotation.PencilCursor);
             var maximum = Number("AnnotationMaximumBrushThickness", value.MaximumBrushThickness, 1, 1024, 2);
-            Add(common, "AnnotationMaximumBrushThickness", maximum);
+            Add(common, "AnnotationMaximumBrushThickness", maximum,
+                static settings => settings.Annotation.MaximumBrushThickness);
             var rememberPinned = Check("AnnotationRememberPinnedTool", value.RememberPinnedTool);
-            Add(common, "AnnotationRememberPinnedTool", rememberPinned);
+            Add(common, "AnnotationRememberPinnedTool", rememberPinned,
+                static settings => settings.Annotation.RememberPinnedTool);
             var rememberTool = Check("AnnotationRememberTool", value.RememberLastTool);
-            Add(common, "AnnotationRememberTool", rememberTool);
+            Add(common, "AnnotationRememberTool", rememberTool,
+                static settings => settings.Annotation.RememberLastTool);
             var limit = Check("AnnotationLimitSelection", value.LimitToSelection);
-            Add(common, "AnnotationLimitSelection", limit);
+            Add(common, "AnnotationLimitSelection", limit, static settings => settings.Annotation.LimitToSelection);
             var wheel = Check("AnnotationDisableWheelAdjustment", value.DisableWheelToolAdjustment);
-            Add(common, "AnnotationDisableWheelAdjustment", wheel);
+            Add(common, "AnnotationDisableWheelAdjustment", wheel,
+                static settings => settings.Annotation.DisableWheelToolAdjustment);
             var quickMargin = Number("AnnotationQuickMarkMargin", value.QuickSettingsPadding, 0, 64, 0);
-            Add(common, "AnnotationQuickMarkMargin", quickMargin);
-            Add(common, "ToolbarToolsTitle", ToolbarCustomizationButton(draft, true));
+            Add(common, "AnnotationQuickMarkMargin", quickMargin,
+                static settings => settings.Annotation.QuickSettingsPadding);
+            Add(common, "ToolbarToolsTitle", ToolbarCustomizationButton(draft, true),
+                static settings => settings.Annotation.Toolbar.Columns, SettingsField.SameColumns);
             page.Children.Add(MouseSettingsCard(common));
 
             var geometry = Section("AnnotationGeometryBehavior");
             var controlPoints = Choice("AnnotationControlPointVisibility", (int)value.ControlPointVisibility,
                 "AnnotationControlPointsHover", "AnnotationControlPointsAlways", "AnnotationControlPointsHidden");
-            Add(geometry, "AnnotationControlPointVisibility", controlPoints);
+            Add(geometry, "AnnotationControlPointVisibility", controlPoints,
+                static settings => settings.Annotation.ControlPointVisibility);
 
             var numbers = Section("AnnotationNumberBehavior");
             var renumber = Check("AnnotationRenumberOnDelete", value.RenumberOnDelete);
             var fromZero = Check("AnnotationNumberStartsAtZero", value.NumberStartsAtZero);
             var globalNumbers = Check("AnnotationGlobalNumberCounter", value.GlobalNumberCounter);
-            Add(numbers, "AnnotationRenumberOnDelete", renumber);
-            Add(numbers, "AnnotationNumberStartsAtZero", fromZero);
-            Add(numbers, "AnnotationGlobalNumberCounter", globalNumbers);
+            Add(numbers, "AnnotationRenumberOnDelete", renumber,
+                static settings => settings.Annotation.RenumberOnDelete);
+            Add(numbers, "AnnotationNumberStartsAtZero", fromZero,
+                static settings => settings.Annotation.NumberStartsAtZero);
+            Add(numbers, "AnnotationGlobalNumberCounter", globalNumbers,
+                static settings => settings.Annotation.GlobalNumberCounter);
 
             var pencil = Section("AnnotationPencilBehavior");
             var shift = Choice("AnnotationPencilShiftMode", (int)value.PencilShiftMode,
                 "AnnotationShiftFreeAngle", "AnnotationShiftSnapAngle");
-            Add(pencil, "AnnotationPencilShiftMode", shift);
+            Add(pencil, "AnnotationPencilShiftMode", shift, static settings => settings.Annotation.PencilShiftMode);
             var smooth = Check("AnnotationSmoothBrush", value.SmoothBrush);
-            Add(pencil, "AnnotationSmoothBrush", smooth);
+            Add(pencil, "AnnotationSmoothBrush", smooth, static settings => settings.Annotation.SmoothBrush);
 
             var polyline = Section("AnnotationToolPolyline");
             var joins = new[] { PenLineJoin.Round, PenLineJoin.Bevel, PenLineJoin.Miter };
@@ -72,31 +92,39 @@ namespace RitsukageGif.Desktop
                 "AnnotationJoinRound", "AnnotationJoinBevel", "AnnotationJoinMiter");
             var cap = Choice("AnnotationPolylineCap", Array.IndexOf(caps, value.PolylineCap),
                 "AnnotationCapRound", "AnnotationCapFlat", "AnnotationCapSquare");
-            Add(polyline, "AnnotationPolylineJoin", join);
-            Add(polyline, "AnnotationPolylineCap", cap);
+            Add(polyline, "AnnotationPolylineJoin", join, static settings => settings.Annotation.PolylineJoin);
+            Add(polyline, "AnnotationPolylineCap", cap, static settings => settings.Annotation.PolylineCap);
 
             var arrow = Section("ScreenshotArrow");
             var suppressComment = Check("AnnotationArrowSuppressComment", !value.ArrowDoubleClickCommentEnabled);
             var hideCurveControls = Check("AnnotationArrowHideCurveControls", !value.ArrowCurveControlPoints);
-            Add(arrow, "AnnotationArrowSuppressComment", suppressComment);
-            Add(arrow, "AnnotationArrowHideCurveControls", hideCurveControls);
+            Add(arrow, "AnnotationArrowSuppressComment", suppressComment,
+                static settings => settings.Annotation.ArrowDoubleClickCommentEnabled);
+            Add(arrow, "AnnotationArrowHideCurveControls", hideCurveControls,
+                static settings => settings.Annotation.ArrowCurveControlPoints);
 
             var text = Section("AnnotationTextBehavior");
             var wrapping = Choice("AnnotationTextWrapMode", (int)value.TextWrapMode,
                 "AnnotationWrapWordOrCharacter", "AnnotationWrapNone");
-            Add(text, "AnnotationTextWrapMode", wrapping);
+            Add(text, "AnnotationTextWrapMode", wrapping, static settings => settings.Annotation.TextWrapMode);
 
             var eraser = Section("AnimationEraser");
             var eraserEditing = Check("AnnotationEraserSecondaryEditing", value.EraserSecondaryEditingEnabled);
-            Add(eraser, "AnnotationEraserSecondaryEditing", eraserEditing);
+            Add(eraser, "AnnotationEraserSecondaryEditing", eraserEditing,
+                static settings => settings.Annotation.EraserSecondaryEditingEnabled);
             var privacy = Section("AnnotationAutoMosaic");
             var autoPrivacy = Check("AnnotationAutoPrivacy", value.AutoSelectPrivacyMosaic);
-            Add(privacy, "AnnotationAutoPrivacy", autoPrivacy);
+            Add(privacy, "AnnotationAutoPrivacy", autoPrivacy,
+                static settings => settings.Annotation.AutoSelectPrivacyMosaic);
+            var watermark = Section("AnnotationToolWatermark");
+            var autoWatermark = Check("AnnotationAutoWatermark", value.AutoAddWatermark);
+            Add(watermark, "AnnotationAutoWatermark", autoWatermark,
+                static settings => settings.Annotation.AutoAddWatermark);
             apply = () => draft.Annotation = value with
             {
                 SharedColor = sharedColor.IsChecked == true,
                 ColorPalette = [.. palette.Select(color => color.ToString())],
-                SecondaryEditingEnabled = secondary.SelectedIndex == 0,
+                SecondaryEditing = secondaryModes[Math.Max(0, secondary.SelectedIndex)],
                 QuickSettingsEnabled = quickMark.SelectedIndex == 0,
                 QuickSettingsPadding = (double)ReadSettingsNumber(quickMargin),
                 PencilCursor = (AnnotationPencilCursor)cursor.SelectedIndex,
@@ -115,6 +143,7 @@ namespace RitsukageGif.Desktop
                 ArrowCurveControlPoints = hideCurveControls.IsChecked != true,
                 EraserSecondaryEditingEnabled = eraserEditing.IsChecked == true,
                 AutoSelectPrivacyMosaic = autoPrivacy.IsChecked == true,
+                AutoAddWatermark = autoWatermark.IsChecked == true,
                 Toolbar = draft.Annotation.Toolbar,
             };
             return page;
@@ -144,17 +173,19 @@ namespace RitsukageGif.Desktop
                 };
             }
 
-            static void Add(StackPanel fields, string key, Control control)
+            static void Add<T>(StackPanel fields, string key, Control control, Func<AppSettings, T> getter,
+                Func<T, T, bool>? equals = null)
             {
                 Grid row;
                 if (control is CheckBox check)
                 {
+                    Setting(check, getter, equals);
                     check.HorizontalAlignment = HorizontalAlignment.Left;
                     row = new() { MinHeight = 32, Children = { check } };
                 }
                 else
                 {
-                    row = Labeled(key, control);
+                    row = SettingRow(key, control, getter, equals);
                 }
 
                 fields.Children.Add(new Border

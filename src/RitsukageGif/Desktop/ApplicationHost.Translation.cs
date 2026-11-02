@@ -18,16 +18,63 @@ namespace RitsukageGif.Desktop
                 _cleanupCancellation.Token);
         }
 
-        private async Task<bool> TranslateActionScreenshotAsync(Window? owner, ScreenshotResult result,
-            CancellationToken token)
+        private async Task OpenScreenshotTranslationAsync(ReadOnlyMemory<byte> png)
         {
-            if (result.Action != ScreenshotOutputAction.Copy) return await OutputScreenshotAsync(owner, result, token);
-            var text = await RecognitionOutput.RecognizeAsync(result.Png, Settings.Recognition,
-                _pinnedImages.TextRecognitionService, token);
+            try
+            {
+                await ShowImageTranslationAsync(_services.Context, png, _cleanupCancellation.Token);
+            }
+            catch (OperationCanceledException) when (_cleanupCancellation.IsCancellationRequested)
+            {
+            }
+            catch (Exception error)
+            {
+                HostLogger.ZLogWarning(
+                    $"Screenshot translation window failed: exceptionType={error.GetType().Name}, hresult={error.HResult}");
+                if (!IsClosing) SetStatus(UiText.Get("TranslationFailed"));
+            }
+        }
+
+        private Task ShowImageTranslationAsync(Window owner, ReadOnlyMemory<byte> png, CancellationToken token)
+        {
             token.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
-            await ShowTranslationAsync(owner ?? _services.Context, text, token);
-            return true;
+            var lifetime = CancellationTokenSource.CreateLinkedTokenSource(_cleanupCancellation.Token);
+            var baseline = Settings.Translation with { };
+            var task = ImageTranslationWindow.ShowAsync(owner, png, baseline, Settings.Recognition with { },
+                _pinnedImages.TextRecognitionService, true, edited =>
+                {
+                    var current = Settings;
+                    var updated = current.MergeChanges(current with { Translation = baseline },
+                        current with { Translation = edited });
+                    Settings = updated;
+                    QueueSettingsSave(updated);
+                    baseline = edited with { };
+                }, lifetime.Token);
+            _translationTasks.Add(task);
+            _ = ObserveImageTranslationAsync(task, lifetime);
+            return Task.CompletedTask;
+        }
+
+        private async Task ObserveImageTranslationAsync(Task task, CancellationTokenSource lifetime)
+        {
+            try
+            {
+                await task;
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+            {
+            }
+            catch (Exception error)
+            {
+                HostLogger.ZLogWarning(
+                    $"Image translation window failed: exceptionType={error.GetType().Name}, hresult={error.HResult}");
+                if (!IsClosing) SetStatus(UiText.Get("TranslationFailed"));
+            }
+            finally
+            {
+                _translationTasks.Remove(task);
+                lifetime.Dispose();
+            }
         }
 
         private async Task ShowTranslationAsync(Window owner, string text, CancellationToken token)

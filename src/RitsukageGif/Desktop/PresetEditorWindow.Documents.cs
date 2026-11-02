@@ -180,8 +180,7 @@ namespace RitsukageGif.Desktop
             _breakpoints.AddRange(document.Breakpoints);
             _editor.Document = document.Buffer;
             _editor.CaretOffset = Math.Min(document.Caret, document.Buffer.TextLength);
-            _editor.ScrollToHorizontalOffset(document.HorizontalOffset);
-            _editor.ScrollToVerticalOffset(document.VerticalOffset);
+            TextEditorScrolling.Restore(_editor, new(document.HorizontalOffset, document.VerticalOffset));
             _switchingDocument = true;
             _documentTabs.SelectedItem =
                 _documentTabs.Items.OfType<TabItem>().Single(t => ReferenceEquals(t.Tag, document));
@@ -351,8 +350,7 @@ namespace RitsukageGif.Desktop
             {
                 _savedText = text;
                 _editor.CaretOffset = Math.Min(document.Caret, document.Buffer.TextLength);
-                _editor.ScrollToHorizontalOffset(document.HorizontalOffset);
-                _editor.ScrollToVerticalOffset(document.VerticalOffset);
+                TextEditorScrolling.Restore(_editor, new(document.HorizontalOffset, document.VerticalOffset));
                 _revision++;
                 _semantic = null;
                 _analysis.Start();

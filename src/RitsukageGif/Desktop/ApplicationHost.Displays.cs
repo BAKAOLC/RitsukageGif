@@ -5,6 +5,7 @@ namespace RitsukageGif.Desktop
         private void DisplayChanged(object? sender, EventArgs args)
         {
             WindowsDisplayColor.Invalidate();
+            NativeDisplayCatalog.Update(Screens);
             RefreshDisplaySelection();
         }
 

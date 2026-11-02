@@ -22,6 +22,12 @@ namespace RitsukageGif.Desktop
 
         private static readonly string[] SystemUpdateChannelLabels = ["SystemUpdateStable", "SystemUpdatePreview"];
 
+        private static readonly string[] SystemExplorerModeLabels =
+            ["SystemFeatureDisabled", "SystemExplorerImagesOnly", "SystemExplorerAllFiles"];
+
+        private static readonly string[] SystemDesktopToolbarModeLabels =
+            ["SystemDesktopFloatingBall", "SystemDesktopToolbar", "SystemFeatureDisabled"];
+
         private StackPanel BuildSystemPage(AppSettings draft, StackPanel clipboard)
         {
             var contentToken = ContentCancellationToken;
@@ -34,31 +40,69 @@ namespace RitsukageGif.Desktop
                     .ToArray(),
                 SelectedIndex = Math.Max(0, Array.IndexOf(languageCodes, draft.Language)),
             };
-            var startup = SystemCheck("SystemStartWithWindows", draft.System.StartWithWindows,
-                value => draft.System = draft.System with { StartWithWindows = value });
-            var administrator = SystemCheck("SystemRunAsAdministrator", draft.System.RunAsAdministrator,
-                value => draft.System = draft.System with { RunAsAdministrator = value });
-            startup.IsEnabled = administrator.IsEnabled = OperatingSystem.IsWindows();
-            if (!OperatingSystem.IsWindows())
-            {
-                startup.Bind(ToolTip.TipProperty, LiveText.Resource("SystemWindowsOnly"));
-                administrator.Bind(ToolTip.TipProperty, LiveText.Resource("SystemWindowsOnly"));
-            }
-            else
-            {
-                administrator.Bind(ToolTip.TipProperty, LiveText.Resource("SystemAdministratorNextLaunch"));
-            }
+            var startup = Setting(SystemCheck("SystemStartWithWindows", draft.System.StartWithWindows,
+                    value => draft.System = draft.System with { StartWithWindows = value }),
+                static settings => settings.System.StartWithWindows);
+            var administrator = Setting(SystemCheck("SystemRunAsAdministrator", draft.System.RunAsAdministrator,
+                    value => draft.System = draft.System with { RunAsAdministrator = value }),
+                static settings => settings.System.RunAsAdministrator);
+            startup.IsEnabled = StartupRegistrationFactory.Supported;
+            administrator.IsEnabled = OperatingSystem.IsWindows();
+            startup.Bind(ToolTip.TipProperty, LiveText.Resource("SystemStartupNextLogin"));
+            administrator.Bind(ToolTip.TipProperty, LiveText.Resource(OperatingSystem.IsWindows()
+                ? "SystemAdministratorNextLaunch"
+                : "SystemWindowsOnly"));
 
             language.SelectionChanged += (_, _) =>
             {
                 if (language.SelectedIndex >= 0) draft.Language = languageCodes[language.SelectedIndex];
             };
-            general.Children.Add(Labeled("Language", language));
+            general.Children.Add(SettingRow("Language", language, static settings => settings.Language));
+            general.Children.Add(Setting(SystemCheck("SystemIgnoreCopyMacros", draft.System.IgnoreCopyMacros,
+                    value => draft.System = draft.System with { IgnoreCopyMacros = value }),
+                static settings => settings.System.IgnoreCopyMacros));
             general.Children.Add(startup);
+            general.Children.Add(StartupStatusMessage(() => draft.System.StartWithWindows));
             general.Children.Add(administrator);
-            general.Children.Add(SystemCheck("CloseToTray", draft.CloseToTray, value => draft.CloseToTray = value));
-            general.Children.Add(SystemCheck("MinimizeToTray", draft.MinimizeToTray,
-                value => draft.MinimizeToTray = value));
+            var explorer = new ComboBox
+            {
+                ItemsSource = SystemExplorerModeLabels.Select(UiText.Get).ToArray(),
+                SelectedIndex = (int)draft.System.ExplorerContextMenu,
+                IsEnabled = OperatingSystem.IsWindows(),
+            };
+            explorer.SelectionChanged += (_, _) =>
+            {
+                if (explorer.SelectedIndex >= 0)
+                    draft.System = draft.System with
+                    {
+                        ExplorerContextMenu = (ExplorerContextMenuMode)explorer.SelectedIndex,
+                    };
+            };
+            general.Children.Add(SettingRow("SystemExplorerContextMode", explorer,
+                static settings => settings.System.ExplorerContextMenu));
+            var desktopToolbar = new ComboBox
+            {
+                ItemsSource = SystemDesktopToolbarModeLabels.Select(UiText.Get).ToArray(),
+                SelectedIndex = (int)draft.System.DesktopToolbar.Mode,
+            };
+            desktopToolbar.SelectionChanged += (_, _) =>
+            {
+                if (desktopToolbar.SelectedIndex >= 0)
+                    draft.System = draft.System with
+                    {
+                        DesktopToolbar = draft.System.DesktopToolbar with
+                        {
+                            Mode = (DesktopToolbarMode)desktopToolbar.SelectedIndex, HiddenUntil = null,
+                        },
+                    };
+            };
+            general.Children.Add(SettingRow("SystemDesktopToolbarMode", desktopToolbar,
+                static settings => settings.System.DesktopToolbar.Mode));
+            general.Children.Add(Setting(
+                SystemCheck("CloseToTray", draft.CloseToTray, value => draft.CloseToTray = value),
+                static settings => settings.CloseToTray));
+            general.Children.Add(Setting(SystemCheck("MinimizeToTray", draft.MinimizeToTray,
+                value => draft.MinimizeToTray = value), static settings => settings.MinimizeToTray));
             page.Children.Add(SettingsSection("GeneralHeading", general));
             page.Children.Add(SettingsSection("ScreenshotClipboardHeading", clipboard));
             var tray = Page();
@@ -68,17 +112,16 @@ namespace RitsukageGif.Desktop
                 value => draft.System = draft.System with { TrayDoubleClick = value });
             var middle = TrayActionBox(draft.System.TrayMiddleClick,
                 value => draft.System = draft.System with { TrayMiddleClick = value });
-            single.IsEnabled = !OperatingSystem.IsMacOS();
-            doubleClick.IsEnabled = middle.IsEnabled = OperatingSystem.IsWindows();
-            if (!OperatingSystem.IsWindows())
-            {
-                doubleClick.Bind(ToolTip.TipProperty, LiveText.Resource("SystemWindowsOnly"));
-                middle.Bind(ToolTip.TipProperty, LiveText.Resource("SystemWindowsOnly"));
-            }
+            RefreshTraySupport();
+            PortableTrayState.Changed += RefreshTraySupport;
+            RegisterContentCleanup(() => PortableTrayState.Changed -= RefreshTraySupport);
 
-            tray.Children.Add(Labeled("SystemTraySingleClick", single));
-            tray.Children.Add(Labeled("SystemTrayDoubleClick", doubleClick));
-            tray.Children.Add(Labeled("SystemTrayMiddleClick", middle));
+            tray.Children.Add(SettingRow("SystemTraySingleClick", single,
+                static settings => settings.System.TraySingleClick));
+            tray.Children.Add(SettingRow("SystemTrayDoubleClick", doubleClick,
+                static settings => settings.System.TrayDoubleClick));
+            tray.Children.Add(SettingRow("SystemTrayMiddleClick", middle,
+                static settings => settings.System.TrayMiddleClick));
             var recognition = Page();
             var layout = new ComboBox
             {
@@ -123,9 +166,13 @@ namespace RitsukageGif.Desktop
                         ShowDialogOnCopyAll = (popup.SelectedIndex & 2) != 0,
                     };
             };
-            recognition.Children.Add(Labeled("SystemOcrLayout", layout));
-            recognition.Children.Add(Labeled("SystemOcrDialogWhen", popup));
-            recognition.Children.Add(Labeled("SystemOcrPunctuation", punctuation));
+            recognition.Children.Add(SettingRow("SystemOcrLayout", layout,
+                static settings => settings.Recognition.Layout));
+            recognition.Children.Add(SettingRow("SystemOcrDialogWhen", popup,
+                static settings => (settings.Recognition.ShowDialogOnRecognition,
+                    settings.Recognition.ShowDialogOnCopyAll)));
+            recognition.Children.Add(SettingRow("SystemOcrPunctuation", punctuation,
+                static settings => settings.Recognition.Punctuation));
             var ocrLanguage = new ComboBox { IsEnabled = false };
             var languages = new List<OcrLanguage>();
             var loadingLanguages = false;
@@ -146,7 +193,8 @@ namespace RitsukageGif.Desktop
                                 : languages[ocrLanguage.SelectedIndex - 1].Tag,
                     };
             };
-            recognition.Children.Add(Labeled("RecognitionLanguage", ocrLanguage));
+            recognition.Children.Add(SettingRow("RecognitionLanguage", ocrLanguage,
+                static settings => settings.Recognition.LanguageTag));
             recognition.AttachedToVisualTree += async (_, _) =>
             {
                 if (loadingLanguages || languagesLoaded) return;
@@ -174,8 +222,8 @@ namespace RitsukageGif.Desktop
             page.Children.Add(SettingsSection("TranslationTitle", BuildTranslationSettings(draft)));
             page.Children.Add(SettingsSection("SystemTrayHeading", tray));
             var updates = Page();
-            updates.Children.Add(SystemCheck("AutomaticUpdates", draft.CheckForUpdates,
-                value => draft.CheckForUpdates = value));
+            updates.Children.Add(Setting(SystemCheck("AutomaticUpdates", draft.CheckForUpdates,
+                value => draft.CheckForUpdates = value), static settings => settings.CheckForUpdates));
             var channel = new ComboBox
             {
                 ItemsSource = SystemUpdateChannelLabels.Select(UiText.Get).ToArray(),
@@ -189,13 +237,25 @@ namespace RitsukageGif.Desktop
                         UpdateChannel = (UpdateChannel)channel.SelectedIndex,
                     };
             };
-            updates.Children.Add(Labeled("SystemUpdateChannel", channel));
+            updates.Children.Add(SettingRow("SystemUpdateChannel", channel,
+                static settings => settings.System.UpdateChannel));
             AddSystemUpdateCheck(updates, draft);
             page.Children.Add(SettingsSection("SystemUpdatesHeading", updates));
+            page.Children.Add(BuildNetworkSettings(draft));
             page.Children.Add(BuildDiagnosticsSettings());
             SubscribeContentLanguage(Refresh);
             Refresh();
             return page;
+
+            void RefreshTraySupport()
+            {
+                single.IsEnabled = PortableTrayState.Supports(TrayMouseGesture.SingleClick);
+                doubleClick.IsEnabled = PortableTrayState.Supports(TrayMouseGesture.DoubleClick);
+                middle.IsEnabled = PortableTrayState.Supports(TrayMouseGesture.MiddleClick);
+                ToolTip.SetTip(single, single.IsEnabled ? null : UiText.Get("SystemTrayGestureUnavailable"));
+                ToolTip.SetTip(middle, middle.IsEnabled ? null : UiText.Get("SystemTrayGestureUnavailable"));
+                ToolTip.SetTip(doubleClick, doubleClick.IsEnabled ? null : UiText.Get("SystemTrayDoubleUnavailable"));
+            }
 
             void RefreshLanguages()
             {

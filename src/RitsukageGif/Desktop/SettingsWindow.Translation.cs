@@ -25,6 +25,16 @@ namespace RitsukageGif.Desktop
                 ItemsSource = TranslationProviderKeys.Select(UiText.Get).ToArray(),
                 SelectedIndex = (int)preferences.Provider,
             };
+            var mode = new ComboBox
+            {
+                ItemsSource = new[] { UiText.Get("TranslationImageToText"), UiText.Get("TranslationImageToImage") },
+                SelectedIndex = (int)preferences.Mode,
+            };
+            mode.SelectionChanged += (_, _) =>
+            {
+                if (mode.SelectedIndex >= 0)
+                    draft.Translation = draft.Translation with { Mode = (TranslationMode)mode.SelectedIndex };
+            };
             var endpoint = new TextBox { Text = preferences.Endpoint };
             var region = new TextBox { Text = preferences.Region };
             var model = new TextBox { Text = preferences.Model };
@@ -36,14 +46,15 @@ namespace RitsukageGif.Desktop
                 { Minimum = 1, Maximum = 300, Value = preferences.TimeoutSeconds, Width = 80 };
             var key = new TextBox { PasswordChar = '●' };
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
-            var useKey = SystemCheck("TranslationUseApiKey", preferences.UseApiKey,
-                value => draft.Translation = draft.Translation with { UseApiKey = value });
+            var useKey = Setting(SystemCheck("TranslationUseApiKey", preferences.UseApiKey,
+                    value => draft.Translation = draft.Translation with { UseApiKey = value }),
+                static settings => settings.Translation.UseApiKey);
             var save = new Button();
             var delete = new Button();
             save.Bind(ContentProperty, LiveText.Resource("TranslationSaveKey"));
             delete.Bind(ContentProperty, LiveText.Resource("TranslationDeleteKey"));
-            var regionRow = Labeled("TranslationRegion", region);
-            var modelRow = Labeled("TranslationModel", model);
+            var regionRow = SettingRow("TranslationRegion", region, static settings => settings.Translation.Region);
+            var modelRow = SettingRow("TranslationModel", model, static settings => settings.Translation.Model);
             provider.SelectionChanged += (_, _) =>
             {
                 if (refreshingProvider || provider.SelectedIndex < 0 ||
@@ -65,14 +76,21 @@ namespace RitsukageGif.Desktop
                 draft.Translation = draft.Translation with { TimeoutSeconds = (int)(timeout.Value ?? 30) };
             save.Click += async (_, _) => await StoreCredentialAsync(false);
             delete.Click += async (_, _) => await StoreCredentialAsync(true);
-            page.Children.Add(Labeled("TranslationProvider", provider));
-            page.Children.Add(Labeled("TranslationEndpoint", endpoint));
+            page.Children.Add(SettingRow("TranslationMode", mode, static settings => settings.Translation.Mode));
+            page.Children.Add(SettingRow("TranslationProvider", provider,
+                static settings => settings.Translation.Provider));
+            page.Children.Add(SettingRow("TranslationEndpoint", endpoint,
+                static settings => settings.Translation.Endpoint));
             page.Children.Add(regionRow);
             page.Children.Add(modelRow);
-            page.Children.Add(Labeled("TranslationSourceLanguage", source));
-            page.Children.Add(Labeled("TranslationTargetLanguage", target));
-            page.Children.Add(Labeled("TranslationFallbackLanguage", fallback));
-            page.Children.Add(Labeled("TranslationTimeout", timeout));
+            page.Children.Add(SettingRow("TranslationSourceLanguage", source,
+                static settings => settings.Translation.SourceLanguage));
+            page.Children.Add(SettingRow("TranslationTargetLanguage", target,
+                static settings => settings.Translation.TargetLanguage));
+            page.Children.Add(SettingRow("TranslationFallbackLanguage", fallback,
+                static settings => settings.Translation.FallbackLanguage));
+            page.Children.Add(SettingRow("TranslationTimeout", timeout,
+                static settings => settings.Translation.TimeoutSeconds));
             page.Children.Add(useKey);
             page.Children.Add(Labeled("TranslationApiKey", key));
             page.Children.Add(new StackPanel
@@ -86,6 +104,10 @@ namespace RitsukageGif.Desktop
 
             void RefreshLanguage()
             {
+                var selectedMode = mode.SelectedIndex;
+                mode.ItemsSource = new[]
+                    { UiText.Get("TranslationImageToText"), UiText.Get("TranslationImageToImage") };
+                mode.SelectedIndex = selectedMode;
                 var selected = provider.SelectedIndex;
                 refreshingProvider = true;
                 try

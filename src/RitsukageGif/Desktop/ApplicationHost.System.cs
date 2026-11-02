@@ -20,17 +20,31 @@ namespace RitsukageGif.Desktop
             _settingsPersistence.RequestSave(settings.Snapshot());
         }
 
-        private Task PersistSettingsAsync(AppSettings settings, CancellationToken cancellationToken)
+        private async Task PersistSettingsAsync(AppSettings settings, CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (_startServices && OperatingSystem.IsWindows() &&
+            await _networkPersistenceGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                PersistSettingsCore(settings with { Network = Volatile.Read(ref _committedNetwork) });
+            }
+            finally
+            {
+                _networkPersistenceGate.Release();
+            }
+        }
+
+        private void PersistSettingsCore(AppSettings settings)
+        {
+            if (_startServices && StartupRegistrationFactory.Supported &&
                 (settings.System.StartWithWindows != _persistedStartWithWindows || _startupRegistrationUncertain))
                 try
                 {
                     SettingsLogger.ZLogDebug($"Startup registration persistence started.");
-                    StartupRegistrationService.Save(settings.System.StartWithWindows,
+                    var startupStatus = StartupRegistrationService.Save(settings.System.StartWithWindows,
                         Environment.ProcessPath ?? throw new InvalidOperationException(),
-                        () => SettingsWriter(settings), new WindowsStartupRegistration());
+                        () => PersistSettingsWithExplorer(settings), StartupRegistrationFactory.Create());
+                    Dispatcher.UIThread.Post(() => _settingsWindow?.RefreshStartupStatus(startupStatus));
                     _startupRegistrationUncertain = false;
                     SettingsLogger.ZLogInformation($"Startup registration persistence completed.");
                 }
@@ -40,10 +54,9 @@ namespace RitsukageGif.Desktop
                     SettingsLogger.ZLogError(error, $"Startup registration persistence failed.");
                     throw;
                 }
-            else SettingsWriter(settings);
+            else PersistSettingsWithExplorer(settings);
 
             _persistedStartWithWindows = settings.System.StartWithWindows;
-            return Task.CompletedTask;
         }
 
         private Task FlushSettingsAsync()

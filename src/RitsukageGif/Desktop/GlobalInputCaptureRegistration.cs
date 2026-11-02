@@ -24,7 +24,7 @@ namespace RitsukageGif.Desktop
             Synchronize();
         }
 
-        private void Focused(object? sender, GotFocusEventArgs args)
+        private void Focused(object? sender, FocusChangedEventArgs args)
         {
             Synchronize();
         }
@@ -83,7 +83,7 @@ namespace RitsukageGif.Desktop
         private void Synchronize()
         {
             GlobalInputCapture.SetActive(_control,
-                _control.IsKeyboardFocusWithin && _control.GetVisualRoot() is not null &&
+                _control.IsKeyboardFocusWithin && _control.GetPresentationSource() is not null &&
                 (_window is null || _window.IsActive));
         }
     }

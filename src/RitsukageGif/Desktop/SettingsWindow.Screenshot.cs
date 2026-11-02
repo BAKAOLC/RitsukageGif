@@ -18,24 +18,28 @@ namespace RitsukageGif.Desktop
                 ItemsSource = ClipboardModeLabels(),
                 SelectedIndex = (int)preferences.Mode,
             };
-            page.Children.Add(Labeled("ScreenshotClipboardCopyAs", mode));
+            page.Children.Add(SettingRow("ScreenshotClipboardCopyAs", mode,
+                static settings => settings.ScreenshotClipboard.Mode));
             var format = new ComboBox
             {
                 Name = "ScreenshotClipboardFileFormat", HorizontalAlignment = HorizontalAlignment.Stretch,
-                ItemsSource = new[] { "PNG", "JPEG", "BMP", "WebP" },
+                ItemsSource = new[] { "PNG", "JPEG", "BMP", "WebP", "AVIF" },
                 SelectedIndex = (int)preferences.FileFormat,
             };
-            var formatRow = Labeled("ScreenshotClipboardFileFormat", format);
+            var formatRow = SettingRow("ScreenshotClipboardFileFormat", format,
+                static settings => settings.ScreenshotClipboard.FileFormat);
             page.Children.Add(formatRow);
-            page.Children.Add(Labeled("ScreenshotOutputSize",
-                OutputSizeEditor(preferences.OutputSize, out var readSize)));
+            page.Children.Add(SettingRow("ScreenshotOutputSize",
+                OutputSizeEditor(preferences.OutputSize, out var readSize),
+                static settings => settings.ScreenshotClipboard.OutputSize));
             var hdpi = new ComboBox
             {
                 Name = "ScreenshotHdpiReduction",
                 ItemsSource = new[] { UiText.Get("ScreenshotHdpiNoReduction"), "100%", "150%", "200%", "250%", "300%" },
                 SelectedIndex = Array.IndexOf(ScreenshotHdpiTargets, preferences.HdpiTargetPercent),
             };
-            captureOptions.Children.Add(Labeled("ScreenshotHdpiReduction", hdpi));
+            captureOptions.Children.Add(SettingRow("ScreenshotHdpiReduction", hdpi,
+                static settings => settings.ScreenshotClipboard.HdpiTargetPercent));
             var paste = new CheckBox
             {
                 Name = "ScreenshotPasteAfterCopy", IsChecked = preferences.PasteAfterCopy,
@@ -44,7 +48,8 @@ namespace RitsukageGif.Desktop
             };
             if (!OperatingSystem.IsWindows())
                 paste.Bind(ToolTip.TipProperty, LiveText.Resource("ScreenshotPastePlatformUnavailable"));
-            captureOptions.Children.Insert(0, paste);
+            captureOptions.Children.Insert(0,
+                Setting(paste, static settings => settings.ScreenshotClipboard.PasteAfterCopy));
 
             mode.SelectionChanged += (_, _) => UpdateVisibility();
             SubscribeContentLanguage(RefreshClipboardLanguage);

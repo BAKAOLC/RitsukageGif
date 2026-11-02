@@ -11,7 +11,7 @@ namespace RitsukageGif.Desktop
         {
             var capabilities = await VideoRecordingCapabilities.ProbeAsync(token);
             return new(capabilities.Executable is not null, capabilities.Mp4, capabilities.WebM,
-                capabilities.Mp4Audio, capabilities.WebMAudio, OperatingSystem.IsWindows(),
+                capabilities.Mp4Audio, capabilities.WebMAudio, AudioCaptureBackend.IsAvailable(capabilities),
                 [.. capabilities.AudioInputFormats.Order(StringComparer.Ordinal)], capabilities.Mp4Hdr,
                 capabilities.WebMHdr);
         }

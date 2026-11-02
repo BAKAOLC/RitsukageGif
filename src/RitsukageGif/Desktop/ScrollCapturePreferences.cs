@@ -4,6 +4,7 @@ namespace RitsukageGif.Desktop
     {
         public ScrollCaptureAxis InitialAxis { get; set; } = ScrollCaptureAxis.Vertical;
         public bool RespondShortcuts { get; set; } = true;
+        public bool AutoCropOnReverse { get; set; }
 
         public ScrollCapturePreferences Normalize()
         {

@@ -69,7 +69,9 @@ namespace RitsukageGif.Desktop
         private readonly TextBlock _propertyTitle = new() { FontWeight = FontWeight.SemiBold };
 
         private readonly TextBox _text = new()
-            { [!TextBox.WatermarkProperty] = LiveText.Resource("AnimationText"), AcceptsReturn = true, Height = 60 };
+        {
+            [!TextBox.PlaceholderTextProperty] = LiveText.Resource("AnimationText"), AcceptsReturn = true, Height = 60,
+        };
 
         private Control? _exportQualityRow, _exportColorsRow;
 
@@ -104,7 +106,7 @@ namespace RitsukageGif.Desktop
             root.Children.Add(scroll);
             var actions = new StackPanel { Margin = new(8), Spacing = 4 };
             actions.Children.Add(_draftScope);
-            _draftScope.IsVisible = !_imageMode;
+            _draftScope.IsVisible = true;
             _draftScope.Name = "DraftApplyScope";
             _draftScope.Bind(ToolTip.TipProperty, LiveText.Resource("AnimationDraftScopeHint"));
             var buttons = new Grid { ColumnDefinitions = new("*,*") };
@@ -150,7 +152,7 @@ namespace RitsukageGif.Desktop
             _color.LostFocus += (_, _) => UpdateBrush();
             _brush.LostFocus += (_, _) => UpdateBrush();
             _filled.IsCheckedChanged += (_, _) => _canvas.Filled = _filled.IsChecked == true;
-            ShowProperties(_imageMode ? "AnimationSelect" : "AnimationFrames");
+            ShowProperties("AnimationFrames");
             UpdateDraftActions();
             return new()
             {
@@ -233,25 +235,19 @@ namespace RitsukageGif.Desktop
                         var options = new MediaProcessOptions { Width = Value(_width), Height = Value(_height) };
                         return EditAsync((d, t) => d.Transform(options, t));
                     }));
-                    if (!_imageMode) Hint(panel, "AnimationWholeAnimationHint");
+                    Hint(panel, "AnimationWholeAnimationHint");
                     break;
                 case "AnimationCrop":
                 case "AnimationSelection":
                     _canvas.Tool = AnimationEditorTool.Selection;
                     Hint(panel, "AnimationSelectRegion");
                     panel.Children.Add(ActionButton("AnimationCrop", CropAsync));
-                    if (!_imageMode) Hint(panel, "AnimationWholeAnimationHint");
+                    Hint(panel, "AnimationWholeAnimationHint");
                     break;
                 case "AnimationExport":
                     panel.Children.Add(Row("AnimationFormat", _format));
                     _exportQualityRow = Row("AnimationExportQuality", _exportQuality);
                     panel.Children.Add(_exportQualityRow);
-                    if (_imageMode)
-                    {
-                        panel.Children.Add(ActionButton("ImageSaveAs", () => SaveImageAsync(true)));
-                        break;
-                    }
-
                     _exportColorsRow = Row("AnimationColors", _colors);
                     panel.Children.Add(_exportColorsRow);
                     AddControl(panel, _lossless);
@@ -597,7 +593,6 @@ namespace RitsukageGif.Desktop
 
         private void UpdateExportOptions()
         {
-            if (_imageMode) return;
             var gif = _format.SelectedIndex == 0;
             var webp = _format.SelectedIndex == 1;
             if (_exportQualityRow is { } quality) quality.IsVisible = webp;

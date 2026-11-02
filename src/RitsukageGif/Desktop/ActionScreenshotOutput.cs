@@ -8,5 +8,9 @@ namespace RitsukageGif.Desktop
         QuickSave,
         CopyText,
         Translate,
+        RecognizeText,
+        RecognizeTable,
+        RecognizeFormula,
+        CopyCodeText,
     }
 }

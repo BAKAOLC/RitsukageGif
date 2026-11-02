@@ -3,10 +3,16 @@ using Microsoft.Win32.SafeHandles;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed partial record ForegroundHotkeyContext(string? Program, bool Fullscreen)
+    internal sealed partial record ForegroundHotkeyContext(
+        string? Program,
+        bool Fullscreen,
+        bool ProgramAvailable = true,
+        bool FullscreenAvailable = true,
+        string? UnavailableReason = null)
     {
         internal static unsafe ForegroundHotkeyContext Read(bool fullscreen, bool program)
         {
+            if (!OperatingSystem.IsWindows()) return PortableForegroundPolicy.Read();
             var window = GetForegroundWindow();
             if (window == 0) return new(null, false);
             string? path = null;

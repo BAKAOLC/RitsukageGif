@@ -44,8 +44,13 @@ namespace RitsukageGif.Desktop
                         HorizontalAlignment = HorizontalAlignment.Stretch,
                     };
                     var status = new ContentControl { Width = 24, VerticalAlignment = VerticalAlignment.Center };
-                    rows.Children.Add(MouseSettingsRow(UiText.Get(definition.DescriptionKey), modifiers, kindBox,
-                        status));
+                    var row = MouseSettingsRow(UiText.Get(definition.DescriptionKey), modifiers, kindBox, status);
+                    SettingsField.Track(row, ((Grid)row.Child!).Children[0],
+                        settings => settings.MouseShortcuts.TryGetValue(definition.Id, out var values)
+                            ? values
+                            : definition.DefaultGestures,
+                        static (left, right) => left.SequenceEqual(right, StringComparer.OrdinalIgnoreCase));
+                    rows.Children.Add(row);
                     statuses[definition.Id] = (error, active) => SetMouseBindingStatus(status, error, active);
                     modifiers.ValueChanged += Store;
                     kindBox.SelectionChanged += (_, _) => Store();

@@ -32,7 +32,8 @@ namespace RitsukageGif.Desktop
                 foreach (var tool in column.EnumerateArray())
                 {
                     ValidateEnum<ScreenshotTool>(tool, path);
-                    if (!tools.Add((ScreenshotTool)tool.GetInt32()) || tools.Count > toolCount) throw Invalid(path);
+                    if ((ScreenshotTool)tool.GetInt32() == ScreenshotTool.Select ||
+                        !tools.Add((ScreenshotTool)tool.GetInt32()) || tools.Count > toolCount) throw Invalid(path);
                 }
             }
         }

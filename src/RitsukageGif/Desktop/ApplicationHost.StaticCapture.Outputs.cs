@@ -36,7 +36,9 @@ namespace RitsukageGif.Desktop
 
             var (plan, toneMap) = await Dispatcher.UIThread.InvokeAsync(() =>
                 (PrepareStaticCapture(options, token), options.ToneMap ?? Settings.CaptureToneMap));
-            await PrepareStaticSourceAsync(plan, token).ConfigureAwait(false);
+            await PrepareStaticSourceAsync(plan, requests.Any(output => output.Color == OutputColorMode.Hdr) ||
+                                                 toneMap != HdrToneMapMode.HighlightCompression, token)
+                .ConfigureAwait(false);
             return await Task.Run(async () =>
             {
                 var frames = CaptureStaticFrames(plan, requests.Any(output => output.Color == OutputColorMode.Hdr),
@@ -55,8 +57,9 @@ namespace RitsukageGif.Desktop
             CapturedFrameSet frames;
             using (IFrameSource source = plan.Preset is { } preset
                        ? new SceneCapture(plan.Options, plan.Monitors, preset, plan.Runtime, inputs: _inputs)
-                       : new DesktopCapture(plan.Options, plan.Monitors, width, height))
-                if (source is IColorFrameSource colorSource)
+                       : new DesktopCapture(plan.Options, plan.Monitors, plan.Options.Width, plan.Options.Height))
+                if (source is IColorFrameSource colorSource &&
+                    (needsHdr || toneMap != HdrToneMapMode.HighlightCompression))
                 {
                     frames = colorSource.CaptureFrames(token);
                     if (needsHdr && frames.Hdr is null)
@@ -80,15 +83,15 @@ namespace RitsukageGif.Desktop
             return frames;
         }
 
-        private static async Task PrepareStaticSourceAsync(StaticCapturePlan plan, CancellationToken token)
+        private static async Task PrepareStaticSourceAsync(StaticCapturePlan plan, bool retainHdr,
+            CancellationToken token)
         {
             if (!DesktopCapture.UsesSourceSelection ||
                 plan.Preset?.Layout?.Layers.All(layer => layer.Media is not null) == true) return;
-            if (plan.Preset is not null)
-                throw new PlatformNotSupportedException(UiText.Get("CapturePlatformUnsupported"));
-            var frame = await DesktopCapture.PrepareSourceAsync(NativeCaptureSession.SourceIsWindow,
-                plan.Options.Cursor, plan.Options.Fps, token).ConfigureAwait(false);
-            var bounds = new PixelRect(0, 0, frame.Width, frame.Height);
+            var frame = await DesktopCapture.PrepareSourceAsync(
+                plan.Preset?.Source == CaptureSourceKind.Window || NativeCaptureSession.SourceIsWindow,
+                plan.Options.Cursor, plan.Options.Fps, retainHdr, token).ConfigureAwait(false);
+            var bounds = DesktopCapture.SourceBounds ?? frame.Bounds;
             if (plan.Options.Region.Intersect(bounds) != plan.Options.Region) throw new CaptureSourceLostException();
         }
 

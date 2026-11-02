@@ -25,11 +25,23 @@ namespace RitsukageGif.Desktop
                 if (!names.Add(property.Name)) throw Invalid(parent + "." + property.Name);
                 var path = parent.Length == 0 ? property.Name : parent + "." + property.Name;
                 var value = property.Value;
+                if ((parent.Length == 0 && property.Name is nameof(AppSettings.MixingKeypadMainKeyboard)
+                         or nameof(AppSettings.GlobalMouseShowMask)
+                         or nameof(AppSettings.NonDefaultConfigItemsFontNotBold) &&
+                     value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) ||
+                    (parent == "GlobalActions" && property.Name == "Script" && value.ValueKind != JsonValueKind.String))
+                    throw Invalid(path);
                 ValidateOutputProperty(parent, property, path);
                 ValidateDecorationProperty(parent, property, path);
+                ValidateCaptureDoubleClickProperty(parent, property, path);
+                ValidateCodeDetectionProperty(parent, property, path);
+                ValidateSystemFeaturesProperty(parent, property, path);
                 if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number))
                     switch (property.Name)
                     {
+                        case "BlockedWindowsKeys" when parent == "CapturePreferences":
+                            if (!Enum.IsDefined((CaptureBlockedWindowsKeys)number)) throw Invalid(path);
+                            break;
                         case "CaptureColorMode":
                             if (!Enum.IsDefined((OutputColorMode)number)) throw Invalid(path);
                             break;
@@ -69,6 +81,9 @@ namespace RitsukageGif.Desktop
                         case "Punctuation" when parent == "Recognition":
                             if (!Enum.IsDefined((RecognitionPunctuation)number)) throw Invalid(path);
                             break;
+                        case "CopyFormat" when parent == "Recognition":
+                            if (!Enum.IsDefined((FormulaCopyFormat)number)) throw Invalid(path);
+                            break;
                     }
 
                 var invalidLanguage = parent == "Recognition" && property.Name == "LanguageTag" &&
@@ -100,12 +115,15 @@ namespace RitsukageGif.Desktop
                 throw Invalid("VideoRecording");
             if (!Enum.IsDefined(settings.ScrollCapture.InitialAxis)) throw Invalid("ScrollCapture.InitialAxis");
             var capture = settings.CapturePreferences;
-            if (!Enum.IsDefined(capture.DetectionMode) || !Enum.IsDefined(capture.CursorPolicy) ||
-                !Enum.IsDefined(capture.AuxiliaryPolicy) || !Enum.IsDefined(capture.MagnifierColorFormat) ||
+            if (!Enum.IsDefined(capture.CodeDetection)) throw Invalid("CapturePreferences.CodeDetection");
+            if (!Enum.IsDefined(capture.DoubleClickAction) || !Enum.IsDefined(capture.DetectionMode) ||
+                !Enum.IsDefined(capture.CursorPolicy) ||
+                !Enum.IsDefined(capture.AuxiliaryPolicy) ||
                 capture.RegionHistoryCapacity is < 0 or > 1000 || capture.ScreenshotHistoryCapacity is < 0 or > 1000 ||
                 capture.ScreenshotHistoryMaximumMiB is < 0 or > 512 || capture.ElementMargin is < -128 or > 128 ||
                 capture.Magnification is < 2 or > 32 ||
                 !Color.TryParse(capture.MagnifierGridColor, out _)) throw Invalid("CapturePreferences");
+            ValidateColorFormats(capture);
             var reserved = settings.PresetHotkeys.Select(binding => binding.Shortcut).ToArray();
             HotkeyService.Validate(reserved);
             var selectionIds = BuiltinShortcuts.Registrations().Select(definition => definition.Id)
@@ -115,7 +133,7 @@ namespace RitsukageGif.Desktop
             var mouseIds = MouseCommands.Catalog.Select(definition => definition.Id).ToHashSet(StringComparer.Ordinal);
             if (settings.MouseShortcuts.Keys.FirstOrDefault(id => !mouseIds.Contains(id)) is { } mouseId)
                 throw Invalid(nameof(settings.MouseShortcuts) + "." + mouseId);
-            var errors = SelectionCommands.Validate(settings.SelectionShortcuts)
+            var errors = SelectionCommands.Validate(settings.SelectionShortcuts, settings.MixingKeypadMainKeyboard)
                 .Concat(MouseCommands.Validate(settings.MouseShortcuts))
                 .Concat(GlobalActions.Validate(settings.GlobalActions, reserved, settings.GlobalMouseBindings))
                 .Concat(GlobalMouseService.Validate(settings.GlobalMouseBindings, settings.GlobalActions)).ToArray();
@@ -169,5 +187,9 @@ namespace RitsukageGif.Desktop
 
             ValidateJson(root, "");
         }
+
+        static partial void ValidateCaptureDoubleClickProperty(string parent, JsonProperty property, string path);
+        static partial void ValidateCodeDetectionProperty(string parent, JsonProperty property, string path);
+        static partial void ValidateSystemFeaturesProperty(string parent, JsonProperty property, string path);
     }
 }

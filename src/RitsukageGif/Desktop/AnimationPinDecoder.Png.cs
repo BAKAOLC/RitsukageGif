@@ -87,7 +87,7 @@ namespace RitsukageGif.Desktop
                 hdr = ArrayPool<byte>.Shared.Rent(length);
                 _linear!.AsSpan(0, length).CopyTo(hdr);
                 mapped.Pixels.Span.CopyTo(sdr);
-                return new(sdr, _metadata.Width, _metadata.Height, 0, hdr);
+                return new(sdr, _metadata.Width, _metadata.Height, 0, hdr, hdrAlphaMode: CaptureAlphaMode.Straight);
             }
             catch
             {

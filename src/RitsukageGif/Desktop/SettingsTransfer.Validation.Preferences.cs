@@ -4,6 +4,7 @@ namespace RitsukageGif.Desktop
     {
         private static void ValidatePreferenceValues(AppSettings settings)
         {
+            ValidateNetworkPreferences(settings.Network);
             var appearance = settings.Appearance;
             if (!Enum.IsDefined(appearance.ThemeMode) || !Enum.IsDefined(appearance.TrayIcon) ||
                 !Enum.IsDefined(appearance.ToolbarIconSize) || !Enum.IsDefined(appearance.ColorDialogStyle) ||
@@ -13,13 +14,26 @@ namespace RitsukageGif.Desktop
             ValidateFontFamily(appearance.FontFamily, "Appearance.FontFamily");
 
             var pinned = settings.PinnedImages;
-            const PinnedLockedOperations operations = PinnedLockedOperations.Move | PinnedLockedOperations.Resize |
-                                                      PinnedLockedOperations.Close | PinnedLockedOperations.Shortcuts |
-                                                      PinnedLockedOperations.Annotation;
-            if (!Enum.IsDefined(pinned.OutputContent) || !Enum.IsDefined(pinned.DuplicateBehavior) ||
+            const PinnedLockRestrictions operations =
+                PinnedLockRestrictions.Move | PinnedLockRestrictions.PointerClose |
+                PinnedLockRestrictions.KeyboardClose | PinnedLockRestrictions.IncomingDrop;
+            if (!Enum.IsDefined(pinned.TitlePosition) ||
+                !(pinned.ActiveGroup is { Length: 0 } || Guid.TryParseExact(pinned.ActiveGroup, "N", out _)) ||
+                // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+                pinned.Groups is null || pinned.Groups.Any(group => group is not { IsValid: true }) ||
+                pinned.Groups.Select(group => group.Id).Distinct(StringComparer.Ordinal).Count() !=
+                pinned.Groups.Count ||
+                pinned.Groups.Select(group => group.Name).Distinct(StringComparer.Ordinal).Count() !=
+                pinned.Groups.Count ||
+                (pinned.ActiveGroup.Length != 0 && pinned.Groups.All(group => group.Id != pinned.ActiveGroup)) ||
+                !Enum.IsDefined(pinned.OutputContent) || !Enum.IsDefined(pinned.ReplacementAction) ||
+                !Enum.IsDefined(pinned.DuplicateBehavior) ||
                 !Enum.IsDefined(pinned.RestoreOrder) || !Enum.IsDefined(pinned.WheelZoomAnchor) ||
-                !Enum.IsDefined(pinned.ResetZoomAnchor) || (pinned.LockedOperations & ~operations) != 0 ||
-                pinned.HistoryLimit < 0) throw Invalid("PinnedImages");
+                !Enum.IsDefined(pinned.ResetZoomAnchor) || (pinned.LockRestrictions & ~operations) != 0 ||
+                pinned.MaximumWindowSize < 0 || pinned.QuickThumbnailWidth is < 1 ||
+                pinned.QuickThumbnailHeight is < 1 || pinned.HistoryLimit < 0 ||
+                (pinned.SupportedContentKinds & ~PinnedContentKinds.All) != 0)
+                throw Invalid("PinnedImages");
             ValidateFiniteRange(pinned.Opacity, "PinnedImages.Opacity", .15, 1);
             ValidateFiniteRange(pinned.MouseThroughOpacity, "PinnedImages.MouseThroughOpacity", .15, 1);
             ValidateFiniteRange(pinned.ZoomStep, "PinnedImages.ZoomStep", .01, 1);
@@ -41,7 +55,6 @@ namespace RitsukageGif.Desktop
             ValidateOutputSizeValue(clipboard.OutputSize, "ScreenshotClipboard.OutputSize");
 
             var annotation = settings.Annotation;
-            ValidateFontFamily(annotation.Properties.FontFamily, "Annotation.Properties.FontFamily");
             foreach (var (tool, style) in annotation.ToolStyles)
                 ValidateFontFamily(style.Properties.FontFamily,
                     "Annotation.ToolStyles." + tool + ".Properties.FontFamily");
@@ -58,7 +71,8 @@ namespace RitsukageGif.Desktop
             if (!Enum.IsDefined(system.TraySingleClick) || !Enum.IsDefined(system.TrayDoubleClick) ||
                 !Enum.IsDefined(system.TrayMiddleClick) || !Enum.IsDefined(system.UpdateChannel))
                 throw Invalid("System");
-            if (!Enum.IsDefined(settings.Recognition.Layout) || !Enum.IsDefined(settings.Recognition.Punctuation))
+            if (!Enum.IsDefined(settings.Recognition.Layout) || !Enum.IsDefined(settings.Recognition.Punctuation) ||
+                !Enum.IsDefined(settings.Recognition.CopyFormat) || !Enum.IsDefined(settings.Recognition.LatexFormat))
                 throw Invalid("Recognition");
             if (!Enum.IsDefined(settings.Translation.Provider) || settings.Translation.TimeoutSeconds is < 1 or > 300)
                 throw Invalid("Translation");

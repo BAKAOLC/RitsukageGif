@@ -14,26 +14,28 @@ namespace RitsukageGif.Desktop
             return FluentToolbarIcon.Geometry(key);
         }
 
-        public static Control Create(Button button, string geometry)
+        public static Control Create(TemplatedControl owner, string geometry)
         {
-            if (FluentToolbarIcon.IsFilled(geometry))
-                return new Path
-                {
-                    Data = Avalonia.Media.Geometry.Parse(geometry), Width = 16, Height = 16, Stretch = Stretch.Uniform,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    [!Shape.FillProperty] = button[!TemplatedControl.ForegroundProperty],
-                };
-            return new Path
-            {
-                Data = Avalonia.Media.Geometry.Parse(geometry), Width = 16, Height = 16, Stretch = Stretch.Uniform,
-                StrokeThickness = 1.6, VerticalAlignment = VerticalAlignment.Center,
-                [!Shape.StrokeProperty] =
-                    button[!TemplatedControl.ForegroundProperty],
-            };
+            return CreateInViewport(owner, geometry);
         }
 
-        public static Control CreateInViewport(Button button, string geometry)
+        public static Control CreateInViewport(TemplatedControl owner, string geometry)
         {
+            var path = new Path
+            {
+                Width = 24, Height = 24, Data = Avalonia.Media.Geometry.Parse(geometry),
+                Stretch = Stretch.None,
+            };
+            if (FluentToolbarIcon.IsFilled(geometry))
+            {
+                path[!Shape.FillProperty] = owner[!TemplatedControl.ForegroundProperty];
+            }
+            else
+            {
+                path.StrokeThickness = 1.6;
+                path[!Shape.StrokeProperty] = owner[!TemplatedControl.ForegroundProperty];
+            }
+
             return new Viewbox
             {
                 Width = 16, Height = 16, Stretch = Stretch.Uniform,
@@ -41,21 +43,14 @@ namespace RitsukageGif.Desktop
                 Child = new Canvas
                 {
                     Width = 24, Height = 24,
-                    Children =
-                    {
-                        new Path
-                        {
-                            Width = 24, Height = 24, Data = Avalonia.Media.Geometry.Parse(geometry),
-                            Stretch = Stretch.None,
-                            [!Shape.FillProperty] = button[!TemplatedControl.ForegroundProperty],
-                        },
-                    },
+                    Children = { path },
                 },
             };
         }
 
         public static string Geometry(string key)
         {
+            if (TryGeometry(key) is { } geometry) return geometry;
             return key switch
             {
                 "EditorNew" => "M3,2 L12,2 19,9 19,22 3,22 Z M12,2 L12,9 19,9",

@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AvaloniaAccessUnstablePrivateApis>true</AvaloniaAccessUnstablePrivateApis>
     <ApplicationManifest Condition="$([MSBuild]::IsOSPlatform('Windows'))">app.manifest</ApplicationManifest>
     <ApplicationIcon>Icon.ico</ApplicationIcon>
     <PublishAot>true</PublishAot>
@@ -16,15 +17,21 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../RitsukageGif.Diagnostics/RitsukageGif.Diagnostics.csproj" />
+    <ProjectReference Include="../RitsukageGif.SettingsGenerator/RitsukageGif.SettingsGenerator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
     <Compile Include="Desktop/**/*.cs" />
     <PackageReference Include="JAJ.Packages.MiniAudioEx" Version="3.3.7" />
     <ProjectReference Include="../RitsukageGif.Scripting/RitsukageGif.Scripting.csproj" />
-    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.4.1" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <ProjectReference Include="../RitsukageGif.Core/RitsukageGif.Core.csproj" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
-    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="11.3.22" />
-    <PackageReference Include="Semi.Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Native" Version="12.1.4" ExcludeAssets="all" />
+    <ProjectReference Include="../RitsukageGif.Avalonia.Native/Avalonia.Native.Patched.csproj" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.4" />
+    <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
     <PackageReference Include="Markdig" Version="1.4.2" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.12.3" />
     <EmbeddedResource Include="About.md" LogicalName="RitsukageGif.About.md" />
     <AvaloniaResource Include="Background.png" />
     <None Include="../../THIRD-PARTY-NOTICES/Fluent-System-Icons.txt"
@@ -32,6 +39,12 @@
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../THIRD-PARTY-NOTICES/Logging.txt"
           Link="THIRD-PARTY-NOTICES/Logging.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../THIRD-PARTY-NOTICES/HtmlAgilityPack.txt"
+          Link="THIRD-PARTY-NOTICES/HtmlAgilityPack.txt"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="../../THIRD-PARTY-NOTICES/CSharpMath.txt"
+          Link="THIRD-PARTY-NOTICES/CSharpMath.txt"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

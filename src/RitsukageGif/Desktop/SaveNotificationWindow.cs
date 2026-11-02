@@ -22,7 +22,7 @@ namespace RitsukageGif.Desktop
             ShowActivated = false;
             Focusable = false;
             Topmost = true;
-            SystemDecorations = SystemDecorations.None;
+            WindowDecorations = WindowDecorations.None;
             Background = AppTheme.Surface;
             _message = new()
             {
@@ -37,12 +37,12 @@ namespace RitsukageGif.Desktop
                 Background = Brushes.Transparent, BorderThickness = new(0), Focusable = false,
             };
             ToolTip.SetTip(open, UiText.Get("OpenFolder"));
-            open.Click += (_, _) =>
+            open.Click += async (_, _) =>
             {
                 if (_path is not { } path) return;
                 try
                 {
-                    PlatformShell.RevealFile(path);
+                    await PlatformShell.RevealFileAsync(path);
                 }
                 catch (Exception exception)
                 {

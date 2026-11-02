@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 
 namespace RitsukageGif.Desktop
 {
@@ -57,7 +58,10 @@ namespace RitsukageGif.Desktop
 
             var confirm = output switch
             {
-                ActionScreenshotOutput.Copy or ActionScreenshotOutput.CopyText or ActionScreenshotOutput.Translate =>
+                ActionScreenshotOutput.Copy or ActionScreenshotOutput.CopyText or ActionScreenshotOutput.Translate
+                    or ActionScreenshotOutput.CopyCodeText
+                    or ActionScreenshotOutput.RecognizeText or ActionScreenshotOutput.RecognizeTable
+                    or ActionScreenshotOutput.RecognizeFormula =>
                     ScreenshotOutputAction.Copy,
                 ActionScreenshotOutput.Pin => ScreenshotOutputAction.Pin,
                 ActionScreenshotOutput.Save or ActionScreenshotOutput.QuickSave => ScreenshotOutputAction.Save,
@@ -69,8 +73,22 @@ namespace RitsukageGif.Desktop
                 case ActionScreenshotOutput.CopyText:
                     handler = CopyActionScreenshotTextAsync;
                     break;
+                case ActionScreenshotOutput.CopyCodeText:
+                    handler = CopyActionScreenshotCodeTextAsync;
+                    break;
                 case ActionScreenshotOutput.Translate:
-                    handler = TranslateActionScreenshotAsync;
+                    break;
+                case ActionScreenshotOutput.RecognizeText:
+                case ActionScreenshotOutput.RecognizeTable:
+                case ActionScreenshotOutput.RecognizeFormula:
+                    var recognitionMode = output switch
+                    {
+                        ActionScreenshotOutput.RecognizeTable => RecognitionMode.Table,
+                        ActionScreenshotOutput.RecognizeFormula => RecognitionMode.Formula,
+                        _ => RecognitionMode.Text,
+                    };
+                    handler = (owner, result, token) =>
+                        RecognizeActionScreenshotAsync(owner, result, recognitionMode, token);
                     break;
                 case ActionScreenshotOutput.QuickSave:
                     var directory = action.Arguments.GetValueOrDefault("directory");
@@ -88,10 +106,26 @@ namespace RitsukageGif.Desktop
                     throw new ArgumentOutOfRangeException(nameof(action));
             }
 
-            await ScreenshotAsync(source, region, confirm, action.Kind != GlobalActionKind.Screenshot,
+            await ScreenshotAsync(source, region, confirm, GlobalActions.Definition(action.Kind).AutoConfirm,
                 target, handler, action.Kind == GlobalActionKind.CaptureActiveWindow,
-                GlobalActions.ScreenshotDelay(action), action.Kind == GlobalActionKind.ScreenshotAndScroll,
-                output == ActionScreenshotOutput.CopyText);
+                GlobalActions.ScreenshotDelay(action), GlobalActions.Definition(action.Kind).StartWithScrolling,
+                output is ActionScreenshotOutput.CopyText or ActionScreenshotOutput.CopyCodeText,
+                output == ActionScreenshotOutput.Translate,
+                GlobalActions.ScreenshotGeometry(action));
+        }
+
+        private async Task<bool> RecognizeActionScreenshotAsync(Window? owner, ScreenshotResult result,
+            RecognitionMode mode, CancellationToken token)
+        {
+            if (result.Action != ScreenshotOutputAction.Copy) return await OutputScreenshotAsync(owner, result, token);
+            token.ThrowIfCancellationRequested();
+            await RecognitionWindow.ShowAsync(owner ?? _services.Context, result.Png, mode,
+                preferences: Settings.Recognition, token: token, translationPreferences: Settings.Translation,
+                pinFormula: (_, source) => _pinnedImages.PinFormulas(source),
+                copyFormatChanged: PersistFormulaCopyFormat,
+                originalImageVisibilityChanged: PersistRecognitionOriginalImage,
+                latexFormatChanged: PersistFormulaLatexFormat);
+            return true;
         }
 
         private async Task<bool> CopyActionScreenshotTextAsync(Window? owner, ScreenshotResult result,

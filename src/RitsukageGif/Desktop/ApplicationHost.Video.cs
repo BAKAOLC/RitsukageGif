@@ -17,6 +17,28 @@ namespace RitsukageGif.Desktop
                 _videoRecorder.Closed += (_, _) => _videoRecorder = null;
             }
 
+            else
+            {
+                _videoRecorder.SelectVideoOutput();
+            }
+
+            WindowActivation.Show(_videoRecorder);
+            return Task.CompletedTask;
+        }
+
+        private Task OpenCaptureRecorderAsync()
+        {
+            if (IsClosing) return Task.CompletedTask;
+            if (_videoRecorder is null)
+            {
+                _videoRecorder = new(this, true);
+                _videoRecorder.Closed += (_, _) => _videoRecorder = null;
+            }
+            else
+            {
+                _videoRecorder.SelectAnimationOutput();
+            }
+
             WindowActivation.Show(_videoRecorder);
             return Task.CompletedTask;
         }
@@ -39,10 +61,18 @@ namespace RitsukageGif.Desktop
                 {
                     Capture = options.Capture with { Region = new(0, 0, layout.Width, layout.Height) },
                 };
+            if ((preset is null || ReferenceEquals(preset, _manualPreset)) && preset?.Layout is null)
+                options = options with
+                {
+                    Capture = options.Capture with
+                    {
+                        PixelDensity = NativeDisplayCatalog.Density(options.Capture.Region),
+                    },
+                };
             options.Validate();
             if (FfmpegEncoder.FindExecutable() is null)
                 throw new FfmpegDependencyException(UiText.Get("FfmpegMissing"));
-            if ((systemAudio || microphone) && !OperatingSystem.IsWindows())
+            if ((systemAudio || microphone) && !AudioCaptureBackend.IsSupported)
                 throw new PlatformNotSupportedException(UiText.Get("VideoAudioUnavailable"));
             _presets.PrepareVideoRecording();
             View?.PausePreview();
@@ -105,7 +135,7 @@ namespace RitsukageGif.Desktop
                     await DesktopCapture.PrepareSourceAsync(preset?.Source == CaptureSourceKind.Window ||
                                                             (preset is null && NativeCaptureSession.SourceIsWindow),
                         options.Capture.Cursor,
-                        options.Capture.Fps, prepare.Token);
+                        options.Capture.Fps, Settings.CaptureColorMode != OutputColorMode.Sdr, prepare.Token);
                     monitors = [DesktopCapture.SourceBounds ?? throw new CaptureSourceLostException()];
                 }
 
@@ -150,11 +180,13 @@ namespace RitsukageGif.Desktop
 
                 IReadOnlyList<IAudioCaptureSource> CreateAudio()
                 {
+                    using var preparing = CancellationTokenSource.CreateLinkedTokenSource(stop, cancel);
                     var sources = new List<IAudioCaptureSource>();
                     try
                     {
-                        if (systemAudio) sources.Add(WindowsAudioCapture.Create(true, systemDevice));
-                        if (microphone) sources.Add(WindowsAudioCapture.Create(false, microphoneDevice));
+                        if (systemAudio) sources.Add(AudioCaptureBackend.Create(true, systemDevice, preparing.Token));
+                        if (microphone)
+                            sources.Add(AudioCaptureBackend.Create(false, microphoneDevice, preparing.Token));
                         return sources;
                     }
                     catch

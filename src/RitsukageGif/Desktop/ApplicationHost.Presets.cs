@@ -120,7 +120,12 @@ namespace RitsukageGif.Desktop
                 throw new ArgumentException(UiText.Get("NoMonitor"));
         }
 
-        private async Task ApplyPresetActionAsync(PresetAction action, PixelRect? region)
+        private Task ApplyPresetActionAsync(PresetAction action, PixelRect? region)
+        {
+            return ApplyPresetActionAsync(action, region, true);
+        }
+
+        private async Task ApplyPresetActionAsync(PresetAction action, PixelRect? region, bool waitForOutput)
         {
             if (IsClosing) return;
             switch (action.Kind)
@@ -165,7 +170,7 @@ namespace RitsukageGif.Desktop
                 throw new InvalidOperationException(reply.Message);
             }
 
-            if (action.Kind is "stop" or "cancel" && _presets.ActivePreset?.Program is not null &&
+            if (waitForOutput && action.Kind is "stop" or "cancel" && _presets.ActivePreset?.Program is not null &&
                 _operation is { } operation)
             {
                 // Cancellation also must drain the operation before a subsequent script action may run.

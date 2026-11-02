@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -12,44 +12,53 @@ namespace RitsukageGif.Desktop
             var general = new StackPanel();
             page.Children.Add(MouseSettingsCard(general));
 
-            Select(general, "AppearanceThemeMode", draft.Appearance.ThemeMode,
-                ["FollowSystem", "AppearanceLight", "AppearanceDark"],
-                value => draft.Appearance = draft.Appearance with { ThemeMode = value });
+            Setting(Select(general, "AppearanceThemeMode", draft.Appearance.ThemeMode,
+                    ["FollowSystem", "AppearanceLight", "AppearanceDark"],
+                    value => draft.Appearance = draft.Appearance with { ThemeMode = value }),
+                static settings => settings.Appearance.ThemeMode);
             var font = new AutoCompleteBox
             {
                 Name = "AppearanceFont", Text = draft.Appearance.FontFamily,
                 ItemsSource = FontManager.Current.SystemFonts.Select(item => item.Name)
                     .Order(StringComparer.CurrentCultureIgnoreCase).ToArray(),
-                IsTextCompletionEnabled = true, Watermark = UiText.Get("FollowSystem"),
+                IsTextCompletionEnabled = true, PlaceholderText = UiText.Get("FollowSystem"),
             };
             font.TextChanged += (_, _) =>
             {
                 draft.Appearance = draft.Appearance with { FontFamily = font.Text ?? "" };
                 PreviewAppearance(draft.Appearance);
             };
-            general.Children.Add(Labeled("AppearanceFont", font));
-            ColorRow(general, "AppearanceAccent", draft.Appearance.AccentColor,
-                value => draft.Appearance = draft.Appearance with { AccentColor = value }, false);
-            ColorRow(general, "AppearanceLockedWindow", draft.Appearance.LockedWindowColor,
-                value => draft.Appearance = draft.Appearance with { LockedWindowColor = value });
-            ColorRow(general, "AppearanceSelectionMask", draft.Appearance.SelectionMaskColor,
-                value => draft.Appearance = draft.Appearance with { SelectionMaskColor = value });
-            ColorRow(general, "AppearanceClickThroughShade", draft.Appearance.ClickThroughShadeColor,
-                value => draft.Appearance = draft.Appearance with { ClickThroughShadeColor = value });
-            var trayStyle = Select(general, "AppearanceTrayIcon", draft.Appearance.TrayIcon,
-                ["AppearanceAutomatic", "AppearanceOriginalIcon", "AppearanceMonochromeIcon", "AppearanceHidden"],
-                value => draft.Appearance = draft.Appearance with { TrayIcon = value });
-            var trayColor = ColorRow(general, "AppearanceTrayIconColor", draft.Appearance.TrayIconColor,
-                value => draft.Appearance = draft.Appearance with { TrayIconColor = value }, false);
+            general.Children.Add(SettingRow("AppearanceFont", font, static settings => settings.Appearance.FontFamily));
+            Setting(ColorRow(general, "AppearanceAccent", draft.Appearance.AccentColor,
+                    value => draft.Appearance = draft.Appearance with { AccentColor = value }, false),
+                static settings => settings.Appearance.AccentColor);
+            Setting(ColorRow(general, "AppearanceLockedWindow", draft.Appearance.LockedWindowColor,
+                    value => draft.Appearance = draft.Appearance with { LockedWindowColor = value }),
+                static settings => settings.Appearance.LockedWindowColor);
+            Setting(ColorRow(general, "AppearanceSelectionMask", draft.Appearance.SelectionMaskColor,
+                    value => draft.Appearance = draft.Appearance with { SelectionMaskColor = value }),
+                static settings => settings.Appearance.SelectionMaskColor);
+            Setting(ColorRow(general, "AppearanceClickThroughShade", draft.Appearance.ClickThroughShadeColor,
+                    value => draft.Appearance = draft.Appearance with { ClickThroughShadeColor = value }),
+                static settings => settings.Appearance.ClickThroughShadeColor);
+            var trayStyle = Setting(Select(general, "AppearanceTrayIcon", draft.Appearance.TrayIcon,
+                    ["AppearanceAutomatic", "AppearanceOriginalIcon", "AppearanceMonochromeIcon", "AppearanceHidden"],
+                    value => draft.Appearance = draft.Appearance with { TrayIcon = value }),
+                static settings => settings.Appearance.TrayIcon);
+            var trayColor = Setting(ColorRow(general, "AppearanceTrayIconColor", draft.Appearance.TrayIconColor,
+                    value => draft.Appearance = draft.Appearance with { TrayIconColor = value }, false),
+                static settings => settings.Appearance.TrayIconColor);
             trayColor.IsEnabled = draft.Appearance.TrayIcon == TrayIconAppearance.Monochrome;
             trayStyle.SelectionChanged += (_, _) =>
                 trayColor.IsEnabled = draft.Appearance.TrayIcon == TrayIconAppearance.Monochrome;
-            Select(general, "AppearanceToolbarIconSize", draft.Appearance.ToolbarIconSize,
-                ["AppearanceSmall", "AppearanceMedium", "AppearanceLarge"],
-                value => draft.Appearance = draft.Appearance with { ToolbarIconSize = value });
-            var colorStyle = Select(general, "AppearanceColorDialog", draft.Appearance.ColorDialogStyle,
-                ["AppearanceModern", "AppearanceSystem"],
-                value => draft.Appearance = draft.Appearance with { ColorDialogStyle = value });
+            Setting(Select(general, "AppearanceToolbarIconSize", draft.Appearance.ToolbarIconSize,
+                    ["AppearanceSmall", "AppearanceMedium", "AppearanceLarge"],
+                    value => draft.Appearance = draft.Appearance with { ToolbarIconSize = value }),
+                static settings => settings.Appearance.ToolbarIconSize);
+            var colorStyle = Setting(Select(general, "AppearanceColorDialog", draft.Appearance.ColorDialogStyle,
+                    ["AppearanceModern", "AppearanceSystem"],
+                    value => draft.Appearance = draft.Appearance with { ColorDialogStyle = value }),
+                static settings => settings.Appearance.ColorDialogStyle);
             if (!OperatingSystem.IsWindows())
             {
                 colorStyle.SelectedIndex = 0;
@@ -61,9 +70,10 @@ namespace RitsukageGif.Desktop
                 });
             }
 
-            Select(general, "AppearanceSaveDialog", draft.Appearance.SaveDialogStyle,
-                ["AppearanceModern", "AppearanceSystem"],
-                value => draft.Appearance = draft.Appearance with { SaveDialogStyle = value });
+            Setting(Select(general, "AppearanceSaveDialog", draft.Appearance.SaveDialogStyle,
+                    ["AppearanceModern", "AppearanceSystem"],
+                    value => draft.Appearance = draft.Appearance with { SaveDialogStyle = value }),
+                static settings => settings.Appearance.SaveDialogStyle);
             var selection = new StackPanel();
             page.Children.Add(new TextBlock
             {
@@ -81,7 +91,8 @@ namespace RitsukageGif.Desktop
                 if (width.Value is { } current)
                     draft.Appearance = draft.Appearance with { SelectionBorderWidth = (double)current };
             };
-            selection.Children.Add(Labeled("AppearanceSelectionBorderWidth", width));
+            selection.Children.Add(SettingRow("AppearanceSelectionBorderWidth", width,
+                static settings => settings.Appearance.SelectionBorderWidth));
             var border = CreateAppearanceColorPicker("AppearanceSelectionBorderColor",
                 draft.Appearance.SelectionBorderColor ?? draft.Appearance.AccentColor, true,
                 () => draft.Appearance.ColorDialogStyle);
@@ -104,11 +115,13 @@ namespace RitsukageGif.Desktop
                 if (follow.IsChecked != true)
                     draft.Appearance = draft.Appearance with { SelectionBorderColor = border.Color.ToUInt32() };
             };
-            selection.Children.Add(Labeled("AppearanceSelectionBorderColor",
-                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { follow, border } }));
-            Select(selection, "AppearanceAnchors", draft.Appearance.SelectionAnchors,
-                ["AppearanceHidden", "AppearanceFourAnchors", "AppearanceEightAnchors"],
-                value => draft.Appearance = draft.Appearance with { SelectionAnchors = value });
+            selection.Children.Add(SettingRow("AppearanceSelectionBorderColor",
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { follow, border } },
+                static settings => settings.Appearance.SelectionBorderColor));
+            Setting(Select(selection, "AppearanceAnchors", draft.Appearance.SelectionAnchors,
+                    ["AppearanceHidden", "AppearanceFourAnchors", "AppearanceEightAnchors"],
+                    value => draft.Appearance = draft.Appearance with { SelectionAnchors = value }),
+                static settings => settings.Appearance.SelectionAnchors);
             var animation = new CheckBox
             {
                 [!ContentProperty] = LiveText.Resource("AppearanceSelectionAnimation"),
@@ -116,7 +129,7 @@ namespace RitsukageGif.Desktop
             };
             animation.IsCheckedChanged += (_, _) =>
                 draft.Appearance = draft.Appearance with { AnimateSelection = animation.IsChecked == true };
-            selection.Children.Add(animation);
+            selection.Children.Add(Setting(animation, static settings => settings.Appearance.AnimateSelection));
             return page;
 
             ColorPicker ColorRow(StackPanel target, string key, uint value, Action<uint> change, bool alpha = true)

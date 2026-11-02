@@ -11,12 +11,15 @@ namespace RitsukageGif.Desktop
     {
         private readonly List<(NativeMenuItemSeparator Separator, NativeMenuItem Next)> _traySeparatorSlots = [];
         private TrayIcon? _tray;
-        private NativeMenuItem? _trayShow, _trayExit, _traySettings;
-        private bool CanHideToTray => !IsClosing && _tray is { IsVisible: true, NativeMenuExporter: not null };
+        private NativeMenuItem? _trayShow, _trayExit, _traySettings, _trayToggleShortcuts;
+
+        private bool CanHideToTray => !IsClosing && PortableTrayState.HostAvailable &&
+                                      _tray is { IsVisible: true, NativeMenuExporter: not null };
 
         internal bool CanHideMainWindowToTray => CanHideToTray && !IsConfiguring && !IsSelecting &&
                                                  View is { IsVisible: true } view &&
                                                  !view.OwnedWindows.Any(window => window.IsVisible);
+        private NativeMenuItem? _trayClearRecords;
 
         private void InitializeTray()
         {
@@ -29,6 +32,14 @@ namespace RitsukageGif.Desktop
                 _trayActionAnchor = new();
                 _trayPresets = new();
                 _traySettings = new();
+                _trayClearRecords = new();
+                _trayClearRecords.Click += (_, _) => _ = RunTrayActionAsync(OpenClearRecordsAsync);
+                _trayToggleShortcuts = new() { ToggleType = MenuItemToggleType.CheckBox };
+                _trayToggleShortcuts.Click += (_, _) => _ = RunTrayActionAsync(() =>
+                {
+                    ToggleGlobalShortcuts();
+                    return Task.CompletedTask;
+                });
                 _traySettings.Click += (_, _) => Dispatcher.UIThread.Post(() => _ = OpenTraySettingsAsync());
                 _trayShow.Click += (_, _) =>
                 {
@@ -42,6 +53,7 @@ namespace RitsukageGif.Desktop
                     RebuildPinGroupMenus();
                     RefreshTray();
                 };
+                menu.Items.Add(_trayToggleShortcuts);
                 menu.Items.Add(_trayActionAnchor);
                 InitializePinMenus(menu);
                 _traySeparatorSlots.Add((_trayActionAnchor, _trayPinGroups!));
@@ -51,12 +63,12 @@ namespace RitsukageGif.Desktop
                 _traySeparatorSlots.Add((presetSeparator, _trayPresets));
                 var systemSeparator = new NativeMenuItemSeparator();
                 menu.Items.Add(systemSeparator);
+                menu.Items.Add(_trayClearRecords);
                 menu.Items.Add(_trayShow);
-                _traySeparatorSlots.Add((systemSeparator, _trayShow));
+                _traySeparatorSlots.Add((systemSeparator, _trayClearRecords));
                 menu.Items.Add(_traySettings);
                 menu.Items.Add(_trayExit);
                 _tray = new() { Icon = new(stream), Menu = menu, ToolTipText = "RitsukageGif" };
-                InitializeTrayInput();
                 var icons = TrayIcon.GetIcons(application);
                 if (icons is null)
                 {
@@ -65,6 +77,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 icons.Add(_tray);
+                InitializeTrayInput();
                 _tray.IsVisible = true;
                 Changed += RefreshTray;
                 _pinnedImages.Changed += PinnedImagesChanged;
@@ -131,6 +144,8 @@ namespace RitsukageGif.Desktop
             var mainVisible = View is { IsVisible: true };
             _trayShow!.Header = UiText.Get(mainVisible ? "TrayHideMain" : "TrayShowMain");
             _trayShow.IsEnabled = mainVisible ? CanHideMainWindowToTray : !IsClosing && !IsSelecting;
+            _trayClearRecords!.Header = UiText.Get("ClearRecords");
+            _trayClearRecords.IsEnabled = !IsClosing && !IsSelecting && _clearRecordsWindow is null;
             _traySettings!.Header = UiText.Get("Settings");
             _traySettings.IsEnabled = !IsClosing && !IsSelecting && !IsConfiguring;
             _trayExit!.Header = UiText.Get("TrayExit");
@@ -218,6 +233,8 @@ namespace RitsukageGif.Desktop
             _tray = null;
             _trayActionAnchor = null;
             _trayPresets = null;
+            _trayToggleShortcuts = null;
+            _trayClearRecords = null;
             _traySeparatorSlots.Clear();
             _actionMenus.Clear();
             _trayPinGroups = _trayPinImages = _trayRestorePins = _trayUnlockPins = null;

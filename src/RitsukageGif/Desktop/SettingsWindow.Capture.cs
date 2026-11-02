@@ -18,6 +18,20 @@ namespace RitsukageGif.Desktop
             var margin = new CompactNumberInput
                 { Minimum = -128, Maximum = 128, Value = value.ElementMargin, Width = 100 };
             var expand = Toggle(value.ExpandOnOutsideClick);
+            var quitOnForeign = Toggle(value.QuitOnForeignActivation);
+            var cycleRegions = Toggle(value.CycleRegionHistory);
+            var disableWheel = Toggle(value.DisableMouseWheel);
+            var persistHistory = Toggle(value.PersistHistory);
+            var blockedKeys = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var blockLeft = Toggle((value.BlockedWindowsKeys & CaptureBlockedWindowsKeys.Left) != 0);
+            var blockRight = Toggle((value.BlockedWindowsKeys & CaptureBlockedWindowsKeys.Right) != 0);
+            blockLeft.Bind(ContentProperty, LiveText.Resource("CaptureWindowsKeyLeft"));
+            blockRight.Bind(ContentProperty, LiveText.Resource("CaptureWindowsKeyRight"));
+            blockLeft.IsEnabled = blockRight.IsEnabled = OperatingSystem.IsWindows();
+            blockedKeys.Children.Add(blockLeft);
+            blockedKeys.Children.Add(blockRight);
+            var doubleClick = Choice((int)value.DoubleClickAction, "CaptureDoubleClickNone", "ScreenshotCopy",
+                "CaptureDoubleClickOcrCopy", "ScreenshotQuickSave", "ScreenshotSave", "ScreenshotPin");
             var cursor = Choice((int)value.CursorPolicy, "CaptureCursorHidden", "CaptureCursorVisible");
             var auxiliary = Choice((int)value.AuxiliaryPolicy, "CaptureAuxiliaryHidden", "CaptureAuxiliaryAlt",
                 "CaptureAuxiliaryAlways");
@@ -65,49 +79,84 @@ namespace RitsukageGif.Desktop
                 },
             };
             color.ColorChanged += (_, _) => swatch.Background = new SolidColorBrush(color.Color);
-            var format = Choice((int)value.MagnifierColorFormat, "CaptureColorRgb", "CaptureColorHex",
-                "CaptureColorHsv", "CaptureColorHsl");
+            var formats = value.ColorFormats;
+            var format = ColorFormatsButton(formats);
             var smooth = Toggle(value.SmoothMagnifier);
             var hints = Toggle(value.ShowShortcutHints);
-            Add("CaptureDetection", detection);
-            Add("CaptureElementMargin", margin);
-            Add("CaptureExpandOutside", expand);
-            Add("", cursor);
+            var codes = Choice((int)value.CodeDetection, "CaptureCodeDisabled", "CaptureCodeManual",
+                "CaptureCodeAutomatic", "CaptureCodeContents");
+            Add("CaptureDetection", detection, static settings => settings.CapturePreferences.DetectionMode);
+            Add("CaptureElementMargin", margin, static settings => settings.CapturePreferences.ElementMargin);
+            Add("CaptureExpandOutside", expand, static settings => settings.CapturePreferences.ExpandOnOutsideClick);
+            Add("CaptureDoubleClickAction", doubleClick,
+                static settings => settings.CapturePreferences.DoubleClickAction);
+            Add("", cursor, static settings => settings.CapturePreferences.CursorPolicy);
             var cursorLabel = (TextBlock)((Grid)((Border)fields.Children[^1]).Child!).Children[0];
 
             RefreshCursorLabel();
             SubscribeContentLanguage(RefreshCursorLabel);
             page.AttachedToVisualTree += (_, _) => RefreshCursorLabel();
-            Add("CaptureAuxiliaryTiming", auxiliary);
-            Add("CaptureAuxiliaryContents", guides);
-            Add("CaptureInformation", info);
-            Add("CaptureMagnifier", magnifier);
-            Add("CaptureMagnifierContents", details);
-            Add("CaptureMagnification", zoom);
-            Add("CaptureMagnifierShortcuts", mirrorHints);
-            Add("CaptureMagnifierGridColor", color);
-            Add("CaptureMagnifierColorFormat", format);
-            Add("CaptureMagnifierSmooth", smooth);
-            Add("CaptureShortcutHints", hints);
+            Add("CaptureAuxiliaryTiming", auxiliary, static settings => settings.CapturePreferences.AuxiliaryPolicy);
+            Add("CaptureAuxiliaryContents", guides,
+                static settings => (settings.CapturePreferences.GuideCursor,
+                    settings.CapturePreferences.GuideSelectionCenter, settings.CapturePreferences.GuideSelectionBorder,
+                    settings.CapturePreferences.GuideMagnifier, settings.CapturePreferences.GuideThirds,
+                    settings.CapturePreferences.GuideMeasurements));
+            Add("CaptureInformation", info, static settings => settings.CapturePreferences.ShowInformation);
+            Add("CaptureMagnifier", magnifier, static settings => settings.CapturePreferences.ShowMagnifier);
+            Add("CaptureMagnifierContents", details,
+                static settings => (settings.CapturePreferences.MagnifierGrid,
+                    settings.CapturePreferences.MagnifierCrosshair, settings.CapturePreferences.MagnifierCenterPixel,
+                    settings.CapturePreferences.MagnifierSelectionBorder,
+                    settings.CapturePreferences.MagnifierSelectionHandles,
+                    settings.CapturePreferences.MagnifierCoordinates));
+            Add("CaptureMagnification", zoom, static settings => settings.CapturePreferences.Magnification);
+            Add("CaptureMagnifierShortcuts", mirrorHints,
+                static settings => settings.CapturePreferences.MagnifierShortcuts);
+            Add("CaptureMagnifierGridColor", color, static settings => settings.CapturePreferences.MagnifierGridColor,
+                StringComparer.OrdinalIgnoreCase.Equals);
+            Add("CaptureMagnifierColorFormat", format, static settings => settings.CapturePreferences.ColorFormats,
+                static (left, right) => left.SequenceEqual(right));
+            Add("CaptureMagnifierSmooth", smooth, static settings => settings.CapturePreferences.SmoothMagnifier);
+            Add("CaptureShortcutHints", hints, static settings => settings.CapturePreferences.ShowShortcutHints);
+            Add("CaptureCodeDetection", codes, static settings => settings.CapturePreferences.CodeDetection);
             var regionHistory = new CompactNumberInput
                 { Minimum = 0, Maximum = 1000, Value = value.RegionHistoryCapacity, Width = 100 };
             var screenshotHistory = new CompactNumberInput
                 { Minimum = 0, Maximum = 1000, Value = value.ScreenshotHistoryCapacity, Width = 100 };
             var historyMemory = new CompactNumberInput
                 { Minimum = 0, Maximum = 512, Value = value.ScreenshotHistoryMaximumMiB, Width = 100 };
-            Add("CaptureRegionHistoryCapacity", regionHistory);
-            Add("CaptureScreenshotHistoryCapacity", screenshotHistory);
-            Add("CaptureScreenshotHistoryMemory", historyMemory);
+            Add("CaptureRegionHistoryCapacity", regionHistory,
+                static settings => settings.CapturePreferences.RegionHistoryCapacity);
+            Add("CaptureScreenshotHistoryCapacity", screenshotHistory,
+                static settings => settings.CapturePreferences.ScreenshotHistoryCapacity);
+            Add("CaptureScreenshotHistoryMemory", historyMemory,
+                static settings => settings.CapturePreferences.ScreenshotHistoryMaximumMiB);
+            Add("CapturePersistHistory", persistHistory, static settings => settings.CapturePreferences.PersistHistory);
+            Add("CaptureCycleRegionHistory", cycleRegions,
+                static settings => settings.CapturePreferences.CycleRegionHistory);
+            Add("CaptureQuitOnForeignActivation", quitOnForeign,
+                static settings => settings.CapturePreferences.QuitOnForeignActivation);
+            Add("CaptureDisableMouseWheel", disableWheel,
+                static settings => settings.CapturePreferences.DisableMouseWheel);
+            Add("CaptureBlockedWindowsKeys", blockedKeys,
+                static settings => settings.CapturePreferences.BlockedWindowsKeys);
             fields.Children.Add(clipboardOptions);
-            Add("ToolbarActionsTitle", ToolbarCustomizationButton(draft, false));
+            Add("ToolbarActionsTitle", ToolbarCustomizationButton(draft, false),
+                static settings => settings.Annotation.Toolbar.Actions,
+                static (left, right) => left.SequenceEqual(right));
             page.Children.Add(MouseSettingsCard(fields));
             var scroll = draft.ScrollCapture.Normalize();
             var axis = Choice((int)scroll.InitialAxis, "CaptureScrollVertical", "CaptureScrollHorizontal");
             var scrollKeys = Toggle(scroll.RespondShortcuts);
             scrollKeys.Bind(ContentProperty, LiveText.Resource("CaptureScrollShortcuts"));
+            var autoCrop = Toggle(scroll.AutoCropOnReverse);
+            autoCrop.Bind(ContentProperty, LiveText.Resource("CaptureScrollAutoCrop"));
             var scrollFields = new StackPanel { Spacing = 4 };
-            scrollFields.Children.Add(Labeled("CaptureScrollInitialAxis", axis));
-            scrollFields.Children.Add(scrollKeys);
+            scrollFields.Children.Add(SettingRow("CaptureScrollInitialAxis", axis,
+                static settings => settings.ScrollCapture.InitialAxis));
+            scrollFields.Children.Add(Setting(autoCrop, static settings => settings.ScrollCapture.AutoCropOnReverse));
+            scrollFields.Children.Add(Setting(scrollKeys, static settings => settings.ScrollCapture.RespondShortcuts));
             page.Children.Add(SettingsSection("ScrollCaptureTitle", scrollFields));
             apply = () =>
             {
@@ -115,6 +164,13 @@ namespace RitsukageGif.Desktop
                 {
                     DetectionMode = (CaptureDetectionMode)detection.SelectedIndex,
                     ElementMargin = (int)ReadSettingsNumber(margin), ExpandOnOutsideClick = expand.IsChecked == true,
+                    QuitOnForeignActivation = quitOnForeign.IsChecked == true,
+                    CycleRegionHistory = cycleRegions.IsChecked == true,
+                    DisableMouseWheel = disableWheel.IsChecked == true,
+                    PersistHistory = persistHistory.IsChecked == true,
+                    BlockedWindowsKeys = (blockLeft.IsChecked == true ? CaptureBlockedWindowsKeys.Left : 0) |
+                                         (blockRight.IsChecked == true ? CaptureBlockedWindowsKeys.Right : 0),
+                    DoubleClickAction = (CaptureDoubleClickAction)doubleClick.SelectedIndex,
                     CursorPolicy = (CaptureCursorPolicy)cursor.SelectedIndex,
                     AuxiliaryPolicy = (CaptureAuxiliaryPolicy)auxiliary.SelectedIndex,
                     GuideCursor = guideValues[0], GuideSelectionCenter = guideValues[1],
@@ -129,13 +185,16 @@ namespace RitsukageGif.Desktop
                     ScreenshotHistoryMaximumMiB = (int)ReadSettingsNumber(historyMemory),
                     Magnification = (int)ReadSettingsNumber(zoom), MagnifierShortcuts = mirrorHints.IsChecked == true,
                     MagnifierGridColor = color.Color.ToString(),
-                    MagnifierColorFormat = (CaptureSampleColorFormat)format.SelectedIndex,
+                    ColorFormats = [.. formats],
+                    MagnifierColorFormatId = SampleColorFormats.First(formats, value.MagnifierColorFormatId).Id,
                     SmoothMagnifier = smooth.IsChecked == true, ShowShortcutHints = hints.IsChecked == true,
+                    CodeDetection = (CaptureCodeDetectionMode)codes.SelectedIndex,
                 };
                 draft.ScrollCapture = scroll with
                 {
                     InitialAxis = (ScrollCaptureAxis)axis.SelectedIndex,
                     RespondShortcuts = scrollKeys.IsChecked == true,
+                    AutoCropOnReverse = autoCrop.IsChecked == true,
                 };
                 draft.Cursor = draft.CapturePreferences.CursorPolicy == CaptureCursorPolicy.Visible;
                 draft.SelectionDetectControls = draft.CapturePreferences.DetectionMode == CaptureDetectionMode.Controls;
@@ -154,19 +213,20 @@ namespace RitsukageGif.Desktop
                     : UiText.Get("CaptureCursor");
             }
 
-            void Add(string key, Control control)
+            void Add<T>(string key, Control control, Func<AppSettings, T> getter, Func<T, T, bool>? equals = null)
             {
                 Grid row;
                 if (control is CheckBox check)
                 {
                     check.Bind(ContentProperty, LiveText.Resource(key));
+                    Setting(check, getter, equals);
                     check.HorizontalAlignment = HorizontalAlignment.Left;
                     row = new() { MinHeight = 32 };
                     row.Children.Add(check);
                 }
                 else
                 {
-                    row = Labeled(key, control);
+                    row = SettingRow(key, control, getter, equals);
                     if (control is ColorPicker) control.HorizontalAlignment = HorizontalAlignment.Right;
                 }
 

@@ -49,6 +49,9 @@ namespace RitsukageGif.Desktop
         public string OutputDirectory { get; set; } =
             Path.Combine(DefaultPicturesDirectory(), "RitsukageGif");
 
+        public bool MixingKeypadMainKeyboard { get; set; }
+        public bool GlobalMouseShowMask { get; set; }
+        public bool NonDefaultConfigItemsFontNotBold { get; set; }
         public Dictionary<string, string[]> SelectionShortcuts { get; set; } = new(StringComparer.Ordinal);
         public Dictionary<string, string[]> MouseShortcuts { get; set; } = new(StringComparer.Ordinal);
 
@@ -95,6 +98,8 @@ namespace RitsukageGif.Desktop
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.System = (settings.System ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+                settings.Network = (settings.Network ?? new()).Normalize();
+                // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.Recognition = (settings.Recognition ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.Translation = (settings.Translation ?? new()).Normalize();
@@ -111,7 +116,11 @@ namespace RitsukageGif.Desktop
                 // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
                 settings.GlobalActions.RemoveAll(action => action is null);
                 foreach (var action in settings.GlobalActions)
+                {
                     action.Arguments = new(action.Arguments, StringComparer.Ordinal);
+                    action.IgnoredPrograms = ProgramExclusionRules.Normalize(action.IgnoredPrograms);
+                }
+
                 settings.VideoRecording = settings.VideoRecording with
                 {
                     Container = Enum.IsDefined(settings.VideoRecording.Container)

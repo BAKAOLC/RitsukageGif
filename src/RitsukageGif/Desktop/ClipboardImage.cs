@@ -20,9 +20,9 @@ namespace RitsukageGif.Desktop
                     preferences, storage, quality, token);
         }
 
-        public static Task CopyAsync(IClipboard clipboard, byte[] png)
+        public static Task CopyAsync(IClipboard clipboard, byte[] png, CancellationToken token = default)
         {
-            return CopyImageQueuedAsync(clipboard, png, CancellationToken.None);
+            return CopyImageQueuedAsync(clipboard, png, token);
         }
 
         private static async Task CopyImageQueuedAsync(IClipboard clipboard, byte[] png, CancellationToken token)
@@ -42,16 +42,16 @@ namespace RitsukageGif.Desktop
         private static async Task CopyImageAsync(IClipboard clipboard, byte[] png, byte[]? encodedPng = null)
         {
             var transfer = new DataTransfer();
-            var item = DataTransferItem.Create(DataFormat.Bitmap, () =>
-            {
-                using var stream = new MemoryStream(png, false);
-                return new(stream);
-            });
-            item.Set(DataFormat.CreateBytesPlatformFormat("image/png"), encodedPng ?? png);
-            if (OperatingSystem.IsWindows()) item.Set(DataFormat.CreateBytesPlatformFormat("PNG"), encodedPng ?? png);
-            transfer.Add(item);
+            transfer.Add(CreateImageItem(png, encodedPng));
             await clipboard.SetDataAsync(transfer);
             await clipboard.FlushAsync();
+        }
+
+        private static DataTransferItem CreateImageItem(byte[] png, byte[]? encodedPng = null)
+        {
+            var item = new DataTransferItem();
+            ClipboardPlatformFormats.SetImage(item, encodedPng ?? png, "image/png", png);
+            return item;
         }
 
         private static async Task CopyHdrAsync(IClipboard clipboard, byte[] sdrPng, CapturedFrame hdr,
@@ -130,7 +130,11 @@ namespace RitsukageGif.Desktop
                 {
                     var file = await storage.TryGetFileFromPathAsync(path) ??
                                throw new IOException(UiText.Get("ClipboardFailed"));
-                    transfer.Add(DataTransferItem.CreateFile(file));
+                    var item = transfer.Items.Count == 0
+                        ? CreateImageItem(sdrPng, hdrPng)
+                        : new();
+                    item.Set(DataFormat.File, file);
+                    transfer.Add(item);
                 }
 
                 token.ThrowIfCancellationRequested();
@@ -186,7 +190,9 @@ namespace RitsukageGif.Desktop
                                throw new IOException(UiText.Get("ClipboardFailed"));
                     token.ThrowIfCancellationRequested();
                     var transfer = new DataTransfer();
-                    transfer.Add(DataTransferItem.CreateFile(file));
+                    var item = CreateImageItem(png);
+                    item.Set(DataFormat.File, file);
+                    transfer.Add(item);
                     publicationAttempted = true;
                     await clipboard.SetDataAsync(transfer);
                     await clipboard.FlushAsync();

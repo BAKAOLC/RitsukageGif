@@ -31,5 +31,13 @@ namespace RitsukageGif.Desktop
         ToggleGlobalShortcuts,
         ScreenshotAndTranslate,
         TranslateClipboard,
+        ScreenshotAndRecognizeText,
+        ScreenshotAndRecognizeTable,
+        ScreenshotAndRecognizeFormula,
+        OpenAnimationEditor,
+        ToggleOtherPinnedImages,
+        SwitchPinnedGroup,
+        RunScript,
+        ScreenshotAndCopyCodeText,
     }
 }

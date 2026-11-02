@@ -13,10 +13,10 @@ namespace RitsukageGif.Desktop
 
         private async Task RunAsync(Func<CancellationToken, Task> action, [CallerMemberName] string operation = "")
         {
-            if (_operation is not null) return;
+            if (_languageClosed || _operation is not null) return;
             CrashRecoverySession.Current?.MarkOperation($"Animation editor: {operation}");
             var started = Stopwatch.GetTimestamp();
-            Logger.ZLogInformation($"Animation editor operation started. Operation={operation} ImageMode={_imageMode}");
+            Logger.ZLogInformation($"Animation editor operation started. Operation={operation}");
             _playback.Stop();
             using var cancellation = new CancellationTokenSource();
             _operation = cancellation;
@@ -85,15 +85,8 @@ namespace RitsukageGif.Desktop
                 if (_document is null) return;
                 if (_canvas.HasChanges)
                 {
-                    if (_imageMode)
-                    {
-                        await CommitImageDraftAsync(token);
-                    }
-                    else
-                    {
-                        SetStatus("AnimationApplyFirst");
-                        return;
-                    }
+                    SetStatus("AnimationApplyFirst");
+                    return;
                 }
 
                 var before = _document.Frames;
@@ -176,7 +169,7 @@ namespace RitsukageGif.Desktop
             if (!await ConfirmDiscardAsync()) return;
             var files = await StorageProvider.OpenFilePickerAsync(new()
             {
-                Title = UiText.Get("EditorOpen"), FileTypeFilter = _imageMode ? StaticImageFiles() : [AnimationFiles()],
+                Title = UiText.Get("EditorOpen"), FileTypeFilter = [AnimationFiles()],
             });
             if (files.Count > 0 && files[0].TryGetLocalPath() is { } path) await LoadAsync(path);
         }
@@ -185,13 +178,6 @@ namespace RitsukageGif.Desktop
         {
             return RunAsync(async token =>
             {
-                if (_imageMode)
-                {
-                    var image = await Task.Run(() => AnimationEditDocument.OpenImage(path, token), token);
-                    await InstallImageDocumentAsync(image, path, false, token);
-                    return;
-                }
-
                 var loaded = await AnimationImportProcess.OpenAsync(path, token: token);
                 try
                 {
@@ -262,49 +248,50 @@ namespace RitsukageGif.Desktop
 
         private async Task ExportAsync()
         {
-            if (_imageMode)
+            if (_languageClosed || _document is null) return;
+            var lifetime = _lifetime.Token;
+            try
             {
-                await SaveImageAsync(true);
-                return;
-            }
-
-            if (_document is null) return;
-            if (_canvas.HasChanges)
-            {
-                SetStatus("AnimationApplyFirst");
-                return;
-            }
-
-            var formats = new[] { "gif", "webp", "apng", "png" };
-            var format = formats[Math.Max(0, _format.SelectedIndex)];
-            var file = await StorageProvider.SaveFilePickerAsync(new()
-            {
-                Title = UiText.Get("AnimationExport"),
-                SuggestedFileName =
-                    $"{(_path is null ? "animation" : Path.GetFileNameWithoutExtension(_path))}-edited.{format}",
-                DefaultExtension = format, ShowOverwritePrompt = true,
-                FileTypeChoices = [new(format.ToUpperInvariant()) { Patterns = [$"*.{format}"] }],
-            });
-            if (file?.TryGetLocalPath() is not { } path) return;
-            var selectedFrame = CurrentFrame;
-            var options = new MediaProcessOptions
-            {
-                Format = format, Quality = Value(_exportQuality), Colors = Value(_colors),
-                Lossless = _lossless.IsChecked == true, Dither = _dither.IsChecked == true, Overwrite = true,
-            };
-            await RunAsync(async token =>
-            {
-                if (format == "png") await Task.Run(() => _document.ExportFrame(selectedFrame, path, token), token);
-                else await Task.Run(() => _document.ExportAsync(path, options, token), token);
-                if (format != "png" || _document.Frames.Count == 1)
+                if (_canvas.HasChanges)
                 {
-                    _dirty = false;
-                    _path = path;
+                    SetStatus("AnimationApplyFirst");
+                    return;
                 }
 
-                Refresh();
-                SetStatus("AnimationExported", path);
-            });
+                var formats = new[] { "gif", "webp", "apng", "png" };
+                var format = formats[Math.Max(0, _format.SelectedIndex)];
+                using var file = await StoragePickerAwaiter.WaitAsync(StorageProvider.SaveFilePickerAsync(new()
+                {
+                    Title = UiText.Get("AnimationExport"),
+                    SuggestedFileName =
+                        $"{(_path is null ? "animation" : Path.GetFileNameWithoutExtension(_path))}-edited.{format}",
+                    DefaultExtension = format, ShowOverwritePrompt = true,
+                    FileTypeChoices = [new(format.ToUpperInvariant()) { Patterns = [$"*.{format}"] }],
+                }), lifetime);
+                if (file?.TryGetLocalPath() is not { } path) return;
+                var selectedFrame = CurrentFrame;
+                var options = new MediaProcessOptions
+                {
+                    Format = format, Quality = Value(_exportQuality), Colors = Value(_colors),
+                    Lossless = _lossless.IsChecked == true, Dither = _dither.IsChecked == true, Overwrite = true,
+                };
+                await RunAsync(async token =>
+                {
+                    if (format == "png") await Task.Run(() => _document.ExportFrame(selectedFrame, path, token), token);
+                    else await Task.Run(() => _document.ExportAsync(path, options, token), token);
+                    if (format != "png" || _document.Frames.Count == 1)
+                    {
+                        _dirty = false;
+                        _path = path;
+                    }
+
+                    Refresh();
+                    SetStatus("AnimationExported", path);
+                });
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+            {
+            }
         }
 
         private async Task<bool> ConfirmDiscardAsync()
@@ -312,7 +299,7 @@ namespace RitsukageGif.Desktop
             if (!_dirty && !_canvas.HasChanges) return true;
             var dialog = new Window
             {
-                [!TitleProperty] = LiveText.Resource(_imageMode ? "ImageEditorTitle" : "AnimationEditorTitle"),
+                [!TitleProperty] = LiveText.Resource("AnimationEditorTitle"),
                 Width = 390,
                 SizeToContent = SizeToContent.Height,
                 CanResize = false, WindowStartupLocation = WindowStartupLocation.CenterOwner,

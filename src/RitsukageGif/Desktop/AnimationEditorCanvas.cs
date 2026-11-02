@@ -257,7 +257,7 @@ namespace RitsukageGif.Desktop
             using var target = new RenderTargetBitmap(new(_width, _height), new(96, 96));
             using (var context = target.CreateDrawingContext()) DrawContent(context);
             using var stream = new MemoryStream();
-            target.Save(stream);
+            target.Save(stream, PngBitmapEncoderOptions.Default);
             return stream.ToArray();
         }
 
@@ -318,7 +318,7 @@ namespace RitsukageGif.Desktop
                     metadata.Ping(path);
                     if ((long)metadata.Width * metadata.Height > 64 * 1024 * 1024)
                         throw new InvalidOperationException(UiText.Get("AnimationEditorImageTooLarge"));
-                    return new Bitmap(path);
+                    return CreateImportedBitmap(path, token);
                 }, token);
                 token.ThrowIfCancellationRequested();
                 if (_disposed || version != _loadVersion) return;

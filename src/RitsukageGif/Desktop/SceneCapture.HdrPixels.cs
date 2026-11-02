@@ -15,9 +15,8 @@ namespace RitsukageGif.Desktop
 
             WriteLinearFrame(output.Source, frame, token);
             using var paint = new SKPaint();
-            paint.FilterQuality = SKFilterQuality.Medium;
             paint.IsAntialias = true;
-            output.Drawing.DrawBitmap(output.Source, crop ?? new SKRect(0, 0, frame.Width, frame.Height),
+            output.Drawing.DrawSampledBitmap(output.Source, crop ?? new SKRect(0, 0, frame.Width, frame.Height),
                 new(0, 0, output.Bitmap.Width, output.Bitmap.Height), paint);
             output.IsHdrSource |= frame.ColorInfo.IsHdrSource;
         }

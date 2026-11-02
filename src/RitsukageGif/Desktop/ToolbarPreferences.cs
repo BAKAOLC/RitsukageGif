@@ -28,7 +28,10 @@ namespace RitsukageGif.Desktop
             {
                 // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
                 if (column is null) continue;
-                columns.Add([.. column.Where(tool => Enum.IsDefined(tool) && tools.Add(tool)).Take(toolCount)]);
+                columns.Add([
+                    .. column.Where(tool => Enum.IsDefined(tool) && tool != ScreenshotTool.Select && tools.Add(tool))
+                        .Take(toolCount),
+                ]);
             }
 
             var identifiers = new HashSet<ToolbarActionId>();
@@ -50,12 +53,12 @@ namespace RitsukageGif.Desktop
         {
             return
             [
-                [ScreenshotTool.Rectangle, ScreenshotTool.Ellipse],
+                [ScreenshotTool.Rectangle, ScreenshotTool.Ellipse, ScreenshotTool.Spotlight],
                 [ScreenshotTool.Brush, ScreenshotTool.Highlight],
-                [ScreenshotTool.Arrow, ScreenshotTool.Line, ScreenshotTool.Polyline],
-                [ScreenshotTool.Text],
+                [ScreenshotTool.Arrow, ScreenshotTool.Line, ScreenshotTool.Polyline, ScreenshotTool.Magnifier],
+                [ScreenshotTool.Text, ScreenshotTool.Watermark],
                 [ScreenshotTool.Number],
-                [ScreenshotTool.Mosaic, ScreenshotTool.Blur],
+                [ScreenshotTool.Mosaic, ScreenshotTool.Blur, ScreenshotTool.SmartErase],
                 [ScreenshotTool.Eraser, ScreenshotTool.StrokeEraser],
             ];
         }
@@ -64,12 +67,9 @@ namespace RitsukageGif.Desktop
         {
             return
             [
-                .. Enum.GetValues<ToolbarActionId>().Select(id => new ToolbarActionPreference
+                .. ToolbarActionCatalog.All.Select(definition => new ToolbarActionPreference
                 {
-                    Id = id,
-                    Visibility = id <= ToolbarActionId.Cancel
-                        ? ToolbarButtonVisibility.Toolbar
-                        : ToolbarButtonVisibility.MoreMenu,
+                    Id = definition.Id, Visibility = definition.DefaultVisibility,
                 }),
             ];
         }

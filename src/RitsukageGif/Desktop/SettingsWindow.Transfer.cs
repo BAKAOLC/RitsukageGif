@@ -24,6 +24,18 @@ namespace RitsukageGif.Desktop
             page.Children.Add(actions);
             var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
             page.Children.Add(status);
+            var normalWeight = Setting(new CheckBox
+            {
+                Name = "NonDefaultConfigItemsFontNotBold",
+                [!ContentProperty] = LiveText.Resource("NonDefaultConfigItemsFontNotBold"),
+                IsChecked = _draft?.NonDefaultConfigItemsFontNotBold == true,
+            }, static settings => settings.NonDefaultConfigItemsFontNotBold);
+            normalWeight.IsCheckedChanged += (_, _) =>
+            {
+                _draft?.NonDefaultConfigItemsFontNotBold = normalWeight.IsChecked == true;
+                RefreshDefaultPresentation();
+            };
+            page.Children.Add(normalWeight);
             var lifetime = new CancellationTokenSource();
             var token = lifetime.Token;
             RegisterContentCleanup(() =>
@@ -45,7 +57,7 @@ namespace RitsukageGif.Desktop
                     await using var stream = await selected[0].OpenReadAsync();
                     var loaded = await SettingsTransfer.ImportAsync(stream, token);
                     token.ThrowIfCancellationRequested();
-                    ReplaceLiveSettings(loaded);
+                    await ReplaceLiveSettingsAsync(loaded);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
@@ -8,14 +8,19 @@ namespace RitsukageGif.Desktop
         private static void ValidateAnnotationPreferences(JsonElement root)
         {
             if (!root.TryGetProperty("Annotation", out var annotation)) return;
-            ValidateStyle(annotation, "Annotation");
+            if (annotation.ValueKind != JsonValueKind.Object) throw Invalid("Annotation");
             foreach (var property in annotation.EnumerateObject())
             {
                 var path = "Annotation." + property.Name;
                 switch (property.Name)
                 {
+                    case "Color":
+                        if (property.Value.ValueKind != JsonValueKind.String ||
+                            !Color.TryParse(property.Value.GetString(), out _)) throw Invalid(path);
+                        break;
                     case "MaximumBrushThickness": ValidateNumber(property.Value, path, 1, 1024); break;
                     case "QuickSettingsPadding": ValidateNumber(property.Value, path, 0, 64); break;
+                    case "SecondaryEditing": ValidateEnum<AnnotationSecondaryEditingMode>(property.Value, path); break;
                     case "PencilCursor": ValidateEnum<AnnotationPencilCursor>(property.Value, path); break;
                     case "ControlPointVisibility":
                         ValidateEnum<AnnotationControlPointVisibility>(property.Value, path); break;
@@ -45,8 +50,7 @@ namespace RitsukageGif.Desktop
             if (styles.ValueKind != JsonValueKind.Object) throw Invalid("Annotation.ToolStyles");
             foreach (var style in styles.EnumerateObject())
             {
-                if (!Enum.TryParse<ScreenshotTool>(style.Name, out var tool) || !Enum.IsDefined(tool) ||
-                    style.Name != tool.ToString()) throw Invalid("Annotation.ToolStyles." + style.Name);
+                if (!ScreenshotToolCatalog.IsStyleKey(style.Name)) throw Invalid("Annotation.ToolStyles." + style.Name);
                 ValidateStyle(style.Value, "Annotation.ToolStyles." + style.Name);
             }
         }
@@ -89,11 +93,16 @@ namespace RitsukageGif.Desktop
                 var name = path + "." + property.Name;
                 switch (property.Name)
                 {
+                    case "GeometryShape": ValidateEnum<AnnotationGeometryShape>(property.Value, name); break;
+                    case "ArrowShape": ValidateEnum<AnnotationArrowShape>(property.Value, name); break;
+                    case "StrokeStyle": ValidateEnum<AnnotationStrokeStyle>(property.Value, name); break;
+                    case "CornerRadius": ValidateNumber(property.Value, name, 0, 1024); break;
+                    case "StartEndpoint":
+                    case "EndEndpoint": ValidateEnum<AnnotationEndpointStyle>(property.Value, name); break;
                     case "TextPadding": ValidateNumber(property.Value, name, 0, 128); break;
                     case "TextOutlineWidth": ValidateNumber(property.Value, name, 0, 16); break;
                     case "WrapWidth": ValidateNumber(property.Value, name, 0, 8192); break;
                     case "Opacity": ValidateNumber(property.Value, name, .01, 1); break;
-                    case "Magnification": ValidateNumber(property.Value, name, 1.1, 16); break;
                     case "Number": ValidateNumber(property.Value, name, 0, 999999, true); break;
                     case "BlurRadius": ValidateNumber(property.Value, name, 1, 256, true); break;
                     case "Anchor": ValidateNumber(property.Value, name, 0, 8, true); break;
@@ -105,7 +114,17 @@ namespace RitsukageGif.Desktop
                         break;
                 }
             }
+
+            ValidateNumberProperties(properties, path);
+            ValidateMagnifierProperties(properties, path);
+            ValidatePixelToolProperties(properties, path);
+            ValidateMarkerProperties(properties, path);
         }
+
+        static partial void ValidateNumberProperties(JsonElement properties, string path);
+        static partial void ValidateMagnifierProperties(JsonElement properties, string path);
+        static partial void ValidatePixelToolProperties(JsonElement properties, string path);
+        static partial void ValidateMarkerProperties(JsonElement properties, string path);
 
         private static void ValidateNumber(JsonElement value, string path, double minimum, double maximum,
             bool integer = false)

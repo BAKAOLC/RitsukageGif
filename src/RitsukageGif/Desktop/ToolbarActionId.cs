@@ -17,5 +17,14 @@ namespace RitsukageGif.Desktop
         RecognizeBarcode,
         OutputColor,
         Translate,
+        QuickSave,
+        Record,
+        RecognizeTable,
+        RecognizeFormula,
+        ExportPdf,
+        Print,
+        WindowPin,
+        Edit,
+        CopyCodeText,
     }
 }

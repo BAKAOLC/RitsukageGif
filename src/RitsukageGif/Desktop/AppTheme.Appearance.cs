@@ -50,6 +50,7 @@ namespace RitsukageGif.Desktop
             Outline.Color = Color.Parse(dark ? "#35FFFFFF" : "#141C1F23");
             Ink.Color = Color.Parse(dark ? "#F0F1F3" : "#1C1F23");
             Muted.Color = Color.Parse(dark ? "#ACAFB7" : "#9E1C1F23");
+            Error.Color = Color.Parse(dark ? "#FFB4AB" : "#B3261E");
             Accent.Color = Color.FromUInt32(CurrentAppearance.AccentColor);
             AccentSoft.Color = Color.FromArgb(38, Accent.Color.R, Accent.Color.G, Accent.Color.B);
             foreach (var key in new[] { "SemiColorPrimary", "SemiColorPrimaryPointerover", "SemiColorPrimaryActive" })

@@ -5,7 +5,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class MediaResource : IDisposable
     {
-        private static readonly HttpClient Client = new();
+        private static readonly HttpClient Client = ApplicationHttp.CreateClient();
         private readonly Entry? _entry;
         private int _disposed;
 

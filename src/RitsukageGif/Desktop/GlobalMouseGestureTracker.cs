@@ -13,10 +13,22 @@ namespace RitsukageGif.Desktop
         private int _pressedButtons;
         private int _startX, _startY;
 
+        internal PixelRect? PreviewRegion { get; private set; }
+        internal string? PreviewAction { get; private set; }
+
         internal string? Process(uint message, GlobalMouseHookData data, KeyModifiers modifiers,
             out PixelRect? region)
         {
             region = null;
+            if (message == 0x001F)
+            {
+                _button = _pressedButtons = 0;
+                _dragging = false;
+                PreviewRegion = null;
+                PreviewAction = null;
+                return null;
+            }
+
             if ((data.Flags & 3) != 0) return null;
             var button = message switch
             {
@@ -32,6 +44,8 @@ namespace RitsukageGif.Desktop
                 var wasPressed = _pressedButtons != 0;
                 _pressedButtons |= 1 << button;
                 _button = 0;
+                PreviewRegion = null;
+                PreviewAction = null;
                 if (wasPressed || modifiers == KeyModifiers.None ||
                     !bindings.ContainsKey(new(DragKind(button), modifiers))) return null;
                 _button = button;
@@ -47,19 +61,33 @@ namespace RitsukageGif.Desktop
             if (_button == 0 || (message != 0x0200 && !released)) return null;
             if (Math.Abs((long)data.X - _startX) > dragWidth || Math.Abs((long)data.Y - _startY) > dragHeight)
                 _dragging = true;
+            if (_dragging && message == 0x0200)
+            {
+                PreviewRegion = Region(data);
+                PreviewAction = bindings.GetValueOrDefault(new(DragKind(_button), _modifiers));
+            }
+
             if (!released || button != _button) return null;
             _button = 0;
+            PreviewRegion = null;
+            PreviewAction = null;
             if (!_dragging || _pressedButtons != 0) return null;
             var action = bindings.GetValueOrDefault(new(DragKind(button), _modifiers));
             if (action is null) return null;
+            region = Region(data);
+            return region is null ? null : action;
+        }
+
+        private PixelRect? Region(GlobalMouseHookData data)
+        {
             var left = Math.Min(_startX, data.X);
             var top = Math.Min(_startY, data.Y);
             var width = Math.Max(1, Math.Abs((long)data.X - _startX));
             var height = Math.Max(1, Math.Abs((long)data.Y - _startY));
-            if (width > int.MaxValue || height > int.MaxValue ||
-                left + width > int.MaxValue || top + height > int.MaxValue) return null;
-            region = new(left, top, (int)width, (int)height);
-            return action;
+            return width > int.MaxValue || height > int.MaxValue ||
+                   left + width > int.MaxValue || top + height > int.MaxValue
+                ? null
+                : new(left, top, (int)width, (int)height);
         }
 
         private static MouseGestureKind DragKind(int button)

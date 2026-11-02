@@ -221,7 +221,14 @@ namespace RitsukageGif.Desktop
                             staticCaptureService: staticCaptureService, videoService: videoService,
                             textRecognitionService: textRecognitionService,
                             barcodeRecognitionService: barcodeRecognitionService,
-                            privacyService: privacyDetectionService);
+                            privacyService: privacyDetectionService, documentService: new PdfDocumentService(),
+                            tableService: StructuredRecognitionProcess.Shared,
+                            formulaService: StructuredRecognitionProcess.Shared,
+                            formulaOutputService: StructuredRecognitionProcess.Shared,
+                            tableOutputService: new TableOutputService(),
+                            formulaDocumentService: new FormulaDocxService(),
+                            tableDataService: new TableDataService(),
+                            tableEditService: TableEditorService.Shared);
                         owner.Script = session;
                         owner.Acquire();
                         owner.ScriptTask = RunScriptAsync(owner, session);

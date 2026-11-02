@@ -103,12 +103,9 @@ namespace RitsukageGif.Desktop
                 var html = ClipboardHtml.CreateFragment(path);
                 if (OperatingSystem.IsWindows())
                     item.Set(DataFormat.CreateBytesPlatformFormat("HTML Format"), ClipboardHtml.CreateWindows(html));
-                else
-                    item.Set(
-                        DataFormat.CreateStringPlatformFormat(OperatingSystem.IsMacOS() ? "public.html" : "text/html"),
-                        html);
-                item.Set(DataFormat.CreateBytesPlatformFormat("QQ_Unicode_RichEdit_Format"), qq);
-                item.Set(DataFormat.CreateBytesPlatformFormat("QQ_RichEdit_Format"), qq);
+                ClipboardPlatformFormats.SetHtml(item, html);
+                item.Set(ClipboardPlatformFormats.CreateBytesFormat("QQ_Unicode_RichEdit_Format"), qq);
+                item.Set(ClipboardPlatformFormats.CreateBytesFormat("QQ_RichEdit_Format"), qq);
                 data.Add(item);
             }
 

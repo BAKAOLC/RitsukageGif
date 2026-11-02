@@ -49,6 +49,7 @@ namespace RitsukageGif.Desktop
             {
                 "RETURN" => "Enter", "ESC" => "Escape", "BACKSPACE" => "Back",
                 "`" => "OemTilde",
+                "=" => "OemPlus",
                 "PRIOR" => "PageUp", "NEXT" => "PageDown", "CAPITAL" => "CapsLock",
                 "SCROLLLOCK" => "Scroll", "SNAPSHOT" => "PrintScreen",
                 "OEM1" => "OemSemicolon", "OEM2" => "OemQuestion", "OEM3" => "OemTilde",

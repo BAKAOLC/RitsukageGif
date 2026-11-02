@@ -33,6 +33,7 @@ namespace RitsukageGif.Desktop
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                DesktopTrayPlatform.Install();
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 _host = new(desktop);
                 CrashRecoverySession.Current?.MarkOperation("Desktop idle");

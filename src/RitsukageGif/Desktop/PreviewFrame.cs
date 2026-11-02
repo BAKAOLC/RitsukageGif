@@ -8,10 +8,13 @@ namespace RitsukageGif.Desktop
         private int _disposed;
         private int _references = 1;
 
-        public PreviewFrame(byte[] pixels, int width, int height, int delay, byte[]? hdrPixels = null)
+        public PreviewFrame(byte[] pixels, int width, int height, int delay, byte[]? hdrPixels = null,
+            float hdrReferenceWhiteLevel = 1, CaptureAlphaMode hdrAlphaMode = CaptureAlphaMode.Opaque)
         {
             Pixels = pixels;
             HdrPixels = hdrPixels;
+            HdrReferenceWhiteLevel = hdrReferenceWhiteLevel;
+            HdrAlphaMode = hdrAlphaMode;
             Width = width;
             Height = height;
             Delay = delay;
@@ -23,6 +26,8 @@ namespace RitsukageGif.Desktop
             _owner = owner;
             Pixels = owner.Pixels;
             HdrPixels = owner.HdrPixels;
+            HdrReferenceWhiteLevel = owner.HdrReferenceWhiteLevel;
+            HdrAlphaMode = owner.HdrAlphaMode;
             Width = owner.Width;
             Height = owner.Height;
             Delay = owner.Delay;
@@ -30,6 +35,8 @@ namespace RitsukageGif.Desktop
 
         public byte[] Pixels { get; }
         public byte[]? HdrPixels { get; }
+        public CaptureAlphaMode HdrAlphaMode { get; }
+        public float HdrReferenceWhiteLevel { get; }
         public long StorageBytes => Pixels.LongLength + (HdrPixels?.LongLength ?? 0);
         public int Width { get; }
         public int Height { get; }

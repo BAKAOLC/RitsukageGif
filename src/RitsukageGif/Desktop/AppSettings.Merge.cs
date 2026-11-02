@@ -25,6 +25,9 @@ namespace RitsukageGif.Desktop
             return current with
             {
                 Appearance = Merge(current.Appearance, baseline.Appearance, edited.Appearance),
+                ImageEditorTopmost = baseline.ImageEditorTopmost == edited.ImageEditorTopmost
+                    ? current.ImageEditorTopmost
+                    : edited.ImageEditorTopmost,
                 Language = EqualityComparer<string>.Default.Equals(baseline.Language, edited.Language)
                     ? current.Language
                     : edited.Language,
@@ -150,6 +153,16 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<string>.Default.Equals(baseline.OutputDirectory, edited.OutputDirectory)
                     ? current.OutputDirectory
                     : edited.OutputDirectory,
+                MixingKeypadMainKeyboard = baseline.MixingKeypadMainKeyboard == edited.MixingKeypadMainKeyboard
+                    ? current.MixingKeypadMainKeyboard
+                    : edited.MixingKeypadMainKeyboard,
+                GlobalMouseShowMask = baseline.GlobalMouseShowMask == edited.GlobalMouseShowMask
+                    ? current.GlobalMouseShowMask
+                    : edited.GlobalMouseShowMask,
+                NonDefaultConfigItemsFontNotBold = baseline.NonDefaultConfigItemsFontNotBold ==
+                                                   edited.NonDefaultConfigItemsFontNotBold
+                    ? current.NonDefaultConfigItemsFontNotBold
+                    : edited.NonDefaultConfigItemsFontNotBold,
                 SelectionShortcuts = MergeSettingDictionary(current.SelectionShortcuts, baseline.SelectionShortcuts,
                     edited.SelectionShortcuts,
                     static (a, b) => SameSequence(a, b, static (a, b) => EqualityComparer<string>.Default.Equals(a, b)),
@@ -159,6 +172,7 @@ namespace RitsukageGif.Desktop
                     static (a, b) => SameSequence(a, b, static (a, b) => EqualityComparer<string>.Default.Equals(a, b)),
                     static (_, _, e) => e),
                 System = Merge(current.System, baseline.System, edited.System),
+                Network = Merge(current.Network, baseline.Network, edited.Network),
                 Recognition = Merge(current.Recognition, baseline.Recognition, edited.Recognition),
                 Translation = Merge(current.Translation, baseline.Translation, edited.Translation),
             };
@@ -347,15 +361,6 @@ namespace RitsukageGif.Desktop
                 Color = EqualityComparer<string>.Default.Equals(baseline.Color, edited.Color)
                     ? current.Color
                     : edited.Color,
-                Thickness = EqualityComparer<double>.Default.Equals(baseline.Thickness, edited.Thickness)
-                    ? current.Thickness
-                    : edited.Thickness,
-                FontSize = EqualityComparer<double>.Default.Equals(baseline.FontSize, edited.FontSize)
-                    ? current.FontSize
-                    : edited.FontSize,
-                MosaicSize = EqualityComparer<int>.Default.Equals(baseline.MosaicSize, edited.MosaicSize)
-                    ? current.MosaicSize
-                    : edited.MosaicSize,
                 RememberLastTool =
                 EqualityComparer<bool>.Default.Equals(baseline.RememberLastTool, edited.RememberLastTool)
                     ? current.RememberLastTool
@@ -370,7 +375,6 @@ namespace RitsukageGif.Desktop
                 SharedColor = EqualityComparer<bool>.Default.Equals(baseline.SharedColor, edited.SharedColor)
                     ? current.SharedColor
                     : edited.SharedColor,
-                Properties = Merge(current.Properties, baseline.Properties, edited.Properties),
                 ToolStyles = MergeSettingDictionary(current.ToolStyles, baseline.ToolStyles, edited.ToolStyles,
                     static (a, b) => Same(a, b), static (c, b, e) => Merge(c, b, e)),
                 ColorPalette =
@@ -378,10 +382,11 @@ namespace RitsukageGif.Desktop
                     static (a, b) => EqualityComparer<string>.Default.Equals(a, b))
                     ? current.ColorPalette
                     : edited.ColorPalette,
-                SecondaryEditingEnabled =
-                EqualityComparer<bool>.Default.Equals(baseline.SecondaryEditingEnabled, edited.SecondaryEditingEnabled)
-                    ? current.SecondaryEditingEnabled
-                    : edited.SecondaryEditingEnabled,
+                SecondaryEditing =
+                EqualityComparer<AnnotationSecondaryEditingMode>.Default.Equals(baseline.SecondaryEditing,
+                    edited.SecondaryEditing)
+                    ? current.SecondaryEditing
+                    : edited.SecondaryEditing,
                 QuickSettingsEnabled =
                 EqualityComparer<bool>.Default.Equals(baseline.QuickSettingsEnabled, edited.QuickSettingsEnabled)
                     ? current.QuickSettingsEnabled
@@ -463,6 +468,9 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<bool>.Default.Equals(baseline.AutoSelectPrivacyMosaic, edited.AutoSelectPrivacyMosaic)
                     ? current.AutoSelectPrivacyMosaic
                     : edited.AutoSelectPrivacyMosaic,
+                AutoAddWatermark = baseline.AutoAddWatermark == edited.AutoAddWatermark
+                    ? current.AutoAddWatermark
+                    : edited.AutoAddWatermark,
                 Toolbar = Merge(current.Toolbar, baseline.Toolbar, edited.Toolbar),
             };
         }
@@ -473,6 +481,34 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return current with
             {
+                Groups = baseline.Groups.SequenceEqual(edited.Groups)
+                    ? [.. current.Groups.Select(group => group with { })]
+                    : [.. edited.Groups.Select(group => group with { })],
+                TitlePosition = baseline.TitlePosition == edited.TitlePosition
+                    ? current.TitlePosition
+                    : edited.TitlePosition,
+                ActiveGroup = baseline.ActiveGroup == edited.ActiveGroup ? current.ActiveGroup : edited.ActiveGroup,
+                HideOthersOnShake = baseline.HideOthersOnShake == edited.HideOthersOnShake
+                    ? current.HideOthersOnShake
+                    : edited.HideOthersOnShake,
+                KeepOthersHiddenOnNewPin = baseline.KeepOthersHiddenOnNewPin == edited.KeepOthersHiddenOnNewPin
+                    ? current.KeepOthersHiddenOnNewPin
+                    : edited.KeepOthersHiddenOnNewPin,
+                ActivateOnNewPin = baseline.ActivateOnNewPin == edited.ActivateOnNewPin
+                    ? current.ActivateOnNewPin
+                    : edited.ActivateOnNewPin,
+                FlashOnNewPin = baseline.FlashOnNewPin == edited.FlashOnNewPin
+                    ? current.FlashOnNewPin
+                    : edited.FlashOnNewPin,
+                FlashAfterGroupSwitch = baseline.FlashAfterGroupSwitch == edited.FlashAfterGroupSwitch
+                    ? current.FlashAfterGroupSwitch
+                    : edited.FlashAfterGroupSwitch,
+                TranslucentOnAttention = baseline.TranslucentOnAttention == edited.TranslucentOnAttention
+                    ? current.TranslucentOnAttention
+                    : edited.TranslucentOnAttention,
+                SupportedContentKinds = baseline.SupportedContentKinds == edited.SupportedContentKinds
+                    ? current.SupportedContentKinds
+                    : edited.SupportedContentKinds,
                 Topmost = EqualityComparer<bool>.Default.Equals(baseline.Topmost, edited.Topmost)
                     ? current.Topmost
                     : edited.Topmost,
@@ -483,6 +519,15 @@ namespace RitsukageGif.Desktop
                 AutoFit = EqualityComparer<bool>.Default.Equals(baseline.AutoFit, edited.AutoFit)
                     ? current.AutoFit
                     : edited.AutoFit,
+                MaximumWindowSize = baseline.MaximumWindowSize == edited.MaximumWindowSize
+                    ? current.MaximumWindowSize
+                    : edited.MaximumWindowSize,
+                QuickThumbnailWidth = baseline.QuickThumbnailWidth == edited.QuickThumbnailWidth
+                    ? current.QuickThumbnailWidth
+                    : edited.QuickThumbnailWidth,
+                QuickThumbnailHeight = baseline.QuickThumbnailHeight == edited.QuickThumbnailHeight
+                    ? current.QuickThumbnailHeight
+                    : edited.QuickThumbnailHeight,
                 Opacity = EqualityComparer<double>.Default.Equals(baseline.Opacity, edited.Opacity)
                     ? current.Opacity
                     : edited.Opacity,
@@ -509,6 +554,9 @@ namespace RitsukageGif.Desktop
                 OutputContent = baseline.OutputContent == edited.OutputContent
                     ? current.OutputContent
                     : edited.OutputContent,
+                ReplacementAction = baseline.ReplacementAction == edited.ReplacementAction
+                    ? current.ReplacementAction
+                    : edited.ReplacementAction,
                 CopyVisibleRegion =
                 EqualityComparer<bool>.Default.Equals(baseline.CopyVisibleRegion, edited.CopyVisibleRegion)
                     ? current.CopyVisibleRegion
@@ -529,11 +577,11 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<bool>.Default.Equals(baseline.ShowLockIndicator, edited.ShowLockIndicator)
                     ? current.ShowLockIndicator
                     : edited.ShowLockIndicator,
-                LockedOperations =
-                EqualityComparer<PinnedLockedOperations>.Default.Equals(baseline.LockedOperations,
-                    edited.LockedOperations)
-                    ? current.LockedOperations
-                    : edited.LockedOperations,
+                LockRestrictions =
+                EqualityComparer<PinnedLockRestrictions>.Default.Equals(baseline.LockRestrictions,
+                    edited.LockRestrictions)
+                    ? current.LockRestrictions
+                    : edited.LockRestrictions,
                 ShowTaskbarWhenNotTopmost =
                 EqualityComparer<bool>.Default.Equals(baseline.ShowTaskbarWhenNotTopmost,
                     edited.ShowTaskbarWhenNotTopmost)
@@ -572,6 +620,9 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<ScrollCaptureAxis>.Default.Equals(baseline.InitialAxis, edited.InitialAxis)
                     ? current.InitialAxis
                     : edited.InitialAxis,
+                AutoCropOnReverse = baseline.AutoCropOnReverse == edited.AutoCropOnReverse
+                    ? current.AutoCropOnReverse
+                    : edited.AutoCropOnReverse,
                 RespondShortcuts =
                 EqualityComparer<bool>.Default.Equals(baseline.RespondShortcuts, edited.RespondShortcuts)
                     ? current.RespondShortcuts
@@ -585,6 +636,28 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return current with
             {
+                QuitOnForeignActivation = baseline.QuitOnForeignActivation == edited.QuitOnForeignActivation
+                    ? current.QuitOnForeignActivation
+                    : edited.QuitOnForeignActivation,
+                CycleRegionHistory = baseline.CycleRegionHistory == edited.CycleRegionHistory
+                    ? current.CycleRegionHistory
+                    : edited.CycleRegionHistory,
+                DisableMouseWheel = baseline.DisableMouseWheel == edited.DisableMouseWheel
+                    ? current.DisableMouseWheel
+                    : edited.DisableMouseWheel,
+                BlockedWindowsKeys = baseline.BlockedWindowsKeys == edited.BlockedWindowsKeys
+                    ? current.BlockedWindowsKeys
+                    : edited.BlockedWindowsKeys,
+                PersistHistory = baseline.PersistHistory == edited.PersistHistory
+                    ? current.PersistHistory
+                    : edited.PersistHistory,
+
+                DoubleClickAction = baseline.DoubleClickAction == edited.DoubleClickAction
+                    ? current.DoubleClickAction
+                    : edited.DoubleClickAction,
+                RelativeCoordinates = baseline.RelativeCoordinates == edited.RelativeCoordinates
+                    ? current.RelativeCoordinates
+                    : edited.RelativeCoordinates,
                 DetectionMode =
                 EqualityComparer<CaptureDetectionMode>.Default.Equals(baseline.DetectionMode, edited.DetectionMode)
                     ? current.DetectionMode
@@ -637,6 +710,9 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<bool>.Default.Equals(baseline.ShowShortcutHints, edited.ShowShortcutHints)
                     ? current.ShowShortcutHints
                     : edited.ShowShortcutHints,
+                CodeDetection = baseline.CodeDetection == edited.CodeDetection
+                    ? current.CodeDetection
+                    : edited.CodeDetection,
                 RegionHistoryCapacity =
                 EqualityComparer<int>.Default.Equals(baseline.RegionHistoryCapacity, edited.RegionHistoryCapacity)
                     ? current.RegionHistoryCapacity
@@ -687,11 +763,16 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<string>.Default.Equals(baseline.MagnifierGridColor, edited.MagnifierGridColor)
                     ? current.MagnifierGridColor
                     : edited.MagnifierGridColor,
-                MagnifierColorFormat =
-                EqualityComparer<CaptureSampleColorFormat>.Default.Equals(baseline.MagnifierColorFormat,
-                    edited.MagnifierColorFormat)
-                    ? current.MagnifierColorFormat
-                    : edited.MagnifierColorFormat,
+                ColorFormats =
+                [
+                    .. baseline.ColorFormats.SequenceEqual(edited.ColorFormats)
+                        ? current.ColorFormats
+                        : edited.ColorFormats,
+                ],
+                MagnifierColorFormatId =
+                EqualityComparer<string>.Default.Equals(baseline.MagnifierColorFormatId, edited.MagnifierColorFormatId)
+                    ? current.MagnifierColorFormatId
+                    : edited.MagnifierColorFormatId,
                 SmoothMagnifier =
                 EqualityComparer<bool>.Default.Equals(baseline.SmoothMagnifier, edited.SmoothMagnifier)
                     ? current.SmoothMagnifier
@@ -721,13 +802,16 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return current with
             {
+                ShortcutsEnabled = baseline.ShortcutsEnabled == edited.ShortcutsEnabled
+                    ? current.ShortcutsEnabled
+                    : edited.ShortcutsEnabled,
                 DisableInFullscreen =
                 EqualityComparer<bool>.Default.Equals(baseline.DisableInFullscreen, edited.DisableInFullscreen)
                     ? current.DisableInFullscreen
                     : edited.DisableInFullscreen,
                 IgnoredPrograms =
                 SameSequence(baseline.IgnoredPrograms, edited.IgnoredPrograms,
-                    static (a, b) => EqualityComparer<string>.Default.Equals(a, b))
+                    ProgramExclusionRules.Same)
                     ? current.IgnoredPrograms
                     : edited.IgnoredPrograms,
             };
@@ -775,6 +859,13 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return new()
             {
+                IgnoreCopyMacros = baseline.IgnoreCopyMacros == edited.IgnoreCopyMacros
+                    ? current.IgnoreCopyMacros
+                    : edited.IgnoreCopyMacros,
+                ExplorerContextMenu = baseline.ExplorerContextMenu == edited.ExplorerContextMenu
+                    ? current.ExplorerContextMenu
+                    : edited.ExplorerContextMenu,
+                DesktopToolbar = Merge(current.DesktopToolbar, baseline.DesktopToolbar, edited.DesktopToolbar),
                 StartWithWindows =
                     EqualityComparer<bool>.Default.Equals(baseline.StartWithWindows, edited.StartWithWindows)
                         ? current.StartWithWindows
@@ -808,6 +899,11 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return new()
             {
+                CopyFormat = baseline.CopyFormat == edited.CopyFormat ? current.CopyFormat : edited.CopyFormat,
+                LatexFormat = baseline.LatexFormat == edited.LatexFormat ? current.LatexFormat : edited.LatexFormat,
+                ShowOriginalImage = baseline.ShowOriginalImage == edited.ShowOriginalImage
+                    ? current.ShowOriginalImage
+                    : edited.ShowOriginalImage,
                 Layout = EqualityComparer<RecognitionTextLayout>.Default.Equals(baseline.Layout, edited.Layout)
                     ? current.Layout
                     : edited.Layout,
@@ -848,71 +944,6 @@ namespace RitsukageGif.Desktop
                 Height = EqualityComparer<int>.Default.Equals(baseline.Height, edited.Height)
                     ? current.Height
                     : edited.Height,
-            };
-        }
-
-        private static ScreenshotAnnotationProperties Merge(ScreenshotAnnotationProperties current,
-            ScreenshotAnnotationProperties baseline, ScreenshotAnnotationProperties edited)
-        {
-            if (Same(baseline, edited)) return current;
-            return current with
-            {
-                Filled = EqualityComparer<bool>.Default.Equals(baseline.Filled, edited.Filled)
-                    ? current.Filled
-                    : edited.Filled,
-                Dashed = EqualityComparer<bool>.Default.Equals(baseline.Dashed, edited.Dashed)
-                    ? current.Dashed
-                    : edited.Dashed,
-                Bold = EqualityComparer<bool>.Default.Equals(baseline.Bold, edited.Bold) ? current.Bold : edited.Bold,
-                Italic = EqualityComparer<bool>.Default.Equals(baseline.Italic, edited.Italic)
-                    ? current.Italic
-                    : edited.Italic,
-                StrikeThrough = EqualityComparer<bool>.Default.Equals(baseline.StrikeThrough, edited.StrikeThrough)
-                    ? current.StrikeThrough
-                    : edited.StrikeThrough,
-                TextBackground = EqualityComparer<Color>.Default.Equals(baseline.TextBackground, edited.TextBackground)
-                    ? current.TextBackground
-                    : edited.TextBackground,
-                TextOutline = EqualityComparer<Color>.Default.Equals(baseline.TextOutline, edited.TextOutline)
-                    ? current.TextOutline
-                    : edited.TextOutline,
-                TextOutlineWidth =
-                EqualityComparer<double>.Default.Equals(baseline.TextOutlineWidth, edited.TextOutlineWidth)
-                    ? current.TextOutlineWidth
-                    : edited.TextOutlineWidth,
-                WrapWidth = EqualityComparer<double>.Default.Equals(baseline.WrapWidth, edited.WrapWidth)
-                    ? current.WrapWidth
-                    : edited.WrapWidth,
-                TextPadding = EqualityComparer<double>.Default.Equals(baseline.TextPadding, edited.TextPadding)
-                    ? current.TextPadding
-                    : edited.TextPadding,
-                Opacity = EqualityComparer<double>.Default.Equals(baseline.Opacity, edited.Opacity)
-                    ? current.Opacity
-                    : edited.Opacity,
-                Magnification = EqualityComparer<double>.Default.Equals(baseline.Magnification, edited.Magnification)
-                    ? current.Magnification
-                    : edited.Magnification,
-                Number = EqualityComparer<int>.Default.Equals(baseline.Number, edited.Number)
-                    ? current.Number
-                    : edited.Number,
-                Tiled = EqualityComparer<bool>.Default.Equals(baseline.Tiled, edited.Tiled)
-                    ? current.Tiled
-                    : edited.Tiled,
-                NineGrid = EqualityComparer<bool>.Default.Equals(baseline.NineGrid, edited.NineGrid)
-                    ? current.NineGrid
-                    : edited.NineGrid,
-                Anchor = EqualityComparer<int>.Default.Equals(baseline.Anchor, edited.Anchor)
-                    ? current.Anchor
-                    : edited.Anchor,
-                ImageWidth = EqualityComparer<double>.Default.Equals(baseline.ImageWidth, edited.ImageWidth)
-                    ? current.ImageWidth
-                    : edited.ImageWidth,
-                BlurRadius = EqualityComparer<int>.Default.Equals(baseline.BlurRadius, edited.BlurRadius)
-                    ? current.BlurRadius
-                    : edited.BlurRadius,
-                FontFamily = EqualityComparer<string>.Default.Equals(baseline.FontFamily, edited.FontFamily)
-                    ? current.FontFamily
-                    : edited.FontFamily,
             };
         }
 

@@ -41,22 +41,36 @@ namespace RitsukageGif.Desktop
         {
             HostLogger.ZLogInformation($"Application host initialization started. ServicesEnabled={startServices}");
             _startServices = startServices;
+            InitializeNetworkPreferences();
+            _globalShortcutsSuspended = !Settings.HotkeyPolicy.ShortcutsEnabled;
             _persistedStartWithWindows = Settings.System.StartWithWindows;
             AppTheme.Apply(Settings.Appearance);
             _pinnedImages.Preferences = Settings.PinnedImages;
+            _pinnedImages.PreferencesChanged = preferences =>
+            {
+                Settings.PinnedImages = preferences;
+                QueueSettingsSave(Settings);
+            };
             _pinnedImages.AnnotationPreferences = Settings.Annotation;
             _pinnedImages.RecognitionPreferencesProvider = () => Settings.Recognition;
+            _pinnedImages.FormulaCopyFormatChanged = PersistFormulaCopyFormat;
+            _pinnedImages.RecognitionOriginalImageVisibilityChanged = PersistRecognitionOriginalImage;
+            _pinnedImages.FormulaLatexFormatChanged = PersistFormulaLatexFormat;
             _pinnedImages.TranslationPreferencesProvider = () => Settings.Translation;
+            _pinnedImages.ImageTranslationRequested = ShowImageTranslationAsync;
             _pinnedImages.AnnotationPreferencesChanged = PersistAnnotationPreferences;
             _pinnedImages.SavePreferencesProvider = () => Settings.ScreenshotSave;
             _pinnedImages.OutputColorModeProvider = () => Settings.CaptureColorMode;
+            _pinnedImages.CaptureToneMapProvider = () => Settings.CaptureToneMap;
             _pinnedImages.ClipboardPreferencesProvider = () => Settings.ScreenshotClipboard;
             _pinnedImages.OutputDirectoryProvider = () => Settings.OutputDirectory;
             _pinnedImages.DialogStyleProvider = () => Settings.Appearance.SaveDialogStyle;
             _pinnedImages.SavedPathChanged = PersistScreenshotExtension;
+            _pinnedImages.DocumentOutputSaved = QueueCleanup;
             _pinnedImages.OutputNotification = ShowOutputNotification;
             _pinnedImages.AutomaticSave = AutoSaveScreenshotAsync;
             _desktop = desktop;
+            NativeDisplayCatalog.Update(Screens);
             _pinnedImages.CanRestoreHidden = () => CanHideToTray;
             _pinnedImages.CanRestoreNow = () => !IsSelecting && !IsClosing;
             _pinnedImages.SessionError = error =>
@@ -75,10 +89,11 @@ namespace RitsukageGif.Desktop
                     new BarcodePrivacyCandidateProvider(barcodeRecognition),
                 ]));
             _services.DisplaysChanged += DisplayChanged;
-            var shortcutErrors = SelectionCommands.Configure(Settings.SelectionShortcuts);
+            var shortcutErrors =
+                SelectionCommands.Configure(Settings.SelectionShortcuts, Settings.MixingKeypadMainKeyboard);
             if (shortcutErrors.Count > 0)
             {
-                SelectionCommands.Configure(null);
+                SelectionCommands.Configure(null, Settings.MixingKeypadMainKeyboard);
                 _statusKey = null;
                 _status = string.Join(Environment.NewLine, shortcutErrors);
                 _inputStatusSource = InputConfigurationStatusSource.SelectionShortcuts;
@@ -95,12 +110,18 @@ namespace RitsukageGif.Desktop
 
             if (startServices)
                 _commands = new(args => Dispatcher.UIThread.InvokeAsync(() => ExecuteCommandAsync(args)));
+            InitializeGlobalInputPolicy();
             RegisterHotkeys();
             RegisterGlobalMouse();
             if (startServices) GlobalInputCapture.Changed += GlobalInputCaptureChanged;
             InitializeSessionShortcuts();
             InitializeTray();
-            if (startServices) _pinStartup = InitializePinnedSessionAsync();
+            InitializeSystemFeatures();
+            if (startServices)
+            {
+                _pinStartup = InitializePinnedSessionAsync();
+                ConfigureCaptureHistoryPersistence();
+            }
         }
 
         private MainWindow? View { get; set; }
@@ -169,12 +190,15 @@ namespace RitsukageGif.Desktop
         private void Notify()
         {
             _pinnedImages.ResumeDeferred();
+            RefreshDesktopToolbar();
             Changed?.Invoke();
         }
 
         public void ShowMainWindow()
         {
             if (IsClosing) return;
+            _desktopToolbarSuppressedAtStartup = false;
+            RefreshDesktopToolbar();
             var created = View is null;
             if (View is null)
             {
@@ -214,6 +238,7 @@ namespace RitsukageGif.Desktop
             IsConfiguring = true;
             _hotkeys?.Dispose();
             _hotkeys = null;
+            ResetHotkeyRegistrations();
             _globalMouse?.Dispose();
             _globalMouse = null;
             Notify();
@@ -231,17 +256,29 @@ namespace RitsukageGif.Desktop
         public void UpdateSettings(AppSettings settings)
         {
             if (IsClosing) return;
+            if (settings.Network != Settings.Network)
+                throw new InvalidOperationException(UiText.Get("NetworkProxyNeedsVerification"));
             if (Settings.ContentEquals(settings)) return;
             settings = settings.Snapshot();
+            settings.HotkeyPolicy = settings.HotkeyPolicy.Normalize();
             settings.System = settings.System.Normalize();
+            settings.Network = settings.Network.Normalize();
             settings.Recognition = settings.Recognition.Normalize();
             var previous = Settings;
-            var shortcutErrors = SelectionCommands.Validate(settings.SelectionShortcuts);
-            if (shortcutErrors.Count > 0 && !SameShortcuts(previous.SelectionShortcuts, settings.SelectionShortcuts))
+            var shortcutErrors =
+                SelectionCommands.Validate(settings.SelectionShortcuts, settings.MixingKeypadMainKeyboard);
+            if (shortcutErrors.Count > 0 &&
+                (previous.MixingKeypadMainKeyboard != settings.MixingKeypadMainKeyboard ||
+                 !SameShortcuts(previous.SelectionShortcuts, settings.SelectionShortcuts)))
                 throw new ArgumentException(string.Join(Environment.NewLine, shortcutErrors), nameof(settings));
             var actionErrors = GlobalActions.Validate(settings.GlobalActions, ReservedActionShortcuts(settings),
                 settings.GlobalMouseBindings);
-            var actionsChanged = !SameActions(previous.GlobalActions, settings.GlobalActions) ||
+            var actionsChanged = previous.HotkeyPolicy.ShortcutsEnabled != settings.HotkeyPolicy.ShortcutsEnabled ||
+                                 previous.HotkeyPolicy.DisableInFullscreen !=
+                                 settings.HotkeyPolicy.DisableInFullscreen ||
+                                 !previous.HotkeyPolicy.IgnoredPrograms.SequenceEqual(
+                                     settings.HotkeyPolicy.IgnoredPrograms, ProgramExclusionRules.Comparer) ||
+                                 !SameActions(previous.GlobalActions, settings.GlobalActions) ||
                                  !previous.PresetHotkeys.SequenceEqual(settings.PresetHotkeys) ||
                                  !previous.GlobalMouseBindings.SequenceEqual(settings.GlobalMouseBindings);
             if (actionErrors.Count > 0 && actionsChanged)
@@ -252,6 +289,8 @@ namespace RitsukageGif.Desktop
             var globalMouseErrors = GlobalMouseService.Validate(settings.GlobalMouseBindings, settings.GlobalActions);
             if (globalMouseErrors.Count > 0 && actionsChanged)
                 throw new ArgumentException(string.Join(Environment.NewLine, globalMouseErrors), nameof(settings));
+            foreach (var action in settings.GlobalActions)
+                action.IgnoredPrograms = ProgramExclusionRules.Normalize(action.IgnoredPrograms);
             QueueSettingsSave(settings);
             if (CanEditRecordingSettings && settings.CaptureSource != Settings.CaptureSource &&
                 _presets.ActivePreset is null)
@@ -262,10 +301,26 @@ namespace RitsukageGif.Desktop
             }
 
             Settings = settings;
-            if (!SameShortcuts(previous.SelectionShortcuts, settings.SelectionShortcuts))
-                SelectionCommands.Configure(settings.SelectionShortcuts);
+            if (previous.CapturePreferences.PersistHistory != settings.CapturePreferences.PersistHistory ||
+                previous.CapturePreferences.RegionHistoryCapacity !=
+                settings.CapturePreferences.RegionHistoryCapacity ||
+                previous.CapturePreferences.ScreenshotHistoryCapacity !=
+                settings.CapturePreferences.ScreenshotHistoryCapacity ||
+                previous.CapturePreferences.ScreenshotHistoryMaximumMiB !=
+                settings.CapturePreferences.ScreenshotHistoryMaximumMiB)
+                ConfigureCaptureHistoryPersistence();
+            if (previous.GlobalMouseShowMask != settings.GlobalMouseShowMask ||
+                previous.Appearance != settings.Appearance)
+                CloseGlobalMousePreview();
+            _globalShortcutsSuspended = !settings.HotkeyPolicy.ShortcutsEnabled;
+            if (previous.System.DesktopToolbar.Mode != settings.System.DesktopToolbar.Mode)
+                _desktopToolbarSuppressedAtStartup = false;
+            if (previous.MixingKeypadMainKeyboard != settings.MixingKeypadMainKeyboard ||
+                !SameShortcuts(previous.SelectionShortcuts, settings.SelectionShortcuts))
+                SelectionCommands.Configure(settings.SelectionShortcuts, settings.MixingKeypadMainKeyboard);
             if (previous.Appearance != settings.Appearance) AppTheme.Apply(settings.Appearance);
-            if (previous.PinnedImages != settings.PinnedImages) _pinnedImages.Preferences = settings.PinnedImages;
+            if (!AppSettings.Same(previous.PinnedImages, settings.PinnedImages))
+                _pinnedImages.Preferences = settings.PinnedImages;
             _pinnedImages.AnnotationPreferences = settings.Annotation;
             if (!SameShortcuts(previous.MouseShortcuts, settings.MouseShortcuts))
                 MouseCommands.Configure(settings.MouseShortcuts);
@@ -285,10 +340,15 @@ namespace RitsukageGif.Desktop
                 !previous.PresetHotkeys.SequenceEqual(settings.PresetHotkeys) ||
                 !previous.PresetFiles.SequenceEqual(settings.PresetFiles, StringComparer.Ordinal))
                 RebuildActionMenus();
-            if (!IsConfiguring && actionsChanged)
+            switch (IsConfiguring)
             {
-                RegisterHotkeys();
-                RegisterGlobalMouse();
+                case false when actionsChanged:
+                    RegisterHotkeys();
+                    RegisterGlobalMouse();
+                    break;
+                case false when previous.GlobalMouseShowMask != settings.GlobalMouseShowMask:
+                    RegisterGlobalMouse();
+                    break;
             }
 
             View?.RefreshSettingsPresentation(previous, settings);
@@ -336,6 +396,7 @@ namespace RitsukageGif.Desktop
             }
 
             IsClosing = true;
+            foreach (var imageEditor in _imageEditors.ToArray()) imageEditor.Close();
             var selectionOperation = _selectionOperation;
             var screenshotOperation = _screenshotOperation;
             var recordingOperation = _operation;
@@ -345,7 +406,10 @@ namespace RitsukageGif.Desktop
             var stopToken = _stop?.Token ?? CancellationToken.None;
             var abortToken = _abort?.Token ?? CancellationToken.None;
             if (_startServices) GlobalInputCapture.Changed -= GlobalInputCaptureChanged;
+            await RunShutdownStageAsync("foreground hotkey monitor", StopGlobalInputPolicyAsync,
+                CancellationToken.None);
             RunShutdownStage("session shortcuts", StopSessionShortcuts);
+            RunShutdownStage("system features", StopSystemFeatures);
             RunShutdownStage("output notification", CloseOutputNotification);
             await RunShutdownStageAsync("pinned image startup cancellation", _pinStartupCancellation.CancelAsync,
                 CancellationToken.None);
@@ -356,7 +420,10 @@ namespace RitsukageGif.Desktop
             RunShutdownStage("cleanup cancellation source", _cleanupCancellation.Dispose);
             await RunShutdownStageAsync("update check", StopUpdateCheckAsync, _updateCancellation.Token);
             RunShutdownStage("closing notification", Notify);
+            var nativeTray = PortableTrayState.Current;
             RunShutdownStage("tray", DisposeTray);
+            if (nativeTray is not null)
+                await RunShutdownStageAsync("native tray helper", () => nativeTray.Completion, CancellationToken.None);
             RunShutdownStage("command server", () => _commands?.Dispose());
             RunShutdownStage("global mouse", () => _globalMouse?.Dispose());
             _globalMouse = null;
@@ -373,9 +440,14 @@ namespace RitsukageGif.Desktop
                 await RunShutdownStageAsync("selection", () => selectionOperation, selectionToken);
             if (screenshotOperation is not null)
                 await RunShutdownStageAsync("screenshot", () => screenshotOperation, screenshotToken);
+            await RunShutdownStageAsync("inline action scripts", StopActionScriptsAsync, CancellationToken.None);
             await RunShutdownStageAsync("translation windows", () => Task.WhenAll(_translationTasks.ToArray()),
                 cleanupToken);
+            await RunShutdownStageAsync("record clearing", () => _recordClearingTask, CancellationToken.None);
             await RunShutdownStageAsync("pinned image session", StopPinnedSessionAsync, CancellationToken.None);
+            await RunShutdownStageAsync("capture history", StopCaptureHistoryAsync, CancellationToken.None);
+            await RunShutdownStageAsync("structured recognition worker",
+                () => StructuredRecognitionProcess.Shared.DisposeAsync().AsTask(), CancellationToken.None);
             if (recordingOperation is not null)
                 await RunShutdownStageAsync("recording", () => recordingOperation,
                     abortToken.IsCancellationRequested ? abortToken : stopToken);
@@ -396,10 +468,18 @@ namespace RitsukageGif.Desktop
 
         private List<(string Shortcut, Func<Task> Action)> BuildGlobalHotkeyBindings()
         {
+            var context = _registeredInputContext ?? ReadGlobalInputContext();
             var bindings = new List<(string Shortcut, Func<Task> Action)>();
             // Build bindings directly without allocating a LINQ iterator and closure for the list projection.
             // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var hotkey in Settings.PresetHotkeys)
+            {
+                if (GlobalInputDisabledReason(null, context) is { } reason)
+                {
+                    SetHotkeyDisabled(hotkey.Shortcut, reason);
+                    continue;
+                }
+
                 bindings.Add((hotkey.Shortcut, () =>
                 {
                     if (!IsBusy && !IsSelecting && !IsConfiguring && !IsClosing)
@@ -407,6 +487,8 @@ namespace RitsukageGif.Desktop
                             .Single(p => p.Name == hotkey.Preset));
                     return Task.CompletedTask;
                 }));
+            }
+
             var actionErrors = GlobalActions.Validate(Settings.GlobalActions, ReservedActionShortcuts(),
                 Settings.GlobalMouseBindings);
             if (actionErrors.Count != 0)
@@ -416,7 +498,14 @@ namespace RitsukageGif.Desktop
                 // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                 foreach (var action in Settings.GlobalActions)
                     if (action.Enabled && !string.IsNullOrWhiteSpace(action.Shortcut))
-                        bindings.Add((action.Shortcut, () => ExecuteActionAsync(action)));
+                    {
+                        var reason = GlobalInputDisabledReason(action, context,
+                            action.Kind == GlobalActionKind.ToggleGlobalShortcuts);
+                        if (reason is null)
+                            bindings.Add((action.Shortcut, () => ExecutePinnedKeyboardActionAsync(action)));
+                        else SetHotkeyDisabled(action.Shortcut, reason);
+                    }
+
             return bindings;
         }
 
@@ -424,21 +513,29 @@ namespace RitsukageGif.Desktop
         {
             _hotkeys?.Dispose();
             _hotkeys = null;
+            ResetHotkeyRegistrations();
+            ConfigureGlobalInputPolicyRecovery();
             if (!_startServices || !HotkeyService.Supported || IsClosing || IsConfiguring ||
                 GlobalInputCapture.Active) return;
             try
             {
+                _registeredInputContext = ReadGlobalInputContext();
                 var bindings = BuildGlobalHotkeyBindings();
                 for (var index = 0; index < bindings.Count; index++)
                     bindings[index] = (bindings[index].Shortcut,
                         GuardGlobalInput(bindings[index].Action, bindings[index].Shortcut));
                 AddSessionShortcuts(bindings);
+                foreach (var binding in bindings)
+                    _hotkeyRegistrations[HotkeyService.Parse(binding.Shortcut)] = new(binding.Shortcut,
+                        HotkeyRegistrationState.Pending);
                 _hotkeys = new(bindings, SetStatus,
                     message => SetInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys, message),
-                    () => ClearInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys));
+                    () => ClearInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys),
+                    SetHotkeyRegistration, DescribeGlobalShortcut);
             }
             catch (Exception ex)
             {
+                FailPendingHotkeyRegistrations(ex.Message);
                 SetInputConfigurationStatus(InputConfigurationStatusSource.GlobalHotkeys, ex.Message);
             }
         }

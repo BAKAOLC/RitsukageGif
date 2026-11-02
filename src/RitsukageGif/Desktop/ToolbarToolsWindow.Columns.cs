@@ -47,7 +47,7 @@ namespace RitsukageGif.Desktop
             _pool.Children.Clear();
             var included = _draft.Columns.SelectMany(column => column).ToHashSet();
             foreach (var definition in ScreenshotToolCatalog.All)
-                if (!included.Contains(definition.Tool))
+                if (definition.Tool != ScreenshotTool.Select && !included.Contains(definition.Tool))
                 {
                     var cell = ToolCell(definition.Tool);
                     cell.Width = 36;

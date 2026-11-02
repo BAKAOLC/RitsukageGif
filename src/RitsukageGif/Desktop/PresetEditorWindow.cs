@@ -98,6 +98,7 @@ namespace RitsukageGif.Desktop
             _editor.Options.HighlightCurrentLine = true;
             _editor.TextArea.IndentationStrategy = new CSharpIndentationStrategy(_editor.Options);
             _editor.TextArea.TextView.LineTransformers.Add(_colors);
+            ActualThemeVariantChanged += (_, _) => _editor.TextArea.TextView.Redraw();
             var toolbar = CreateToolbar();
             var variablesPage = new ScrollViewer { Content = _variables };
             var outputPage = new ScrollViewer { Content = _output };
