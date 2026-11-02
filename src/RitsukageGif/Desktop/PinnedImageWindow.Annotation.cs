@@ -33,15 +33,16 @@ namespace RitsukageGif.Desktop
         private bool IsAnnotationTextInputKey(Key key)
         {
             return _annotation is { IsEditingText: true } || _annotationTextInputKeys.Contains(key) ||
-                   FocusManager?.GetFocusedElement() is TextBox;
+                   FocusManager.GetFocusedElement() is TextBox;
         }
 
         private async Task BeginAnnotationAsync()
         {
-            if (_annotation is not null || IsOperationLocked(PinnedLockedOperations.Annotation) || IsMouseThrough)
+            if (_annotation is not null || IsMouseThrough)
                 return;
             try
             {
+                await FreezeLiveAsync(_lifetime.Token);
                 await FreezeAnimationFrameAsync(_lifetime.Token);
                 await BeginAnnotationCore();
             }
@@ -54,7 +55,7 @@ namespace RitsukageGif.Desktop
 
         private Task BeginAnnotationCore()
         {
-            if (_annotation is not null || IsOperationLocked(PinnedLockedOperations.Annotation) || IsMouseThrough)
+            if (_annotation is not null || IsMouseThrough)
                 return Task.CompletedTask;
             ClearTextSelection();
             _thumbnailBeforeAnnotation = _isThumbnail;
@@ -96,7 +97,8 @@ namespace RitsukageGif.Desktop
             layer.Children.Add(surface);
             _viewport.Content = layer;
             var toolbar = _annotationToolbar = new(session, region, RenderScaling / _zoom,
-                SelectionCommands.SnapshotBindings(), imageEditing: true) { IsDocked = true };
+                AnnotationOutputShortcutBindings(), imageEditing: true,
+                shortcutBindingsProvider: AnnotationOutputShortcutBindings) { IsDocked = true };
             toolbar.Refresh(region, default, true);
             var apply = new Button
                 { Name = "PinnedImageApply", [!ContentProperty] = LiveText.Resource("AnimationApplyDraft") };
@@ -152,6 +154,7 @@ namespace RitsukageGif.Desktop
 
         private async Task CompleteAnnotationAsync(ScreenshotOutputAction action)
         {
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (action)
             {
                 case ScreenshotOutputAction.Save: await SaveAsync(); break;
@@ -160,7 +163,14 @@ namespace RitsukageGif.Desktop
                     break;
                 case ScreenshotOutputAction.Pin: await ApplyAnnotationAsync(); break;
                 case ScreenshotOutputAction.QuickSave:
-                    throw new NotSupportedException("Quick save is not an annotation completion action.");
+                    await QuickSaveAsync();
+                    break;
+                case ScreenshotOutputAction.ExportPdf:
+                    await ExportDocumentAsync();
+                    break;
+                case ScreenshotOutputAction.Print:
+                    await PrintDocumentAsync();
+                    break;
                 default: throw new ArgumentOutOfRangeException(nameof(action), action, null);
             }
         }
@@ -279,8 +289,25 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            switch (BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args))
+            var pinAction = BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args);
+            if (pinAction is not null && Presentation.Execute(pinAction))
             {
+                args.Handled = true;
+                return;
+            }
+
+            switch (pinAction)
+            {
+                case "wheel-up":
+                    args.Handled = _simulatedWheel.Raise(1);
+                    return;
+                case "wheel-down":
+                    args.Handled = _simulatedWheel.Raise(-1);
+                    return;
+                case "print" when ScreenshotPrintService.IsSupported:
+                    args.Handled = true;
+                    session.RequestComplete(ScreenshotOutputAction.Print);
+                    return;
                 case "close":
                     args.Handled = true;
                     RequestClose();
@@ -322,6 +349,7 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.SelectTool: session.Tool = definition.Tool ?? ScreenshotTool.Select; break;
                 case SelectionCommand.Copy: session.RequestComplete(ScreenshotOutputAction.Copy); break;
                 case SelectionCommand.Save: session.RequestComplete(ScreenshotOutputAction.Save); break;
+                case SelectionCommand.QuickSave: session.RequestComplete(ScreenshotOutputAction.QuickSave); break;
                 default: args.Handled = false; break;
             }
         }

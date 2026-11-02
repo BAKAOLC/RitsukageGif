@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Layout;
 
 namespace RitsukageGif.Desktop
 {
@@ -14,11 +13,41 @@ namespace RitsukageGif.Desktop
         public string Id { get; private set; } = Guid.NewGuid().ToString("N");
         public string Group { get; private set; } = "";
         private bool IsLocked { get; set; }
-        public bool IsInteractionLocked => IsOperationLocked(PinnedLockedOperations.Move);
-        public bool IsCloseLocked => IsOperationLocked(PinnedLockedOperations.Close);
+        public bool IsInteractionLocked => IsOperationLocked(PinnedLockRestrictions.Move);
+        public bool IsIncomingDropLocked => IsOperationLocked(PinnedLockRestrictions.IncomingDrop);
+        public bool IsCloseLocked => PinnedInputContext.IsCloseBlocked(IsLocked, CurrentPreferences.LockRestrictions);
         private bool IsMouseThrough { get; set; }
-        public Func<IReadOnlyList<string>> GroupsProvider { get; set; } = () => [];
+        public Func<IReadOnlyList<PinnedGroupDefinition>> GroupsProvider { get; set; } = () => [];
         public Action<string, bool>? GroupVisibilityRequested { get; set; }
+        public Action<IPinnedWindow, string>? GroupChangeRequested { get; set; }
+        public Func<IPinnedWindow, Task>? NewGroupRequested { get; set; }
+
+        public void SetGroup(string value)
+        {
+            if (value.Length != 0 && !Guid.TryParseExact(value, "N", out _))
+                throw new ArgumentException("Invalid pin group identifier.", nameof(value));
+            if (Group == value) return;
+            Group = value;
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void RestoreInteraction()
+        {
+            SetMouseThrough(false);
+            SetLocked(false);
+            RevealImage();
+        }
+
+        public void RevealImage()
+        {
+            Presentation.SetUserVisibility(true);
+            var wasHidden = !IsVisible || WindowState == WindowState.Minimized;
+            Show();
+            WindowState = WindowState.Normal;
+            RestoreToScreen();
+            if (wasHidden) PinLogger.ZLogInformation($"Pinned image visibility restored.");
+        }
+
         public event EventHandler? StateChanged;
 
         private void AddInteractionMenu(ContextMenu menu)
@@ -55,20 +84,45 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(through);
             menu.Items.Add(topmost);
             menu.Items.Add(group);
+            menu.Items.Add(Command("PinnedTitleEdit", () =>
+            {
+                Presentation.Title.BeginEdit();
+                return Task.CompletedTask;
+            }));
+            menu.Items.Add(Command("PinnedHideOthers", () =>
+            {
+                Presentation.HideOthersRequested?.Invoke();
+                return Task.CompletedTask;
+            }));
+            menu.Items.Add(Command("PinnedSwitchNext", () =>
+            {
+                Presentation.SwitchNextRequested?.Invoke();
+                return Task.CompletedTask;
+            }));
             menu.Opened += (_, _) =>
             {
                 locked.IsChecked = IsLocked;
                 locked.IsEnabled = _annotation is null;
                 through.IsChecked = IsMouseThrough;
                 topmost.IsChecked = Topmost;
-                through.IsEnabled = _annotation is null && OperatingSystem.IsWindows() &&
+                through.IsEnabled = _annotation is null && PinnedWindowPlatform.CanSetMouseThrough(this) &&
                                     (_canRestoreHidden() || IsMouseThrough);
                 group.Items.Clear();
-                AddGroupChoice(group, "", UiText.Get("PinnedImageUngrouped"));
-                foreach (var name in GroupsProvider()) AddGroupChoice(group, name, name);
+                foreach (var definition in GroupsProvider())
+                    AddGroupChoice(group, definition.Id, definition.Name.Length == 0
+                        ? UiText.Get("PinnedImageUngrouped")
+                        : definition.Name);
                 group.Items.Add(new Separator());
                 var create = new MenuItem
-                    { [!HeaderedSelectingItemsControl.HeaderProperty] = LiveText.Resource("PinnedImageNewGroup") };
+                {
+                    Tag = "new-group",
+                    [!HeaderedSelectingItemsControl.HeaderProperty] = LiveText.Resource("PinnedImageNewGroup"),
+                    InputGesture = CurrentPreferences.ShowMenuShortcuts
+                        ? BuiltinShortcuts.Snapshot().FirstOrDefault(binding =>
+                                binding is { ContextKey: "BuiltinShortcutPinnedContext", Action: "new-group" })
+                            ?.Gesture
+                        : null,
+                };
                 create.Click += async (_, _) => await EditGroupAsync();
                 group.Items.Add(create);
                 var hide = new MenuItem
@@ -86,49 +140,17 @@ namespace RitsukageGif.Desktop
         {
             var item = new MenuItem
                 { Header = label, ToggleType = MenuItemToggleType.Radio, IsChecked = Group == name };
-            item.Click += (_, _) => SetGroup(name);
+            item.Click += (_, _) =>
+            {
+                if (GroupChangeRequested is { } change) change(this, name);
+                else SetGroup(name);
+            };
             parent.Items.Add(item);
         }
 
         private async Task EditGroupAsync()
         {
-            var box = new TextBox { Text = Group, MaxLength = 80 };
-            var save = new Button { [!ContentProperty] = LiveText.Resource("EditorSave") };
-            var cancel = new Button { [!ContentProperty] = LiveText.Resource("Close") };
-            var dialog = new Window
-            {
-                [!TitleProperty] = LiveText.Resource("PinnedImageNewGroup"), Width = 360,
-                SizeToContent = SizeToContent.Height, CanResize = false, ShowInTaskbar = false,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = AppTheme.Surface,
-                Content = new StackPanel
-                {
-                    Margin = new(16), Spacing = 12, Children =
-                    {
-                        box,
-                        new StackPanel
-                        {
-                            Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-                            Spacing = 8, Children = { save, cancel },
-                        },
-                    },
-                },
-            };
-            save.Click += (_, _) =>
-            {
-                SetGroup(box.Text ?? "");
-                dialog.Close();
-            };
-            cancel.Click += (_, _) => dialog.Close();
-            await dialog.ShowDialog(this);
-        }
-
-        public void SetGroup(string value)
-        {
-            value = value.Trim();
-            if (value.Length > 80) throw new ArgumentOutOfRangeException(nameof(value));
-            if (Group == value) return;
-            Group = value;
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            if (NewGroupRequested is { } create) await create(this);
         }
 
         private void SetTopmost(bool value)
@@ -193,22 +215,6 @@ namespace RitsukageGif.Desktop
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        public void RestoreInteraction()
-        {
-            SetMouseThrough(false);
-            SetLocked(false);
-            RevealImage();
-        }
-
-        public void RevealImage()
-        {
-            var wasHidden = !IsVisible || WindowState == WindowState.Minimized;
-            Show();
-            WindowState = WindowState.Normal;
-            RestoreToScreen();
-            if (wasHidden) PinLogger.ZLogInformation($"Pinned image visibility restored.");
-        }
-
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
@@ -219,16 +225,26 @@ namespace RitsukageGif.Desktop
 
         public PinnedImageState CaptureState()
         {
-            return new()
+            var state = new PinnedImageState
             {
                 Id = Id, Group = Group, X = Position.X, Y = Position.Y, Zoom = _zoom,
-                CaptureScaling = OriginalCaptureScaling,
+                LiveSource = SnapshotLiveDescriptor ?? LiveDescriptor,
+                CaptureScaling = SnapshotLiveFrame?.NativePixelDensity ?? OriginalCaptureScaling,
                 Opacity = Opacity, Locked = IsLocked, Visible = IsVisible && WindowState != WindowState.Minimized,
                 ScrollX = _viewport.Offset.X, ScrollY = _viewport.Offset.Y, Topmost = Topmost,
                 CreatedAtUtcTicks = _createdAtUtcTicks, Thumbnail = _isThumbnail,
+                ThumbnailManualRegion = _thumbnailManualRegion,
+                ThumbnailNormalZoom = _isThumbnail ? _thumbnailNormalZoom : _zoom,
+                ThumbnailSavedZoom = _isThumbnail ? _zoom : _thumbnailSavedZoom,
+                ThumbnailStandardWidth = _quickThumbnailSourceSize?.Width ?? 0,
+                ThumbnailStandardHeight = _quickThumbnailSourceSize?.Height ?? 0,
+                ThumbnailFullScrollX = _thumbnailFullScrollPhysical.X,
+                ThumbnailFullScrollY = _thumbnailFullScrollPhysical.Y,
                 ThumbnailX = _thumbnailRegion?.X ?? 0, ThumbnailY = _thumbnailRegion?.Y ?? 0,
                 ThumbnailWidth = _thumbnailRegion?.Width ?? 0, ThumbnailHeight = _thumbnailRegion?.Height ?? 0,
             };
+            Presentation.Capture(state);
+            return state;
         }
 
         public void RestoreState(PinnedImageState state)
@@ -236,6 +252,7 @@ namespace RitsukageGif.Desktop
             SetOriginalCaptureScaling(state.CaptureScaling);
             Id = state.Id;
             Group = state.Group;
+            Presentation.Restore(state);
             _zoom = state.Zoom;
             Opacity = state.Opacity;
             IsLocked = state.Locked;
@@ -247,6 +264,13 @@ namespace RitsukageGif.Desktop
             {
                 _thumbnailRegion = new(state.ThumbnailX, state.ThumbnailY, state.ThumbnailWidth, state.ThumbnailHeight);
                 _isThumbnail = state.Thumbnail;
+                _thumbnailManualRegion = state.ThumbnailManualRegion;
+                _thumbnailNormalZoom = state.ThumbnailNormalZoom;
+                _thumbnailSavedZoom = state.ThumbnailSavedZoom;
+                _quickThumbnailSourceSize = state is { ThumbnailStandardWidth: > 0, ThumbnailStandardHeight: > 0 }
+                    ? new(state.ThumbnailStandardWidth, state.ThumbnailStandardHeight)
+                    : null;
+                _thumbnailFullScrollPhysical = new(state.ThumbnailFullScrollX, state.ThumbnailFullScrollY);
             }
 
             UpdateSize();
@@ -254,6 +278,13 @@ namespace RitsukageGif.Desktop
             Position = new(state.X, state.Y);
             _viewport.Offset = new(state.ScrollX, state.ScrollY);
             RestoreToScreen();
+            if (state.LiveSource is { } live && LiveDescriptor != live)
+            {
+                using var initial = new WindowRoiPinFrame((int)_bitmap.Size.Width, (int)_bitmap.Size.Height,
+                    _pixels, _hdrSource);
+                InitializeLiveCapture(live, initial: initial);
+            }
+
             if (!state.Visible) HideImage();
         }
     }

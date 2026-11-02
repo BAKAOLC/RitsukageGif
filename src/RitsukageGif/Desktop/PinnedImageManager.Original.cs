@@ -8,12 +8,12 @@ namespace RitsukageGif.Desktop
             var original = current;
             if (state.HasOriginalImage)
             {
-                var encoded = await ReadOriginalBytesAsync(OriginalPath(state.Id, false), token);
+                var encoded = await ReadOriginalBytesAsync(OriginalPath(state.ImageId, false), token);
                 original = await Task.Run(() => PinnedImageContent.Decode(encoded, token), token);
             }
 
             var sdr = state.HasOriginalSdrImage
-                ? await ReadOriginalBytesAsync(OriginalPath(state.Id, true), token)
+                ? await ReadOriginalBytesAsync(OriginalPath(state.ImageId, true), token)
                 : original.SdrPng;
             if (sdr is not null)
             {
@@ -24,7 +24,7 @@ namespace RitsukageGif.Desktop
             }
 
             var encodedSource = state.HasOriginalEncoded
-                ? await ReadOriginalBytesAsync(OriginalEncodedPath(state.Id), token)
+                ? await ReadOriginalBytesAsync(OriginalEncodedPath(state.ImageId), token)
                 : null;
             var animation = encodedSource is null
                 ? null
@@ -59,7 +59,6 @@ namespace RitsukageGif.Desktop
         private static async Task WriteSessionImageAsync(string target, ReadOnlyMemory<byte> png,
             List<string> createdImages, CancellationToken token)
         {
-            if (File.Exists(target)) return;
             var temporary = target + ".tmp";
             try
             {

@@ -1,4 +1,5 @@
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 
 namespace RitsukageGif.Desktop
@@ -32,7 +33,7 @@ namespace RitsukageGif.Desktop
             return Task.CompletedTask;
         }
 
-        private async Task DragContentAsync(PointerEventArgs args)
+        private async Task DragContentAsync(PointerPressedEventArgs args)
         {
             var png = await CurrentImageAsync();
             var sdr = _hdrSource is null
@@ -47,13 +48,14 @@ namespace RitsukageGif.Desktop
             {
                 var file = await StorageProvider.TryGetFileFromPathAsync(path) ?? throw new IOException(path);
                 var transfer = new DataTransfer();
-                var item = DataTransferItem.Create(DataFormat.Bitmap, () => new(new MemoryStream(sdr, false)));
-                item.Set(DataFormat.CreateBytesPlatformFormat("image/png"), png);
+                var item = new DataTransferItem();
+                ClipboardPlatformFormats.SetImage(item, png, "image/png", sdr);
                 item.Set(DataFormat.File, file);
                 transfer.Add(item);
                 _mouseGesture.Reset();
                 _pressedButtons.Clear();
                 args.Pointer.Capture(null);
+                using var registration = PinnedDragRegistration.Register(transfer, this, true);
                 published = await DragDrop.DoDragDropAsync(args, transfer, DragDropEffects.Copy) !=
                             DragDropEffects.None;
             }

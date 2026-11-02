@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
     {
         private bool _savingSelection;
 
-        private async Task SaveSelectionAsync(PinnedImageWindow source)
+        private async Task SaveSelectionAsync(IPinnedWindow source)
         {
             Dispatcher.UIThread.VerifyAccess();
             if (_savingSelection || _disposed) return;
@@ -20,10 +20,10 @@ namespace RitsukageGif.Desktop
                 var directory = profile.ResolveDirectory(OutputDirectoryProvider() ??
                                                          Environment.GetFolderPath(Environment.SpecialFolder
                                                              .MyPictures));
-                var folders = await source.StorageProvider.OpenFolderPickerAsync(new()
+                var folders = await source.Window.StorageProvider.OpenFolderPickerAsync(new()
                 {
                     Title = UiText.Get("PinnedSelectionSave"), AllowMultiple = false,
-                    SuggestedStartLocation = await source.StorageProvider.TryGetFolderFromPathAsync(directory),
+                    SuggestedStartLocation = await source.Window.StorageProvider.TryGetFolderFromPathAsync(directory),
                 });
                 if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } selectedDirectory) return;
                 if (_disposed || images.Any(image => !image.CanSaveSelection)) return;
@@ -36,7 +36,7 @@ namespace RitsukageGif.Desktop
                 try
                 {
                     progress.Report(0, images.Length);
-                    progress.Show(source);
+                    progress.Show(source.Window);
                     var snapshots = images.Select(image => image.CapturePreferredOutputAsync(mode, token)).ToArray();
                     var results = await Task.WhenAll(snapshots);
                     var stagedOutputs = new ScreenshotSavedOutput[results.Length];

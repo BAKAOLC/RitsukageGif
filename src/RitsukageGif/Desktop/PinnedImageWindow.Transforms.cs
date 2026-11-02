@@ -65,8 +65,7 @@ namespace RitsukageGif.Desktop
 
         private void OnTransformKeyDown(object? sender, KeyEventArgs args)
         {
-            if (_annotation is not null || IsAnnotationTextInputKey(args.Key) ||
-                IsOperationLocked(PinnedLockedOperations.Shortcuts)) return;
+            if (_annotation is not null || IsAnnotationTextInputKey(args.Key)) return;
             var action = BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args);
             if (ParseTransformAction(action) is not { } transform) return;
             args.Handled = true;
@@ -76,9 +75,9 @@ namespace RitsukageGif.Desktop
         private bool CanTransformImage(PinnedImageTransform transform)
         {
             return !_closed && !_busy && _annotation is null && !IsMouseThrough &&
-                   !IsOperationLocked(PinnedLockedOperations.Annotation) &&
+                   CanTransformLiveImage(transform) &&
                    (transform is PinnedImageTransform.Grayscale or PinnedImageTransform.Invert ||
-                    !IsOperationLocked(PinnedLockedOperations.Resize));
+                    !IsOperationLocked(PinnedLockRestrictions.Move));
         }
 
         private async Task ApplyImageTransformAsync(PinnedImageTransform transform, CancellationToken token = default)
@@ -86,13 +85,13 @@ namespace RitsukageGif.Desktop
             if (!Enum.IsDefined(transform)) throw new ArgumentOutOfRangeException(nameof(transform));
             token.ThrowIfCancellationRequested();
             if (_closed || _annotation is not null || IsMouseThrough ||
-                IsOperationLocked(PinnedLockedOperations.Annotation) ||
                 (transform is not (PinnedImageTransform.Grayscale or PinnedImageTransform.Invert) &&
-                 IsOperationLocked(PinnedLockedOperations.Resize))) return;
+                 IsOperationLocked(PinnedLockRestrictions.Move))) return;
             using var work = token.CanBeCanceled && token != _lifetime.Token
                 ? CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, token)
                 : null;
             var workToken = work?.Token ?? _lifetime.Token;
+            if (await ApplyLiveTransformAsync(transform, workToken)) return;
             await FreezeAnimationFrameAsync(workToken);
             var source = _png;
             var sourceHdr = _hdrSource;

@@ -41,7 +41,8 @@ namespace RitsukageGif.Desktop
         private string? _statusResourceKey;
         private CancellationTokenSource? _work;
 
-        private TranslationWindow(string text, TranslationPreferences preferences, bool autoTranslate)
+        private TranslationWindow(string text, TranslationPreferences preferences, bool autoTranslate,
+            ISpeechPlaybackService? speechService = null)
         {
             _preferences = preferences.Normalize();
             _sourceText.Text = text;
@@ -90,6 +91,7 @@ namespace RitsukageGif.Desktop
             var texts = new Grid { ColumnDefinitions = new("*,*"), ColumnSpacing = 12 };
             var original = TextPanel("TranslationOriginal", _sourceText);
             var translated = TextPanel("TranslationResult", _translatedText);
+            InitializeSpeech(original, translated, speechService);
             texts.Children.Add(original);
             Grid.SetColumn(translated, 1);
             texts.Children.Add(translated);
@@ -155,6 +157,7 @@ namespace RitsukageGif.Desktop
             {
                 await window._lifetime.CancelAsync();
                 await window._operation;
+                if (window._speech is not null) await window._speech.DisposeAsync();
                 window._lifetime.Dispose();
             }
         }

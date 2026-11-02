@@ -14,9 +14,9 @@ namespace RitsukageGif.Desktop
         public Action<PinnedImageWindow, PinnedImageArrangement>? ArrangeSelectionRequested { get; set; }
         public Func<PinnedImageWindow, Task>? SaveSelectionRequested { get; set; }
         public Func<PinnedImageWindow, bool>? CanSaveSelectionProvider { get; set; }
-        internal bool CanArrangeSelection => !_closed && !IsInteractionLocked && _annotation is null;
+        private bool CanArrangeSelection => !_closed && !IsInteractionLocked && _annotation is null;
 
-        internal PixelRect SelectionLayoutBounds
+        private PixelRect SelectionLayoutBounds
         {
             get
             {

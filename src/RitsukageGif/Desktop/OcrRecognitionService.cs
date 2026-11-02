@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using ImageMagick;
 
 namespace RitsukageGif.Desktop
@@ -8,24 +7,21 @@ namespace RitsukageGif.Desktop
         private const int MaximumPixels = 16 * 1024 * 1024;
         private const int MaximumEncodedBytes = 64 * 1024 * 1024;
         private static readonly SemaphoreSlim Gate = new(2);
+        private static readonly ILogger Logger = LogHub.GetLogger("Desktop.Ocr");
+        private readonly IPlatformOcrBackend _backend;
+
+        public OcrRecognitionService() : this(CreateBackend())
+        {
+        }
+
+        private OcrRecognitionService(IPlatformOcrBackend backend)
+        {
+            _backend = backend;
+        }
 
         public Task<OcrCapabilities> GetCapabilitiesAsync(CancellationToken token = default)
         {
-            return Task.Run(() =>
-            {
-                token.ThrowIfCancellationRequested();
-                if (!OperatingSystem.IsWindows())
-                    return new(false, 0, [], "System OCR is available only on Windows.");
-                try
-                {
-                    return WindowsOcrRecognition.GetCapabilities();
-                }
-                catch (Exception error) when (error is COMException
-                                                  or DllNotFoundException or EntryPointNotFoundException)
-                {
-                    return new(false, 0, [], error.Message);
-                }
-            }, token);
+            return _backend.GetCapabilitiesAsync(token);
         }
 
         public Task<OcrRecognitionResult> RecognizeImageAsync(ReadOnlyMemory<byte> encoded,
@@ -33,11 +29,10 @@ namespace RitsukageGif.Desktop
         {
             if (encoded.IsEmpty || encoded.Length > MaximumEncodedBytes)
                 throw new ArgumentOutOfRangeException(nameof(encoded));
-            return Run(() =>
+            return Run(async () =>
             {
-                EnsurePlatform();
                 token.ThrowIfCancellationRequested();
-                var capabilities = WindowsOcrRecognition.GetCapabilities();
+                var capabilities = await _backend.GetCapabilitiesAsync(token).ConfigureAwait(false);
                 EnsureAvailable(capabilities);
                 using var image = new MagickImage();
                 image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
@@ -60,8 +55,8 @@ namespace RitsukageGif.Desktop
                 }
 
                 token.ThrowIfCancellationRequested();
-                return WindowsOcrRecognition.Recognize(image.ToByteArray(MagickFormat.Bgra),
-                    checked((int)image.Width), checked((int)image.Height), languageTag, token);
+                return await _backend.RecognizeAsync(image.ToByteArray(MagickFormat.Bgra),
+                    checked((int)image.Width), checked((int)image.Height), languageTag, token).ConfigureAwait(false);
             }, token);
         }
 
@@ -72,11 +67,10 @@ namespace RitsukageGif.Desktop
             if (stride < (long)width * 4 || (long)stride * height > pixels.Length)
                 throw new ArgumentException("BGRA dimensions and stride exceed the supplied pixel data.",
                     nameof(pixels));
-            return Run(() =>
+            return Run(async () =>
             {
-                EnsurePlatform();
                 token.ThrowIfCancellationRequested();
-                var capabilities = WindowsOcrRecognition.GetCapabilities();
+                var capabilities = await _backend.GetCapabilitiesAsync(token).ConfigureAwait(false);
                 EnsureAvailable(capabilities);
                 ValidateDimensions(width, height, capabilities.MaxImageDimension);
                 var opaque = new byte[checked(width * height * 4)];
@@ -95,31 +89,47 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
-                return WindowsOcrRecognition.Recognize(opaque, width, height, languageTag, token);
+                return await _backend.RecognizeAsync(opaque, width, height, languageTag, token).ConfigureAwait(false);
             }, token);
         }
 
-        private static async Task<OcrRecognitionResult> Run(Func<OcrRecognitionResult> operation,
+        private static IPlatformOcrBackend CreateBackend()
+        {
+            if (OperatingSystem.IsWindows()) return new WindowsOcrBackend();
+            if (OperatingSystem.IsMacOS()) return new MacVisionOcrBackend();
+            return new TesseractOcrBackend();
+        }
+
+        private async Task<OcrRecognitionResult> Run(Func<Task<OcrRecognitionResult>> operation,
             CancellationToken token)
         {
             await Gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                return await Task.Run(operation, token).ConfigureAwait(false);
+                Logger.ZLogDebug($"OCR recognition started: backend={_backend.Id}");
+                var result = await Task.Run(operation, token).ConfigureAwait(false);
+                Logger.ZLogDebug($"OCR recognition completed: backend={_backend.Id}, lines={result.Lines.Count}");
+                return result;
             }
             catch (MagickException) when (token.IsCancellationRequested)
             {
                 throw new OperationCanceledException(token);
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                Logger.ZLogDebug($"OCR recognition canceled: backend={_backend.Id}");
+                throw;
+            }
+            catch (Exception error)
+            {
+                Logger.ZLogWarning(error,
+                    $"OCR recognition failed: backend={_backend.Id}, exceptionType={error.GetType().Name}");
+                throw;
+            }
             finally
             {
                 Gate.Release();
             }
-        }
-
-        private static void EnsurePlatform()
-        {
-            if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("System OCR requires Windows.");
         }
 
         private static void EnsureAvailable(OcrCapabilities capabilities)

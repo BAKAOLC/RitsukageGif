@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -126,86 +125,68 @@ namespace RitsukageGif.Desktop
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
-            using (var transfer = await ReadClipboardCandidateAsync(clipboard.TryGetDataAsync, token))
-                if (transfer is not null)
-                    foreach (var (name, animationOnly) in OperatingSystem.IsWindows()
-                                 ? new[]
-                                 {
-                                     ("image/apng", true), ("image/gif", true), ("GIF", true), ("image/webp", true),
-                                     ("image/png", false), ("PNG", false), ("image/apng", false),
-                                     ("image/gif", false), ("GIF", false), ("image/webp", false),
-                                 }
-                                 :
-                                 [
-                                     ("image/apng", true), ("image/gif", true), ("image/webp", true),
-                                     ("image/png", false), ("image/apng", false), ("image/gif", false),
-                                     ("image/webp", false),
-                                 ])
-                    {
-                        var format = DataFormat.CreateBytesPlatformFormat(name);
-                        foreach (var item in transfer.Items)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            if (!item.Formats.Contains(format)) continue;
-                            if (await ReadClipboardCandidateAsync(() => item.TryGetRawAsync(format), token)
-                                is not byte[] { Length: > 0 } png) continue;
-                            var content = await TryPrepareClipboardAsync(
-                                () => Task.Run(() => animationOnly && AnimationPinMetadata.Read(png, token) is null
-                                    ? null
-                                    : PinnedImageContent.Decode(png, token), token), token);
-                            if (content is null) continue;
-                            token.ThrowIfCancellationRequested();
-                            Pin(content, null, "");
-                            return true;
-                        }
-                    }
+            using var transfer = await ReadClipboardCandidateAsync(clipboard.TryGetDataAsync, token);
+            if (transfer is null) return false;
+            var kinds = Preferences.SupportedContentKinds;
+            if (kinds == PinnedContentKinds.None) return false;
+            var snapshot = await PinnedClipboardSnapshot.ReadEnabledAsync(transfer, kinds, token);
+            var result = await PinInputSnapshotAsync(snapshot, kinds,
+                () => PinnedClipboardSnapshot.ReadBitmapAsync(transfer, token), false, token);
+            return result.Handled;
+        }
 
-            using var bitmap = await ReadClipboardCandidateAsync(clipboard.TryGetBitmapAsync, token);
+        private async Task<PinnedInputResult> PinInputSnapshotAsync(PinnedClipboardSnapshot snapshot,
+            PinnedContentKinds kinds, Func<Task<byte[]?>> bitmapFallback, bool preferFileImage, CancellationToken token)
+        {
+            Dispatcher.UIThread.VerifyAccess();
             token.ThrowIfCancellationRequested();
-            if (bitmap is not null)
+            if ((kinds & PinnedContentKinds.Images) != 0)
             {
-                var content = await TryPrepareClipboardAsync(async () =>
+                foreach (var animationOnly in new[] { true, false })
+                foreach (var (_, bytes) in snapshot.Images)
                 {
-                    if ((long)bitmap.PixelSize.Width * bitmap.PixelSize.Height > 128L * 1024 * 1024)
-                        throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
-                    using var stream = new MemoryStream();
-                    await Task.Run(() => bitmap.Save(stream), token);
-                    return await Task.Run(() => PinnedImageContent.Decode(stream.ToArray(), token), token);
-                }, token);
-                if (content is not null)
-                {
-                    token.ThrowIfCancellationRequested();
-                    Pin(content, null, "");
-                    return true;
+                    var content = await TryPrepareClipboardAsync(
+                        () => Task.Run(() =>
+                            animationOnly && AnimationPinMetadata.Read(bytes, token) is null
+                                ? null
+                                : PinnedImageContent.Decode(bytes, token), token), token);
+                    if (content is null) continue;
+                    return new(true, Pin(content, null, ""));
                 }
-            }
 
-            var files = await ReadClipboardCandidateAsync(clipboard.TryGetFilesAsync, token);
-            token.ThrowIfCancellationRequested();
-            foreach (var file in files?.OfType<IStorageFile>() ?? [])
-            {
-                token.ThrowIfCancellationRequested();
-                if (file.TryGetLocalPath() is not { } path) continue;
-                var content = await TryPrepareClipboardAsync(async () =>
+                if (preferFileImage && await TryPrepareFileImageAsync(snapshot.Files, token) is { } originalImage)
+                    return new(true, Pin(originalImage, null, ""));
+
+                var bitmap = snapshot.Bitmap ?? (preferFileImage || snapshot.Images.Count > 0
+                    ? await ReadClipboardCandidateAsync(bitmapFallback, token)
+                    : null);
+                if (bitmap is not null)
                 {
-                    var info = new FileInfo(path);
-                    if (info.Length is <= 0 or > PinnedImageContent.MaximumEncodedBytes)
-                        throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
-                    await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-                        81920, FileOptions.Asynchronous | FileOptions.SequentialScan);
-                    if (stream.Length is <= 0 or > PinnedImageContent.MaximumEncodedBytes)
-                        throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
-                    var encoded = new byte[checked((int)stream.Length)];
-                    await stream.ReadExactlyAsync(encoded, token);
-                    return await Task.Run(() => PinnedImageContent.Decode(encoded, token), token);
-                }, token);
-                if (content is null) continue;
-                token.ThrowIfCancellationRequested();
-                Pin(content, null, "");
-                return true;
+                    var content = await TryPrepareClipboardAsync(
+                        () => Task.Run<PinnedImageContent?>(() => PinnedImageContent.Decode(bitmap, token), token),
+                        token);
+                    if (content is not null) return new(true, Pin(content, null, ""));
+                }
+
+                if (!preferFileImage && await TryPrepareFileImageAsync(snapshot.Files, token) is { } fileImage)
+                    return new(true, Pin(fileImage, null, ""));
             }
 
-            return false;
+            try
+            {
+                if (PinnedContentRegistry.Create(snapshot, kinds) is not { } document) return default;
+                token.ThrowIfCancellationRequested();
+                return new(true, PinDocument(document));
+            }
+            catch (PinnedHtmlFormatException error)
+            {
+                var fallback = (kinds & PinnedContentKinds.Text) != 0 && !string.IsNullOrEmpty(snapshot.Text);
+                PinLogger.ZLogWarning(
+                    $"Pinned input HTML formatting was rejected. MaximumNestingDepth={PinnedRichParser.MaximumNestingDepth}; PlainTextFallback={fallback}; ErrorType={error.GetType().Name} Code={error.HResult}");
+                if (!fallback) throw;
+                token.ThrowIfCancellationRequested();
+                return new(true, PinDocument(new PinnedTextDocument(snapshot.Text!)));
+            }
         }
 
         private async Task<PinnedImageContent?> TryPrepareClipboardAsync(Func<Task<PinnedImageContent?>> prepare,
@@ -223,8 +204,8 @@ namespace RitsukageGif.Desktop
                                               MagickException)
             {
                 token.ThrowIfCancellationRequested();
-                PinLogger.ZLogWarning(error,
-                    $"Pinned image clipboard candidate could not be decoded; trying another format.");
+                PinLogger.ZLogWarning(
+                    $"Pinned image input candidate could not be decoded; trying another format. ErrorType={error.GetType().Name} Code={error.HResult}");
                 return null;
             }
             finally
@@ -247,8 +228,8 @@ namespace RitsukageGif.Desktop
                                               MagickException)
             {
                 token.ThrowIfCancellationRequested();
-                PinLogger.ZLogWarning(error,
-                    $"Pinned image clipboard format could not be read; trying another format.");
+                PinLogger.ZLogWarning(
+                    $"Pinned image clipboard format could not be read; trying another format. ErrorType={error.GetType().Name} Code={error.HResult}");
                 return default;
             }
         }

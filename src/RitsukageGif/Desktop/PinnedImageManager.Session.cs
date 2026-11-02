@@ -7,10 +7,14 @@ namespace RitsukageGif.Desktop
     {
         private const long MaximumSessionBytes = 64L * 1024 * 1024;
         private readonly Dictionary<PinnedImageWindow, PinnedImageState> _pendingRestore = [];
-        private readonly HashSet<string> _persistedIds = new(StringComparer.Ordinal);
         private readonly DispatcherTimer _saveTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
         private readonly SemaphoreSlim _sessionGate = new(1);
+
+        private readonly Dictionary<string, (ReadOnlyMemory<byte> Png, PinnedImageOriginal Original, string ImageId)>
+            _sessionImageReferences = new(StringComparer.Ordinal);
+
         private readonly Dictionary<string, PinnedImageState> _unrestoredStates = new(StringComparer.Ordinal);
+        private PinnedRejectedSession _rejectedSession = new();
         private bool _restoring;
         private bool _saveTimerConfigured;
         private string? _sessionDirectory;
@@ -24,7 +28,20 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_sessionDirectory is not null) throw new InvalidOperationException();
             PinLogger.ZLogDebug($"Pinned image session configuration started.");
-            _sessionDirectory = Path.GetFullPath(directory);
+            var fullDirectory = Path.GetFullPath(directory);
+            var recovery =
+                await PinnedSessionRecovery.PreserveUnsupportedAsync(fullDirectory, MaximumSessionBytes, token);
+            var rejectedSession = await PinnedRejectedSession.ReadAsync(fullDirectory, MaximumSessionBytes, token);
+            token.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _sessionDirectory = fullDirectory;
+            _rejectedSession = rejectedSession;
+            if (recovery is not null)
+            {
+                PinLogger.ZLogWarning($"Unsupported pin session preserved. RecoveryDirectory={recovery}");
+                SessionError?.Invoke(new InvalidDataException(UiText.Format("PinnedSessionRecovered", recovery)));
+            }
+
             if (!_saveTimerConfigured)
             {
                 _saveTimer.Tick += SaveTimerTick;
@@ -36,15 +53,13 @@ namespace RitsukageGif.Desktop
             try
             {
                 var saved = await ReadStatesAsync(token);
-                foreach (var entry in saved.States.Where(ValidState))
-                {
-                    _persistedIds.Add(entry.Id);
-                    _unrestoredStates.TryAdd(entry.Id, entry);
-                }
+                foreach (var entry in saved.States) _unrestoredStates.TryAdd(entry.Id, entry);
 
                 PinLogger.ZLogDebug(
                     $"Pinned image session configuration completed. DeferredCount={_unrestoredStates.Count} RejectedCount={saved.Rejected}");
-                return saved.Rejected;
+                var rejected = saved.Rejected + await ReadDocumentsAsync(false, token);
+                if (rejected > 0) ScheduleSave();
+                return rejected;
             }
             finally
             {
@@ -69,11 +84,19 @@ namespace RitsukageGif.Desktop
                     try
                     {
                         var state = element.Deserialize(PinnedImageJsonContext.Default.PinnedImageState);
-                        if (state is null) rejected++;
-                        else states.Add(state);
+                        if (state is null || !ValidState(state))
+                        {
+                            RejectSessionRecord("session.json", element);
+                            rejected++;
+                        }
+                        else
+                        {
+                            states.Add(state);
+                        }
                     }
                     catch (JsonException)
                     {
+                        RejectSessionRecord("session.json", element);
                         rejected++;
                     }
 
@@ -84,6 +107,13 @@ namespace RitsukageGif.Desktop
                 PinLogger.ZLogWarning(error, $"Pinned image session manifest could not be read.");
                 return ([], 1);
             }
+        }
+
+        private void RejectSessionRecord(string manifest, JsonElement record)
+        {
+            if (!_rejectedSession.Add(manifest, record)) return;
+            var path = Path.Combine(_sessionDirectory!, "rejected-session.json");
+            PinLogger.ZLogWarning($"Pin session record quarantined. Manifest={manifest} QuarantinePath={path}");
         }
 
         private void ScheduleSave()
@@ -113,7 +143,12 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public async Task<int> RestoreSessionAsync(CancellationToken token = default)
+        public Task<int> RestoreSessionAsync(CancellationToken token = default)
+        {
+            return RestoreSessionCoreAsync(null, token);
+        }
+
+        private async Task<int> RestoreSessionCoreAsync(string? group, CancellationToken token)
         {
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -130,15 +165,11 @@ namespace RitsukageGif.Desktop
                 var restoredCount = 0;
                 foreach (var state in entries)
                 {
+                    if (group is not null && state.Group != group) continue;
                     token.ThrowIfCancellationRequested();
                     ObjectDisposedException.ThrowIf(_disposed, this);
-                    if (!ValidState(state))
-                    {
-                        rejected++;
-                        continue;
-                    }
 
-                    _persistedIds.Add(state.Id);
+
                     if (knownIds.Contains(state.Id))
                     {
                         _unrestoredStates.Remove(state.Id);
@@ -149,7 +180,7 @@ namespace RitsukageGif.Desktop
                     PinnedImageWindow? window = null;
                     try
                     {
-                        var imagePath = ImagePath(state.Id);
+                        var imagePath = ImagePath(state.ImageId);
                         if (new FileInfo(imagePath).Length > 256L * 1024 * 1024)
                         {
                             rejected++;
@@ -205,6 +236,8 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
+                _restoring = true;
+                rejected += await ReadDocumentsAsync(true, token, group);
                 if (restoredCount > 0 || rejected > 0)
                     PinLogger.ZLogInformation(
                         $"Pinned image session restore completed. RestoredCount={restoredCount} RejectedCount={rejected}");
@@ -217,6 +250,7 @@ namespace RitsukageGif.Desktop
                 Changed?.Invoke(this, EventArgs.Empty);
             }
 
+            if (rejected > 0) ScheduleSave();
             return rejected;
         }
 
@@ -224,36 +258,86 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.VerifyAccess();
             _saveTimer.Stop();
-            if (_sessionDirectory is null || _disposed || !_sessionTouched) return;
+            var directory = _sessionDirectory;
+            if (directory is null || _disposed || !_sessionTouched) return;
             await _sessionGate.WaitAsync(token);
+            try
+            {
+                await WriteSessionCoreAsync(directory, token);
+            }
+            finally
+            {
+                _sessionGate.Release();
+            }
+        }
+
+        private async Task WriteSessionCoreAsync(string directory, CancellationToken token)
+        {
             PinLogger.ZLogDebug($"Pinned image session save started.");
             var createdImages = new List<string>();
+            var liveSnapshots = new List<WindowRoiPinSnapshot>();
             var committed = false;
             try
             {
                 if (_disposed) return;
-                var images = _windows.Select(window => (
-                    State: _pendingRestore.TryGetValue(window, out var pending) ? pending : window.CaptureState(),
-                    Png: window.CurrentPng, Original: window.OriginalContent, window.AnimationActive)).ToArray();
-                Directory.CreateDirectory(_sessionDirectory);
-                foreach (var (state, png, original, animationActive) in images)
+                await _rejectedSession.WriteAsync(directory, token);
+                await WriteDocumentsAsync(token);
+                var images = _windows.Select(window =>
                 {
-                    state.HasOriginalImage = !png.Equals((ReadOnlyMemory<byte>)original.Png);
-                    state.HasOriginalSdrImage = original.Hdr is not null && original.SdrPng is not null;
-                    state.HasOriginalEncoded = original.Encoded is not null;
-                    state.AnimationActive = animationActive;
-                    var target = ImagePath(state.Id);
+                    var live = window.CaptureLiveSnapshot();
+                    if (live is not null) liveSnapshots.Add(live);
+                    return (
+                        State: _pendingRestore.TryGetValue(window, out var pending)
+                            ? pending.Copy()
+                            : window.CaptureState(),
+                        Png: window.CurrentPng, Original: window.OriginalContent, window.AnimationActive,
+                        Live: live);
+                }).ToArray();
+                Directory.CreateDirectory(directory);
+                var savedImages =
+                    new Dictionary<string, (ReadOnlyMemory<byte> Png, PinnedImageOriginal Original, string ImageId)>(
+                        StringComparer.Ordinal);
+                foreach (var (state, originalPng, original, animationActive, live) in images)
+                {
+                    if (live is null && _sessionImageReferences.TryGetValue(state.Id, out var saved) &&
+                        saved.Png.Equals(originalPng) && saved.Original == original)
+                    {
+                        state.ImageId = saved.ImageId;
+                        state.HasOriginalImage = !originalPng.Equals((ReadOnlyMemory<byte>)original.Png);
+                        state.HasOriginalSdrImage = original.Hdr is not null && original.SdrPng is not null;
+                        state.HasOriginalEncoded = original.Encoded is not null;
+                        state.AnimationActive = animationActive;
+                        savedImages.Add(state.Id, saved);
+                        continue;
+                    }
+
+                    var png = originalPng;
+                    if (live is not null)
+                    {
+                        state.LiveSource = live.Descriptor;
+                        png = (await live.Frame.PrepareContentAsync(token)).Png;
+                        if (_disposed) return;
+                    }
+
+                    state.ImageId = Guid.NewGuid().ToString("N");
+                    state.HasOriginalImage = live is null && !png.Equals((ReadOnlyMemory<byte>)original.Png);
+                    state.HasOriginalSdrImage = live is null && original.Hdr is not null && original.SdrPng is not null;
+                    state.HasOriginalEncoded = live is null && original.Encoded is not null;
+                    state.AnimationActive = live is null && animationActive;
+                    var target = ImagePath(state.ImageId);
                     await WriteSessionImageAsync(target, png, createdImages, token);
                     if (state.HasOriginalImage)
-                        await WriteSessionImageAsync(OriginalPath(state.Id, false), original.Png, createdImages, token);
+                        await WriteSessionImageAsync(OriginalPath(state.ImageId, false), original.Png, createdImages,
+                            token);
                     if (state.HasOriginalSdrImage && original.SdrPng is { } sdr)
-                        await WriteSessionImageAsync(OriginalPath(state.Id, true), sdr, createdImages, token);
-                    if (original.Encoded is { } media)
-                        await WriteSessionImageAsync(OriginalEncodedPath(state.Id), media, createdImages, token);
+                        await WriteSessionImageAsync(OriginalPath(state.ImageId, true), sdr, createdImages, token);
+                    if (state.HasOriginalEncoded && original.Encoded is { } media)
+                        await WriteSessionImageAsync(OriginalEncodedPath(state.ImageId), media, createdImages, token);
+                    if (live is null) savedImages.Add(state.Id, (originalPng, original, state.ImageId));
                 }
 
                 var states = images.Select(image => image.State).Concat(_unrestoredStates.Values).ToArray();
-                var manifest = Path.Combine(_sessionDirectory, "session.json");
+                var manifest = Path.Combine(directory, "session.json");
                 var staging = manifest + ".tmp";
                 try
                 {
@@ -265,28 +349,26 @@ namespace RitsukageGif.Desktop
                         throw new InvalidDataException(UiText.Get("PinnedImageSessionTooLarge"));
                     File.Move(staging, manifest, true);
                     committed = true;
+                    _sessionImageReferences.Clear();
+                    foreach (var (id, saved) in savedImages) _sessionImageReferences.Add(id, saved);
                 }
                 finally
                 {
                     if (File.Exists(staging)) File.Delete(staging);
                 }
 
-                var current = states.Select(state => state.Id).ToHashSet(StringComparer.Ordinal);
-                foreach (var expired in _persistedIds.Except(current))
+                var current = states.Select(state => state.ImageId).ToHashSet(StringComparer.Ordinal);
+                current.UnionWith(_rejectedSession.ImageIds);
+                foreach (var path in Directory.EnumerateFiles(directory, "*.png*"))
                 {
-                    var path = ImagePath(expired);
-                    if (File.Exists(path)) File.Delete(path);
-                    foreach (var original in new[]
-                             {
-                                 OriginalPath(expired, false), OriginalPath(expired, true),
-                                 OriginalEncodedPath(expired),
-                             })
-                        if (File.Exists(original))
-                            File.Delete(original);
+                    var name = Path.GetFileName(path);
+                    if (name.Length < 36 || !Guid.TryParseExact(name.AsSpan(0, 32), "N", out _) ||
+                        name[32..] is not (".png" or ".png.original.png" or ".png.original.sdr.png"
+                            or ".png.original.media") ||
+                        current.Contains(name[..32])) continue;
+                    File.Delete(path);
                 }
 
-                _persistedIds.Clear();
-                _persistedIds.UnionWith(current);
                 PinLogger.ZLogInformation(
                     $"Pinned image session save completed. StateCount={states.Length} NewImageCount={createdImages.Count}");
             }
@@ -302,6 +384,7 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
+                foreach (var snapshot in liveSnapshots) snapshot.Dispose();
                 if (!committed)
                     foreach (var path in createdImages)
                         try
@@ -312,8 +395,6 @@ namespace RitsukageGif.Desktop
                         {
                             PinLogger.ZLogWarning(error, $"Pinned image session rollback failed.");
                         }
-
-                _sessionGate.Release();
             }
         }
 
@@ -321,7 +402,17 @@ namespace RitsukageGif.Desktop
         {
             window.ShowActivated = false;
             window.SetGroup(state.Group);
-            if ((!state.Visible && CanRestoreHidden()) || !CanRestoreNow())
+            window.Presentation.Restore(state);
+            if (state.Group != Preferences.ActiveGroup)
+            {
+                var visible = state.GroupHidden ? state.VisibleInGroup : state.Visible;
+                window.Presentation.HideForGroup(visible);
+                state.GroupHidden = true;
+                state.VisibleInGroup = visible;
+                state.Visible = false;
+            }
+
+            if (state.Group != Preferences.ActiveGroup || (!state.Visible && CanRestoreHidden()) || !CanRestoreNow())
             {
                 _pendingRestore.Add(window, state);
                 return;
@@ -335,9 +426,11 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.VerifyAccess();
             if (_disposed || !CanRestoreNow()) return;
+            ResumeDocumentWindows();
+            ResumeGroupRestore();
             foreach (var (window, state) in _pendingRestore.ToArray())
             {
-                if (!state.Visible && CanRestoreHidden()) continue;
+                if (state.Group != Preferences.ActiveGroup || (!state.Visible && CanRestoreHidden())) continue;
                 _pendingRestore.Remove(window);
                 window.Show();
                 window.RestoreState(state);
@@ -362,14 +455,26 @@ namespace RitsukageGif.Desktop
             return Path.Combine(_sessionDirectory!, id + ".png");
         }
 
-        private static bool ValidState(PinnedImageState? state)
+        private bool ValidState(PinnedWindowState? state)
         {
-            return state is { Group.Length: <= 80 } && Guid.TryParseExact(state.Id, "N", out _) &&
+            return state is { CustomTitle.Length: <= 32767 } &&
+                   (state.Group is "" || Guid.TryParseExact(state.Group, "N", out _)) &&
+                   GroupDefinitions.Any(group => group.Id == state.Group) &&
+                   Guid.TryParseExact(state.Id, "N", out _) &&
                    double.IsFinite(state.Zoom) && state.Zoom is > 0 and <= 8 &&
                    double.IsFinite(state.CaptureScaling) && state.CaptureScaling is >= 1 and <= 16 &&
                    double.IsFinite(state.Opacity) && state.Opacity is >= 0.15 and <= 1 &&
                    double.IsFinite(state.ScrollX) && state.ScrollX >= 0 &&
-                   double.IsFinite(state.ScrollY) && state.ScrollY >= 0;
+                   double.IsFinite(state.ScrollY) && state.ScrollY >= 0 &&
+                   state is not PinnedImageState { LiveSource.IsValid: false } &&
+                   (state is not PinnedImageState image ||
+                    (Guid.TryParseExact(image.ImageId, "N", out _) &&
+                     image is { ThumbnailStandardWidth: 0, ThumbnailStandardHeight: 0 } or
+                         { ThumbnailStandardWidth: > 0, ThumbnailStandardHeight: > 0 } &&
+                     double.IsFinite(image.ThumbnailNormalZoom) && image.ThumbnailNormalZoom is >= 0 and <= 8 &&
+                     double.IsFinite(image.ThumbnailSavedZoom) && image.ThumbnailSavedZoom is >= 0 and <= 8 &&
+                     double.IsFinite(image.ThumbnailFullScrollX) && image.ThumbnailFullScrollX >= 0 &&
+                     double.IsFinite(image.ThumbnailFullScrollY) && image.ThumbnailFullScrollY >= 0));
         }
     }
 }

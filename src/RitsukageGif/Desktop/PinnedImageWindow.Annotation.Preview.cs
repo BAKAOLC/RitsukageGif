@@ -208,7 +208,7 @@ namespace RitsukageGif.Desktop
                     (session is { HasAnnotations: true, AnnotationsVisible: true } || session.IsDrawing)) ||
                    session is { HasMosaicAnnotations: true } or
                    {
-                       IsDrawing: true, Tool: ScreenshotTool.Mosaic or ScreenshotTool.Blur
+                       IsDrawing: true, Tool: ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase
                        or ScreenshotTool.Eraser or ScreenshotTool.Magnifier,
                    };
         }

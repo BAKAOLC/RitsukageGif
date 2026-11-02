@@ -3,6 +3,7 @@ using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Media;
 using Avalonia.Threading;
 
@@ -26,7 +27,7 @@ namespace RitsukageGif.Desktop
         public Func<ITextRecognitionService>? TextRecognitionServiceProvider { get; set; }
         public Func<RecognitionPreferences> RecognitionPreferencesProvider { get; set; } = () => new();
 
-        private bool CanSelectImageText => CurrentPreferences.SelectableText &&
+        private bool CanSelectImageText => !LiveCaptureActive && CurrentPreferences.SelectableText &&
                                            (!_isThumbnail || CurrentPreferences.ThumbnailSelectableText);
 
         private void EnsureTextRecognition()
@@ -102,7 +103,6 @@ namespace RitsukageGif.Desktop
             _recognizedWords = [];
             ClearTextSelection();
             if (ReferenceEquals(_image.Cursor, TextSelectionCursor)) _image.Cursor = null;
-            _image.Bind(ToolTip.TipProperty, LiveText.Resource("PinnedImageHelp"));
         }
 
         private Point TextImagePoint(Point point)

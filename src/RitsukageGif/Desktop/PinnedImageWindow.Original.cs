@@ -26,10 +26,11 @@ namespace RitsukageGif.Desktop
             OriginalContent = sameAsCurrent ? original with { Png = _png } : original;
         }
 
-        internal Task<ScreenshotResult> CapturePreferredOutputAsync(OutputColorMode mode, CancellationToken token)
+        private Task<ScreenshotResult> CapturePreferredOutputAsync(OutputColorMode mode, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_closed, this);
+            if (CaptureLiveOutputAsync(mode, token) is { } live) return live;
             if (CurrentPreferences.OutputContent != PinnedImageOutputContent.Original)
                 return CaptureOutputAsync(mode, token);
             return Task.FromResult(CreateOutput(
