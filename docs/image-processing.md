@@ -44,7 +44,9 @@ let result = image.compose("../captures/redacted.webp", {
 });
 ```
 
-输出支持静态 PNG、WebP 和 GIF。默认从扩展名判断，也可以用 `format: MediaFormat.Png` 指定。`quality` 为 1 到 100，默认 90；`lossless` 控制 WebP 无损编码，默认 `true`。GIF 需要量化，无法保留完整真彩色。需要无损保存合成结果时使用 PNG 或无损 WebP。
+输出支持静态 PNG、WebP、GIF、JPEG 和 BMP。默认从扩展名判断，也可以用 `format: ImageFormat.Png` 指定。`quality` 为 1 到 100，默认 90；`lossless` 控制 WebP 无损编码，默认 `true`。GIF 需要量化，无法保留完整真彩色。需要无损保存合成结果时使用 PNG 或无损 WebP。
+
+合成和联系表使用 SDR sRGB 工作空间；带色彩配置的图层先转换再混合，避免把 Display P3 等色域的数值直接当作 sRGB。输入文件的色彩配置不会被修改。
 
 默认不覆盖已有文件；需要覆盖时设置 `overwrite: true`。仅在合成成功后写入目标路径；取消或失败时保留原目标文件。
 
@@ -62,7 +64,7 @@ let sheet = image.contactSheet("../captures/game.gif", "../captures/overview.png
 });
 ```
 
-每隔 10 帧取一帧，最多 36 帧，组成 6 列的图像。缩略图保持原始比例并在格子里居中。默认 4 列，每格 160 × 120，从第 0 帧开始逐帧选取，最多 64 帧。输出同样支持 PNG、WebP、GIF，默认不覆盖。
+每隔 10 帧取一帧，最多 36 帧，组成 6 列的图像。缩略图保持原始比例并在格子里居中。默认 4 列，每格 160 × 120，从第 0 帧开始逐帧选取，最多 64 帧。输出同样支持 PNG、WebP、GIF、JPEG 和 BMP，默认不覆盖。
 
 合成最多 128 个图层；总览最多 1024 帧、128 列。最多同时执行两个图像任务。解码像素量超过限制时返回错误，可降低输入尺寸或减少选取帧数后重试。
 
@@ -95,3 +97,5 @@ scene.effects('detail', [{
 同一个 `PixelEffect[]` 结构也可传给 `media.process` 的 `options.effects`，以及 `image.compose` 每个图层的 `effects`。离线合成的坐标阶段见上文。
 
 可运行范例：[静态图像合成](../examples/image-composition.rgpreset)、[文件动画与动态效果](../examples/file-animation.rgpreset)。后者使用范例附带的动画文件作为输入。
+
+需要移除画面内容并修补背景时，参见[智能擦除与 `image.inpaint`](image-inpainting.md)。

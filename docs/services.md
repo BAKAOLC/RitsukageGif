@@ -216,3 +216,7 @@ for (const failure of detected.failures) print(failure.provider, failure.message
 候选包含 `provider`、`kind`、`text`、`bounds`、`isSensitive` 和 `boundsApproximate`。`kind` 使用 `PrivacyCandidateKind` 枚举，支持普通文本、邮箱、电话、身份证校验号、支付卡校验号和二维码。普通文本不会自动视为隐私；检测结果仍需检查。
 
 坐标对应图片按 EXIF 方向调整后的首帧像素。二维码边界为保守估计，`boundsApproximate` 为 `true`；不根据一维码的两个端点猜测完整范围。服务只返回候选，不修改图片。路径相对脚本目录解析，输入上限为 64 MiB、16 × 1024 × 1024 像素。某个检测服务不可用时，其错误放在 `failures`，其他服务的结果保留；读图或解码失败返回错误，取消向上传播。
+
+## PDF 文档
+
+使用独立的 `document.save` 服务合并图片或将长图分页输出为 PDF。纸张、DPI、边距、分页和错误处理见 [PDF 文档输出](document-output.md)。
