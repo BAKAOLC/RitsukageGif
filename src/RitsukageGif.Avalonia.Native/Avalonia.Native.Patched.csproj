@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Avalonia.Native</AssemblyName>
+    <PackageId>Avalonia.Native.Patched</PackageId>
+    <RootNamespace>Avalonia.Native</RootNamespace>
+    <Version>12.1.4</Version>
+    <AssemblyVersion>12.1.4.0</AssemblyVersion>
+    <FileVersion>12.1.4.0</FileVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>vendor/avalonia.snk</AssemblyOriginatorKeyFile>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="vendor/src/**/*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="vendor/LICENSE" Link="THIRD-PARTY-NOTICES/Avalonia.Native.txt"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <MicroComIdl Include="vendor/src/avn.idl" />
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute" />
+    <PackageReference Include="Avalonia" Version="12.1.4" ExcludeAssets="compile" GeneratePathProperty="true" />
+    <Reference Include="$(PkgAvalonia)/lib/net10.0/*.dll" Private="false" />
+    <PackageReference Include="MicroCom.Runtime" Version="0.11.6" />
+    <PackageReference Include="MicroCom.CodeGenerator.Roslyn" Version="0.11.6" PrivateAssets="all" />
+    <PackageReference Include="Avalonia.Native" Version="12.1.4" ExcludeAssets="all" PrivateAssets="all"
+                      GeneratePathProperty="true" />
+  </ItemGroup>
+  <ItemGroup
+    Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('osx')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')))">
+    <Content Include="$(PkgAvalonia_Native)/runtimes/osx/native/libAvaloniaNative.dylib"
+             Link="libAvaloniaNative.dylib" CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

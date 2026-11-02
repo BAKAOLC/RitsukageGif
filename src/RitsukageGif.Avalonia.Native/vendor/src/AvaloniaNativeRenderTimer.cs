@@ -1,0 +1,60 @@
+using System;
+using System.Diagnostics;
+using Avalonia.Native.Interop;
+using Avalonia.Rendering;
+
+namespace Avalonia.Native
+{
+    internal sealed class AvaloniaNativeRenderTimer : NativeCallbackBase, IRenderTimer, IAvnActionCallback
+    {
+        private readonly IAvnPlatformRenderTimer _platformRenderTimer;
+        private readonly Stopwatch _stopwatch;
+        private volatile Action<TimeSpan>? _tick;
+        private bool _registered;
+
+        // ReSharper disable once ConvertToPrimaryConstructor
+        public AvaloniaNativeRenderTimer(IAvnPlatformRenderTimer platformRenderTimer)
+        {
+            _platformRenderTimer = platformRenderTimer;
+            _stopwatch = Stopwatch.StartNew();
+        }
+
+        public void Run()
+        {
+            _tick?.Invoke(_stopwatch.Elapsed);
+        }
+
+        public Action<TimeSpan>? Tick
+        {
+            get => _tick;
+            set
+            {
+                if (value != null)
+                {
+                    _tick = value;
+                    EnsureRegistered();
+                    _platformRenderTimer.Start();
+                }
+                else
+                {
+                    _platformRenderTimer.Stop();
+                    _tick = null;
+                }
+            }
+        }
+
+        public bool RunsInBackground => _platformRenderTimer.RunsInBackground().FromComBool();
+
+        private void EnsureRegistered()
+        {
+            if (!_registered)
+            {
+                _registered = true;
+                var registrationResult = _platformRenderTimer.RegisterTick(this);
+                if (registrationResult != 0)
+                    throw new InvalidOperationException(
+                        $"Avalonia.Native was not able to start the RenderTimer. Native error code is: {registrationResult}");
+            }
+        }
+    }
+}
