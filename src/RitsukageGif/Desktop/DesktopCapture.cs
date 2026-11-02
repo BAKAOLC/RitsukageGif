@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 namespace RitsukageGif.Desktop
 {
     internal sealed class DesktopCapture : IFrameSource, IColorFrameSource
@@ -49,11 +47,17 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (!OperatingSystem.IsWindows())
             {
-                var pixels = Capture(token);
-                var color = new FrameColorInfo(false);
-                return new(new(_width, _height, _width * 4, CapturePixelFormat.Bgra8Srgb, pixels, color,
-                        CaptureAlphaMode.Opaque, -1, [new(new(0, 0, _width, _height), color)]), null,
-                    Stopwatch.GetTimestamp());
+                var portableTopology = _displayProvider?.Invoke() ?? _topology;
+                if (!ReferenceEquals(portableTopology, _topology))
+                {
+                    ReleaseSource();
+                    _topology = portableTopology;
+                }
+
+                if (!UsesSourceSelection && !portableTopology.Covers(_options.Region))
+                    throw new CaptureSourceLostException();
+                _portable ??= new(_options, [.. portableTopology.Monitors], _width, _height);
+                return _portable.CaptureFrames(token);
             }
 
             var topology = _displayProvider?.Invoke() ?? _topology;
@@ -127,6 +131,11 @@ namespace RitsukageGif.Desktop
             ReleaseSource();
         }
 
+        internal void Suspend()
+        {
+            _portable?.Suspend();
+        }
+
         public void Move(PixelRect region)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -148,15 +157,15 @@ namespace RitsukageGif.Desktop
         }
 
         public static Task<NativeCaptureSelection> BeginSourceSelectionAsync(bool window = false,
-            bool cursor = true, int fps = 60, CancellationToken token = default)
+            bool cursor = true, int fps = 60, bool retainHdr = false, CancellationToken token = default)
         {
-            return NativeCaptureSession.BeginSelectionAsync(window, token, cursor, fps);
+            return NativeCaptureSession.BeginSelectionAsync(window, cursor, fps, retainHdr, token);
         }
 
         public static Task<CaptureSourceFrame> PrepareSourceAsync(bool window = false,
-            bool cursor = true, int fps = 60, CancellationToken token = default)
+            bool cursor = true, int fps = 60, bool retainHdr = false, CancellationToken token = default)
         {
-            return NativeCaptureSession.PrepareAsync(window, token, cursor, fps);
+            return NativeCaptureSession.PrepareAsync(window, cursor, fps, retainHdr, token);
         }
 
         public static void CloseSharedSource()

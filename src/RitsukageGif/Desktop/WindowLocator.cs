@@ -10,7 +10,10 @@ namespace RitsukageGif.Desktop
         {
             if (OperatingSystem.IsLinux() && !DesktopCapture.UsesSourceSelection)
                 return X11WindowSystem.Refresh(target);
-            if (!OperatingSystem.IsWindows()) return List().FirstOrDefault(window => window.Handle == target.Handle);
+            if (!OperatingSystem.IsWindows())
+                return List().FirstOrDefault(window => window.Handle == target.Handle &&
+                                                       (target.NativeSourceIdentity is null ||
+                                                        window.NativeSourceIdentity == target.NativeSourceIdentity));
             var handle = target.Handle;
             if (NativeMethods.IsWindowVisible(handle) == 0 || NativeMethods.IsIconic(handle) != 0) return null;
             if (NativeMethods.DwmGetWindowAttribute(handle, 9, out var bounds, 16) != 0 &&
@@ -65,7 +68,10 @@ namespace RitsukageGif.Desktop
         public static unsafe IReadOnlyList<WindowTarget> List()
         {
             if (OperatingSystem.IsMacOS()) return MacWindowSystem.List();
-            if (OperatingSystem.IsLinux()) return DesktopCapture.UsesSourceSelection ? [] : X11WindowSystem.List();
+            if (OperatingSystem.IsLinux())
+                return DesktopCapture.UsesSourceSelection
+                    ? NativeCaptureSession.AuthorizedWindows()
+                    : X11WindowSystem.List();
             if (!OperatingSystem.IsWindows())
                 throw new PlatformNotSupportedException(UiText.Get("PlatformUnsupported"));
             var result = new List<WindowTarget>();

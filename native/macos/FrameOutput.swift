@@ -2,23 +2,64 @@ import Foundation
 import ScreenCaptureKit
 import CoreMedia
 import CoreVideo
-import Darwin
+import CoreImage
+import CoreGraphics
 
 final class FrameOutput: NSObject, SCStreamOutput, SCStreamDelegate {
-    private let originX: Int32
-    private let originY: Int32
+    let queue = DispatchQueue(label: "RitsukageGif.capture.frames", qos: .userInteractive)
+    private var latestSample: CMSampleBuffer?
+    private let envelope: CaptureEnvelope
+    private let hdr: Bool
+    private let colorSpace: CGColorSpace?
+    private var color: [String: Any]
     private let lock = NSLock()
-    private let outputQueue = DispatchQueue(label: "RitsukageGif.capture.output", qos: .userInteractive)
-    private var pending: Data?
-    private var writing = false
-    private var lastWidth = 0
-    private var lastHeight = 0
-    private var transparentFrame: Data?
+    private var geometry: CaptureGeometry
+    private var sourceGeometry: CaptureGeometry
+    private var configurationId: Int64 = 0
+    private var expectedWidth = 0
+    private var expectedHeight = 0
+    private var outputWidth = 0
+    private var outputHeight = 0
+    private var suspended = false
+    private var intentionallySuspended = false
+    private lazy var context = CIContext(options: [.cacheIntermediates: false])
 
-    init(originX: Int32, originY: Int32) {
-        self.originX = originX
-        self.originY = originY
+    init(geometry: CaptureGeometry, envelope: CaptureEnvelope, hdr: Bool, colorSpace: CGColorSpace?,
+         color: [String: Any]) {
+        self.geometry = geometry
+        self.sourceGeometry = geometry
+        self.envelope = envelope
+        self.hdr = hdr
+        self.colorSpace = colorSpace
+        self.color = color
         super.init()
+    }
+
+    func updateSource(_ value: CaptureGeometry, hdrSource: Bool) {
+        lock.lock()
+        sourceGeometry = value
+        color["hdr"] = hdrSource
+        lock.unlock()
+    }
+
+    func configure(_ value: CaptureGeometry, source: CaptureGeometry, width: Int, height: Int,
+                   inputWidth: Int, inputHeight: Int, id: Int64) {
+        lock.lock()
+        geometry = value
+        sourceGeometry = source
+        outputWidth = width
+        outputHeight = height
+        expectedWidth = inputWidth
+        expectedHeight = inputHeight
+        configurationId = id
+        lock.unlock()
+        queue.async { [self] in
+            if let sample = latestSample { process(sample) }
+        }
+    }
+
+    func setSuspended(_ value: Bool) {
+        lock.lock(); intentionallySuspended = value; lock.unlock()
     }
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
@@ -26,116 +67,116 @@ final class FrameOutput: NSObject, SCStreamOutput, SCStreamDelegate {
     }
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
-        guard outputType == .screen, sampleBuffer.isValid,
+        guard outputType == .screen else { return }
+        process(sampleBuffer)
+    }
+
+    private func process(_ sampleBuffer: CMSampleBuffer) {
+        lock.lock(); let ignore = intentionallySuspended; lock.unlock()
+        if ignore { return }
+        guard sampleBuffer.isValid,
               let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false)
                 as? [[SCStreamFrameInfo: Any]],
               let statusValue = attachments.first?[.status] as? Int,
-              let status = SCFrameStatus(rawValue: statusValue), status != .idle else { return }
-        if status != .complete {
-            if let buffer = sampleBuffer.imageBuffer {
-                updateSize(width: CVPixelBufferGetWidth(buffer), height: CVPixelBufferGetHeight(buffer))
+              let status = SCFrameStatus(rawValue: statusValue) else { return }
+        if status == .idle { return }
+        guard status == .complete else {
+            if !suspended {
+                suspended = true
+                do { try envelope.capabilities(["reason": "source-suspended"]) }
+                catch { CaptureFailure.terminate(error) }
             }
-            guard lastWidth > 0 && lastHeight > 0 else { return }
-            if transparentFrame == nil { transparentFrame = makeFrame(width: lastWidth, height: lastHeight) }
-            if let transparentFrame { enqueue(transparentFrame) }
             return
         }
-        guard let buffer = sampleBuffer.imageBuffer else {
-            CaptureFailure.terminate(CaptureFailure.captureFailed)
-        }
+        suspended = false
+        latestSample = sampleBuffer
+        guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
-        updateSize(width: width, height: height)
-        guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA else {
+        let bytesPerPixel = hdr ? 8 : 4
+        guard width > 0, height > 0, width <= 32768, height <= 32768,
+              width * height * bytesPerPixel <= 512 * 1024 * 1024 else {
             CaptureFailure.terminate(CaptureFailure.captureFailed)
         }
-        let byteCount = width * height * 4
-        var frame = makeFrame(width: width, height: height)
-        do {
-            guard CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return }
+        lock.lock()
+        let current = geometry
+        let currentColor = color
+        let fullSource = sourceGeometry
+        let currentConfiguration = configurationId
+        let configuredWidth = expectedWidth
+        let configuredHeight = expectedHeight
+        let targetWidth = outputWidth > 0 ? outputWidth : width
+        let targetHeight = outputHeight > 0 ? outputHeight : height
+        lock.unlock()
+        if configuredWidth > 0 && (width != configuredWidth || height != configuredHeight) { return }
+        guard targetWidth > 0, targetHeight > 0, targetWidth <= 32768, targetHeight <= 32768,
+              targetWidth * targetHeight * bytesPerPixel <= 512 * 1024 * 1024 else {
+            CaptureFailure.terminate(CaptureFailure.captureFailed)
+        }
+        var pixels = Data(count: targetWidth * targetHeight * bytesPerPixel)
+        let cropSource = current.bounds != fullSource.bounds || targetWidth != width || targetHeight != height
+        if hdr || cropSource {
+            let destinationSpace = hdr ? colorSpace : CGColorSpace(name: CGColorSpace.sRGB)
+            guard let destinationSpace else { CaptureFailure.terminate(CaptureFailure.captureFailed) }
+            var image = CIImage(cvPixelBuffer: buffer)
+            if cropSource {
+                // Keep complete GPU surfaces so queued frames cannot carry a stale hardware crop.
+                // Only the current ROI is read into CPU memory, for displays and windows alike.
+                let crop = CGRect(x: (current.bounds.minX - fullSource.bounds.minX) * CGFloat(width) / fullSource.bounds.width,
+                                  y: (fullSource.bounds.maxY - current.bounds.maxY) * CGFloat(height) / fullSource.bounds.height,
+                                  width: current.bounds.width * CGFloat(width) / fullSource.bounds.width,
+                                  height: current.bounds.height * CGFloat(height) / fullSource.bounds.height)
+                image = image.cropped(to: crop)
+                    .transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
+                    .transformed(by: CGAffineTransform(scaleX: CGFloat(targetWidth) / crop.width,
+                                                      y: CGFloat(targetHeight) / crop.height))
+            }
+            pixels.withUnsafeMutableBytes { raw in
+                guard let destination = raw.baseAddress else { return }
+                context.render(image, toBitmap: destination, rowBytes: targetWidth * bytesPerPixel,
+                               bounds: CGRect(x: 0, y: 0, width: CGFloat(targetWidth), height: CGFloat(targetHeight)),
+                               format: hdr ? .RGBAh : .BGRA8, colorSpace: destinationSpace)
+            }
+        } else {
+            guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA,
+                  CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else {
+                CaptureFailure.terminate(CaptureFailure.captureFailed)
+            }
             defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
             guard let source = CVPixelBufferGetBaseAddress(buffer) else { return }
-            let rowStride = CVPixelBufferGetBytesPerRow(buffer)
-            guard rowStride >= width * 4 else { return }
-            frame.withUnsafeMutableBytes { raw in
-                guard let destination = raw.baseAddress?.advanced(by: 24) else { return }
+            let stride = CVPixelBufferGetBytesPerRow(buffer)
+            guard stride >= width * 4 else { CaptureFailure.terminate(CaptureFailure.captureFailed) }
+            pixels.withUnsafeMutableBytes { raw in
+                guard let destination = raw.baseAddress else { return }
                 for row in 0..<height {
-                    memcpy(destination.advanced(by: row * width * 4), source.advanced(by: row * rowStride), width * 4)
+                    memcpy(destination.advanced(by: row * width * 4), source.advanced(by: row * stride), width * 4)
                 }
-                let pixels = destination.assumingMemoryBound(to: UInt8.self)
-                for index in stride(from: 0, to: byteCount, by: 4) {
-                    let alpha = Int(pixels[index + 3])
-                    if alpha > 0 && alpha < 255 {
+            }
+        }
+        if !hdr {
+            pixels.withUnsafeMutableBytes { raw in
+                let values = raw.bindMemory(to: UInt8.self)
+                for offset in Swift.stride(from: 0, to: values.count, by: 4) {
+                    let alpha = Int(values[offset + 3])
+                    if alpha == 0 { values[offset] = 0; values[offset + 1] = 0; values[offset + 2] = 0 }
+                    else if alpha < 255 {
                         for channel in 0..<3 {
-                            pixels[index + channel] = UInt8(min(255, (Int(pixels[index + channel]) * 255 + alpha / 2) / alpha))
+                            values[offset + channel] = UInt8(min(255, (Int(values[offset + channel]) * 255 + alpha / 2) / alpha))
                         }
-                    } else if alpha == 0 {
-                        pixels[index] = 0
-                        pixels[index + 1] = 0
-                        pixels[index + 2] = 0
                     }
                 }
             }
         }
-        enqueue(frame)
-    }
-
-    private func updateSize(width: Int, height: Int) {
-        guard width > 0, height > 0, width <= 32768, height <= 32768,
-              width * height <= 128 * 1024 * 1024 else {
-            CaptureFailure.terminate(CaptureFailure.captureFailed)
-        }
-        if lastWidth != width || lastHeight != height {
-            lastWidth = width
-            lastHeight = height
-            transparentFrame = nil
-        }
-    }
-
-    private func makeFrame(width: Int, height: Int) -> Data {
-        let byteCount = width * height * 4
-        var frame = Data(count: 24 + byteCount)
-        frame.withUnsafeMutableBytes { raw in
-            let header = [UInt32(0x46434752), UInt32(width), UInt32(height), UInt32(bitPattern: originX),
-                          UInt32(bitPattern: originY), UInt32(byteCount)]
-            for (index, integer) in header.enumerated() {
-                var littleEndian = integer.littleEndian
-                withUnsafeBytes(of: &littleEndian) { source in
-                    raw.baseAddress!.advanced(by: index * 4).copyMemory(from: source.baseAddress!, byteCount: 4)
-                }
-            }
-        }
-        return frame
-    }
-
-    private func enqueue(_ frame: Data) {
-        lock.lock()
-        pending = frame
-        let start = !writing
-        writing = true
-        lock.unlock()
-        if start { outputQueue.async { self.drain() } }
-    }
-
-    private func drain() {
-        while true {
-            lock.lock()
-            guard let frame = pending else {
-                writing = false
-                lock.unlock()
-                return
-            }
-            pending = nil
-            lock.unlock()
-            frame.withUnsafeBytes { raw in
-                var offset = 0
-                while offset < raw.count {
-                    let count = Darwin.write(STDOUT_FILENO, raw.baseAddress!.advanced(by: offset), raw.count - offset)
-                    if count < 0 && errno == EINTR { continue }
-                    if count <= 0 { exit(errno == EPIPE ? 0 : 1) }
-                    offset += count
-                }
-            }
-        }
+        let plane: [String: Any] = ["width": targetWidth, "height": targetHeight, "stride": targetWidth * bytesPerPixel,
+                                   "format": hdr ? "rgba16f" : "bgra8",
+                                   "alpha": hdr ? "premultiplied" : "straight", "color": currentColor]
+        let metadata: [String: Any] = ["configurationId": currentConfiguration,
+                                     "sourceGeometry": fullSource.metadata(width: Int((fullSource.bounds.width * fullSource.backingScale).rounded(.up)),
+                                                                            height: Int((fullSource.bounds.height * fullSource.backingScale).rounded(.up))),
+                                     "timestampNanoseconds": DispatchTime.now().uptimeNanoseconds,
+                                      "geometry": current.metadata(width: targetWidth, height: targetHeight),
+                                      hdr ? "hdr" : "sdr": plane]
+        do { try envelope.frame(metadata, sdr: hdr ? nil : pixels, hdr: hdr ? pixels : nil, cursor: nil) }
+        catch { CaptureFailure.terminate(error) }
     }
 }

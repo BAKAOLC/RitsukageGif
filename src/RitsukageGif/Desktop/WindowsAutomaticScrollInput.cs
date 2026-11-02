@@ -17,19 +17,22 @@ namespace RitsukageGif.Desktop
             _process = process;
         }
 
+        public string? UnavailableReason { get; private set; }
+
         public AutomaticScrollInputResult Scroll(ScrollCaptureAxis axis, PixelRect region, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            UnavailableReason = null;
             if (!OperatingSystem.IsWindows() || WindowLocator.IsWindow(_target.Handle) == 0 ||
                 NativeMethods.IsWindowVisible(_target.Handle) == 0 || NativeMethods.IsIconic(_target.Handle) != 0 ||
                 GetWindowThreadProcessId(_target.Handle, out var process) == 0 || process != _process ||
                 GetWindowThreadProcessId(_control, out var controlProcess) == 0 || controlProcess != _process ||
                 NativeMethods.IsWindowVisible(_control) == 0 ||
                 (_control != _target.Handle && IsChild(_target.Handle, _control) == 0))
-                return AutomaticScrollInputResult.Unavailable;
+                return Unavailable("The selected capture window is no longer available.");
             var current = WindowLocator.Refresh(_target);
             if (current is null || current.Client != _client || region.Intersect(current.Client) != region)
-                return AutomaticScrollInputResult.Unavailable;
+                return Unavailable("The selected window or capture region changed.");
             var bar = axis == ScrollCaptureAxis.Vertical ? 1 : 0;
             var info = new WindowsAutomaticScrollInfo
                 { Size = (uint)Marshal.SizeOf<WindowsAutomaticScrollInfo>(), Mask = 7 };
@@ -39,7 +42,7 @@ namespace RitsukageGif.Desktop
             var x = region.X + region.Width / 2;
             var y = region.Y + region.Height / 2;
             if (x is < short.MinValue or > short.MaxValue || y is < short.MinValue or > short.MaxValue)
-                return AutomaticScrollInputResult.Unavailable;
+                return Unavailable("The capture region exceeds the window-message coordinate range.");
             var coordinates = (nint)(((uint)(ushort)y << 16) | (ushort)x);
             var delta = axis == ScrollCaptureAxis.Vertical ? -120 : 120;
             var flags = (nuint)((uint)(ushort)delta << 16);
@@ -48,6 +51,12 @@ namespace RitsukageGif.Desktop
             return SendMessageTimeout(_control, message, flags, coordinates, 3, 100, out _) != 0
                 ? AutomaticScrollInputResult.Sent
                 : AutomaticScrollInputResult.Failed;
+        }
+
+        private AutomaticScrollInputResult Unavailable(string reason)
+        {
+            UnavailableReason = reason;
+            return AutomaticScrollInputResult.Unavailable;
         }
 
         internal static IAutomaticScrollInput? Create(PixelRect region, WindowTarget? source)

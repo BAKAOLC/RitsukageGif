@@ -2,6 +2,17 @@ import Foundation
 import CoreGraphics
 
 enum WindowCatalog {
+    static func writeState(of id: CGWindowID) throws {
+        let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]]
+        let item = windows?.first { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == id }
+        let state: [String: Any] = ["exists": item != nil,
+                                    "visible": item?[kCGWindowIsOnscreen as String] as? Bool ?? false,
+                                    "pid": (item?[kCGWindowOwnerPID as String] as? NSNumber)?.uint32Value ?? 0]
+        var output = try JSONSerialization.data(withJSONObject: state, options: [.sortedKeys])
+        output.append(10)
+        try FileHandle.standardOutput.write(contentsOf: output)
+    }
+
     static func bounds(of id: CGWindowID) -> CGRect? {
         guard let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]],
               let item = windows.first,

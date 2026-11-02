@@ -1,10 +1,10 @@
 #define _POSIX_C_SOURCE 200809L
+#include "portal-video.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <gio/gio.h>
 #include <gio/gunixfdlist.h>
-#include <gst/app/gstappsink.h>
-#include <gst/video/video.h>
+#include <json-glib/json-glib.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdint.h>
@@ -17,6 +17,7 @@
 #define PORTAL "org.freedesktop.portal.Desktop"
 #define PORTAL_PATH "/org/freedesktop/portal/desktop"
 #define SCREENCAST "org.freedesktop.portal.ScreenCast"
+#define REMOTE_DESKTOP "org.freedesktop.portal.RemoteDesktop"
 #define FRAME_LIMIT (512u * 1024u * 1024u)
 
 static volatile sig_atomic_t stopping;
@@ -75,7 +76,8 @@ static void close_portal_object(GDBusConnection *bus, const char *path, const ch
         g_variant_unref(reply);
 }
 
-static GVariant *portal_request(GDBusConnection *bus, const char *method, GVariant *parameters)
+static GVariant *portal_request(GDBusConnection *bus, const char *interface, const char *method,
+                                GVariant *parameters)
 {
     PortalRequest request = {0};
     /* Subscribe before making the call. Filter the returned handle only after
@@ -85,7 +87,7 @@ static GVariant *portal_request(GDBusConnection *bus, const char *method, GVaria
                                            NULL, G_DBUS_SIGNAL_FLAGS_NONE, response_received, &request, NULL);
     GError *error = NULL;
     GVariant *reply =
-        g_dbus_connection_call_sync(bus, PORTAL, PORTAL_PATH, SCREENCAST, method, parameters,
+        g_dbus_connection_call_sync(bus, PORTAL, PORTAL_PATH, interface, method, parameters,
                                     G_VARIANT_TYPE("(o)"), G_DBUS_CALL_FLAGS_NONE, 10000, NULL, &error);
     if (!reply) {
         g_clear_error(&error);
@@ -127,11 +129,11 @@ static void init_options(GVariantBuilder *options)
     g_variant_builder_add(options, "{sv}", "handle_token", g_variant_new_string(token));
 }
 
-static guint property_uint(GDBusConnection *bus, const char *name, guint fallback)
+static guint property_uint(GDBusConnection *bus, const char *interface, const char *name, guint fallback)
 {
     GVariant *reply =
         g_dbus_connection_call_sync(bus, PORTAL, PORTAL_PATH, "org.freedesktop.DBus.Properties", "Get",
-                                    g_variant_new("(ss)", SCREENCAST, name), G_VARIANT_TYPE("(v)"),
+                                    g_variant_new("(ss)", interface, name), G_VARIANT_TYPE("(v)"),
                                     G_DBUS_CALL_FLAGS_NONE, 5000, NULL, NULL);
     if (!reply)
         return fallback;
@@ -170,162 +172,201 @@ static int open_remote(GDBusConnection *bus, const char *session)
     return descriptor;
 }
 
-static gboolean write_bytes(const void *buffer, size_t count)
+static gboolean member_int(JsonObject *object, const char *name, gint64 *value)
 {
-    const guint8 *bytes = buffer;
-    gint64 deadline = g_get_monotonic_time() + 5 * G_TIME_SPAN_SECOND;
-    while (count && !stopping) {
-        ssize_t written = write(STDOUT_FILENO, bytes, count);
-        if (written > 0) {
-            bytes += written;
-            count -= (size_t)written;
-            continue;
-        }
-        if (written < 0 && errno == EINTR)
-            continue;
-        if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            struct pollfd output = {.fd = STDOUT_FILENO, .events = POLLOUT};
-            if (g_get_monotonic_time() >= deadline)
-                return FALSE;
-            int ready = poll(&output, 1, 100);
-            if (ready < 0 && errno != EINTR)
-                return FALSE;
-            if (ready > 0 && output.revents & (POLLERR | POLLHUP | POLLNVAL))
-                return FALSE;
-            continue;
-        }
+    JsonNode *node = json_object_get_member(object, name);
+    if (!node || !JSON_NODE_HOLDS_VALUE(node) || json_node_get_value_type(node) != G_TYPE_INT64)
         return FALSE;
+    *value = json_node_get_int(node);
+    return TRUE;
+}
+static const char *member_string(JsonObject *object, const char *name)
+{
+    JsonNode *node = json_object_get_member(object, name);
+    return node && JSON_NODE_HOLDS_VALUE(node) && json_node_get_value_type(node) == G_TYPE_STRING
+               ? json_node_get_string(node)
+               : NULL;
+}
+static gboolean control_line(const char *line, struct rgc_portal_video *video, GDBusConnection *bus,
+                             const char *session, const struct rgc_portal_source *source, uint32_t devices,
+                             GCancellable *cancel)
+{
+    JsonParser *parser = json_parser_new();
+    GError *error = NULL;
+    gint64 request_id = 0;
+    if (!json_parser_load_from_data(parser, line, -1, &error) ||
+        !JSON_NODE_HOLDS_OBJECT(json_parser_get_root(parser))) {
+        gboolean written =
+            rgc_portal_video_reply(video, 0, "unavailable", "The capture command JSON is invalid.");
+        g_clear_error(&error);
+        g_object_unref(parser);
+        return written;
     }
-    return count == 0;
+    JsonObject *object = json_node_get_object(json_parser_get_root(parser));
+    if (!member_int(object, "requestId", &request_id) || request_id < 0)
+        request_id = 0;
+    const char *command = member_string(object, "command");
+    gboolean written = TRUE;
+    if (command && !strcmp(command, "stop")) {
+        stopping = 1;
+    } else if (command && (!strcmp(command, "suspend") || !strcmp(command, "resume"))) {
+        written = request_id > 0 ? rgc_portal_video_set_active(video, request_id, !strcmp(command, "resume"))
+                                 : rgc_portal_video_reply(video, request_id, "unavailable",
+                                                          "The capture command request identity is invalid.");
+    } else if (command && !strcmp(command, "cursor")) {
+        written = rgc_portal_video_cursor(video, request_id);
+    } else if (command && !strcmp(command, "capabilities")) {
+        written = rgc_portal_video_capabilities(video, request_id);
+    } else if (command && !strcmp(command, "configure")) {
+        gint64 generation, x, y, width, height, output_width, output_height;
+        const char *stream = member_string(object, "streamId");
+        JsonNode *region_node = json_object_get_member(object, "region");
+        JsonObject *region =
+            region_node && JSON_NODE_HOLDS_OBJECT(region_node) ? json_node_get_object(region_node) : NULL;
+        char expected_stream[32];
+        g_snprintf(expected_stream, sizeof(expected_stream), "%u", source->node_id);
+        if (request_id <= 0 || !member_int(object, "generation", &generation) || generation < 0 ||
+            (uint64_t)generation != source->generation || !stream || strcmp(stream, expected_stream) ||
+            !region || !member_int(region, "x", &x) || !member_int(region, "y", &y) ||
+            !member_int(region, "width", &width) || !member_int(region, "height", &height) ||
+            !member_int(object, "outputWidth", &output_width) ||
+            !member_int(object, "outputHeight", &output_height) || x < 0 || y < 0 || width <= 0 ||
+            height <= 0 || x > G_MAXINT || y > G_MAXINT || width > G_MAXINT || height > G_MAXINT ||
+            output_width <= 0 || output_height <= 0 || output_width > 32768 || output_height > 32768) {
+            written = rgc_portal_video_reply(video, request_id, "unavailable",
+                                             "The capture configuration or source identity is invalid.");
+        } else {
+            written = rgc_portal_video_configure(video, request_id, (uint64_t)generation, source->node_id,
+                                                 (int)x, (int)y, (int)width, (int)height, (int)output_width,
+                                                 (int)output_height);
+        }
+    } else if (command && !strcmp(command, "scroll")) {
+        gint64 generation, x, y, width, height;
+        const char *stream = member_string(object, "streamId"), *axis = member_string(object, "axis");
+        JsonNode *region_node = json_object_get_member(object, "region");
+        JsonObject *region =
+            region_node && JSON_NODE_HOLDS_OBJECT(region_node) ? json_node_get_object(region_node) : NULL;
+        char expected_stream[32];
+        g_snprintf(expected_stream, sizeof(expected_stream), "%u", source->node_id);
+        if (!member_int(object, "generation", &generation) || generation < 0 ||
+            (uint64_t)generation != source->generation || !stream || strcmp(stream, expected_stream) ||
+            !region || !axis || (strcmp(axis, "vertical") && strcmp(axis, "horizontal")) ||
+            !member_int(region, "x", &x) || !member_int(region, "y", &y) ||
+            !member_int(region, "width", &width) || !member_int(region, "height", &height) || x < 0 ||
+            y < 0 || width <= 0 || height <= 0 || x > G_MAXINT || y > G_MAXINT || width > G_MAXINT ||
+            height > G_MAXINT) {
+            written = rgc_portal_video_reply(video, request_id, "unavailable",
+                                             "The authorized source or scroll coordinates changed.");
+        } else {
+            struct rgc_portal_pointer_observation observation;
+            rgc_portal_video_pointer(video, &observation);
+            int result = rgc_portal_scroll_input_send(
+                bus, session, devices, source->generation, source->node_id, &observation, (int)x, (int)y,
+                (int)width, (int)height, !strcmp(axis, "vertical") ? 0 : 1, 1, cancel, &error);
+            written = rgc_portal_video_reply(video, request_id,
+                                             result == RGC_SCROLL_SENT          ? "sent"
+                                             : result == RGC_SCROLL_UNAVAILABLE ? "unavailable"
+                                                                                : "failed",
+                                             error ? error->message : NULL);
+            g_clear_error(&error);
+        }
+    } else {
+        written =
+            rgc_portal_video_reply(video, request_id, "unavailable", "The capture command is unsupported.");
+    }
+    g_object_unref(parser);
+    return written;
 }
 
-static gboolean write_sample(GstSample *sample)
+static gboolean run_capture(GDBusConnection *bus, int descriptor, const char *session,
+                            const struct rgc_portal_source *source, int fps, gboolean hdr,
+                            gboolean metadata_cursor, uint32_t devices, gboolean can_request_pointer,
+                            GCancellable *cancel, struct rgc_frame_writer *writer)
 {
-    GstCaps *caps = gst_sample_get_caps(sample);
-    GstBuffer *buffer = gst_sample_get_buffer(sample);
-    GstVideoInfo info;
-    gst_video_info_init(&info);
-    if (!caps || !buffer || !gst_video_info_from_caps(&info, caps) ||
-        GST_VIDEO_INFO_FORMAT(&info) != GST_VIDEO_FORMAT_BGRA)
-        return FALSE;
-    guint width = GST_VIDEO_INFO_WIDTH(&info), height = GST_VIDEO_INFO_HEIGHT(&info);
-    guint64 length = (guint64)width * height * 4;
-    if (!width || !height || width > G_MAXINT32 || height > G_MAXINT32 || length > FRAME_LIMIT)
-        return FALSE;
-    GstVideoFrame frame;
-    memset(&frame, 0, sizeof(frame));
-    if (!gst_video_frame_map(&frame, &info, buffer, GST_MAP_READ))
-        return FALSE;
-    gint stride = GST_VIDEO_FRAME_PLANE_STRIDE(&frame, 0);
-    if (stride < 0 || (guint)stride < width * 4) {
-        gst_video_frame_unmap(&frame);
+    GError *error = NULL;
+    struct rgc_portal_video *video = rgc_portal_video_new(
+        descriptor, source, writer, fps, hdr, metadata_cursor, devices, can_request_pointer, cancel, &error);
+    if (!video) {
+        g_printerr("Capture initialization failed: %s\n", error ? error->message : "unknown error");
+        g_clear_error(&error);
         return FALSE;
     }
-    guint32 header[6] = {GUINT32_TO_LE(0x46434752u),    GUINT32_TO_LE(width), GUINT32_TO_LE(height), 0, 0,
-                         GUINT32_TO_LE((guint32)length)};
-    gboolean success = write_bytes(header, sizeof(header));
-    const guint8 *pixels = GST_VIDEO_FRAME_PLANE_DATA(&frame, 0);
-    if (success && (guint)stride == width * 4)
-        success = write_bytes(pixels, (size_t)length);
-    else
-        for (guint y = 0; success && y < height; y++)
-            success = write_bytes(pixels + (gsize)y * (gsize)stride, (size_t)width * 4);
-    gst_video_frame_unmap(&frame);
-    return success;
-}
-
-static gboolean run_capture(GDBusConnection *bus, int descriptor, guint node, guint64 serial, int fps)
-{
-    GstElement *pipeline = gst_pipeline_new(NULL);
-    GstElement *source = gst_element_factory_make("pipewiresrc", NULL);
-    GstElement *convert = gst_element_factory_make("videoconvert", NULL);
-    GstElement *rate = gst_element_factory_make("videorate", NULL);
-    GstElement *sink = gst_element_factory_make("appsink", NULL);
-    if (!pipeline || !source || !convert || !rate || !sink) {
-        if (pipeline)
-            gst_object_unref(pipeline);
-        if (source)
-            gst_object_unref(source);
-        if (convert)
-            gst_object_unref(convert);
-        if (rate)
-            gst_object_unref(rate);
-        if (sink)
-            gst_object_unref(sink);
-        fputs("dependency-missing\n", stderr);
-        return FALSE;
-    }
-    g_object_set(source, "fd", descriptor, "do-timestamp", TRUE, NULL);
-    char identity[32];
-    GObjectClass *source_class = G_OBJECT_GET_CLASS(source);
-    if (serial && g_object_class_find_property(source_class, "target-object")) {
-        g_snprintf(identity, sizeof(identity), "%" G_GUINT64_FORMAT, serial);
-        g_object_set(source, "target-object", identity, NULL);
-    } else {
-        g_snprintf(identity, sizeof(identity), "%u", node);
-        g_object_set(source, "path", identity, NULL);
-    }
-    if (g_object_class_find_property(source_class, "resend-last"))
-        g_object_set(source, "resend-last", FALSE, NULL);
-    if (g_object_class_find_property(source_class, "dont-reconnect"))
-        g_object_set(source, "dont-reconnect", TRUE, NULL);
-    if (g_object_class_find_property(source_class, "always-copy"))
-        g_object_set(source, "always-copy", TRUE, NULL);
-    if (g_object_class_find_property(source_class, "on-disconnect"))
-        g_object_set(source, "on-disconnect", 1, NULL);
-    g_object_set(rate, "drop-only", TRUE, NULL);
-    g_object_set(sink, "sync", FALSE, "max-buffers", 1u, "drop", TRUE, "wait-on-eos", FALSE,
-                 "enable-last-sample", FALSE, NULL);
-    gst_bin_add_many(GST_BIN(pipeline), source, convert, rate, sink, NULL);
-    GstCaps *output = gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING, "BGRA", "framerate",
-                                          GST_TYPE_FRACTION, fps, 1, NULL);
-    gboolean linked = gst_element_link_many(source, rate, convert, NULL) &&
-                      gst_element_link_filtered(convert, sink, output);
-    gst_caps_unref(output);
-    gboolean success = linked;
-    GstBus *messages = gst_element_get_bus(pipeline);
-    if (!linked || gst_element_set_state(pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
-        fputs("capture-failed\n", stderr);
-        success = FALSE;
-    } else {
-        gint64 first_frame_deadline = g_get_monotonic_time() + 30 * G_TIME_SPAN_SECOND;
-        gboolean have_frame = FALSE;
-        while (!stopping && !g_dbus_connection_is_closed(bus)) {
-            while (g_main_context_iteration(NULL, FALSE)) {
-            }
-            struct pollfd output_pipe = {.fd = STDOUT_FILENO, .events = POLLOUT};
-            if (poll(&output_pipe, 1, 0) > 0 && output_pipe.revents & (POLLERR | POLLHUP | POLLNVAL))
+    GString *pending = g_string_new(NULL);
+    gboolean success = TRUE;
+    gint64 deadline = g_get_monotonic_time() + 30 * G_TIME_SPAN_SECOND;
+    while (!stopping && !g_cancellable_is_cancelled(cancel) && !g_dbus_connection_is_closed(bus)) {
+        while (g_main_context_iteration(NULL, FALSE)) {
+        }
+        char *reason = NULL;
+        if (rgc_portal_video_failed(video, &reason)) {
+            g_printerr("Capture source lost: %s\n", reason);
+            g_free(reason);
+            success = FALSE;
+            break;
+        }
+        if (!rgc_portal_video_has_frame(video) && g_get_monotonic_time() >= deadline) {
+            fputs("Capture source timed out before its first frame.\n", stderr);
+            success = FALSE;
+            break;
+        }
+        struct pollfd input = {.fd = STDIN_FILENO, .events = POLLIN};
+        int ready = poll(&input, 1, 50);
+        if (ready < 0) {
+            if (errno == EINTR)
+                continue;
+            success = FALSE;
+            break;
+        }
+        if (ready == 0)
+            continue;
+        if (input.revents & POLLIN) {
+            char data[4096];
+            ssize_t length = read(STDIN_FILENO, data, sizeof(data));
+            if (length == 0)
                 break;
-            GstMessage *message = gst_bus_pop_filtered(messages, GST_MESSAGE_ERROR | GST_MESSAGE_EOS);
-            if (message) {
-                success = GST_MESSAGE_TYPE(message) != GST_MESSAGE_ERROR;
-                if (!success)
-                    fputs("source-lost\n", stderr);
-                gst_message_unref(message);
+            if (length < 0) {
+                if (errno == EINTR || errno == EAGAIN)
+                    continue;
+                success = FALSE;
                 break;
             }
-            GstSample *sample = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 100 * GST_MSECOND);
-            if (!sample) {
-                if (gst_app_sink_is_eos(GST_APP_SINK(sink)))
-                    break;
-                if (!have_frame && g_get_monotonic_time() >= first_frame_deadline) {
-                    fputs("timeout\n", stderr);
+            g_string_append_len(pending, data, length);
+            char *newline;
+            while ((newline = memchr(pending->str, '\n', pending->len))) {
+                gsize length_to_line = (gsize)(newline - pending->str);
+                char *line = g_strndup(pending->str, length_to_line);
+                gboolean written = control_line(line, video, bus, session, source, devices, cancel);
+                g_free(line);
+                g_string_erase(pending, 0, (gssize)(length_to_line + 1));
+                if (!written) {
                     success = FALSE;
+                    stopping = 1;
                     break;
                 }
-                continue;
             }
-            success = write_sample(sample);
-            have_frame = TRUE;
-            gst_sample_unref(sample);
-            if (!success)
+            if (pending->len > 65536) {
+                fputs("Capture command exceeds the input limit.\n", stderr);
+                success = FALSE;
                 break;
-        }
+            }
+        } else if (input.revents & (POLLHUP | POLLERR | POLLNVAL))
+            break;
     }
-    gst_element_set_state(pipeline, GST_STATE_NULL);
-    gst_object_unref(messages);
-    gst_object_unref(pipeline);
+    g_cancellable_cancel(cancel);
+    rgc_portal_video_free(video);
+    g_string_free(pending, TRUE);
     return success;
+}
+
+static gboolean parse_number(const char *text, gint64 minimum, gint64 maximum, gint64 *result)
+{
+    char *end = NULL;
+    errno = 0;
+    gint64 value = g_ascii_strtoll(text, &end, 10);
+    if (errno || !end || end == text || *end || value < minimum || value > maximum)
+        return FALSE;
+    *result = value;
+    return TRUE;
 }
 
 int main(int argc, char **argv)
@@ -334,24 +375,26 @@ int main(int argc, char **argv)
         fputs("unsupported\n", stderr);
         return 2;
     }
-    guint source_type = strcmp(argv[1], "window") == 0 ? 2u : 1u;
-    int fps = 30, cursor = 1;
-    for (int i = 2; i < argc; i += 2) {
-        if (i + 1 >= argc) {
+    struct rgc_portal_source source = {.source_type = !strcmp(argv[1], "window") ? 2u : 1u};
+    int fps = 30;
+    gboolean cursor = TRUE, hdr = FALSE, pointer = FALSE;
+    for (int index = 2; index < argc; index += 2) {
+        if (index + 1 >= argc) {
             fputs("unsupported\n", stderr);
             return 2;
         }
-        char *end = NULL;
-        errno = 0;
-        long value = strtol(argv[i + 1], &end, 10);
-        if (errno || !end || end == argv[i + 1] || *end) {
-            fputs("unsupported\n", stderr);
-            return 2;
-        }
-        if (!strcmp(argv[i], "--fps") && value >= 1 && value <= 240)
-            fps = (int)value;
-        else if (!strcmp(argv[i], "--cursor") && (value == 0 || value == 1))
-            cursor = (int)value;
+        const char *name = argv[index], *value = argv[index + 1];
+        gint64 number;
+        if (!strcmp(name, "--fps") && parse_number(value, 1, 240, &number))
+            fps = (int)number;
+        else if (!strcmp(name, "--cursor") && parse_number(value, 0, 1, &number))
+            cursor = number != 0;
+        else if (!strcmp(name, "--generation") && parse_number(value, 0, G_MAXINT64, &number))
+            source.generation = (uint64_t)number;
+        else if (!strcmp(name, "--color") && (!strcmp(value, "sdr") || !strcmp(value, "hdr")))
+            hdr = !strcmp(value, "hdr");
+        else if (!strcmp(name, "--input") && (!strcmp(value, "none") || !strcmp(value, "pointer")))
+            pointer = !strcmp(value, "pointer");
         else {
             fputs("unsupported\n", stderr);
             return 2;
@@ -364,35 +407,48 @@ int main(int argc, char **argv)
     if (prctl(PR_SET_PDEATHSIG, SIGTERM) < 0 || parent == 1 || getppid() != parent)
         return 1;
     int output_flags = fcntl(STDOUT_FILENO, F_GETFL);
-    if (output_flags < 0 || fcntl(STDOUT_FILENO, F_SETFL, output_flags | O_NONBLOCK) < 0)
+    int input_flags = fcntl(STDIN_FILENO, F_GETFL);
+    if (output_flags < 0 || input_flags < 0 || fcntl(STDOUT_FILENO, F_SETFL, output_flags | O_NONBLOCK) < 0 ||
+        fcntl(STDIN_FILENO, F_SETFL, input_flags | O_NONBLOCK) < 0)
         return 1;
-    gst_init(NULL, NULL);
+    pw_init(NULL, NULL);
     GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
     if (!bus) {
         fputs("dependency-missing\n", stderr);
+        pw_deinit();
         return 1;
     }
     g_dbus_connection_set_exit_on_close(bus, FALSE);
-    int exit_code = 1;
-    int descriptor = -1;
+    GCancellable *cancel = g_cancellable_new();
+    struct rgc_frame_writer writer;
+    rgc_frame_writer_init(&writer, cancel);
+    int exit_code = 1, descriptor = -1;
     char *session = NULL;
-    guint session_subscription = 0;
+    guint subscription = 0, devices = 0;
     GVariant *result = NULL;
     GVariantBuilder options;
-    guint version = property_uint(bus, "version", 1);
-    if (version < 2 && cursor) {
+    source.portal_version = property_uint(bus, SCREENCAST, "version", 1);
+    guint source_types = property_uint(bus, SCREENCAST, "AvailableSourceTypes", 1);
+    guint cursor_modes =
+        source.portal_version >= 2 ? property_uint(bus, SCREENCAST, "AvailableCursorModes", 1) : 1;
+    gboolean metadata_cursor = (cursor_modes & 4) != 0;
+    guint remote_devices = property_uint(bus, REMOTE_DESKTOP, "AvailableDeviceTypes", 0);
+    gboolean can_request_pointer = (remote_devices & 2) != 0;
+    if (!(source_types & source.source_type)) {
         fputs("unsupported\n", stderr);
         goto cleanup;
     }
-    if (!(property_uint(bus, "AvailableSourceTypes", 1) & source_type)) {
-        fputs("unsupported\n", stderr);
+    if (pointer && (!can_request_pointer || !metadata_cursor)) {
+        fputs("Pointer control requires an available RemoteDesktop portal and independent cursor metadata.\n",
+              stderr);
         goto cleanup;
     }
+    const char *session_interface = pointer ? REMOTE_DESKTOP : SCREENCAST;
     init_options(&options);
     char session_token[64];
     g_snprintf(session_token, sizeof(session_token), "ritsukage_session_%u", (guint)getpid());
     g_variant_builder_add(&options, "{sv}", "session_handle_token", g_variant_new_string(session_token));
-    result = portal_request(bus, "CreateSession", g_variant_new("(a{sv})", &options));
+    result = portal_request(bus, session_interface, "CreateSession", g_variant_new("(a{sv})", &options));
     if (!result)
         goto cleanup;
     if (!g_variant_lookup(result, "session_handle", "s", &session) || !g_variant_is_object_path(session)) {
@@ -400,30 +456,48 @@ int main(int argc, char **argv)
         goto cleanup;
     }
     g_clear_pointer(&result, g_variant_unref);
-    session_subscription =
+    subscription =
         g_dbus_connection_signal_subscribe(bus, PORTAL, "org.freedesktop.portal.Session", "Closed", session,
                                            NULL, G_DBUS_SIGNAL_FLAGS_NONE, session_closed, NULL, NULL);
+    if (pointer) {
+        init_options(&options);
+        g_variant_builder_add(&options, "{sv}", "types", g_variant_new_uint32(2));
+        result = portal_request(bus, REMOTE_DESKTOP, "SelectDevices",
+                                g_variant_new("(oa{sv})", session, &options));
+        if (!result)
+            goto cleanup;
+        g_clear_pointer(&result, g_variant_unref);
+    }
     init_options(&options);
-    g_variant_builder_add(&options, "{sv}", "types", g_variant_new_uint32(source_type));
+    g_variant_builder_add(&options, "{sv}", "types", g_variant_new_uint32(source.source_type));
     g_variant_builder_add(&options, "{sv}", "multiple", g_variant_new_boolean(FALSE));
-    if (version >= 2) {
-        guint modes = property_uint(bus, "AvailableCursorModes", 1);
-        guint mode = cursor ? 2u : 1u;
-        if (!(modes & mode)) {
+    if (source.portal_version >= 2) {
+        guint mode = metadata_cursor ? 4u : cursor ? 2u : 1u;
+        if (!(cursor_modes & mode)) {
             g_variant_builder_clear(&options);
             fputs("unsupported\n", stderr);
             goto cleanup;
         }
         g_variant_builder_add(&options, "{sv}", "cursor_mode", g_variant_new_uint32(mode));
+    } else if (cursor) {
+        g_variant_builder_clear(&options);
+        fputs("unsupported\n", stderr);
+        goto cleanup;
     }
-    result = portal_request(bus, "SelectSources", g_variant_new("(oa{sv})", session, &options));
+    result = portal_request(bus, SCREENCAST, "SelectSources", g_variant_new("(oa{sv})", session, &options));
     if (!result)
         goto cleanup;
     g_clear_pointer(&result, g_variant_unref);
     init_options(&options);
-    result = portal_request(bus, "Start", g_variant_new("(osa{sv})", session, "", &options));
+    result =
+        portal_request(bus, session_interface, "Start", g_variant_new("(osa{sv})", session, "", &options));
     if (!result)
         goto cleanup;
+    if (pointer && (!g_variant_lookup(result, "devices", "u", &devices) || !(devices & 2))) {
+        fputs("permission-denied\n", stderr);
+        goto cleanup;
+    }
+    g_variant_lookup(result, "restore_token", "s", &source.restore_token);
     GVariant *streams = g_variant_lookup_value(result, "streams", G_VARIANT_TYPE("a(ua{sv})"));
     if (!streams || g_variant_n_children(streams) != 1) {
         if (streams)
@@ -431,11 +505,16 @@ int main(int argc, char **argv)
         fputs("source-lost\n", stderr);
         goto cleanup;
     }
-    guint node;
-    guint64 serial = 0;
     GVariant *properties = NULL;
-    g_variant_get_child(streams, 0, "(u@a{sv})", &node, &properties);
-    g_variant_lookup(properties, "pipewire-serial", "t", &serial);
+    g_variant_get_child(streams, 0, "(u@a{sv})", &source.node_id, &properties);
+    g_variant_lookup(properties, "pipewire-serial", "t", &source.serial);
+    g_variant_lookup(properties, "source_type", "u", &source.source_type);
+    g_variant_lookup(properties, "id", "s", &source.id);
+    source.has_position =
+        g_variant_lookup(properties, "position", "(ii)", &source.position_x, &source.position_y);
+    source.has_size = g_variant_lookup(properties, "size", "(ii)", &source.size_width, &source.size_height);
+    source.has_logical_size =
+        g_variant_lookup(properties, "logical_size", "(ii)", &source.logical_width, &source.logical_height);
     g_variant_unref(properties);
     g_variant_unref(streams);
     g_clear_pointer(&result, g_variant_unref);
@@ -444,19 +523,27 @@ int main(int argc, char **argv)
         fputs("capture-failed\n", stderr);
         goto cleanup;
     }
-    if (run_capture(bus, descriptor, node, serial, fps))
+    int remote_descriptor = descriptor;
+    descriptor = -1;
+    if (run_capture(bus, remote_descriptor, session, &source, fps, hdr, metadata_cursor, devices,
+                    can_request_pointer, cancel, &writer))
         exit_code = 0;
-
 cleanup:
+    g_cancellable_cancel(cancel);
     if (result)
         g_variant_unref(result);
-    if (session_subscription)
-        g_dbus_connection_signal_unsubscribe(bus, session_subscription);
+    if (subscription)
+        g_dbus_connection_signal_unsubscribe(bus, subscription);
     if (session)
         close_portal_object(bus, session, "org.freedesktop.portal.Session");
+    g_free(source.id);
+    g_free(source.restore_token);
     g_free(session);
     if (descriptor >= 0)
         close(descriptor);
+    rgc_frame_writer_clear(&writer);
+    g_object_unref(cancel);
     g_object_unref(bus);
+    pw_deinit();
     return stopping ? 0 : exit_code;
 }

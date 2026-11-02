@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -13,6 +13,7 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.VerifyAccess();
             _screens = screens;
+            NativeDisplayCatalog.Update(screens);
             _snapshot = ReadTopology(0);
             _screens.Changed += ScreensChanged;
         }
@@ -46,6 +47,7 @@ namespace RitsukageGif.Desktop
         private void Publish()
         {
             if (Volatile.Read(ref _disposed) != 0) return;
+            NativeDisplayCatalog.Update(_screens);
             var current = Snapshot;
             var next = ReadTopology(current.Version + 1);
             if (!current.Monitors.SequenceEqual(next.Monitors)) Volatile.Write(ref _snapshot, next);

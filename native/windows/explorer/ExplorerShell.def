@@ -1,0 +1,4 @@
+LIBRARY "RitsukageGif.ExplorerShell.dll"
+EXPORTS
+    DllGetClassObject PRIVATE
+    DllCanUnloadNow PRIVATE

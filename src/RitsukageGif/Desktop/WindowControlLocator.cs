@@ -10,12 +10,19 @@ namespace RitsukageGif.Desktop
         public static WindowControlTarget? Find(WindowTarget window, PixelPoint point,
             CancellationToken cancellationToken = default)
         {
+            if (OperatingSystem.IsMacOS())
+            {
+                var controls = MacWindowSystem.Controls(window, point, cancellationToken);
+                return controls.Count == 0 ? null : controls[^1];
+            }
+
             return FindCore(window, point, null, cancellationToken);
         }
 
         internal static IReadOnlyList<WindowControlTarget> FindHierarchy(WindowTarget window, PixelPoint point,
             CancellationToken cancellationToken = default)
         {
+            if (OperatingSystem.IsMacOS()) return MacWindowSystem.Controls(window, point, cancellationToken);
             var hierarchy = new List<WindowControlTarget> { new(window, window.Handle, window.Bounds) };
             FindCore(window, point, hierarchy, cancellationToken);
             return hierarchy;

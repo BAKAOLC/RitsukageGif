@@ -12,6 +12,7 @@
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSHighResolutionCapable</key><true/>
+    <key>NSMicrophoneUsageDescription</key><string>Include microphone audio in your video recordings.</string>
     <key>NSScreenCaptureUsageDescription</key><string>Record selected screens and windows.</string>
   </dict>
 </plist>

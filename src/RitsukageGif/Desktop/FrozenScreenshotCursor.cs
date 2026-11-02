@@ -15,6 +15,7 @@ namespace RitsukageGif.Desktop
             _bounds = bounds;
         }
 
+        // ReSharper disable once InconsistentlySynchronizedField
         internal PixelRect Bounds => _bounds;
 
         public void Dispose()
@@ -23,37 +24,42 @@ namespace RitsukageGif.Desktop
             {
                 if (_icon != 0) CheckCleanup(DestroyIcon(_icon));
                 _icon = 0;
+                _nativePixels = null;
             }
         }
 
         internal byte[]? ReadTransparentPixels()
         {
-            var black = new byte[checked(_bounds.Width * _bounds.Height * 4)];
-            var white = new byte[black.Length];
-            Array.Fill(white, (byte)255);
-            Draw(black, _bounds);
-            Draw(white, _bounds);
-            for (var offset = 0; offset < black.Length; offset += 4)
+            lock (_sync)
             {
-                var difference = white[offset] - black[offset];
-                // Inverting/monochrome cursors depend on the destination and cannot be represented by RGBA.
-                if (difference < 0 || Math.Abs(white[offset + 1] - black[offset + 1] - difference) > 1 ||
-                    Math.Abs(white[offset + 2] - black[offset + 2] - difference) > 1) return null;
-                var alpha = 255 - difference;
-                for (var channel = 0; channel < 3; channel++)
-                    black[offset + channel] = alpha == 0
-                        ? (byte)0
-                        : (byte)Math.Clamp(
-                            (black[offset + channel] * 255 + alpha / 2) / alpha, 0, 255);
-                black[offset + 3] = (byte)alpha;
-            }
+                if (_nativePixels is not null) return ReadNativeLogicalPixels();
+                var black = new byte[checked(_bounds.Width * _bounds.Height * 4)];
+                var white = new byte[black.Length];
+                Array.Fill(white, (byte)255);
+                Draw(black, _bounds);
+                Draw(white, _bounds);
+                for (var offset = 0; offset < black.Length; offset += 4)
+                {
+                    var difference = white[offset] - black[offset];
+                    // Inverting/monochrome cursors depend on the destination and cannot be represented by RGBA.
+                    if (difference < 0 || Math.Abs(white[offset + 1] - black[offset + 1] - difference) > 1 ||
+                        Math.Abs(white[offset + 2] - black[offset + 2] - difference) > 1) return null;
+                    var alpha = 255 - difference;
+                    for (var channel = 0; channel < 3; channel++)
+                        black[offset + channel] = alpha == 0
+                            ? (byte)0
+                            : (byte)Math.Clamp(
+                                (black[offset + channel] * 255 + alpha / 2) / alpha, 0, 255);
+                    black[offset + 3] = (byte)alpha;
+                }
 
-            return black;
+                return black;
+            }
         }
 
         internal static FrozenScreenshotCursor? Capture()
         {
-            if (!OperatingSystem.IsWindows()) return null;
+            if (!OperatingSystem.IsWindows()) return CapturePortable();
             var cursor = new NativeMethods.CursorInfo { Size = Marshal.SizeOf<NativeMethods.CursorInfo>() };
             if (NativeMethods.GetCursorInfo(ref cursor) == 0 || (cursor.Flags & 1) == 0) return null;
             var copy = CopyIcon(cursor.Cursor);
@@ -85,11 +91,16 @@ namespace RitsukageGif.Desktop
 
         internal void Draw(byte[] pixels, PixelRect region)
         {
-            var clipped = region.Intersect(_bounds);
-            if (clipped.IsEmpty) return;
             lock (_sync)
             {
-                if (_icon == 0) return;
+                if (_nativePixels is not null)
+                {
+                    DrawNative(pixels, region, region.Width, region.Height);
+                    return;
+                }
+
+                var clipped = region.Intersect(_bounds);
+                if (clipped.IsEmpty || _icon == 0) return;
                 var dc = NativeMethods.CreateCompatibleDC(0);
                 var info = new NativeMethods.BitmapInfo
                 {
