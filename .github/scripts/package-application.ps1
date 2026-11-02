@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)]
     [ValidateSet('win-x64', 'linux-x64', 'linux-arm64', 'osx-arm64')]
     [string]$RuntimeIdentifier,
-    [string]$Output = 'artifacts/packages'
+    [string]$Output = 'artifacts/packages',
+    [string]$NativeHelpers
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -18,9 +19,19 @@ if ($outputPath -eq $staging -or $outputPath.StartsWith($staging + [IO.Path]::Di
 if (Test-Path -LiteralPath $staging) { [IO.Directory]::Delete($staging, $true) }
 New-Item -ItemType Directory -Force -Path $staging, $outputPath | Out-Null
 $publish = Join-Path $staging 'publish'
+if (!$NativeHelpers) {
+    & (Join-Path $PSScriptRoot 'build-native-helpers.ps1') -RuntimeIdentifier $RuntimeIdentifier
+    $NativeHelpers = Join-Path $artifacts "native-helpers-$RuntimeIdentifier"
+}
+$NativeHelpers = [IO.Path]::GetFullPath($NativeHelpers, $root)
+$nativeManifest = Get-Content -LiteralPath (Join-Path $NativeHelpers 'native-helpers.json') -Raw | ConvertFrom-Json
+if ($nativeManifest.RuntimeIdentifier -ne $RuntimeIdentifier) { throw 'Native helper runtime does not match the application.' }
 if ($IsMacOS) { $env:MACOSX_DEPLOYMENT_TARGET = '13.0' }
 & dotnet publish (Join-Path $root 'src/RitsukageGif') -c Release -r $RuntimeIdentifier -o $publish
 if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
+foreach ($file in $nativeManifest.Files) {
+    Copy-Item -LiteralPath (Join-Path $NativeHelpers $file) -Destination $publish
+}
 $executable = Join-Path $publish $(if ($IsWindows) { 'RitsukageGif.exe' } else { 'RitsukageGif' })
 $smoke = & $executable --version | Out-String
 if ($LASTEXITCODE -ne 0) { throw 'Published application could not start.' }
@@ -29,17 +40,12 @@ if (!$smokeReply.Success -or $smokeReply.State -ne 'version' -or $smokeReply.Mes
 Get-ChildItem -LiteralPath $publish -File | Where-Object { $_.Extension -in '.pdb', '.xml', '.dbg' } | Remove-Item -Force
 $packageName = "RitsukageGif-$($versions.Application)-$RuntimeIdentifier"
 if ($IsWindows) {
+    & (Join-Path $PSScriptRoot 'build-explorer-shell.ps1') -Destination $publish -BuildDirectory (Join-Path $artifacts 'explorer-shell-win-x64')
     $fileVersion = (Get-Item -LiteralPath (Join-Path $publish 'RitsukageGif.exe')).VersionInfo
     if ($fileVersion.FileVersion -ne $versions.NumericVersion -or $fileVersion.ProductVersion -ne $versions.Application) { throw 'Unexpected file version.' }
     Compress-Archive -Path (Join-Path $publish '*') -DestinationPath (Join-Path $outputPath "$packageName.zip") -Force
 }
 elseif ($IsMacOS) {
-    $swiftArchitecture = if ($architecture -eq 'arm64') { 'arm64' } else { 'x86_64' }
-    $swiftSources = @(Get-ChildItem -LiteralPath (Join-Path $root 'native/macos') -Filter '*.swift' -File | ForEach-Object FullName)
-    & xcrun swiftc -swift-version 5 -O -parse-as-library -target "$swiftArchitecture-apple-macosx13.0" @swiftSources -o (Join-Path $publish 'RitsukageGif.Capture') -framework ScreenCaptureKit -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework Foundation
-    if ($LASTEXITCODE -ne 0) { throw 'ScreenCaptureKit helper build failed.' }
-    $permission = & (Join-Path $publish 'RitsukageGif.Capture') permission
-    if ($LASTEXITCODE -notin 0, 77 -or ($permission -join '').Trim() -notin 'true', 'false') { throw 'ScreenCaptureKit helper could not start.' }
     $bundle = Join-Path $staging 'RitsukageGif.app'
     $contents = Join-Path $bundle 'Contents'
     $macos = Join-Path $contents 'MacOS'
@@ -56,6 +62,11 @@ elseif ($IsMacOS) {
         New-Item -ItemType Directory -Path $localized | Out-Null
         Copy-Item -LiteralPath (Join-Path $root "native/macos/$language.lproj/InfoPlist.strings") -Destination $localized
     }
+    $loginAgents = Join-Path $contents 'Library/LaunchAgents'
+    New-Item -ItemType Directory -Force -Path $loginAgents | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'native/macos/local.ritsukagegif.login.plist') -Destination $loginAgents
+    & plutil -lint (Join-Path $loginAgents 'local.ritsukagegif.login.plist')
+    if ($LASTEXITCODE -ne 0) { throw 'Login agent property list is invalid.' }
     & codesign --force --deep --sign - $bundle
     if ($LASTEXITCODE -ne 0) { throw 'Application ad-hoc signing failed.' }
     & codesign --verify --deep --strict $bundle
@@ -64,11 +75,6 @@ elseif ($IsMacOS) {
     if ($LASTEXITCODE -ne 0) { throw 'Application archive failed.' }
 }
 else {
-    $nativeOutput = & pkg-config --cflags --libs gio-2.0 gio-unix-2.0 gstreamer-app-1.0 gstreamer-video-1.0
-    if ($LASTEXITCODE -ne 0) { throw 'Portal capture build dependencies are missing.' }
-    $nativeFlags = @(($nativeOutput -join ' ') -split '\s+' | Where-Object { $_ })
-    & cc -std=c11 -O2 -Wall -Wextra -Werror (Join-Path $root 'native/linux/portal-capture.c') -o (Join-Path $publish 'RitsukageGif.Capture') @nativeFlags
-    if ($LASTEXITCODE -ne 0) { throw 'Portal capture helper build failed.' }
     & tar -czf (Join-Path $outputPath "$packageName.tar.gz") -C $publish .
     if ($LASTEXITCODE -ne 0) { throw 'Application archive failed.' }
     $deb = Join-Path $staging 'deb'
@@ -86,7 +92,7 @@ Architecture: $debArchitecture
 Maintainer: OLC
 Section: graphics
 Priority: optional
-Depends: libc6 (>= 2.38), libgcc-s1, libstdc++6, zlib1g, libicu74, libssl3t64, libfontconfig1, libfreetype6, libx11-6, libxext6, libxcomposite1, libxfixes3, libxrandr2, libice6, libsm6, libgtk-3-0t64, libglib2.0-0t64, libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-base, gstreamer1.0-pipewire, xdg-desktop-portal
+Depends: libc6 (>= 2.38), libgcc-s1, libstdc++6, zlib1g, libicu74, libssl3t64, libfontconfig1, libfreetype6, libx11-6, libxtst6, libxext6, libxcomposite1, libxfixes3, libxrandr2, libice6, libsm6, libgtk-3-0t64, libglib2.0-0t64, libpipewire-0.3-0t64, libspa-0.2-modules, libjson-glib-1.0-0, libatspi2.0-0, xdg-desktop-portal, tesseract-ocr, tesseract-ocr-eng, pulseaudio-utils, libsecret-tools
 Description: Screen and window animation recorder
 "@ | Set-Content -LiteralPath (Join-Path $control 'control') -Encoding utf8NoBOM
     @'

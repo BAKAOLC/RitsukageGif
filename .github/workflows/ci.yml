@@ -98,8 +98,12 @@ jobs:
           }
           sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update
           if ($LASTEXITCODE -ne 0) { throw 'Package metadata update failed.' }
-          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends clang zlib1g-dev pkg-config libglib2.0-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-pipewire gstreamer1.0-plugins-base libgtk-3-0t64 libxcomposite1 libxfixes3 libxrandr2
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends cmake clang zlib1g-dev pkg-config libx11-dev libxtst-dev libxfixes-dev libglib2.0-dev libpipewire-0.3-dev libspa-0.2-dev libjson-glib-dev libatspi2.0-dev libgtk-3-0t64 libxcomposite1 libxfixes3 libxrandr2
           if ($LASTEXITCODE -ne 0) { throw 'Linux dependency installation failed.' }
+      - name: Compile native helpers
+        env:
+          TARGET_RID: ${{ matrix.rid }}
+        run: ./.github/scripts/build-native-helpers.ps1 -RuntimeIdentifier $env:TARGET_RID
       - name: Restore
         run: dotnet restore RitsukageGif.sln
       - name: Build
@@ -107,7 +111,7 @@ jobs:
       - name: Package application
         env:
           TARGET_RID: ${{ matrix.rid }}
-        run: ./.github/scripts/package-application.ps1 -RuntimeIdentifier $env:TARGET_RID
+        run: ./.github/scripts/package-application.ps1 -RuntimeIdentifier $env:TARGET_RID -NativeHelpers "artifacts/native-helpers-$env:TARGET_RID"
       - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
