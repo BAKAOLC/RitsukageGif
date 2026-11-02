@@ -11,8 +11,11 @@ namespace RitsukageGif.Core
         private readonly ScrollCaptureOptions _options;
         private readonly int _rowBytes;
         private readonly byte[] _scratch;
+        private readonly int _storageRowBytes;
         private readonly int _width;
         private long _attemptedFrames;
+        private bool _autoCropOnReverse;
+        private int _captureDirection;
         private int? _crossPosition;
         private int _end;
         private bool _limitReported;
@@ -26,6 +29,7 @@ namespace RitsukageGif.Core
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
             _options = options ?? new ScrollCaptureOptions();
+            _autoCropOnReverse = _options.AutoCropOnReverse;
             if (!Enum.IsDefined(_options.Axis) || _options.LeadingInset < 0 || _options.TrailingInset < 0
                 || _options.MinimumOverlap is < 0.2 or > 0.8 || !double.IsFinite(_options.MinimumOverlap)
                 || _options.MaximumLength < 1 || _options.MaximumBytes < 1)
@@ -38,12 +42,26 @@ namespace RitsukageGif.Core
             if (_axisLength < 16 || _crossLength < 8)
                 throw new ArgumentException("The capture area is too small after cropping.", nameof(options));
             _rowBytes = checked(_crossLength * 4);
-            if (_axisLength > _options.MaximumLength || (long)_rowBytes * _axisLength * 3 > _options.MaximumBytes)
+            _storageRowBytes = checked(_crossLength * (_options.RetainHdr ? 12 : 4));
+            if (_axisLength > _options.MaximumLength ||
+                (long)_storageRowBytes * _axisLength * 3 > _options.MaximumBytes)
                 throw new ArgumentException("The capture area exceeds the memory or length limit.", nameof(options));
             _scratch = new byte[checked(_axisLength * _rowBytes)];
             _nextLogAt = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 5;
             Logger.ZLogInformation(
                 $"Scrolling capture session created: width={width}, height={height}, axis={_options.Axis.ToString()}, maximumLength={_options.MaximumLength}, maximumBytes={_options.MaximumBytes}");
+        }
+
+        public bool AutoCropOnReverse
+        {
+            get => _autoCropOnReverse;
+            set
+            {
+                if (_autoCropOnReverse == value) return;
+                _autoCropOnReverse = value;
+                _captureDirection = 0;
+                Logger.ZLogInformation($"Scrolling capture automatic crop policy changed: enabled={value}");
+            }
         }
 
         public bool CanUndo => _undo is not null;
@@ -57,6 +75,22 @@ namespace RitsukageGif.Core
         public ScrollCaptureResult TryAppend(ReadOnlySpan<byte> bgra, int screenX, int screenY,
             CancellationToken token = default)
         {
+            return TryAppendCore(bgra, null, screenX, screenY, token);
+        }
+
+        public ScrollCaptureResult TryAppend(CapturedFrameSet frames, int screenX, int screenY,
+            CancellationToken token = default)
+        {
+            if (frames.Sdr.Width != _width || frames.Sdr.Height != _height)
+                throw new ArgumentException("The frame dimensions must remain unchanged.", nameof(frames));
+            var pixels = CapturedFramePixels.ToStraightBgra(frames.Sdr, token);
+            return TryAppendCore(pixels, frames.Hdr, screenX, screenY, token);
+        }
+
+        private ScrollCaptureResult TryAppendCore(ReadOnlySpan<byte> bgra, CapturedFrame? hdr, int screenX, int screenY,
+            CancellationToken token)
+        {
+            if (_options.RetainHdr) ValidateHdr(hdr);
             if (bgra.Length != (long)_width * _height * 4)
                 throw new ArgumentException("The frame dimensions must remain unchanged.", nameof(bgra));
             token.ThrowIfCancellationRequested();
@@ -68,7 +102,7 @@ namespace RitsukageGif.Core
             token.ThrowIfCancellationRequested();
             if (_strips.Count == 0)
             {
-                _strips.Add(new(0, _axisLength, (byte[])pixels.Clone()));
+                _strips.Add(CreateStrip(0, _axisLength, 0, pixels, hdr, token));
                 _end = _axisLength;
                 _crossPosition = crossPosition;
                 return Result(ScrollCaptureStatus.Started, 0, _axisLength, 1);
@@ -77,6 +111,8 @@ namespace RitsukageGif.Core
             var match = FindMatch(pixels, token);
             if (match.Status != ScrollCaptureStatus.Appended) return match;
             var offset = match.Offset;
+            var movement = Math.Sign(offset - CurrentOffset);
+            if (_end - StartOffset - _axisLength < 5) _captureDirection = 0;
             var confidence = match.Confidence;
             var nextStart = Math.Min(StartOffset, offset);
             var nextEnd = Math.Max(_end, checked(offset + _axisLength));
@@ -84,21 +120,27 @@ namespace RitsukageGif.Core
             if (added == 0)
             {
                 CurrentOffset = offset;
+                if (AutoCropOnReverse && _captureDirection != 0 && movement != 0 && movement != _captureDirection)
+                {
+                    if (_captureDirection > 0) CropAfterCurrentViewport(token);
+                    else CropBeforeCurrentViewport(token);
+                }
+
                 return Result(ScrollCaptureStatus.AlreadyCovered, offset, 0, confidence);
             }
 
             // Keep space for both the assembled export and the incoming frame.
             if (nextEnd - nextStart > _options.MaximumLength
-                || ((long)(nextEnd - nextStart) * 2 + _axisLength) * _rowBytes > _options.MaximumBytes)
+                || ((long)(nextEnd - nextStart) * 2 + _axisLength) * _storageRowBytes > _options.MaximumBytes)
                 return Result(ScrollCaptureStatus.LimitReached, offset);
             token.ThrowIfCancellationRequested();
             var prepend = nextStart < StartOffset;
             var begin = prepend ? offset : _end;
             var end = prepend ? StartOffset : nextEnd;
-            var strip = new Strip(begin, end,
-                [.. pixels.AsSpan((begin - offset) * _rowBytes, (end - begin) * _rowBytes)]);
+            var strip = CreateStrip(begin, end, offset, pixels, hdr, token);
             var undo = new UndoState(StartOffset, _end, CurrentOffset, prepend);
             _strips.Insert(prepend ? 0 : _strips.Count, strip);
+            if (_captureDirection == 0 && movement != 0) _captureDirection = movement;
             _undo = undo;
             StartOffset = nextStart;
             _end = nextEnd;
@@ -142,9 +184,13 @@ namespace RitsukageGif.Core
                             .CopyTo(output.AsSpan((cross * Width + axis - StartOffset) * 4, 4));
             }
 
+            var image = new ScrollCaptureImage(output, Width, Height)
+            {
+                Hdr = _options.RetainHdr ? ExportHdr(Width, Height, token) : null,
+            };
             Logger.ZLogInformation(
-                $"Scrolling capture export completed: width={Width}, height={Height}, bytes={output.Length}, inputFrames={_attemptedFrames}, strips={_strips.Count}");
-            return new(output, Width, Height);
+                $"Scrolling capture export completed: width={Width}, height={Height}, CombinedBytes={image.Pixels.LongLength + (image.Hdr?.Pixels.Length ?? 0)}, HasHdr={image.Hdr is not null}, inputFrames={_attemptedFrames}, strips={_strips.Count}");
+            return image;
         }
 
         private byte[] Normalize(ReadOnlySpan<byte> pixels)

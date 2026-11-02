@@ -10,7 +10,7 @@ namespace RitsukageGif.Core
             return Map(source, mode, null, token);
         }
 
-        internal static CapturedFrame Map(CapturedFrame source, HdrToneMapMode mode,
+        public static CapturedFrame Map(CapturedFrame source, HdrToneMapMode mode,
             byte[]? destination, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(source);
@@ -21,8 +21,8 @@ namespace RitsukageGif.Core
                 throw new ArgumentException("A valid linear scRGB FP16 frame is required.", nameof(source));
             token.ThrowIfCancellationRequested();
             var length = checked(source.Width * source.Height * 4);
-            if (destination is not null && destination.Length != length)
-                throw new ArgumentException("The destination must match the frame dimensions.", nameof(destination));
+            if (destination is not null && destination.Length < length)
+                throw new ArgumentException("The destination buffer is too small.", nameof(destination));
             var output = destination ?? new byte[length];
             IReadOnlyList<FrameColorRegion> regions =
             [
@@ -45,7 +45,8 @@ namespace RitsukageGif.Core
 
             return source with
             {
-                PixelFormat = CapturePixelFormat.Bgra8Srgb, Stride = checked(source.Width * 4), Pixels = output,
+                PixelFormat = CapturePixelFormat.Bgra8Srgb, Stride = checked(source.Width * 4),
+                Pixels = output.AsMemory(0, length),
                 AlphaMode = source.AlphaMode == CaptureAlphaMode.Opaque
                     ? CaptureAlphaMode.Opaque
                     : CaptureAlphaMode.Straight,

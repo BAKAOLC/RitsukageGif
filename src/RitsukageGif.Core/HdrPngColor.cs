@@ -4,6 +4,16 @@ namespace RitsukageGif.Core
 {
     public static class HdrPngColor
     {
+        public static float DecodePq(float code)
+        {
+            return (float)Eotf(code);
+        }
+
+        public static float EncodePq(float linear)
+        {
+            return (float)Pq(linear);
+        }
+
         // Linear scRGB uses Rec.709 primaries and an absolute 80 cd/m² unit.
         // PNG uses straight alpha; RGB is transformed before clipping to the PQ gamut.
         public static void EncodeRow(ReadOnlySpan<byte> rgbaHalf, Span<byte> rgba16BigEndian,

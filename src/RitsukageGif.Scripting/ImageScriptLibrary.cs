@@ -1,12 +1,16 @@
 namespace RitsukageGif.Scripting
 {
-    public static class ImageScriptLibrary
+    public static partial class ImageScriptLibrary
     {
         public static void Register(ScriptBindingRegistry bindings, IImageCompositionService? service = null,
             string? baseDirectory = null)
         {
             var root = Path.GetFullPath(baseDirectory ?? Environment.CurrentDirectory);
             PixelEffectsBinding.Register(bindings);
+            bindings.RegisterEnum("ImageFormat", new Dictionary<string, string>
+            {
+                ["Png"] = "png", ["WebP"] = "webp", ["Gif"] = "gif", ["Jpeg"] = "jpeg", ["Bmp"] = "bmp",
+            });
             bindings.RegisterObjectSchema("ImageLayer",
             [
                 new("path", "string"), new("frameIndex", "number", true), new("x", "number", true),
@@ -18,7 +22,7 @@ namespace RitsukageGif.Scripting
             bindings.RegisterObjectSchema("ImageCompositionOptions",
             [
                 new("width", "number"), new("height", "number"), new("layers", "ImageLayer[]", true),
-                new("background", "string", true), new("format", "MediaFormat", true),
+                new("background", "string", true), new("format", "ImageFormat", true),
                 new("quality", "number", true), new("lossless", "boolean", true), new("overwrite", "boolean", true),
             ]);
             bindings.RegisterObjectSchema("ImageContactSheetOptions",
@@ -29,6 +33,7 @@ namespace RitsukageGif.Scripting
                 new("background", "string", true), new("overwrite", "boolean", true),
             ]);
             var table = bindings.RegisterTable("image");
+            RegisterInpainting(bindings, table, service, root);
             table.Function("compose", async (args, token) =>
                 {
                     var output = (string)args[0]!;

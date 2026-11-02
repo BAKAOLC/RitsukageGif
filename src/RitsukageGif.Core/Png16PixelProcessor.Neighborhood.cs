@@ -98,28 +98,6 @@ namespace RitsukageGif.Core
             }
         }
 
-        public static void Magnify(byte[] target, byte[] original, int width, int height, PixelRect region,
-            double centerX, double centerY, double scale, CancellationToken token = default)
-        {
-            Validate(target, width, height);
-            Validate(original, width, height);
-            if (ReferenceEquals(target, original))
-                throw new ArgumentException("Magnification requires an immutable source.", nameof(original));
-            if (!double.IsFinite(scale) || scale < 1 || !double.IsFinite(centerX) || !double.IsFinite(centerY))
-                throw new ArgumentOutOfRangeException(nameof(scale));
-            var area = Clip(region, width, height);
-            for (var y = area.Y; y < area.Bottom; y++)
-            {
-                token.ThrowIfCancellationRequested();
-                var sy = Math.Clamp((int)Math.Floor(centerY + (y + .5 - centerY) / scale), 0, height - 1);
-                for (var x = area.X; x < area.Right; x++)
-                {
-                    var sx = Math.Clamp((int)Math.Floor(centerX + (x + .5 - centerX) / scale), 0, width - 1);
-                    original.AsSpan((sy * width + sx) * 8, 8).CopyTo(target.AsSpan((y * width + x) * 8, 8));
-                }
-            }
-        }
-
         private static void AdjustColumns(byte[] original, int width, int y, int left, ulong[] columns,
             bool add, CancellationToken token)
         {

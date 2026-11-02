@@ -3,6 +3,8 @@ namespace RitsukageGif.Contracts
     public sealed record ScrollCaptureOptions
     {
         public ScrollCaptureAxis Axis { get; init; }
+        public bool AutoCropOnReverse { get; init; }
+        public bool RetainHdr { get; init; }
         public int LeadingInset { get; init; }
         public int TrailingInset { get; init; }
 

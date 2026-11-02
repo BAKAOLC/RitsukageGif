@@ -15,6 +15,20 @@ namespace RitsukageGif.Core
 
             switch (info)
             {
+                case { Format: "png" or "apng" } when PngAnimation.HasHdrPqMetadata(path, token):
+                {
+                    var hdrIterations = MediaPngCodec.ReadIterations(path);
+                    foreach (var (frame, delay) in PngAnimation.ReadToneMappedFrames(path, token))
+                    {
+                        using var image = CreateSdrImage(frame);
+                        image.AnimationTicksPerSecond = 1000;
+                        image.AnimationDelay = (uint)delay;
+                        image.AnimationIterations = hdrIterations;
+                        Add(image);
+                    }
+
+                    break;
+                }
                 case { Format: "apng" }:
                     foreach (var image in MediaPngCodec.ReadCoalescedFrames(path, info, token)) Add(image);
                     break;
@@ -57,6 +71,7 @@ namespace RitsukageGif.Core
         {
             token.ThrowIfCancellationRequested();
             var path = Path.Combine(_directory, Guid.NewGuid().ToString("N") + ".png");
+            ImageCompositionService.NormalizeSdrWorkingImage(image);
             image.ResetPage();
             image.Write(path, MagickFormat.Png32);
             token.ThrowIfCancellationRequested();
@@ -149,7 +164,7 @@ namespace RitsukageGif.Core
         public void Overlay(IEnumerable<int> indices, string overlayPng, int x = 0, int y = 0,
             CancellationToken token = default)
         {
-            using var overlay = new MagickImage(overlayPng);
+            using var overlay = ReadEditingImage(overlayPng, token);
             // Edit invokes the callback synchronously before the overlay is disposed.
             // ReSharper disable once AccessToDisposedClosure
             Edit(indices, image => image.Composite(overlay, x, y, CompositeOperator.Over), token);
@@ -158,7 +173,7 @@ namespace RitsukageGif.Core
         public void ReplaceFrames(IEnumerable<int> indices, byte[] png, CancellationToken token = default)
         {
             ThrowIfDisposed();
-            using var replacement = new MagickImage(png);
+            using var replacement = ReadEditingImage(png, token);
             if (replacement.Width != Width || replacement.Height != Height)
                 throw new ArgumentException(null, nameof(png));
             // Edit invokes the callback synchronously before the replacement is disposed.

@@ -1,6 +1,7 @@
 Fluent UI System Icons
 Source: https://github.com/microsoft/fluentui-system-icons
 Revision: 64e5aa757d1b70c24a283256ddcb8269d0f58773
+Additional icons (Table, Math Formula, Document PDF, Print, Wand, Speaker 2, Record Stop): 9eb184e96268d3293462f9d9d19225b4c7b07774
 
 MIT License
 

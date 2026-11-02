@@ -14,6 +14,7 @@ namespace RitsukageGif.Core
             var width = images.Max(image => Math.Max(image.Width, image.Page.Width));
             var height = images.Max(image => Math.Max(image.Height, image.Page.Height));
             using var canvas = new MagickImage(background ?? MagickColors.Transparent, width, height);
+            InitializeCanvasColor(canvas, images[0]);
             canvas.SetArtifact("compose:outside-overlay", "false");
             using var complete = new MagickImageCollection();
             foreach (var frame in images)

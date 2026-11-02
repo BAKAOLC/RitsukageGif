@@ -6,5 +6,6 @@ namespace RitsukageGif.Contracts
         Jpeg,
         Bmp,
         WebP,
+        Avif,
     }
 }

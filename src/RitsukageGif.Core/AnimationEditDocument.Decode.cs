@@ -7,7 +7,7 @@ namespace RitsukageGif.Core
     // ReSharper disable once ClassCannotBeInstantiated
     public sealed partial class AnimationEditDocument
     {
-        private static IEnumerable<IMagickImage<byte>> ReadAnimationFrames(string path, MediaInfo info,
+        internal static IEnumerable<IMagickImage<byte>> ReadAnimationFrames(string path, MediaInfo info,
             CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

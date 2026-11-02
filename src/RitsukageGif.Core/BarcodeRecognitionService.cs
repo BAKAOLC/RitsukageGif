@@ -1,6 +1,4 @@
-using System.Text;
 using ImageMagick;
-using ZXing;
 
 namespace RitsukageGif.Core
 {
@@ -11,13 +9,8 @@ namespace RitsukageGif.Core
         private static readonly ILogger Logger = LogHub.GetLogger("Core.Recognition");
         private static readonly SemaphoreSlim Gate = new(2);
 
-        static BarcodeRecognitionService()
-        {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        }
-
         /// <summary>
-        ///     Recognizes codes on a worker thread. Points identify decoder features, not the complete symbol boundary.
+        ///     Recognizes codes on a worker thread. Points and Outline identify the complete symbol boundary.
         ///     Cancellation is checked between decoder calls; an in-progress ZXing call is not interruptible.
         /// </summary>
         public Task<IReadOnlyList<BarcodeRecognitionResult>> RecognizeAsync(CapturedFrame frame,
@@ -26,7 +19,8 @@ namespace RitsukageGif.Core
             ArgumentNullException.ThrowIfNull(frame);
             ValidateDimensions(frame.Width, frame.Height);
             if (frame.PixelFormat != CapturePixelFormat.Bgra8Srgb || !Enum.IsDefined(frame.AlphaMode) ||
-                frame.Stride < (long)frame.Width * 4 || frame.Pixels.Length < (long)frame.Stride * frame.Height)
+                frame.Stride < (long)frame.Width * 4 ||
+                frame.Pixels.Length < (long)frame.Stride * (frame.Height - 1) + (long)frame.Width * 4)
                 throw new ArgumentException(null, nameof(frame));
             return Run(() => Recognize(ToLuminance(frame, token), frame.Width, frame.Height, token), token);
         }
@@ -119,29 +113,6 @@ namespace RitsukageGif.Core
             }
 
             return result;
-        }
-
-        private static BarcodeReaderGeneric CreateReader(bool qrOnly)
-        {
-            return new()
-            {
-                AutoRotate = false,
-                Options = new()
-                {
-                    TryHarder = true,
-                    TryInverted = true,
-                    PossibleFormats = qrOnly
-                        ? [BarcodeFormat.QR_CODE]
-                        :
-                        [
-                            BarcodeFormat.DATA_MATRIX, BarcodeFormat.AZTEC, BarcodeFormat.PDF_417,
-                            BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.CODE_93,
-                            BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-                            BarcodeFormat.ITF, BarcodeFormat.CODABAR, BarcodeFormat.RSS_14,
-                            BarcodeFormat.RSS_EXPANDED,
-                        ],
-                },
-            };
         }
     }
 }

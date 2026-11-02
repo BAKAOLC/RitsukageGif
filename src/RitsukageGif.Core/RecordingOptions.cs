@@ -10,14 +10,19 @@ namespace RitsukageGif.Core
         bool UseFfmpeg = false,
         bool Transparent = false)
     {
-        public int Width => Math.Max(1, Region.Width / Divisor);
-        public int Height => Math.Max(1, Region.Height / Divisor);
+        public double PixelDensity { get; init; } = 1;
+
+        public int Width => Math.Max(1, checked((int)Math.Ceiling(Region.Width * PixelDensity)) / Divisor);
+        public int Height => Math.Max(1, checked((int)Math.Ceiling(Region.Height * PixelDensity)) / Divisor);
 
         public void Validate()
         {
-            if (Region.IsEmpty || Fps is < 1 or > 100 || Divisor is < 1 or > 100)
+            if (Region.IsEmpty || Fps is < 1 or > 100 || Divisor is < 1 or > 100 ||
+                !double.IsFinite(PixelDensity) || PixelDensity <= 0)
                 throw new ArgumentException(UiText.Get("InvalidRecording"));
-            if (Width > 65535 || Height > 65535 || (long)Width * Height > 64 * 1024 * 1024)
+            if (Region.Width * PixelDensity > (long)65535 * Divisor ||
+                Region.Height * PixelDensity > (long)65535 * Divisor ||
+                Width > 65535 || Height > 65535 || (long)Width * Height > 64 * 1024 * 1024)
                 throw new ArgumentException(UiText.Get("RecordingTooLarge"));
         }
     }

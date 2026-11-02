@@ -7,6 +7,18 @@ namespace RitsukageGif.Core
         public static bool HasHdrPqMetadata(string path, CancellationToken token = default)
         {
             using var source = File.OpenRead(path);
+            return HasHdrPqMetadata(source, token);
+        }
+
+        public static bool HasHdrPqMetadata(byte[] png, CancellationToken token = default)
+        {
+            using var source = new MemoryStream(png, false);
+            return HasHdrPqMetadata(source, token);
+        }
+
+        private static bool HasHdrPqMetadata(Stream source, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
             Span<byte> prefix = stackalloc byte[8];
             Span<byte> color = stackalloc byte[4];
             if (source.Read(prefix) != 8 || !prefix.SequenceEqual(Signature)) return false;
@@ -33,6 +45,12 @@ namespace RitsukageGif.Core
         // The original high-depth PNG payload is preserved; no Q8 image decoding occurs here.
         public static IEnumerable<EncodedPngFrame> ReadEncodedFrames(string path, CancellationToken token = default)
         {
+            return ReadEncodedFramesCore(path, true, token);
+        }
+
+        private static IEnumerable<EncodedPngFrame> ReadEncodedFramesCore(string path, bool previewDelay,
+            CancellationToken token)
+        {
             using var source = File.OpenRead(path);
             source.Position = 8;
             byte[] header = [];
@@ -45,6 +63,14 @@ namespace RitsukageGif.Core
                     case "IHDR": header = chunk.Data.ToArray(); break;
                     case "PLTE":
                     case "tRNS":
+                    case "iCCP":
+                    case "gAMA":
+                    case "cHRM":
+                    case "sRGB":
+                    case "cICP":
+                    case "sBIT":
+                    case "pHYs":
+                    case "bKGD":
                         if (shared.Any(item => item.Type == chunk.Type)) throw new InvalidDataException();
                         shared.Add((chunk.Type, chunk.Data.ToArray()));
                         break;
@@ -89,9 +115,13 @@ namespace RitsukageGif.Core
                 if (denominator == 0) denominator = 100;
                 var delay = control is null
                     ? 100
-                    : (int)(BinaryPrimitives.ReadUInt16BigEndian(control.AsSpan(20)) * 1000L / denominator);
+                    : previewDelay
+                        ? (int)(BinaryPrimitives.ReadUInt16BigEndian(control.AsSpan(20)) * 1000L / denominator)
+                        : checked((int)Math.Round(BinaryPrimitives.ReadUInt16BigEndian(control.AsSpan(20)) * 1000d /
+                                                  denominator));
                 compressed.SetLength(0);
-                return new(png.ToArray(), width, height, region, Math.Max(10, delay), control?[24] ?? 0,
+                return new(png.ToArray(), width, height, region, Math.Max(previewDelay ? 10 : 1, delay),
+                    control?[24] ?? 0,
                     control?[25] ?? 0, poster);
             }
         }

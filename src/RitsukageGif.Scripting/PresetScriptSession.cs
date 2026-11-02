@@ -17,7 +17,16 @@ namespace RitsukageGif.Scripting
         IVideoRecordingService? videoService = null,
         ITextRecognitionService? textRecognitionService = null,
         IBarcodeRecognitionService? barcodeRecognitionService = null,
-        IPrivacyDetectionService? privacyService = null)
+        IPrivacyDetectionService? privacyService = null,
+        IDocumentOutputService? documentService = null,
+        ITableRecognitionService? tableService = null,
+        IFormulaRecognitionService? formulaService = null,
+        IFormulaOutputService? formulaOutputService = null,
+        ITableOutputService? tableOutputService = null,
+        IFormulaDocumentService? formulaDocumentService = null,
+        ITableDataService? tableDataService = null,
+        ITableEditService? tableEditService = null,
+        bool manageRecordingLifecycle = true)
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Scripting.Session");
         private readonly ConcurrentQueue<string> _events = new();
@@ -36,7 +45,7 @@ namespace RitsukageGif.Scripting
         public ScriptParameters Parameters { get; } = parameters ?? new ScriptParameters();
         internal IInputChannelReader? InputReader { get; } = inputReader;
         public string? LastError { get; private set; }
-        private ScriptDiagnostic? LastDiagnostic { get; set; }
+        public ScriptDiagnostic? LastDiagnostic { get; private set; }
         private IReadOnlyList<ScriptStackFrame>? LastStackFrames { get; set; }
 
         public void Signal(string name)
@@ -61,9 +70,9 @@ namespace RitsukageGif.Scripting
                     LastStackFrames = _engine?.FailureFrames;
                     Logger.ZLogWarning(
                         $"Script session returned an error result. Line={LastDiagnostic.Line} Column={LastDiagnostic.Column}");
-                    await ExecuteActionAsync(new("cancel"));
+                    if (manageRecordingLifecycle) await ExecuteActionAsync(new("cancel"));
                 }
-                else if (!_recordingEnded)
+                else if (manageRecordingLifecycle && !_recordingEnded)
                 {
                     await ExecuteActionAsync(new("stop"));
                 }
@@ -71,7 +80,7 @@ namespace RitsukageGif.Scripting
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
                 Logger.ZLogInformation($"Script session canceled.");
-                await ExecuteActionAsync(new("cancel"));
+                if (manageRecordingLifecycle) await ExecuteActionAsync(new("cancel"));
             }
             catch (Exception ex)
             {
@@ -86,7 +95,7 @@ namespace RitsukageGif.Scripting
                 LastStackFrames = (ex as ScriptExecutionException)?.Frames;
                 Logger.ZLogError(
                     $"Script session failed. ExceptionType={ex.GetType().Name} Line={LastDiagnostic.Line} Column={LastDiagnostic.Column} StackTrace={ex.StackTrace}");
-                await ExecuteActionAsync(new("cancel"));
+                if (manageRecordingLifecycle) await ExecuteActionAsync(new("cancel"));
             }
             finally
             {

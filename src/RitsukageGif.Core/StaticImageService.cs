@@ -86,6 +86,7 @@ namespace RitsukageGif.Core
                 ".jpg" or ".jpeg" => StaticImageFormat.Jpeg,
                 ".bmp" => StaticImageFormat.Bmp,
                 ".webp" => StaticImageFormat.WebP,
+                ".avif" => StaticImageFormat.Avif,
                 _ => throw new ArgumentOutOfRangeException(nameof(output)),
             };
             if (!Enum.IsDefined(format) || options.Quality is < 0 or > 100)
@@ -97,7 +98,7 @@ namespace RitsukageGif.Core
             image.Quality = format switch
             {
                 StaticImageFormat.Jpeg => (uint)Math.Max(1, options.Quality),
-                StaticImageFormat.WebP => (uint)options.Quality,
+                StaticImageFormat.WebP or StaticImageFormat.Avif => (uint)options.Quality,
                 _ => 90,
             };
             if (format is StaticImageFormat.Jpeg or StaticImageFormat.Bmp)
@@ -124,6 +125,7 @@ namespace RitsukageGif.Core
                     StaticImageFormat.Png => MagickFormat.Png32,
                     StaticImageFormat.Jpeg => MagickFormat.Jpeg,
                     StaticImageFormat.WebP => MagickFormat.WebP,
+                    StaticImageFormat.Avif => MagickFormat.Avif,
                     _ => MagickFormat.Bmp3,
                 });
                 token.ThrowIfCancellationRequested();

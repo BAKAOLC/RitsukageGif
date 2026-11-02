@@ -26,7 +26,7 @@ namespace RitsukageGif.Core
                 }
             }
 
-            return new(pixels, width, height);
+            return new(pixels, width, height) { Hdr = _options.RetainHdr ? ExportHdr(width, height, token) : null };
         }
     }
 }

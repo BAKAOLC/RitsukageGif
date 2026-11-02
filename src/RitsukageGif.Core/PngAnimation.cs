@@ -44,9 +44,21 @@ namespace RitsukageGif.Core
         public static IEnumerable<MagickImage> ReadFrames(string path, CancellationToken token = default)
         {
             using var source = File.OpenRead(path);
+            foreach (var frame in ReadFrames(source, token)) yield return frame;
+        }
+
+        internal static IEnumerable<MagickImage> ReadFrames(byte[] png, CancellationToken token)
+        {
+            using var source = new MemoryStream(png, false);
+            foreach (var frame in ReadFrames(source, token)) yield return frame;
+        }
+
+        private static IEnumerable<MagickImage> ReadFrames(Stream source, CancellationToken token)
+        {
             source.Position = 8;
             var header = Array.Empty<byte>();
             var shared = new List<(string Type, byte[] Data)>();
+            byte[]? sourceProfile = null;
             byte[]? control = null;
             using var compressed = new MemoryStream();
             foreach (var chunk in ReadFrameChunks(source, token))
@@ -55,6 +67,14 @@ namespace RitsukageGif.Core
                     case "IHDR": header = chunk.Data.ToArray(); break;
                     case "PLTE":
                     case "tRNS":
+                    case "iCCP":
+                    case "gAMA":
+                    case "cHRM":
+                    case "sRGB":
+                    case "cICP":
+                    case "sBIT":
+                    case "pHYs":
+                    case "bKGD":
                         if (shared.Any(existing => existing.Type == chunk.Type)) throw new InvalidDataException();
                         shared.Add((chunk.Type, chunk.Data.ToArray()));
                         break;
@@ -93,6 +113,12 @@ namespace RitsukageGif.Core
                     frame.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
                     png.Position = 0;
                     frame.Read(png);
+                    if (frame.GetColorProfile() is null)
+                    {
+                        sourceProfile ??= CreateFrameProfile(shared, token);
+                        if (sourceProfile.Length != 0) frame.SetProfile(new ColorProfile(sourceProfile));
+                    }
+
                     token.ThrowIfCancellationRequested();
                 }
                 catch
@@ -156,7 +182,9 @@ namespace RitsukageGif.Core
 
                 var maximum = type switch
                 {
-                    "IHDR" => 13, "fcTL" => 26, "PLTE" => 768, "tRNS" => 256, "IEND" => 0, _ => -1,
+                    "IHDR" => 13, "fcTL" => 26, "PLTE" => 768, "tRNS" => 256, "IEND" => 0,
+                    "iCCP" => 4 * 1024 * 1024, "gAMA" => 4, "cHRM" => 32, "sRGB" => 1,
+                    "cICP" => 4, "sBIT" => 4, "pHYs" => 9, "bKGD" => 6, _ => -1,
                 };
                 if (maximum < 0)
                 {
@@ -166,6 +194,7 @@ namespace RitsukageGif.Core
 
                 if (length > maximum || (type is "IHDR" or "fcTL" && length != maximum))
                     throw new InvalidDataException();
+                if (length > buffer.Length) buffer = new byte[length];
                 stream.ReadExactly(buffer.AsSpan(0, length));
                 stream.Position += 4;
                 yield return (type, buffer.AsMemory(0, length));

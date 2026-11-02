@@ -9,7 +9,24 @@
   <ItemGroup><ProjectReference Include="../RitsukageGif.Diagnostics/RitsukageGif.Diagnostics.csproj" />
     <ProjectReference Include="../RitsukageGif.Contracts/RitsukageGif.Contracts.csproj" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="15.0.0" />
-    <PackageReference Include="SkiaSharp" Version="2.88.9" />
-    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="CSharpMath.SkiaSharp" Version="0.5.1" />
   </ItemGroup>
+  <PropertyGroup>
+    <BarcodeRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</BarcodeRuntimeIdentifier>
+    <BarcodeRuntimeIdentifier Condition="'$(BarcodeRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</BarcodeRuntimeIdentifier>
+    <BarcodeNativeDirectory>$(MSBuildThisFileDirectory)../../artifacts/native-barcode/$(BarcodeRuntimeIdentifier)/bin</BarcodeNativeDirectory>
+    <BarcodeNativeFile Condition="$([MSBuild]::IsOSPlatform('Windows'))">RitsukageBarcode.dll</BarcodeNativeFile>
+    <BarcodeNativeFile Condition="$([MSBuild]::IsOSPlatform('Linux'))">libRitsukageBarcode.so</BarcodeNativeFile>
+    <BarcodeNativeFile Condition="$([MSBuild]::IsOSPlatform('OSX'))">libRitsukageBarcode.dylib</BarcodeNativeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="$(BarcodeNativeDirectory)/$(BarcodeNativeFile)" Link="$(BarcodeNativeFile)"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(BarcodeNativeDirectory)/RitsukageBarcode.LICENSE" Link="RitsukageBarcode.LICENSE"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="BuildBarcodeNative" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildThisFileDirectory)../../.github/scripts/build-barcode-native.ps1&quot; -RuntimeIdentifier &quot;$(BarcodeRuntimeIdentifier)&quot;" />
+  </Target>
 </Project>
