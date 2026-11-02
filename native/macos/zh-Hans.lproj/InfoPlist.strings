@@ -1,1 +1,2 @@
 "NSScreenCaptureUsageDescription" = "录制选定的屏幕和窗口。";
+"NSMicrophoneUsageDescription" = "在视频录制中包含麦克风声音。";

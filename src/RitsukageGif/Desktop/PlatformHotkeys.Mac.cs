@@ -8,7 +8,7 @@ namespace RitsukageGif.Desktop
         private const string Carbon = "/System/Library/Frameworks/Carbon.framework/Carbon";
 
         internal static unsafe IDisposable RegisterMac((uint Modifiers, uint Key)[] keys, Action<int> pressed,
-            Action<string> error, Action ready)
+            Action<string> error, Action ready, Action<int, string?>? registrationChanged = null)
         {
             var registered = new List<nint>();
             var failed = false;
@@ -28,6 +28,7 @@ namespace RitsukageGif.Desktop
                     if (code is null)
                     {
                         failed = true;
+                        registrationChanged?.Invoke(i, UiText.Get("HotkeySupported"));
                         error(UiText.Get("HotkeySupported"));
                         continue;
                     }
@@ -39,10 +40,12 @@ namespace RitsukageGif.Desktop
                             target, 0, out var handle) == 0)
                     {
                         registered.Add(handle);
+                        registrationChanged?.Invoke(i, null);
                     }
                     else
                     {
                         failed = true;
+                        registrationChanged?.Invoke(i, UiText.Get("HotkeyOccupied"));
                         error(UiText.Get("HotkeyOccupied"));
                     }
                 }

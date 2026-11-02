@@ -1,12 +1,17 @@
 namespace RitsukageGif.Desktop
 {
-    internal sealed class NativeCaptureSelection(NativeCaptureSession session, long version, CaptureSourceFrame frame)
+    internal sealed class NativeCaptureSelection(
+        NativeCaptureSession session,
+        long version,
+        NativeCaptureSnapshot snapshot)
         : IDisposable
     {
         private readonly Lock _gate = new();
         private NativeCaptureSession? _session = session;
 
-        public CaptureSourceFrame Frame { get; } = frame;
+        public CaptureSourceFrame Frame { get; } = new(snapshot.Frames.Sdr.Width, snapshot.Frames.Sdr.Height,
+                CapturedFramePixels.ToStraightBgra(snapshot.Frames.Sdr), snapshot.Geometry.X, snapshot.Geometry.Y)
+            { CoordinateBounds = snapshot.Geometry.Bounds, PixelDensity = snapshot.Geometry.BackingScale };
 
         public void Dispose()
         {
@@ -18,6 +23,16 @@ namespace RitsukageGif.Desktop
             }
 
             candidate?.Dispose();
+        }
+
+        internal NativeCaptureSnapshot ReadSnapshot(CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            lock (_gate)
+            {
+                ObjectDisposedException.ThrowIf(_session is null, this);
+                return snapshot;
+            }
         }
 
         public void Commit(CancellationToken token = default)

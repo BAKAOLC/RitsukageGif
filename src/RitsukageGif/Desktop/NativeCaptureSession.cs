@@ -7,11 +7,13 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class NativeCaptureSession : IDisposable
     {
+        private static readonly ILogger Logger = LogHub.GetLogger("Desktop.Capture.Native");
         private static readonly SemaphoreSlim SelectionLock = new(1, 1);
         private static readonly Lock SharedLock = new();
         private static NativeCaptureSession? _shared;
         private static long _sharedVersion;
-        private readonly bool _cursor, _window;
+        private readonly bool _cursor, _window, _retainHdr;
+        private readonly string _authorizationId = Guid.NewGuid().ToString("N");
         private readonly TaskCompletionSource _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly int _fps;
         private readonly object _gate = new();
@@ -21,12 +23,25 @@ namespace RitsukageGif.Desktop
         private string _diagnostic = "";
         private bool _disposed;
         private Exception? _failure;
-        private byte[]? _pixels;
-        private int _width, _height, _x, _y;
+        private NativeCapturePacket? _packet;
+        private CapturedFrameSet? _frames;
+        private NativeCaptureGeometry? _geometry, _sourceGeometry;
+        private NativeCaptureCapabilities? _capabilities;
+        private NativeCaptureCursor? _pointer;
+        private byte[]? _cursorPixels;
+        private string? _sourceReason, _hdrReason, _pointerReason;
+        private readonly SemaphoreSlim _commands = new(1, 1);
+        private readonly Dictionary<long, TaskCompletionSource<NativeCaptureMetadata>> _replies = [];
+        private long _nextRequest;
+        private ulong _frameSequence;
+        private readonly long _generation = Interlocked.Increment(ref _generations);
+        private static long _generations;
 
-        private NativeCaptureSession(string mode, bool cursor, int fps, PixelRect? monitor = null, nint window = 0)
+        private NativeCaptureSession(string mode, bool cursor, int fps, PixelRect? monitor = null, nint window = 0,
+            bool retainHdr = false, bool pointerInput = false)
         {
             _cursor = cursor;
+            _retainHdr = retainHdr;
             _window = mode == "window";
             _fps = Math.Clamp(fps, 1, 120);
             var executable = Path.Combine(AppContext.BaseDirectory, "RitsukageGif.Capture");
@@ -40,13 +55,17 @@ namespace RitsukageGif.Desktop
             start.ArgumentList.Add(mode);
             Add("--fps", _fps);
             Add("--cursor", cursor ? 1 : 0);
-            if (monitor is { } bounds)
+            start.ArgumentList.Add("--color");
+            start.ArgumentList.Add(retainHdr ? "hdr" : "sdr");
+            Add("--generation", _generation);
+            if (pointerInput)
             {
-                Add("--x", bounds.X);
-                Add("--y", bounds.Y);
-                Add("--width", bounds.Width);
-                Add("--height", bounds.Height);
+                start.ArgumentList.Add("--input");
+                start.ArgumentList.Add("pointer");
             }
+
+            if (monitor is { } bounds && OperatingSystem.IsMacOS())
+                Add("--id", NativeDisplayCatalog.Resolve(bounds).DisplayId);
 
             if (window != 0)
             {
@@ -55,11 +74,13 @@ namespace RitsukageGif.Desktop
             }
 
             _process = Process.Start(start) ?? throw new IOException(UiText.Get("CaptureFailed"));
+            Logger.ZLogDebug(
+                $"Native capture started. Generation={_generation} Mode={mode} Cursor={cursor} Fps={_fps} RetainHdr={retainHdr} PointerInput={pointerInput}");
             _errors = ReadErrorsAsync();
             _reader = ReadFramesAsync();
             return;
 
-            void Add(string name, int value)
+            void Add(string name, long value)
             {
                 start.ArgumentList.Add(name);
                 start.ArgumentList.Add(value.ToString(CultureInfo.InvariantCulture));
@@ -74,7 +95,7 @@ namespace RitsukageGif.Desktop
                 {
                     if (_shared is not { } session) return null;
                     lock (session._gate)
-                        return session._pixels is null ? null : new PixelRect(0, 0, session._width, session._height);
+                        return session._frames is null ? null : session._sourceGeometry?.Bounds;
                 }
             }
         }
@@ -103,7 +124,9 @@ namespace RitsukageGif.Desktop
                 _disposed = true;
             }
 
+            Logger.ZLogDebug($"Native capture stopping. Generation={_generation}");
             _stop.Cancel();
+            lock (_gate) _nextFrame.TrySetCanceled();
             try
             {
                 _process.StandardInput.Close();
@@ -126,23 +149,27 @@ namespace RitsukageGif.Desktop
             _ = FinishAsync();
         }
 
-        public static NativeCaptureSession CreateScreen(PixelRect monitor, bool cursor, int fps)
+        public static NativeCaptureSession CreateScreen(PixelRect monitor, bool cursor, int fps, bool retainHdr = false)
         {
-            return new("screen", cursor, fps, monitor);
+            return new("screen", cursor, fps, monitor, retainHdr: retainHdr);
         }
 
-        public static NativeCaptureSession CreateWindow(nint window, bool cursor, int fps = 60)
+        public static NativeCaptureSession CreateWindow(nint window, bool cursor, int fps = 60, bool retainHdr = false)
         {
-            return new("window", cursor, fps, window: window);
+            return new("window", cursor, fps, window: window, retainHdr: retainHdr);
         }
 
-        public static void UseSharedFrame(CaptureFrameConsumer consume, CancellationToken token = default)
+        public static NativeCaptureCursorFrame? ReadSharedCursor()
         {
-            token.ThrowIfCancellationRequested();
-            NativeCaptureSession session;
             lock (SharedLock)
-                session = _shared ?? throw new CaptureSourceLostException();
-            session.UseFrame(consume, token);
+            {
+                if (_shared is not { } session) return null;
+                lock (session._gate)
+                    return session._pointer is { } pointer
+                        ? new(pointer,
+                            session._cursorPixels is { } pixels ? (byte[])pixels.Clone() : null)
+                        : null;
+            }
         }
 
         public static void CloseShared()
@@ -158,29 +185,47 @@ namespace RitsukageGif.Desktop
             session?.Dispose();
         }
 
-        public CaptureSourceFrame Read(CancellationToken token = default)
+        private CaptureSourceFrame Read(CancellationToken token = default)
         {
             AwaitFirstFrame(token);
             lock (_gate)
             {
-                token.ThrowIfCancellationRequested();
-                var frame = CurrentFrame();
-                return frame with { Pixels = (byte[])frame.Pixels.Clone() };
+                var value = CurrentFrames();
+                return new(value.Sdr.Width, value.Sdr.Height,
+                        [.. CapturedFramePixels.ToStraightBgra(value.Sdr, token)],
+                        _geometry!.X, _geometry.Y)
+                    { CoordinateBounds = _geometry.Bounds, PixelDensity = _geometry.BackingScale };
             }
         }
 
-        public void UseFrame(CaptureFrameConsumer consume, CancellationToken token = default)
+        private NativeCaptureSnapshot ReadSnapshot(bool requireHdr = false, CancellationToken token = default)
         {
             AwaitFirstFrame(token);
-            // Only synchronous internal consumers may borrow the reader buffer. No pool/shared lock is held here.
             lock (_gate)
             {
                 token.ThrowIfCancellationRequested();
-                var frame = CurrentFrame();
-                consume(
-                    new(frame.Width, frame.Height, frame.OriginX, frame.OriginY,
-                        frame.Pixels.Length), frame.Pixels);
+                var frames = CurrentFrames(requireHdr);
+                return new(frames with { Sdr = Copy(frames.Sdr), Hdr = frames.Hdr is { } hdr ? Copy(hdr) : null },
+                    _geometry!, _pointer, _cursorPixels is { } pixels ? (byte[])pixels.Clone() : null,
+                    _capabilities, _cursor && _capabilities?.SeparateCursor != true);
             }
+        }
+
+        public void UseSnapshot(Action<NativeCaptureSnapshot> consume, bool requireHdr = false,
+            CancellationToken token = default)
+        {
+            AwaitFirstFrame(token);
+            lock (_gate)
+            {
+                token.ThrowIfCancellationRequested();
+                consume(new(CurrentFrames(requireHdr), _geometry!, _pointer, _cursorPixels, _capabilities,
+                    _cursor && _capabilities?.SeparateCursor != true));
+            }
+        }
+
+        private static CapturedFrame Copy(CapturedFrame frame)
+        {
+            return frame with { Pixels = frame.Pixels.ToArray() };
         }
 
         private void AwaitFirstFrame(CancellationToken token)
@@ -205,46 +250,134 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private CaptureSourceFrame CurrentFrame()
+        private CapturedFrameSet CurrentFrames(bool requireHdr = false)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (_failure is not null) ExceptionDispatchInfo.Throw(_failure);
-            if (_pixels is null) throw new CaptureSourceLostException();
-            return new(_width, _height, _pixels, _x, _y);
+            if (_sourceReason is not null) throw new IOException(_sourceReason);
+            if (requireHdr && _hdrReason is not null) throw new NotSupportedException(_hdrReason);
+            return _frames ?? throw new CaptureSourceLostException();
         }
 
         private async Task ReadFramesAsync()
         {
-            var header = new byte[24];
-            byte[]? next = null;
             try
             {
-                var stream = _process.StandardOutput.BaseStream;
+                var reader = new NativeCapturePacketReader(_process.StandardOutput.BaseStream);
                 while (!_stop.IsCancellationRequested)
                 {
-                    await stream.ReadExactlyAsync(header, _stop.Token);
-                    var frame = CaptureFrameHeader.Parse(header);
-                    if (next?.Length != frame.Length) next = new byte[frame.Length];
-                    await stream.ReadExactlyAsync(next, _stop.Token);
-                    lock (_gate)
+                    var packet = await reader.ReadAsync(_stop.Token).ConfigureAwait(false);
+                    var retained = false;
+                    try
                     {
-                        (_pixels, next) = (next, _pixels);
-                        _width = frame.Width;
-                        _height = frame.Height;
-                        _x = frame.OriginX;
-                        _y = frame.OriginY;
-                    }
+                        lock (_gate)
+                        {
+                            var metadata = packet.Metadata;
+                            if (metadata.Capabilities is { } capabilities) _capabilities = capabilities;
+                            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
+                            switch (packet.Kind)
+                            {
+                                case NativeCapturePacketKind.Frame:
+                                case NativeCapturePacketKind.Cursor:
+                                    break;
+                                case NativeCapturePacketKind.Reply:
+                                {
+                                    if (_replies.Remove(metadata.RequestId, out var reply))
+                                        reply.TrySetResult(metadata);
+                                    continue;
+                                }
 
-                    _first.TrySetResult();
+                                case NativeCapturePacketKind.Capabilities:
+                                {
+                                    if (metadata.SourceGeometry is { Width: > 0, Height: > 0 } refreshedSource)
+                                        _sourceGeometry = refreshedSource;
+                                    if (metadata.Reason == "source-suspended") _sourceReason = metadata.Reason;
+                                    if (_retainHdr && metadata.Capabilities is
+                                            { Hdr: false, Reason: { Length: > 0 } unavailable })
+                                        _hdrReason = unavailable;
+                                    if (_replies.Remove(metadata.RequestId, out var reply))
+                                        reply.TrySetResult(metadata);
+                                    continue;
+                                }
+                            }
+
+                            if (metadata.Cursor is { } pointer)
+                            {
+                                _pointer = pointer;
+                                if (!packet.Cursor.IsEmpty) _cursorPixels = packet.Cursor.ToArray();
+                            }
+
+                            if (packet.Kind == NativeCapturePacketKind.Cursor)
+                            {
+                                if (_replies.Remove(metadata.RequestId, out var reply)) reply.TrySetResult(metadata);
+                                continue;
+                            }
+
+                            CapturedFrameSet frames;
+                            try
+                            {
+                                frames = NativeCaptureFrameDecoder.Decode(packet, _stop.Token);
+                            }
+                            catch (NotSupportedException error)
+                            {
+                                _hdrReason = error.Message;
+                                if (metadata.Sdr is not { } low)
+                                {
+                                    _sourceReason = error.Message;
+                                    var previous = _packet;
+                                    _packet = packet;
+                                    _sourceGeometry = metadata.SourceGeometry;
+                                    _geometry = metadata.Geometry;
+                                    retained = true;
+                                    previous?.Dispose();
+                                    _first.TrySetResult();
+                                    continue;
+                                }
+
+                                var sdr = new CapturedFrame(low.Width, low.Height, low.Stride,
+                                    CapturePixelFormat.Bgra8Srgb, packet.Sdr,
+                                    new(low.Color.Hdr, low.Color.SdrWhiteNits),
+                                    low.Alpha switch
+                                    {
+                                        "opaque" => CaptureAlphaMode.Opaque,
+                                        "premultiplied" => CaptureAlphaMode.Premultiplied,
+                                        _ => CaptureAlphaMode.Straight,
+                                    }, (long)packet.Sequence, []);
+                                frames = new(sdr, null, Stopwatch.GetTimestamp());
+                            }
+
+                            if (frames.Hdr is not null) _hdrReason = null;
+                            else if (metadata.Hdr is null && _retainHdr)
+                                _hdrReason = _capabilities?.Reason ?? "The source did not provide an HDR frame.";
+                            var old = _packet;
+                            _packet = packet;
+                            retained = true;
+                            _frames = frames;
+                            _geometry = metadata.Geometry;
+                            _sourceGeometry = metadata.SourceGeometry;
+                            _configurationId = metadata.ConfigurationId;
+                            _frameSequence = packet.Sequence;
+                            var arrived = _nextFrame;
+                            _nextFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                            arrived.TrySetResult();
+                            _sourceReason = null;
+                            old?.Dispose();
+                            _first.TrySetResult();
+                        }
+                    }
+                    finally
+                    {
+                        if (!retained) packet.Dispose();
+                    }
                 }
             }
             catch (Exception error) when (error is IOException or InvalidDataException or OperationCanceledException
-                                              or InvalidOperationException)
+                                              or InvalidOperationException or NotSupportedException)
             {
                 try
                 {
                     if (!_stop.IsCancellationRequested)
-                        await _errors.WaitAsync(TimeSpan.FromMilliseconds(250));
+                        await _errors.WaitAsync(TimeSpan.FromMilliseconds(250)).ConfigureAwait(false);
                 }
                 catch (Exception waitError) when (waitError is TimeoutException or OperationCanceledException)
                 {
@@ -257,7 +390,14 @@ namespace RitsukageGif.Desktop
                 }
 
                 var failure = ClassifyFailure(error);
-                lock (_gate) _failure = failure;
+                Logger.ZLogWarning(error, $"Native capture transport failed. Generation={_generation}");
+                lock (_gate)
+                {
+                    _failure = failure;
+                    foreach (var reply in _replies.Values) reply.TrySetException(failure);
+                    _replies.Clear();
+                }
+
                 _first.TrySetException(failure);
             }
         }
@@ -303,7 +443,22 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
+                lock (_gate)
+                {
+                    _packet?.Dispose();
+                    _packet = null;
+                    foreach (var reply in _replies.Values) reply.TrySetCanceled();
+                    _replies.Clear();
+                }
+
                 _process.Dispose();
+
+                await _commands.WaitAsync().ConfigureAwait(false);
+                _commands.Release();
+                _commands.Dispose();
+                await _configurationGate.WaitAsync().ConfigureAwait(false);
+                _configurationGate.Release();
+                _configurationGate.Dispose();
                 _stop.Dispose();
             }
         }

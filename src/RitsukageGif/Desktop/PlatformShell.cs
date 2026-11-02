@@ -21,8 +21,15 @@ namespace RitsukageGif.Desktop
             Process.Start(start)?.Dispose();
         }
 
-        public static void RevealFile(string path)
+        public static async Task RevealFileAsync(string path)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            if (OperatingSystem.IsLinux())
+            {
+                await LinuxFileReveal.RevealAsync(Path.GetFullPath(path));
+                return;
+            }
+
             var start = new ProcessStartInfo { UseShellExecute = false };
             if (OperatingSystem.IsWindows())
             {

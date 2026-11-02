@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace RitsukageGif.Desktop
 {
-    internal static class MacWindowSystem
+    internal static partial class MacWindowSystem
     {
         private static readonly Lock Sync = new();
         private static Process? _server;

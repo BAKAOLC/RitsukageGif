@@ -1,1 +1,2 @@
 "NSScreenCaptureUsageDescription" = "Record selected screens and windows.";
+"NSMicrophoneUsageDescription" = "Include microphone audio in your video recordings.";

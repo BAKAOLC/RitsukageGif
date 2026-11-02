@@ -215,7 +215,6 @@ namespace RitsukageGif.Desktop
             {
                 Size size;
                 Check(((delegate* unmanaged[Stdcall]<nint, Size*, int>)Vtable(frame)[8])(frame, &size));
-                if (size.Width <= 0 || size.Height <= 0) throw new CaptureSourceLostException();
                 ValidateSize(size);
                 var resized = size.Width != _size.Width || size.Height != _size.Height;
 
@@ -349,7 +348,8 @@ namespace RitsukageGif.Desktop
 
         private static void ValidateSize(Size size)
         {
-            if (size.Width <= 0 || size.Height <= 0 || (long)size.Width * size.Height > 64 * 1024 * 1024)
+            if (size.Width <= 0 || size.Height <= 0) throw new CaptureSourceLostException();
+            if ((long)size.Width * size.Height > 64 * 1024 * 1024)
                 throw new InvalidOperationException(UiText.Get("RecordingTooLarge"));
         }
 

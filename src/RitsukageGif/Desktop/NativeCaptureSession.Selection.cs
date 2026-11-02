@@ -2,13 +2,14 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class NativeCaptureSession
     {
-        public static async Task<NativeCaptureSelection> BeginSelectionAsync(bool window, CancellationToken token,
-            bool cursor = true, int fps = 60)
+        public static async Task<NativeCaptureSelection> BeginSelectionAsync(bool window, bool cursor = true,
+            int fps = 60, bool retainHdr = false,
+            CancellationToken token = default)
         {
             await SelectionLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                return await CreateSelectionAsync(window, cursor, fps, token).ConfigureAwait(false);
+                return await CreateSelectionAsync(window, cursor, fps, retainHdr, token).ConfigureAwait(false);
             }
             finally
             {
@@ -16,19 +17,23 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public static async Task<CaptureSourceFrame> PrepareAsync(bool window, CancellationToken token,
-            bool cursor = true, int fps = 60)
+        public static async Task<CaptureSourceFrame> PrepareAsync(bool window, bool cursor = true, int fps = 60,
+            bool retainHdr = false,
+            CancellationToken token = default)
         {
             await SelectionLock.WaitAsync(token).ConfigureAwait(false);
             try
             {
                 NativeCaptureSession? current;
                 lock (SharedLock) current = _shared;
-                if (current is not null && current._cursor == cursor && current._fps >= fps
-                    && current._window == window && current.IsAvailable)
+                if (current is not null &&
+                    (current._cursor == cursor || current._capabilities is { SeparateCursor: true }) &&
+                    current._fps >= fps
+                    && current._window == window && current._retainHdr == retainHdr && current.IsAvailable)
                     return current.Read(token);
 
-                using var selection = await CreateSelectionAsync(window, cursor, fps, token).ConfigureAwait(false);
+                using var selection =
+                    await CreateSelectionAsync(window, cursor, fps, retainHdr, token).ConfigureAwait(false);
                 selection.Commit(token);
                 return selection.Frame;
             }
@@ -39,6 +44,7 @@ namespace RitsukageGif.Desktop
         }
 
         private static async Task<NativeCaptureSelection> CreateSelectionAsync(bool window, bool cursor, int fps,
+            bool retainHdr,
             CancellationToken token)
         {
             if (!DesktopCapture.UsesSourceSelection)
@@ -46,11 +52,13 @@ namespace RitsukageGif.Desktop
             long version;
             lock (SharedLock) version = _sharedVersion;
             token.ThrowIfCancellationRequested();
-            var session = new NativeCaptureSession(window ? "window" : "screen", cursor, fps);
+            var session = new NativeCaptureSession(window ? "window" : "screen", cursor, fps, retainHdr: retainHdr);
             try
             {
                 await session._first.Task.WaitAsync(TimeSpan.FromSeconds(155), token).ConfigureAwait(false);
-                return new(session, version, session.Read(token));
+                var frame = session.ReadSnapshot(token: token);
+                await session.SuspendWhenIdleAsync(token).ConfigureAwait(false);
+                return new(session, version, frame);
             }
             catch (Exception error)
             {
