@@ -60,6 +60,7 @@ namespace RitsukageGif.Desktop
         {
             _hdrPreviewWork?.Cancel();
             if (TryRefreshAnimationHdr()) return;
+            if (TryRefreshLiveHdr()) return;
             if (_hdrPreview is null || _hdrSource is not { } source || _annotation is not null ||
                 _selectedTextStart >= 0) return;
             var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
@@ -127,7 +128,9 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
-                return new(sdr, region.Width, region.Height, 0, hdr);
+                return new(sdr, region.Width, region.Height, 0, hdr,
+                    source.ColorInfo.SdrWhiteNits / FrameColorInfo.ScRgbReferenceWhiteNits,
+                    source.AlphaMode == CaptureAlphaMode.Straight ? CaptureAlphaMode.Opaque : source.AlphaMode);
             }
             catch
             {

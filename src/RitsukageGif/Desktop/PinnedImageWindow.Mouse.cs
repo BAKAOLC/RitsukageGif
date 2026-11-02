@@ -19,6 +19,7 @@ namespace RitsukageGif.Desktop
         private readonly MouseGestureTracker _mouseGesture = new();
         private readonly HashSet<MouseButton> _pressedButtons = [];
         private MouseAction? _activeDragAction;
+        private PointerPressedEventArgs? _dragTrigger;
         private bool _adjustingWindow;
         private int _dragHorizontalEdge, _dragVerticalEdge;
         private Point _dragStartImage;
@@ -55,6 +56,7 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
+                _dragTrigger = args;
                 _dragStartScreen = image.PointToScreen(args.GetPosition(image));
                 _dragStartImage = args.GetPosition(image);
                 _dragStartPosition = Position;
@@ -76,7 +78,7 @@ namespace RitsukageGif.Desktop
                                                                    candidate.Gesture.Kind != MouseGestureKind.None);
                     var blocked = horizontal == 0 && vertical == 0
                         ? IsInteractionLocked
-                        : IsOperationLocked(PinnedLockedOperations.Resize);
+                        : IsOperationLocked(PinnedLockRestrictions.Move);
                     image.Cursor = _regionSelectionMode
                         ? RegionSelectionCursor
                         : blocked || !canAdjust
@@ -126,9 +128,9 @@ namespace RitsukageGif.Desktop
                     case MouseAction.MoveWindow or MouseAction.MoveWindowIgnoringText when
                         _dragHorizontalEdge == 0 && _dragVerticalEdge == 0
                             ? IsInteractionLocked
-                            : IsOperationLocked(PinnedLockedOperations.Resize):
+                            : IsOperationLocked(PinnedLockRestrictions.Move):
                     case MouseAction.SelectThumbnailRegion or MouseAction.MoveThumbnailRegion when
-                        IsOperationLocked(PinnedLockedOperations.Resize):
+                        IsOperationLocked(PinnedLockRestrictions.Move):
                         return;
                 }
 
@@ -154,7 +156,7 @@ namespace RitsukageGif.Desktop
 
                         break;
                     case MouseAction.DragContent:
-                        _ = RunAsync(() => DragContentAsync(args));
+                        if (_dragTrigger is { } trigger) _ = RunAsync(() => DragContentAsync(trigger));
                         break;
                 }
             };
@@ -172,6 +174,7 @@ namespace RitsukageGif.Desktop
 
                 if (_activeDragAction == MouseAction.SelectThumbnailRegion) FinishRegionDrag(args.GetPosition(image));
                 _activeDragAction = null;
+                _dragTrigger = null;
                 args.Pointer.Capture(null);
                 _adjustingWindow = false;
                 args.Handled = true;
@@ -179,7 +182,8 @@ namespace RitsukageGif.Desktop
                         out var binding)) return;
                 var point = args.GetPosition(this);
                 _mouseClicks.Dispatch(binding!, MouseBindings, () => ExecuteMouseGesture(gesture, point, 1, menu),
-                    PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ?? TimeSpan.FromMilliseconds(500),
+                    Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
+                    TimeSpan.FromMilliseconds(500),
                     CanExecuteMouseCommand);
             };
             image.PointerCaptureLost += (_, _) =>
@@ -189,6 +193,7 @@ namespace RitsukageGif.Desktop
                 _mouseGesture.Reset();
                 _adjustingWindow = false;
                 _activeDragAction = null;
+                _dragTrigger = null;
                 if (_regionOutline is not null) _content.Children.Remove(_regionOutline);
             };
             image.PointerWheelChanged += (_, args) =>
@@ -211,7 +216,7 @@ namespace RitsukageGif.Desktop
 
         private (int Horizontal, int Vertical) GetResizeEdges(Point point)
         {
-            if (!CurrentPreferences.ResizeFromBorder || IsOperationLocked(PinnedLockedOperations.Resize)) return (0, 0);
+            if (!CurrentPreferences.ResizeFromBorder || IsOperationLocked(PinnedLockRestrictions.Move)) return (0, 0);
             const double margin = 8;
             return (point.X < margin ? -1 : point.X > Width - margin ? 1 : 0,
                 point.Y < margin ? -1 : point.Y > Height - margin ? 1 : 0);
@@ -221,7 +226,7 @@ namespace RitsukageGif.Desktop
         {
             if (_dragHorizontalEdge == 0 && _dragVerticalEdge == 0
                     ? IsInteractionLocked
-                    : IsOperationLocked(PinnedLockedOperations.Resize)) return;
+                    : IsOperationLocked(PinnedLockRestrictions.Move)) return;
             var dx = pointer.X - _dragStartScreen.X;
             var dy = pointer.Y - _dragStartScreen.Y;
             if (_dragHorizontalEdge == 0 && _dragVerticalEdge == 0)
@@ -256,7 +261,7 @@ namespace RitsukageGif.Desktop
         private async Task CopyAndCloseAsync()
         {
             await CopyAsync();
-            if (!_closed && !IsCloseLocked) Close();
+            if (!_closed) RequestClose();
         }
 
         private bool CanExecuteMouseCommand()
@@ -272,6 +277,7 @@ namespace RitsukageGif.Desktop
 
         private bool ExecuteMouseGesture(InputMouseGesture gesture, Point point, double amount, ContextMenu menu)
         {
+            using var input = PinnedInputContext.Use(PinnedInputContext.Current | PinnedInputOrigin.Pointer);
             if (!MouseCommands.TryResolve(MouseGestureContext.Pinned, gesture, MouseBindings, out var binding))
                 return false;
             // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
@@ -284,26 +290,26 @@ namespace RitsukageGif.Desktop
                 case MouseAction.Close: RequestClose(); break;
                 case MouseAction.Destroy: RequestClose(true); break;
                 case MouseAction.ToggleThumbnail
-                    when !IsOperationLocked(PinnedLockedOperations.Resize): ToggleThumbnail(); break;
+                    when !IsOperationLocked(PinnedLockRestrictions.Move): ToggleThumbnail(); break;
                 case MouseAction.CopyRecognizedText: _ = RunAsync(CopyRecognizedTextAsync); break;
                 case MouseAction.ToggleAnnotationToolbar: _ = RunAsync(ToggleAnnotationToolbarAsync); break;
                 case MouseAction.ToggleSelection: SelectionRequested?.Invoke(this); break;
-                case MouseAction.ContextMenu: menu.Open(_content); break;
+                case MouseAction.ContextMenu: Presentation.OpenMenu(menu, _content); break;
                 case MouseAction.ActualSize
-                    when !IsOperationLocked(PinnedLockedOperations.Resize): ResizeAt(point, 1); break;
-                case MouseAction.Zoom when !IsOperationLocked(PinnedLockedOperations.Resize):
+                    when !IsOperationLocked(PinnedLockRestrictions.Move): ResizeAt(point, 1); break;
+                case MouseAction.Zoom when !IsOperationLocked(PinnedLockRestrictions.Move):
                     if (_isThumbnail && !CurrentPreferences.ThumbnailWheelZoom) return false;
                     ResizeAt(ZoomAnchor(point, CurrentPreferences.WheelZoomAnchor),
                         _zoom * Math.Pow(1 + CurrentPreferences.ZoomStep, amount));
                     break;
-                case MouseAction.FineZoom when !IsOperationLocked(PinnedLockedOperations.Resize):
+                case MouseAction.FineZoom when !IsOperationLocked(PinnedLockRestrictions.Move):
                     if (_isThumbnail && !CurrentPreferences.ThumbnailWheelZoom) return false;
                     ResizeAt(ZoomAnchor(point, CurrentPreferences.WheelZoomAnchor),
                         _zoom * Math.Pow(1 + CurrentPreferences.FineZoomStep, amount));
                     break;
                 case MouseAction.AdjustOpacity:
                     Opacity = Math.Clamp(Opacity + amount * CurrentPreferences.OpacityStep, 0.15, 1); break;
-                case MouseAction.Reset when !IsOperationLocked(PinnedLockedOperations.Resize): ResetImage(point); break;
+                case MouseAction.Reset when !IsOperationLocked(PinnedLockRestrictions.Move): ResetImage(point); break;
                 default: return false;
             }
 

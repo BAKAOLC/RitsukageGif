@@ -4,10 +4,10 @@ namespace RitsukageGif.Desktop
     internal sealed partial class PinnedImageWindow
     {
         public Func<OutputColorMode> OutputColorModeProvider { get; set; } = () => OutputColorMode.Sdr;
-        internal bool CanSaveSelection => !_closed && _annotation is null;
-        internal CancellationToken OutputLifetime => _lifetime.Token;
+        private bool CanSaveSelection => !_closed && _annotation is null && LiveSourceReady;
+        private CancellationToken OutputLifetime => _lifetime.Token;
 
-        internal Task CompleteSelectionSaveAsync(IReadOnlyList<string> paths, ScreenshotSaveProfile profile,
+        private Task CompleteSelectionSaveAsync(IReadOnlyList<string> paths, ScreenshotSaveProfile profile,
             ScreenshotResult output)
         {
             return ScreenshotSaveCompletion.RunAsync(paths, profile, Clipboard, StorageProvider,
@@ -20,6 +20,7 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_closed, this);
             if (_annotation is not null) return ComposeOutputAsync(mode, token);
+            if (CaptureLiveOutputAsync(mode, token) is { } live) return live;
             if (CaptureAnimationFrameAsync(mode, token) is { } animation) return animation;
             var png = _hdrSource is null ? _png : _sdrPng ?? _png;
             var hdr = _hdrSource;
@@ -60,7 +61,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 var png = await session.ComposeAsync(session.Selection, source, token);
-                if (hdr is not null && session.HasAnnotations)
+                if (mode != OutputColorMode.Sdr && hdr is not null && session.HasAnnotations)
                     hdr = await session.ComposeHdrAsync(session.Selection, hdr, token: token);
                 return CreateOutput(png, hdr, mode, captureScaling);
             }

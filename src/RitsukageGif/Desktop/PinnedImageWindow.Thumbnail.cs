@@ -23,30 +23,34 @@ namespace RitsukageGif.Desktop
 
         private void ToggleThumbnail()
         {
-            if (IsOperationLocked(PinnedLockedOperations.Resize) || _annotation is not null) return;
-            _thumbnailRegion ??= new(0, 0, Math.Min(160, (int)_bitmap.Size.Width),
-                Math.Min(160, (int)_bitmap.Size.Height));
-            _isThumbnail = !_isThumbnail;
-            RefreshThumbnail();
+            if (IsOperationLocked(PinnedLockRestrictions.Move) || _annotation is not null) return;
+            var region = _isThumbnail
+                ? new(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height)
+                : InitialQuickThumbnailRegion();
+            ApplyThumbnailView(region, !_isThumbnail);
         }
 
         private void SetThumbnailRegion(PixelRect region)
         {
             region = region.Intersect(new(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height));
             if (region.IsEmpty) return;
-            _thumbnailRegion = region;
-            _isThumbnail = true;
-            RefreshThumbnail();
+            ApplyThumbnailView(region, true, true);
         }
 
-        private void RefreshThumbnail()
+        private void RefreshThumbnail(Vector scrollOffset = default, bool notify = true)
         {
             if (CanSelectImageText) ClearTextSelection();
             else ResetTextRecognition();
             RefreshHdrPreview();
             _viewport.Offset = default;
             UpdateSize();
-            StateChanged?.Invoke(this, EventArgs.Empty);
+            if (scrollOffset != default)
+            {
+                UpdateLayout();
+                _viewport.Offset = scrollOffset;
+            }
+
+            if (notify) StateChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private void BeginRegionDrag(Point point)
@@ -111,6 +115,8 @@ namespace RitsukageGif.Desktop
 
         private async Task<byte[]> CurrentImageAsync()
         {
+            if (CaptureLiveOutputAsync(OutputColorMode.Sdr, _lifetime.Token) is { } live)
+                return (await live).Png;
             if (_annotation is not null) return await ComposeAnnotationAsync();
             if (!_isThumbnail || !CurrentPreferences.CopyVisibleRegion) return _png;
             var region = DisplayRegion;

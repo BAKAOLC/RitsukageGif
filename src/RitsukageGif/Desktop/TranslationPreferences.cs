@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
+using RitsukageGif.SettingsGeneration;
 
 namespace RitsukageGif.Desktop
 {
+    [GenerateSettingsMerge(typeof(AppSettings))]
     public sealed record TranslationPreferences
     {
         public TranslationProvider Provider { get; set; }
@@ -14,6 +16,10 @@ namespace RitsukageGif.Desktop
         public string FallbackLanguage { get; set; } = "en";
         public int TimeoutSeconds { get; set; } = 30;
         public bool UseApiKey { get; set; }
+        public TranslationMode Mode { get; set; }
+        public TranslationImageDisplayMode ImageDisplayMode { get; set; }
+        public bool ShowOriginalText { get; set; } = true;
+        public bool WindowTopmost { get; set; }
 
         internal string CredentialKey => "translation/" + Provider.ToString().ToLowerInvariant() + "/" +
                                          Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Endpoint)));
@@ -30,6 +36,10 @@ namespace RitsukageGif.Desktop
                 FallbackLanguage = FallbackLanguage?.Trim() ?? "",
                 // ReSharper restore ConditionalAccessQualifierIsNonNullableAccordingToAPIContract
                 TimeoutSeconds = Math.Clamp(TimeoutSeconds, 1, 300),
+                Mode = Enum.IsDefined(Mode) ? Mode : TranslationMode.ImageToText,
+                ImageDisplayMode = Enum.IsDefined(ImageDisplayMode)
+                    ? ImageDisplayMode
+                    : TranslationImageDisplayMode.TextAndImage,
             };
         }
 

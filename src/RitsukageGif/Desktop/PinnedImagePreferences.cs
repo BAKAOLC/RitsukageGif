@@ -4,7 +4,21 @@ namespace RitsukageGif.Desktop
     {
         public bool Topmost { get; set; } = true;
         public bool ShowWindowShadow { get; set; } = true;
+        public PinnedTitlePosition TitlePosition { get; set; }
+        public bool HideOthersOnShake { get; set; }
+        public bool KeepOthersHiddenOnNewPin { get; set; }
+        public bool ActivateOnNewPin { get; set; } = true;
+        public bool FlashOnNewPin { get; set; }
+        public bool FlashAfterGroupSwitch { get; set; }
+        public bool TranslucentOnAttention { get; set; } = true;
+        public string ActiveGroup { get; set; } = "";
+
+        // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
+        public List<PinnedGroupDefinition> Groups { get; set; } = [];
         public bool AutoFit { get; set; } = true;
+        public int MaximumWindowSize { get; set; } = PinnedViewportGeometry.DefaultMaximumWindowSize;
+        public int? QuickThumbnailWidth { get; set; }
+        public int? QuickThumbnailHeight { get; set; }
         public double Opacity { get; set; } = 1;
         public double ZoomStep { get; set; } = 0.1;
         public double FineZoomStep { get; set; } = 0.01;
@@ -14,15 +28,13 @@ namespace RitsukageGif.Desktop
         public bool ThumbnailSelectableText { get; set; }
         public bool CopyVisibleRegion { get; set; } = true;
         public PinnedImageOutputContent OutputContent { get; set; }
+        public PinnedReplacementAction ReplacementAction { get; set; }
         public bool ResizeFromBorder { get; set; } = true;
         public bool ThumbnailWheelZoom { get; set; } = true;
         public bool ShowMenuShortcuts { get; set; } = true;
         public bool ShowLockIndicator { get; set; } = true;
 
-        public PinnedLockedOperations LockedOperations { get; set; } = PinnedLockedOperations.Move |
-                                                                       PinnedLockedOperations.Resize |
-                                                                       PinnedLockedOperations.Close |
-                                                                       PinnedLockedOperations.Annotation;
+        public PinnedLockRestrictions LockRestrictions { get; set; }
 
         public bool ShowTaskbarWhenNotTopmost { get; set; } = true;
         public int HistoryLimit { get; set; } = 100;
@@ -30,9 +42,14 @@ namespace RitsukageGif.Desktop
         public PinnedRestoreOrder RestoreOrder { get; set; }
         public PinnedZoomAnchor WheelZoomAnchor { get; set; }
         public PinnedZoomAnchor ResetZoomAnchor { get; set; } = PinnedZoomAnchor.Pointer;
+        public PinnedContentKinds SupportedContentKinds { get; set; } = PinnedContentKinds.All;
 
         public PinnedImagePreferences Normalize()
         {
+            // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+            var groups = (Groups ?? []).Where(item => item is { IsValid: true }).Select(item => item.Normalize())
+                .DistinctBy(item => item.Id, StringComparer.Ordinal)
+                .DistinctBy(item => item.Name, StringComparer.Ordinal).ToList();
             return this with
             {
                 Opacity = double.IsFinite(Opacity) ? Math.Clamp(Opacity, 0.15, 1) : 1,
@@ -42,10 +59,24 @@ namespace RitsukageGif.Desktop
                 MouseThroughOpacity =
                 double.IsFinite(MouseThroughOpacity) ? Math.Clamp(MouseThroughOpacity, 0.15, 1) : 0.5,
                 HistoryLimit = Math.Max(0, HistoryLimit),
+                MaximumWindowSize = Math.Max(0, MaximumWindowSize),
+                QuickThumbnailWidth = QuickThumbnailWidth is { } width ? Math.Max(1, width) : null,
+                QuickThumbnailHeight = QuickThumbnailHeight is { } height ? Math.Max(1, height) : null,
+                TitlePosition = Enum.IsDefined(TitlePosition) ? TitlePosition : PinnedTitlePosition.BottomCenter,
+                ActiveGroup = ActiveGroup is { Length: 0 } || groups.Any(group => group.Id == ActiveGroup)
+                    ? ActiveGroup
+                    : "",
+                Groups = groups,
+                SupportedContentKinds = SupportedContentKinds & PinnedContentKinds.All,
                 OutputContent = Enum.IsDefined(OutputContent) ? OutputContent : PinnedImageOutputContent.Current,
-                LockedOperations = LockedOperations & (PinnedLockedOperations.Move | PinnedLockedOperations.Resize |
-                                                       PinnedLockedOperations.Close | PinnedLockedOperations.Shortcuts |
-                                                       PinnedLockedOperations.Annotation),
+                ReplacementAction = Enum.IsDefined(ReplacementAction)
+                    ? ReplacementAction
+                    : PinnedReplacementAction.KeepSource,
+                LockRestrictions = (LockRestrictions &
+                                    ~(PinnedLockRestrictions.Move | PinnedLockRestrictions.PointerClose |
+                                      PinnedLockRestrictions.KeyboardClose | PinnedLockRestrictions.IncomingDrop)) == 0
+                    ? LockRestrictions
+                    : PinnedLockRestrictions.None,
                 DuplicateBehavior = Enum.IsDefined(DuplicateBehavior)
                     ? DuplicateBehavior
                     : PinnedDuplicateBehavior.FocusExisting,

@@ -23,6 +23,23 @@ namespace RitsukageGif.Desktop
             await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Copy, output);
         }
 
+        private async Task QuickSaveAsync()
+        {
+            var token = _lifetime.Token;
+            var output = await CapturePreferredOutputAsync(OutputColorModeProvider(), token);
+            var profile = SavePreferencesProvider().Normalize().Quick;
+            var dimensions = PngImageCodec.ReadDimensions(output.Png);
+            var size = profile.OutputSize.Resolve(dimensions.Width, dimensions.Height);
+            var name = Path.ChangeExtension(profile.CreateFileName(new ScreenshotNameContext(DateTime.Now,
+                Width: size.Width, Height: size.Height)), profile.DialogExtension(output.ColorMode));
+            var directory = profile.ResolveDirectory(OutputDirectoryProvider() ??
+                                                     Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
+            var saved = await ScreenshotImageStorage.SaveAsync(output, Path.Combine(directory, name), profile, token);
+            SavedPathChanged?.Invoke(saved.Paths[0]);
+            await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Save, output);
+            await CompleteSelectionSaveAsync(saved.Paths, profile, output);
+        }
+
         private async Task CopyImageAsync(ScreenshotResult output, bool forceFile = false)
         {
             PinLogger.ZLogDebug($"Pinned image clipboard operation started.");

@@ -22,17 +22,22 @@ namespace RitsukageGif.Desktop
             else _content.Children.Remove(_selectionOutline);
         }
 
-        private void RequestClose(bool destroy = false)
+        public void DestroyForGroup()
         {
-            if (IsCloseLocked) return;
-            if (CloseRequested is { } request) request(this, destroy);
-            else CloseImage(destroy);
+            WasDestroyed = true;
+            Close();
         }
 
         public void CloseImage(bool destroy)
         {
             WasDestroyed = destroy;
             Close();
+        }
+
+        private void RequestClose(bool destroy = false)
+        {
+            if (CloseRequested is { } request) request(this, destroy);
+            else if (!IsCloseLocked) CloseImage(destroy);
         }
 
         private void NudgeWindow(int dx, int dy)

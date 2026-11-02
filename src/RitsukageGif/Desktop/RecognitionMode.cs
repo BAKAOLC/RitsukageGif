@@ -4,5 +4,7 @@ namespace RitsukageGif.Desktop
     {
         Text,
         Barcode,
+        Table,
+        Formula,
     }
 }

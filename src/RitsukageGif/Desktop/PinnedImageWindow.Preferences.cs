@@ -11,13 +11,15 @@ namespace RitsukageGif.Desktop
     {
         private Border? _lockIndicator;
 
-        private bool IsOperationLocked(PinnedLockedOperations operation)
+        private bool IsOperationLocked(PinnedLockRestrictions operation)
         {
-            return IsLocked && (CurrentPreferences.LockedOperations & operation) != 0;
+            return IsLocked && (CurrentPreferences.LockRestrictions & operation) != 0;
         }
 
         public void RefreshPreferencePresentation()
         {
+            Presentation.Title.Refresh();
+            Presentation.Attention.Refresh();
             RefreshWindowShadow();
             EnsureTransformCommands();
             if (!CanSelectImageText) ResetTextRecognition();
@@ -47,6 +49,8 @@ namespace RitsukageGif.Desktop
             {
                 _lockIndicator?.IsVisible = false;
             }
+
+            UpdateSize();
         }
 
         private Point ZoomAnchor(Point point, PinnedZoomAnchor anchor)

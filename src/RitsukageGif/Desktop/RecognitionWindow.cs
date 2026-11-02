@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -129,9 +130,22 @@ namespace RitsukageGif.Desktop
         internal static async Task ShowAsync(Window owner, ReadOnlyMemory<byte> image, RecognitionMode mode,
             Func<CancellationToken, Task>? recognized = null,
             RecognitionPreferences? preferences = null, string? initialText = null,
-            TranslationPreferences? translationPreferences = null, CancellationToken token = default)
+            TranslationPreferences? translationPreferences = null,
+            Action<Window, IReadOnlyList<string>>? pinFormula = null,
+            Action<FormulaCopyFormat>? copyFormatChanged = null, Action<bool>? originalImageVisibilityChanged = null,
+            Action<FormulaLatexFormat>? latexFormatChanged = null, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
+            if (mode is RecognitionMode.Table or RecognitionMode.Formula)
+            {
+                var normalized = (preferences ?? new()).Normalize();
+                await StructuredRecognitionWindow.ShowAsync(owner, image, mode == RecognitionMode.Formula,
+                    recognized, token, pinFormula, normalized.CopyFormat, copyFormatChanged,
+                    normalized.ShowOriginalImage, originalImageVisibilityChanged, normalized.LatexFormat,
+                    latexFormatChanged);
+                return;
+            }
+
             var window = new RecognitionWindow(image, mode, preferences ?? new(), initialText, translationPreferences)
                 { _recognized = recognized };
             await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));

@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -14,13 +15,20 @@ namespace RitsukageGif.Desktop
             get;
             set
             {
+                var previousGroup = field.ActiveGroup;
                 field = value.Normalize();
+                if (previousGroup != field.ActiveGroup) ApplyGroupVisibility();
                 TrimClosedHistory();
                 foreach (var window in _windows) window.RefreshPreferencePresentation();
+                foreach (var window in _documentWindows) window.RefreshPreferencePresentation();
             }
         } = new();
 
         public Func<RecognitionPreferences> RecognitionPreferencesProvider { get; set; } = () => new();
+        public Action<FormulaCopyFormat>? FormulaCopyFormatChanged { get; set; }
+        public Action<bool>? RecognitionOriginalImageVisibilityChanged { get; set; }
+        public Action<FormulaLatexFormat>? FormulaLatexFormatChanged { get; set; }
+        public Func<Window, ReadOnlyMemory<byte>, CancellationToken, Task>? ImageTranslationRequested { get; set; }
         public Func<TranslationPreferences> TranslationPreferencesProvider { get; set; } = () => new();
 
         // ReSharper disable once MemberCanBePrivate.Global, AutoPropertyCanBeMadeGetOnly.Global
@@ -33,6 +41,7 @@ namespace RitsukageGif.Desktop
         public Func<string?> OutputDirectoryProvider { get; set; } = () => null;
         public Func<AppearanceDialogStyle> DialogStyleProvider { get; set; } = () => AppearanceDialogStyle.Modern;
         public Action<string>? SavedPathChanged { get; set; }
+        public Action<IReadOnlyList<string>, IReadOnlyList<string>?>? DocumentOutputSaved { get; set; }
         public Action<IReadOnlyList<string>>? OutputNotification { get; set; }
 
         public Func<byte[], CapturedFrame?, ScreenshotAutoSaveTriggers, CancellationToken, double, Task>? AutomaticSave
@@ -41,13 +50,9 @@ namespace RitsukageGif.Desktop
             set;
         }
 
-        public bool HasImages => _windows.Count != 0;
+        public bool HasImages => AllWindows.Any(window => window.Group == Preferences.ActiveGroup);
 
-        public IReadOnlyList<string> Groups =>
-        [
-            .. _windows.Select(window => window.Group).Where(group => group.Length != 0)
-                .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal),
-        ];
+        public IReadOnlyList<PinnedGroupDefinition> Groups => GroupDefinitions;
 
         public void Dispose()
         {
@@ -55,28 +60,43 @@ namespace RitsukageGif.Desktop
             if (_disposed) return;
             PinLogger.ZLogDebug($"Pinned image manager disposal started. WindowCount={_windows.Count}");
             _disposed = true;
+            _groupManager?.Close();
+            _groupCreateDialog?.Close();
+            _groupSwitcher?.Close();
+            _groupSwitcher = null;
+            _isolatedVisibleIds.Clear();
+            _presentationIds.Clear();
+            _historyCancellation.Cancel();
+            _historyCancellation.Dispose();
             _saveTimer.Stop();
             foreach (var window in _windows.ToArray()) window.Dispose();
+            foreach (var window in _documentWindows.ToArray()) window.Dispose();
+            _documentWindows.Clear();
             _windows.Clear();
+            foreach (var entry in _closedImages) entry.Dispose();
             _closedImages.Clear();
+            _closedDocuments.Clear();
             _selectedImages.Clear();
+            _sessionImageReferences.Clear();
             PinLogger.ZLogDebug($"Pinned image manager disposal completed.");
         }
 
         public event EventHandler? Changed;
 
-        private void Pin(PinnedImageContent content, PixelPoint? position, string group, double captureScaling = 1,
+        private PinnedImageWindow? Pin(PinnedImageContent content, PixelPoint? position, string group,
+            double captureScaling = 1,
             PixelPoint contentOffset = default)
         {
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
             ArgumentNullException.ThrowIfNull(group);
-            group = group.Trim();
-            if (group.Length > 80) throw new ArgumentOutOfRangeException(nameof(group));
+            group = ResolveGroupName(group);
             if (Preferences.DuplicateBehavior == PinnedDuplicateBehavior.RestoreLastClosed &&
-                RestoreMatchingClosed(content.ContentHash)) return;
+                RestoreMatchingClosed(content, group)) return null;
             if (Preferences.DuplicateBehavior != PinnedDuplicateBehavior.CreateNew &&
-                _windows.FirstOrDefault(candidate => candidate.ContentHash == content.ContentHash) is { } existing)
+                _windows.FirstOrDefault(candidate =>
+                    !candidate.LiveCaptureActive && candidate.Group == group &&
+                    candidate.ContentHash == content.ContentHash) is { } existing)
             {
                 switch (Preferences.DuplicateBehavior)
                 {
@@ -91,7 +111,7 @@ namespace RitsukageGif.Desktop
                     default: throw new InvalidOperationException(nameof(Preferences));
                 }
 
-                return;
+                return null;
             }
 
             var window = PinnedImageWindow.CreatePrepared(content, () => CanRestoreHidden(), Preferences);
@@ -102,7 +122,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 if (position is { } location) window.SetCapturePlacement(location, contentOffset);
-                window.Show();
+                ShowNewPin(window);
                 if (position is null) window.RestoreToScreen();
                 PinLogger.ZLogInformation(
                     $"Pinned image window opened. WindowCount={_windows.Count} Width={content.Width} Height={content.Height}");
@@ -117,36 +137,58 @@ namespace RitsukageGif.Desktop
 
             ScheduleSave();
             Changed?.Invoke(this, EventArgs.Empty);
+            return window;
         }
 
         private void OnWindowClosed(object? sender, EventArgs args)
         {
             if (sender is not PinnedImageWindow window || !_windows.Remove(window)) return;
-            PinLogger.ZLogInformation($"Pinned image window closed. WindowCount={_windows.Count}");
-            window.StateChanged -= WindowStateChanged;
-            _pendingRestore.Remove(window);
-            _selectedImages.Remove(window);
-            if (!_disposed)
+            try
             {
-                if (!window.WasDestroyed) RememberClosed(window);
-                ScheduleSave();
-            }
+                PinLogger.ZLogInformation($"Pinned image window closed. WindowCount={_windows.Count}");
+                window.StateChanged -= WindowStateChanged;
+                ForgetPresentation(window);
+                _pendingRestore.Remove(window);
+                _selectedImages.Remove(window);
+                if (!_disposed)
+                {
+                    if (!window.WasDestroyed) RememberClosed(window);
+                    ScheduleSave();
+                }
 
-            Changed?.Invoke(this, EventArgs.Empty);
+                Changed?.Invoke(this, EventArgs.Empty);
+            }
+            finally
+            {
+                window.ReleaseLiveSnapshot();
+            }
         }
 
         public void ShowAll()
         {
             Dispatcher.UIThread.VerifyAccess();
-            foreach (var window in _windows) RevealWindow(window);
+            foreach (var window in AllWindows.Where(window => window.Group == Preferences.ActiveGroup))
+                RevealWindow(window);
         }
 
         public void HideAll()
         {
             Dispatcher.UIThread.VerifyAccess();
-            foreach (var window in _windows)
+            foreach (var window in AllWindows.Where(window => window.Group == Preferences.ActiveGroup))
             {
-                if (_pendingRestore.TryGetValue(window, out var state)) state.Visible = false;
+                window.Presentation.SetGroupIntent(false);
+                switch (window)
+                {
+                    case PinnedImageWindow image when _pendingRestore.TryGetValue(image, out var state):
+                        state.Visible = false;
+                        state.VisibleInGroup = false;
+                        break;
+                    case PinnedDocumentWindow document when _pendingDocuments.TryGetValue(document, out var saved):
+                        saved.Window.Visible = false;
+                        saved.Window.VisibleInGroup = false;
+                        break;
+                }
+
                 window.HideImage();
             }
 
@@ -156,10 +198,24 @@ namespace RitsukageGif.Desktop
         private void AttachWindow(PinnedImageWindow window)
         {
             _windows.Add(window);
+            AttachPresentation(window);
             window.PreferencesProvider = () => Preferences;
+            window.LiveToneMapProvider = () => CaptureToneMapProvider();
             window.TextRecognitionServiceProvider = () => TextRecognitionService;
             window.RecognitionPreferencesProvider = () => RecognitionPreferencesProvider();
+            window.FormulaCopyFormatChanged = format => FormulaCopyFormatChanged?.Invoke(format);
+            window.RecognitionOriginalImageVisibilityChanged =
+                show => RecognitionOriginalImageVisibilityChanged?.Invoke(show);
+            window.FormulaLatexFormatChanged = format => FormulaLatexFormatChanged?.Invoke(format);
+            window.PinFormulaRequested = (_, sources) =>
+            {
+                if (!_disposed) PinFormulas(sources);
+            };
             window.TranslationPreferencesProvider = () => TranslationPreferencesProvider();
+            window.ImageTranslationRequested = (owner, png, token) => ImageTranslationRequested is { } translate
+                ? translate(owner, png, token)
+                : ImageTranslationWindow.ShowAsync(owner, png, TranslationPreferencesProvider(),
+                    RecognitionPreferencesProvider(), TextRecognitionService, token: token);
             window.SelectionRequested = ToggleSelection;
             window.CloseRequested = CloseSelection;
             window.MoveSelectionRequested = MoveSelection;
@@ -177,6 +233,7 @@ namespace RitsukageGif.Desktop
             window.OutputDirectoryProvider = () => OutputDirectoryProvider();
             window.DialogStyleProvider = () => DialogStyleProvider();
             window.SavedPathChanged = path => SavedPathChanged?.Invoke(path);
+            window.DocumentOutputSaved = (paths, protectedFiles) => DocumentOutputSaved?.Invoke(paths, protectedFiles);
             window.OutputNotification = message => OutputNotification?.Invoke(message);
             window.AutomaticSave = (png, hdr, trigger, token, captureScaling) =>
                 AutomaticSave?.Invoke(png, hdr, trigger, token, captureScaling) ?? Task.CompletedTask;
@@ -187,6 +244,8 @@ namespace RitsukageGif.Desktop
                 AnnotationPreferences = preferences;
             };
             window.GroupsProvider = () => Groups;
+            window.GroupChangeRequested = SetSelectionGroup;
+            window.NewGroupRequested = CreateAndMoveToGroupAsync;
             window.GroupVisibilityRequested = (group, visible) =>
             {
                 if (visible) ShowGroup(group);
@@ -198,27 +257,43 @@ namespace RitsukageGif.Desktop
 
         private void WindowStateChanged(object? sender, EventArgs args)
         {
+            if (sender is IPinnedWindow window) RefreshPresentationIdentity(window);
             ScheduleSave();
         }
 
         public void RestoreInteraction()
         {
             ShowAll();
-            foreach (var window in _windows) window.RestoreInteraction();
+            foreach (var window in AllWindows.Where(window => window.Group == Preferences.ActiveGroup))
+                window.RestoreInteraction();
         }
 
         public void ShowGroup(string group)
         {
             Dispatcher.UIThread.VerifyAccess();
-            foreach (var window in _windows.Where(window => window.Group == group)) RevealWindow(window);
+            SetActiveGroup(group);
+            RequestGroupRestore();
+            foreach (var window in AllWindows.Where(window => window.Group == group)) RevealWindow(window);
         }
 
         public void HideGroup(string group)
         {
             Dispatcher.UIThread.VerifyAccess();
-            foreach (var window in _windows.Where(window => window.Group == group))
+            foreach (var window in AllWindows.Where(window => window.Group == group))
             {
-                if (_pendingRestore.TryGetValue(window, out var state)) state.Visible = false;
+                window.Presentation.SetGroupIntent(false);
+                switch (window)
+                {
+                    case PinnedImageWindow image when _pendingRestore.TryGetValue(image, out var state):
+                        state.Visible = false;
+                        state.VisibleInGroup = false;
+                        break;
+                    case PinnedDocumentWindow document when _pendingDocuments.TryGetValue(document, out var saved):
+                        saved.Window.Visible = false;
+                        saved.Window.VisibleInGroup = false;
+                        break;
+                }
+
                 window.HideImage();
             }
 
@@ -228,7 +303,7 @@ namespace RitsukageGif.Desktop
         public void CloseGroup(string group)
         {
             Dispatcher.UIThread.VerifyAccess();
-            foreach (var window in _windows.Where(window => window.Group == group && !window.IsCloseLocked).ToArray())
+            foreach (var window in AllWindows.Where(window => window.Group == group && !window.IsCloseLocked).ToArray())
                 window.CloseImage(false);
         }
     }

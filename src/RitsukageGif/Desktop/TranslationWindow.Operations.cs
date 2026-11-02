@@ -1,3 +1,5 @@
+using Avalonia.Input.Platform;
+
 namespace RitsukageGif.Desktop
 {
     // ReSharper disable once ClassCannotBeInstantiated
@@ -53,6 +55,7 @@ namespace RitsukageGif.Desktop
                     work.Token);
                 work.Token.ThrowIfCancellationRequested();
                 if (revision != _revision || _lifetime.IsCancellationRequested) return;
+                _detectedSpeechLanguage = result.DetectedSourceLanguage;
                 _translatedText.Text = result.Text;
                 SetStatus("TranslationCompleted");
                 _fallback.IsVisible = fallback.Length > 0 &&

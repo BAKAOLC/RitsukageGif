@@ -1,13 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
@@ -17,6 +16,7 @@ namespace RitsukageGif.Desktop
         private readonly Grid _content;
         private readonly Image _image = new() { Stretch = Stretch.Fill };
         private readonly CancellationTokenSource _lifetime = new();
+        private readonly SimulatedWheelInput _simulatedWheel;
 
         private readonly TextBlock _status = new()
         {
@@ -47,6 +47,7 @@ namespace RitsukageGif.Desktop
         private PinnedImageWindow(byte[] png, byte[] pixels, ScreenshotTiledImage bitmap, Bitmap thumbnail,
             Func<bool> canRestoreHidden, PinnedImagePreferences preferences)
         {
+            _simulatedWheel = new(this);
             _canRestoreHidden = canRestoreHidden;
             _png = png;
             _pixels = pixels;
@@ -54,7 +55,7 @@ namespace RitsukageGif.Desktop
             _thumbnail = thumbnail;
             CurrentPreferences = preferences;
             Bind(TitleProperty, LiveText.Resource("PinnedImage"));
-            SystemDecorations = SystemDecorations.None;
+            WindowDecorations = WindowDecorations.None;
             CanResize = false;
             Topmost = preferences.Topmost;
             Opacity = preferences.Opacity;
@@ -71,9 +72,12 @@ namespace RitsukageGif.Desktop
                 StateChanged?.Invoke(this, EventArgs.Empty);
             };
             var content = _content = new() { Children = { _viewport, _status } };
+            Presentation = new(this, content, () => CurrentPreferences);
+            Presentation.Title.Changed += () => StateChanged?.Invoke(this, EventArgs.Empty);
+            Presentation.MoveGroupRequested = () => RunAsync(EditGroupAsync);
             Content = content;
-            image.Bind(ToolTip.TipProperty, LiveText.Resource("PinnedImageHelp"));
             var menu = new ContextMenu();
+            Presentation.ConnectMenu(menu);
             menu.Items.Add(Command("ScreenshotCopy", CopyAsync));
             menu.Items.Add(Command("PinnedImageCopyFile", CopyFileAsync));
             menu.Items.Add(Command("ScreenshotSave", SaveAsync));
@@ -81,7 +85,7 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(annotate);
             menu.Items.Add(Command("PinnedImageAnnotationToolbar", ToggleAnnotationToolbarAsync));
             menu.Opened += (_, _) =>
-                annotate.IsEnabled = !IsOperationLocked(PinnedLockedOperations.Annotation) && !_busy &&
+                annotate.IsEnabled = !_busy &&
                                      _annotation is null;
             menu.Items.Add(new Separator());
             var actualSize = Command("PinnedImageActualSize", () =>
@@ -100,7 +104,7 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(thumbnailMode);
             menu.Items.Add(Command("PinnedImageSelectThumbnailRegion", () =>
             {
-                if (!IsOperationLocked(PinnedLockedOperations.Resize) && _annotation is null)
+                if (!IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null)
                     _regionSelectionMode = true;
                 return Task.CompletedTask;
             }));
@@ -115,10 +119,10 @@ namespace RitsukageGif.Desktop
             {
                 selected.IsChecked = IsSelected;
                 thumbnailMode.IsChecked = _isThumbnail;
-                thumbnailMode.IsEnabled = !IsOperationLocked(PinnedLockedOperations.Resize) && _annotation is null;
+                thumbnailMode.IsEnabled = !IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null;
             };
             menu.Opened += (_, _) =>
-                actualSize.IsEnabled = !IsOperationLocked(PinnedLockedOperations.Resize) && _annotation is null;
+                actualSize.IsEnabled = !IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null;
             AddMultiSelectionMenu(menu);
             AddInteractionMenu(menu);
             AddRecognitionMenu(menu);
@@ -155,7 +159,8 @@ namespace RitsukageGif.Desktop
             AddAnimationCommands(menu);
             content.ContextMenu = menu;
             ConfigureMouseInput(image, content, menu);
-            KeyDown += OnKeyDown;
+            ConfigureQuickThumbnailPointer();
+            AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
             InitializeAnnotationKeyboard();
             Opened += (_, _) =>
             {
@@ -178,9 +183,10 @@ namespace RitsukageGif.Desktop
             UpdateSize();
         }
 
+        public PinnedWindowPresentation Presentation { get; }
+
         public Func<PinnedImagePreferences>? PreferencesProvider { get; set; }
         private PinnedImagePreferences CurrentPreferences => PreferencesProvider?.Invoke() ?? field;
-        public string ContentHash { get; private set; } = "";
 
         public void Dispose()
         {
@@ -193,6 +199,24 @@ namespace RitsukageGif.Desktop
             {
                 ReleaseResources();
             }
+        }
+        public string ContentHash { get; private set; } = "";
+
+        public void HideImage()
+        {
+            Presentation.SetUserVisibility(false);
+            var wasVisible = IsVisible && WindowState != WindowState.Minimized;
+            if (_canRestoreHidden())
+            {
+                Hide();
+            }
+            else
+            {
+                ShowInTaskbar = true;
+                WindowState = WindowState.Minimized;
+            }
+
+            if (wasVisible) PinLogger.ZLogInformation($"Pinned image hidden.");
         }
 
         public static PinnedImageWindow CreatePrepared(PinnedImageContent content, Func<bool> canRestoreHidden,
@@ -238,6 +262,8 @@ namespace RitsukageGif.Desktop
             if (_closed) return;
             _animationActiveAtClose = AnimationActive;
             _closed = true;
+            CancelThumbnailLayout();
+            DisposeLiveCapture();
             DisposeAnimation();
             if (_screens is not null) _screens.Changed -= ScreensChanged;
             _lifetime.Cancel();
@@ -250,22 +276,6 @@ namespace RitsukageGif.Desktop
             _bitmap.Dispose();
             _thumbnail.Dispose();
             if (!_busy) _lifetime.Dispose();
-        }
-
-        public void HideImage()
-        {
-            var wasVisible = IsVisible && WindowState != WindowState.Minimized;
-            if (_canRestoreHidden())
-            {
-                Hide();
-            }
-            else
-            {
-                ShowInTaskbar = true;
-                WindowState = WindowState.Minimized;
-            }
-
-            if (wasVisible) PinLogger.ZLogInformation($"Pinned image hidden.");
         }
 
         public void RestoreToScreen()
@@ -312,9 +322,11 @@ namespace RitsukageGif.Desktop
             }
 
             var screen = Screens.ScreenFromPoint(Position) ?? Screens.Primary;
-            Width = Math.Min(_image.Width, (screen?.WorkingArea.Width ?? 1280) * 0.9 / RenderScaling);
-            Height = Math.Min(_image.Height + (_hdrSource is null ? 0 : 20),
-                (screen?.WorkingArea.Height ?? 720) * 0.9 / RenderScaling);
+            var maximum = PinnedViewportGeometry.MaximumViewport(CurrentPreferences.MaximumWindowSize,
+                RenderScaling,
+                new(screen?.WorkingArea.Width ?? 1280, screen?.WorkingArea.Height ?? 720));
+            Width = Math.Min(_image.Width, maximum.Width);
+            Height = Math.Min(_image.Height + (_hdrSource is null ? 0 : 20), maximum.Height);
             UpdateVisibleRegion();
         }
 
@@ -327,6 +339,10 @@ namespace RitsukageGif.Desktop
             if (_annotation is not null && _annotationPreviewImage is { } preview)
             {
                 _image.Source = preview;
+            }
+            else if (LiveCaptureActive)
+            {
+                UpdateLiveVisibleRegion(display);
             }
             else if (AnimationActive && _animationSurface is { } animation)
             {
@@ -356,7 +372,7 @@ namespace RitsukageGif.Desktop
 
         private void ResizeAt(Point anchor, double zoom)
         {
-            if (IsOperationLocked(PinnedLockedOperations.Resize) || _annotation is not null) return;
+            if (IsOperationLocked(PinnedLockRestrictions.Move) || _annotation is not null) return;
             var next = Math.Clamp(zoom,
                 Math.Min(1,
                     Math.Min(24d / Math.Min(_bitmap.Size.Width, _bitmap.Size.Height),
@@ -383,7 +399,9 @@ namespace RitsukageGif.Desktop
                 Tag = key switch
                 {
                     "ScreenshotCopy" => "copy", "ScreenshotSave" => "save", "Close" => "close",
-                    "PinnedImageHide" => "hide", "PinnedImageAnnotate" => "annotate", _ => null,
+                    "PinnedImageHide" => "hide", "PinnedImageAnnotate" => "annotate",
+                    "PinnedTitleEdit" => "set-title", "PinnedHideOthers" => "hide-others",
+                    "PinnedSwitchNext" => "switch-next", _ => null,
                 },
             };
             var geometry = key switch
@@ -403,13 +421,8 @@ namespace RitsukageGif.Desktop
                 _ => null,
             };
             if (geometry is not null)
-                item.Icon = new Path
-                {
-                    Data = Geometry.Parse(geometry), Width = 16, Height = 16, Stretch = Stretch.Uniform,
-                    StrokeThickness = 1.6,
-                    [!Shape.StrokeProperty] = item[!ForegroundProperty],
-                };
-            item.Click += async (_, _) => await RunAsync(action);
+                item.Icon = ToolbarIcon.Create(item, geometry);
+            item.Click += async (_, _) => await Presentation.RunMenuAsync(() => RunAsync(action));
             return item;
         }
 
@@ -439,28 +452,27 @@ namespace RitsukageGif.Desktop
             }
 
             var action = BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args);
-            if (IsOperationLocked(PinnedLockedOperations.Shortcuts) && action is not (null or "lock" or "menu"))
-            {
-                args.Handled = true;
-                return;
-            }
-
-            if (action is null or "menu") return;
+            if (action is null) return;
+            using var input = PinnedInputContext.Use(PinnedInputContext.Current | PinnedInputOrigin.Keyboard);
             args.Handled = true;
-            if (ExecuteMultiSelectionShortcut(action)) return;
+            if (ExecuteMultiSelectionShortcut(action) || Presentation.Execute(action)) return;
             switch (action)
             {
+                case "menu": Presentation.OpenMenu(_content.ContextMenu!, _content); break;
+                case "wheel-up": _simulatedWheel.Raise(1); break;
+                case "wheel-down": _simulatedWheel.Raise(-1); break;
                 case "hide": HideImage(); break;
                 case "close": RequestClose(); break;
                 case "copy": _ = RunAsync(_selectedTextStart >= 0 ? CopySelectedTextAsync : CopyAsync); break;
                 case "save": _ = RunAsync(SaveAsync); break;
+                case "print" when ScreenshotPrintService.IsSupported: _ = RunAsync(PrintDocumentAsync); break;
                 case "annotate": _ = RunAsync(BeginAnnotationAsync); break;
                 case "annotate-toolbar": _ = RunAsync(ToggleAnnotationToolbarAsync); break;
                 case "copy-all-text": _ = RunAsync(CopyRecognizedTextAsync); break;
                 case "copy-file": _ = RunAsync(CopyFileAsync); break;
                 case "destroy": RequestClose(true); break;
                 case "thumbnail": ToggleThumbnail(); break;
-                case "select-roi" when !IsOperationLocked(PinnedLockedOperations.Resize):
+                case "select-roi" when !IsOperationLocked(PinnedLockRestrictions.Move):
                     ClearTextSelection();
                     _regionSelectionMode = true;
                     break;
@@ -473,7 +485,8 @@ namespace RitsukageGif.Desktop
                 case "move-right": NudgeWindow(1, 0); break;
                 case "lock": SetLocked(!IsLocked); break;
                 case "topmost": SetTopmost(!Topmost); break;
-                case "through" when OperatingSystem.IsWindows() && (_canRestoreHidden() || IsMouseThrough):
+                case "through" when PinnedWindowPlatform.CanSetMouseThrough(this) &&
+                                    (_canRestoreHidden() || IsMouseThrough):
                     _ = RunAsync(() =>
                     {
                         SetMouseThrough(!IsMouseThrough);

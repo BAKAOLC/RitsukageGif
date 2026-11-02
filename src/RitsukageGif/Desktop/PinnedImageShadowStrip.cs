@@ -28,7 +28,7 @@ namespace RitsukageGif.Desktop
             TransientWindowShell.Configure(this);
             Focusable = false;
             IsHitTestVisible = false;
-            SystemDecorations = SystemDecorations.None;
+            WindowDecorations = WindowDecorations.None;
             CanResize = false;
             MinWidth = MinHeight = 0;
             Background = Brushes.Transparent;

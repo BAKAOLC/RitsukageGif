@@ -390,15 +390,9 @@ namespace RitsukageGif.Desktop
             var metadata = AnimationMetadata ?? throw new InvalidOperationException();
             var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
             var transfer = new DataTransfer();
-            var item = DataTransferItem.Create(DataFormat.CreateBytesPlatformFormat(metadata.MimeType), encoded);
-            if (OperatingSystem.IsWindows() && metadata.Extension == ".gif")
-                item.Set(DataFormat.CreateBytesPlatformFormat("GIF"), encoded);
+            var item = new DataTransferItem();
             var preview = OriginalContent.SdrPng ?? OriginalContent.Png;
-            item.Set(DataFormat.Bitmap, () =>
-            {
-                using var stream = new MemoryStream(preview, false);
-                return new(stream);
-            });
+            ClipboardPlatformFormats.SetImage(item, encoded, metadata.MimeType, preview);
             transfer.Add(item);
             await clipboard.SetDataAsync(transfer);
             await clipboard.FlushAsync();
@@ -406,9 +400,11 @@ namespace RitsukageGif.Desktop
 
         private async Task SaveOriginalAnimationAsync()
         {
+            var token = _lifetime.Token;
+            token.ThrowIfCancellationRequested();
             var encoded = _animationEncoded ?? throw new InvalidOperationException();
             var metadata = AnimationMetadata ?? throw new InvalidOperationException();
-            var file = await StorageProvider.SaveFilePickerAsync(new()
+            using var file = await StoragePickerAwaiter.WaitAsync(StorageProvider.SaveFilePickerAsync(new()
             {
                 Title = UiText.Get("PinnedAnimationSaveOriginal"),
                 SuggestedFileName = "Animation" + metadata.Extension,
@@ -418,15 +414,15 @@ namespace RitsukageGif.Desktop
                 [
                     new(metadata.Extension.TrimStart('.').ToUpperInvariant()) { Patterns = ["*" + metadata.Extension] },
                 ],
-            });
+            }), token);
             if (file is null) return;
-            _lifetime.Token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
             var path = file.TryGetLocalPath() ?? throw new NotSupportedException(UiText.Get("FileOperationFailed"));
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                await File.WriteAllBytesAsync(temporary, encoded, _lifetime.Token);
-                _lifetime.Token.ThrowIfCancellationRequested();
+                await File.WriteAllBytesAsync(temporary, encoded, token);
+                token.ThrowIfCancellationRequested();
                 File.Move(temporary, path, true);
             }
             finally

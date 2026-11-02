@@ -9,11 +9,17 @@ namespace RitsukageGif.Desktop
         private const int MaximumInputLength = 100_000;
         private const int MaximumResponseBytes = 2 * 1024 * 1024;
 
-        private static readonly HttpClient SharedClient = new(new SocketsHttpHandler { AllowAutoRedirect = false })
-            { Timeout = Timeout.InfiniteTimeSpan };
+        private static readonly HttpClient SharedClient = CreateClient();
 
         private static readonly ILogger Log = LogHub.GetLogger("Desktop.Translation");
         private readonly HttpClient _client = client ?? SharedClient;
+
+        private static HttpClient CreateClient()
+        {
+            var client = ApplicationHttp.CreateClient(false);
+            client.Timeout = Timeout.InfiniteTimeSpan;
+            return client;
+        }
 
         public async Task<TranslationResult> TranslateAsync(TranslationOptions options, TranslationRequest request,
             CancellationToken cancellationToken = default)

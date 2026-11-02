@@ -4,22 +4,26 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedImageManager
     {
-        public bool HasRestorableSession => _unrestoredStates.Count != 0;
-        public bool HasVisibleImages => _windows.Any(window => window.IsVisible);
-        public IReadOnlyList<PinnedImageWindow> Images => _windows;
+        public bool HasRestorableSession => _unrestoredStates.Count != 0 || _unrestoredDocuments.Count != 0;
+        public bool HasVisibleImages => AllWindows.Any(window => window.IsVisible);
 
-        public void ShowImage(PinnedImageWindow window)
+        public IReadOnlyList<IPinnedWindow> Images =>
+            [.. AllWindows.Where(window => window.Group == Preferences.ActiveGroup)];
+
+        public void ShowImage(IPinnedWindow window)
         {
             Dispatcher.UIThread.VerifyAccess();
-            if (_windows.Contains(window)) RevealWindow(window);
+            if (!AllWindows.Contains(window)) return;
+            SetActiveGroup(window.Group);
+            RevealWindow(window);
         }
 
         public void CloseAll()
         {
             Dispatcher.UIThread.VerifyAccess();
-            foreach (var window in _windows.ToArray())
-                if (!window.IsCloseLocked)
-                    window.CloseImage(false);
+            foreach (var window in AllWindows.Where(window => window.Group == Preferences.ActiveGroup).ToArray())
+                if (AllWindows.Contains(window))
+                    CloseSelection(window, false);
         }
     }
 }
