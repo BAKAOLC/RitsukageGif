@@ -1,6 +1,6 @@
 namespace RitsukageGif.Core
 {
-    public sealed partial class PrivacyDetectionService : IPrivacyDetectionService
+    public sealed partial class PrivacyDetectionService : IPrivacyDetectionService, IAnnotationCandidateDetectionService
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Core.Recognition");
         private readonly IPrivacyCandidateProvider[] _providers;
@@ -52,10 +52,9 @@ namespace RitsukageGif.Core
                     continue;
                 }
 
-                foreach (var candidate in detected.Take(4096))
+                foreach (var candidate in detected)
                 {
                     token.ThrowIfCancellationRequested();
-                    if (candidates.Count >= 4096) break;
                     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
                     if (candidate is null || !Enum.IsDefined(candidate.Kind) || candidate.Bounds.IsEmpty ||
                         (long)candidate.Bounds.X + candidate.Bounds.Width > int.MaxValue ||

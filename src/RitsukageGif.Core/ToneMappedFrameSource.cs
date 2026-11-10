@@ -1,6 +1,7 @@
 namespace RitsukageGif.Core
 {
-    public sealed class ToneMappedFrameSource(IColorFrameSource source, HdrToneMapMode mode) : IFrameSource
+    public sealed class ToneMappedFrameSource(IColorFrameSource source, HdrToneMapMode mode)
+        : IFrameSource, IRecordingCaptureMetadataSource
     {
         public byte[] Capture()
         {
@@ -18,5 +19,7 @@ namespace RitsukageGif.Core
         {
             source.Dispose();
         }
+
+        public object? CaptureMetadata => (source as IRecordingCaptureMetadataSource)?.CaptureMetadata;
     }
 }

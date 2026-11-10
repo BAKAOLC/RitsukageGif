@@ -10,15 +10,19 @@ namespace RitsukageGif.Core
         private static readonly ILogger Logger = LogHub.GetLogger("Core.Capture");
 
         public static Task<ColorRecordingResult> RunAsync(IColorFrameSource source, ColorRecordingOptions options,
-            IProgress<RecordingProgress>? progress, CancellationToken stop, CancellationToken cancel)
+            IProgress<RecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
+            RecordingControl? control = null)
         {
-            return Task.Run(() => RunCoreAsync(source, options, progress, stop, cancel), cancel);
+            control ??= new();
+            control.SetCanPause(true);
+            return Task.Run(() => RunCoreAsync(source, options, progress, control, stop, cancel), cancel);
         }
 
         private static async Task<ColorRecordingResult> RunCoreAsync(IColorFrameSource source,
-            ColorRecordingOptions options, IProgress<RecordingProgress>? progress, CancellationToken stop,
-            CancellationToken cancel)
+            ColorRecordingOptions options, IProgress<RecordingProgress>? progress, RecordingControl control,
+            CancellationToken stop, CancellationToken cancel)
         {
+            await using var timelineStop = stop.Register(control.RecordStop);
             options.Sdr.Validate();
             Logger.ZLogInformation(
                 $"HDR animation recording started: width={options.Sdr.Width}, height={options.Sdr.Height}, fps={options.Sdr.Fps}, includeSdr={options.SdrPath is not null}");
@@ -47,7 +51,7 @@ namespace RitsukageGif.Core
             long stoppedAt = 0;
             await using var stopRegistration = stop.Register(() =>
                 // ReSharper disable once AccessToModifiedClosure
-                Interlocked.CompareExchange(ref stoppedAt, Stopwatch.GetTimestamp(), 0));
+                Interlocked.CompareExchange(ref stoppedAt, control.GetTimestamp(), 0));
             var hdrWorker = ObserveEncoderAsync(HdrAnimationEncoder.EncodeAsync(
                 hdrQueue.Reader.ReadAllAsync(abort.Token),
                 hdrTemporary, options.Sdr.Width, options.Sdr.Height, abort.Token), abort);
@@ -63,30 +67,35 @@ namespace RitsukageGif.Core
             {
                 CapturedFrameSet? pending = null;
                 long startedAt = 0;
-                var period = (double)Stopwatch.Frequency / options.Sdr.Fps;
-                var next = (double)Stopwatch.GetTimestamp();
+                long pendingTime = 0;
+                (long Sequence, object? Metadata) pendingCapture = default;
+                var clock = new RecordingClock(control);
+                var period = 1000.0 / options.Sdr.Fps;
+                var next = clock.Elapsed.TotalMilliseconds;
                 while (!captureStop.IsCancellationRequested)
                 {
-                    var wait = (next - Stopwatch.GetTimestamp()) / Stopwatch.Frequency;
-                    if (wait > 0)
-                        try
-                        {
-                            await Task.Delay(TimeSpan.FromSeconds(wait), captureStop.Token);
-                        }
-                        catch (OperationCanceledException) when (captureStop.IsCancellationRequested)
-                        {
-                            break;
-                        }
+                    try
+                    {
+                        await clock.WaitUntilAsync(next, captureStop.Token);
+                    }
+                    catch (OperationCanceledException) when (captureStop.IsCancellationRequested)
+                    {
+                        break;
+                    }
 
                     if (captureStop.IsCancellationRequested) break;
                     // Both streams accept the same capture or neither does. Slow encoding drops deadlines,
                     // never one color rendition; timestamps preserve real playback speed.
                     if (hdrQueue.Reader.Count < capacity && (sdrPath is null || sdrQueue.Reader.Count < capacity))
                     {
+                        var generation = control.Generation;
+                        if (control.IsPaused) continue;
                         CapturedFrameSet current;
+                        (long Sequence, object? Metadata) capture;
                         try
                         {
                             current = source.CaptureFrames(captureStop.Token);
+                            capture = control.CaptureCompleted(source);
                         }
                         catch (OperationCanceledException) when (captureStop.IsCancellationRequested)
                         {
@@ -94,19 +103,13 @@ namespace RitsukageGif.Core
                         }
 
                         if (captureStop.IsCancellationRequested) break;
+                        if (!control.IsCurrentCapture(generation)) continue;
                         Validate(current, options.Sdr);
                         if (pending is null && !current.Hdr!.ColorInfo.IsHdrSource)
                             throw new InvalidOperationException(UiText.Get("HdrRecordingUnavailable"));
-                        if (current.TimestampTicks <= 0 || current.TimestampTicks > Stopwatch.GetTimestamp() ||
-                            (pending is not null && current.TimestampTicks < pending.TimestampTicks))
+                        if (current.TimestampTicks <= 0 || current.TimestampTicks > Stopwatch.GetTimestamp())
                             throw new InvalidOperationException(UiText.Get("HdrRecordingTimestampInvalid"));
-                        if (pending is not null && current.TimestampTicks == pending.TimestampTicks)
-                        {
-                            if (current.Hdr!.Revision != pending.Hdr!.Revision)
-                                throw new InvalidOperationException(UiText.Get("HdrRecordingTimestampInvalid"));
-                            next = Math.Max(next + period, Stopwatch.GetTimestamp() + period);
-                            continue;
-                        }
+                        var timestamp = control.GetTimestamp(out var rawOrigin);
 
                         if (sdrPath is not null && options.ToneMap != HdrToneMapMode.HighlightCompression)
                             current = current with
@@ -114,27 +117,44 @@ namespace RitsukageGif.Core
                                 Sdr = HdrToneMapping.Map(current.Hdr!, options.ToneMap, abort.Token),
                             };
                         if (pending is not null)
+                        {
                             await EnqueueAsync(pending,
-                                Delay(pending.TimestampTicks, current.TimestampTicks, startedAt),
+                                Delay(pendingTime, timestamp, startedAt),
                                 sdrPath is not null, sdrQueue.Writer, hdrQueue.Writer, abort.Token);
-                        else startedAt = current.TimestampTicks;
+                            control.NotifyFrameAccepted(new(
+                                TimeSpan.FromMilliseconds(Math.Round((pendingTime - startedAt) * 1000.0 /
+                                                                     Stopwatch.Frequency)),
+                                pending.TimestampTicks, options.Sdr.Region, options.Sdr.Width, options.Sdr.Height,
+                                CaptureSequence: pendingCapture.Sequence, SourceMetadata: pendingCapture.Metadata));
+                        }
+                        else
+                        {
+                            startedAt = timestamp;
+                            control.BindTimeline(rawOrigin, timestamp);
+                        }
+
+                        pendingTime = timestamp;
                         pending = current;
+                        pendingCapture = capture;
                         count++;
                         if (count == 1)
                             Logger.ZLogInformation(
                                 $"HDR animation capture produced its first frame: width={current.Hdr!.Width}, height={current.Hdr.Height}, paperWhiteNits={current.Hdr.ColorInfo.SdrWhiteNits}");
-                        if (Logger.IsEnabled(LogLevel.Debug) && current.TimestampTicks >= nextLogAt)
+                        if (Logger.IsEnabled(LogLevel.Debug) && timestamp >= nextLogAt)
                         {
-                            nextLogAt = current.TimestampTicks + Stopwatch.Frequency * 5;
+                            nextLogAt = timestamp + Stopwatch.Frequency * 5;
                             Logger.ZLogDebug(
                                 $"HDR animation recording progress: captured={count}, queuedHdr={hdrQueue.Reader.Count}, queuedSdr={sdrQueue.Reader.Count}");
                         }
 
                         progress?.Report(new(RecordingStage.Recording, count, 0,
-                            ElapsedSeconds: (current.TimestampTicks - startedAt) / (double)Stopwatch.Frequency));
+                            timestamp > startedAt
+                                ? (count - 1) * (double)Stopwatch.Frequency / (timestamp - startedAt)
+                                : 0,
+                            (timestamp - startedAt) / (double)Stopwatch.Frequency));
                     }
 
-                    var now = Stopwatch.GetTimestamp();
+                    var now = clock.Elapsed.TotalMilliseconds;
                     next = Math.Max(next + period, next + Math.Ceiling((now - next) / period) * period);
                 }
 
@@ -143,10 +163,15 @@ namespace RitsukageGif.Core
                 abort.Token.ThrowIfCancellationRequested();
                 if (pending is null) throw new InvalidOperationException(UiText.Get("NoFrames"));
                 var stopTicks = Interlocked.Read(ref stoppedAt);
-                var end = Math.Max(pending.TimestampTicks + Stopwatch.Frequency / 1000,
-                    stopTicks == 0 ? Stopwatch.GetTimestamp() : stopTicks);
-                await EnqueueAsync(pending, Delay(pending.TimestampTicks, end, startedAt), sdrPath is not null,
+                var end = Math.Max(pendingTime + Stopwatch.Frequency / 1000,
+                    stopTicks == 0 ? control.GetTimestamp() : stopTicks);
+                await EnqueueAsync(pending, Delay(pendingTime, end, startedAt), sdrPath is not null,
                     sdrQueue.Writer, hdrQueue.Writer, abort.Token);
+                control.NotifyFrameAccepted(new(
+                    TimeSpan.FromMilliseconds(Math.Round((pendingTime - startedAt) * 1000.0 / Stopwatch.Frequency)),
+                    pending.TimestampTicks, options.Sdr.Region, options.Sdr.Width, options.Sdr.Height,
+                    CaptureSequence: pendingCapture.Sequence, SourceMetadata: pendingCapture.Metadata));
+                control.CompleteTimeline(TimeSpan.FromSeconds((end - startedAt) / (double)Stopwatch.Frequency));
                 hdrQueue.Writer.TryComplete();
                 sdrQueue.Writer.TryComplete();
                 Logger.ZLogInformation($"HDR animation capture stopped; draining encoders: captured={count}");

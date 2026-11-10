@@ -1,6 +1,6 @@
 namespace RitsukageGif.Scripting
 {
-    public sealed class ScriptTableBinding
+    public sealed partial class ScriptTableBinding
     {
         private readonly Dictionary<string, ScriptMemberDescriptor> _members = new(StringComparer.Ordinal);
         private readonly ScriptBindingRegistry _registry;

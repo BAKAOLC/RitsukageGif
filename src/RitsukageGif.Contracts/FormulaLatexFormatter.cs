@@ -12,6 +12,7 @@ namespace RitsukageGif.Contracts
 
         public static string Format(string source, FormulaLatexFormat format)
         {
+            source = Unwrap(source);
             var (prefix, suffix) = Delimiters(format);
             return prefix.Length == 0 ? source : string.Concat(prefix, source, suffix);
         }
@@ -24,7 +25,7 @@ namespace RitsukageGif.Contracts
             for (var index = 0; index < sources.Count; index++)
             {
                 if (index > 0) output.Append('\n');
-                output.Append(prefix).Append(sources[index]).Append(suffix);
+                output.Append(prefix).Append(Unwrap(sources[index])).Append(suffix);
             }
 
             return output.ToString();

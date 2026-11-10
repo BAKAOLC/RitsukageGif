@@ -1,4 +1,4 @@
 namespace RitsukageGif.Core
 {
-    internal sealed record HdrAnimationFrame(byte[] Pixels, int DelayMs, CaptureAlphaMode AlphaMode);
+    public sealed record HdrAnimationFrame(byte[] Pixels, int DelayMs, CaptureAlphaMode AlphaMode);
 }

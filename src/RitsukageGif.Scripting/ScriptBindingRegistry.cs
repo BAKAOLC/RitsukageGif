@@ -324,6 +324,8 @@ namespace RitsukageGif.Scripting
 
         internal IEnumerable<KeyValuePair<string, object?>> BindGlobals()
         {
+            if (IsMetadataOnly)
+                throw new InvalidOperationException("Script metadata bindings cannot execute operations.");
             return _globals.Select(p =>
                 new KeyValuePair<string, object?>(p.Key, p.Value.Value));
         }
@@ -344,7 +346,8 @@ namespace RitsukageGif.Scripting
             {
                 var parameter = entries[i];
                 if ((parameter.Variadic && i != entries.Length - 1) ||
-                    (optional && parameter is { Optional: false, Variadic: false }))
+                    (optional && parameter is { Optional: false, Variadic: false }) ||
+                    (parameter.MaximumCount is { } maximum && (!parameter.Variadic || maximum < 0)))
                     throw TypeError();
                 optional |= parameter.Optional;
             }
@@ -374,6 +377,8 @@ namespace RitsukageGif.Scripting
             {
                 if (parameter.Variadic)
                 {
+                    if (parameter.MaximumCount is { } maximum && arguments.Count - index > maximum)
+                        throw new InvalidOperationException(UiText.Format("DslArguments", function.Descriptor.Name));
                     while (index < arguments.Count) normalized.Add(Validate(arguments[index++], parameter.TypeName));
                     break;
                 }

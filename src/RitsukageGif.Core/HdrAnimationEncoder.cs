@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Core
 {
-    internal static class HdrAnimationEncoder
+    public static class HdrAnimationEncoder
     {
         public static Task EncodeAsync(IAsyncEnumerable<HdrAnimationFrame> frames, string output, int width, int height,
             CancellationToken token)

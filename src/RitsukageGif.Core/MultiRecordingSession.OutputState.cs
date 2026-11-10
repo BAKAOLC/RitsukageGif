@@ -15,6 +15,7 @@ namespace RitsukageGif.Core
             private readonly long _outputId = Interlocked.Increment(ref _nextOutputId);
 
             private readonly IProgress<MultiRecordingProgress>? _progress;
+            private readonly RecordingControl _control;
 
             private readonly Channel<QueuedFrame> _queue = Channel.CreateBounded<QueuedFrame>(
                 new BoundedChannelOptions(100000)
@@ -32,10 +33,11 @@ namespace RitsukageGif.Core
             private long _nextLogAt = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 5;
 
             public OutputState(MultiRecordingOutput output, IProgress<MultiRecordingProgress>? progress,
-                CancellationToken cancel)
+                RecordingControl control, CancellationToken cancel)
             {
                 Output = output;
                 _progress = progress;
+                _control = control;
                 _abort = CancellationTokenSource.CreateLinkedTokenSource(cancel);
                 _directory = Path.Combine(Path.GetTempPath(), "RitsukageGif", Guid.NewGuid().ToString("N"));
                 var destination = Path.GetFullPath(output.Path);
@@ -126,9 +128,10 @@ namespace RitsukageGif.Core
                 Directory.CreateDirectory(Path.GetDirectoryName(_staging)!);
             }
 
-            public void Enqueue(byte[] pixels, double time)
+            public void Enqueue(byte[] pixels, double time, long captureTimestamp, long captureSequence,
+                object? metadata)
             {
-                var write = EnqueueAsync(pixels, time, _abort.Token);
+                var write = EnqueueAsync(pixels, time, captureTimestamp, captureSequence, metadata, _abort.Token);
                 if (write.IsCompletedSuccessfully) write.GetAwaiter().GetResult();
                 else EnqueueWorker = FinishEnqueueAsync(write);
             }
@@ -145,7 +148,8 @@ namespace RitsukageGif.Core
                 }
             }
 
-            public async ValueTask EnqueueAsync(byte[] pixels, double time, CancellationToken token)
+            public async ValueTask EnqueueAsync(byte[] pixels, double time, long captureTimestamp,
+                long captureSequence, object? metadata, CancellationToken token)
             {
                 if (pixels.Length != checked(Output.Options.Width * Output.Options.Height * 4))
                     throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
@@ -168,6 +172,9 @@ namespace RitsukageGif.Core
                     Logger.ZLogInformation(
                         $"Multi-output capture produced its first frame: streamId={_outputId}, width={Output.Options.Width}, height={Output.Options.Height}, format={Output.Options.Format.ToString()}");
                 if (!_queue.Writer.TryWrite(frame)) throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+                _control.NotifyFrameAccepted(new(TimeSpan.FromMilliseconds(Math.Round(time)), captureTimestamp,
+                    Output.Options.Region, Output.Options.Width, Output.Options.Height, Output.Name, captureSequence,
+                    metadata));
                 Report(new(RecordingStage.Recording, 0, Volatile.Read(ref _encoded)));
             }
 

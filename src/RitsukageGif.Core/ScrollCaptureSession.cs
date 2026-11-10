@@ -10,7 +10,7 @@ namespace RitsukageGif.Core
         private readonly int _height;
         private readonly ScrollCaptureOptions _options;
         private readonly int _rowBytes;
-        private readonly byte[] _scratch;
+        private byte[] _scratch;
         private readonly int _storageRowBytes;
         private readonly int _width;
         private long _attemptedFrames;
@@ -43,10 +43,16 @@ namespace RitsukageGif.Core
                 throw new ArgumentException("The capture area is too small after cropping.", nameof(options));
             _rowBytes = checked(_crossLength * 4);
             _storageRowBytes = checked(_crossLength * (_options.RetainHdr ? 12 : 4));
+            var viewportBytes = checked(_axisLength * _rowBytes);
+            _workspaceBytes = 2L * viewportBytes + (long)_axisLength * _crossLength +
+                              (long)_axisLength * sizeof(double);
             if (_axisLength > _options.MaximumLength ||
-                (long)_storageRowBytes * _axisLength * 3 > _options.MaximumBytes)
+                _workspaceBytes + (long)_storageRowBytes * _axisLength * 2 > _options.MaximumBytes)
                 throw new ArgumentException("The capture area exceeds the memory or length limit.", nameof(options));
-            _scratch = new byte[checked(_axisLength * _rowBytes)];
+            _scratch = new byte[viewportBytes];
+            _referencePixels = new byte[viewportBytes];
+            _differenceMask = new byte[checked(_axisLength * _crossLength)];
+            _verificationErrors = new double[_axisLength];
             _nextLogAt = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 5;
             Logger.ZLogInformation(
                 $"Scrolling capture session created: width={width}, height={height}, axis={_options.Axis.ToString()}, maximumLength={_options.MaximumLength}, maximumBytes={_options.MaximumBytes}");
@@ -83,12 +89,18 @@ namespace RitsukageGif.Core
         {
             if (frames.Sdr.Width != _width || frames.Sdr.Height != _height)
                 throw new ArgumentException("The frame dimensions must remain unchanged.", nameof(frames));
+            token.ThrowIfCancellationRequested();
+            var inputBytes = CapturedFramePixels.TryGetStraightBgraArray(frames.Sdr, out _)
+                ? 0
+                : checked((long)_width * _height * 4);
+            if (_workspaceBytes + _storedPayloadBytes + _undoExtraPayloadBytes + inputBytes > _options.MaximumBytes)
+                return Result(ScrollCaptureStatus.LimitReached);
             var pixels = CapturedFramePixels.ToStraightBgra(frames.Sdr, token);
-            return TryAppendCore(pixels, frames.Hdr, screenX, screenY, token);
+            return TryAppendCore(pixels, frames.Hdr, screenX, screenY, token, inputBytes);
         }
 
         private ScrollCaptureResult TryAppendCore(ReadOnlySpan<byte> bgra, CapturedFrame? hdr, int screenX, int screenY,
-            CancellationToken token)
+            CancellationToken token, long inputBytes = 0)
         {
             if (_options.RetainHdr) ValidateHdr(hdr);
             if (bgra.Length != (long)_width * _height * 4)
@@ -102,13 +114,28 @@ namespace RitsukageGif.Core
             token.ThrowIfCancellationRequested();
             if (_strips.Count == 0)
             {
-                _strips.Add(CreateStrip(0, _axisLength, 0, pixels, hdr, token));
+                var firstPayload = (long)_axisLength * _storageRowBytes;
+                if (!CanAllocateStrip(inputBytes, firstPayload, _axisLength))
+                    return Result(ScrollCaptureStatus.LimitReached);
+                var first = CreateStrip(0, _axisLength, 0, pixels, hdr, token);
+                token.ThrowIfCancellationRequested();
+                _strips.Add(first);
+                _storedPayloadBytes = firstPayload;
                 _end = _axisLength;
                 _crossPosition = crossPosition;
+                CommitReference(0);
+                if (_options.RetainHdr) _hdrRevision = Math.Max(_hdrRevision, hdr!.Revision);
                 return Result(ScrollCaptureStatus.Started, 0, _axisLength, 1);
             }
 
-            var match = FindMatch(pixels, token);
+            var match = FindMatch(pixels, token, out var masked);
+            if (match.Status == ScrollCaptureStatus.AlreadyCovered)
+            {
+                token.ThrowIfCancellationRequested();
+                CommitReference(match.Offset);
+                return match;
+            }
+
             if (match.Status != ScrollCaptureStatus.Appended) return match;
             var offset = match.Offset;
             var movement = Math.Sign(offset - CurrentOffset);
@@ -119,6 +146,7 @@ namespace RitsukageGif.Core
             var added = nextEnd - nextStart - (_end - StartOffset);
             if (added == 0)
             {
+                token.ThrowIfCancellationRequested();
                 CurrentOffset = offset;
                 if (AutoCropOnReverse && _captureDirection != 0 && movement != 0 && movement != _captureDirection)
                 {
@@ -126,25 +154,38 @@ namespace RitsukageGif.Core
                     else CropBeforeCurrentViewport(token);
                 }
 
+                CommitReference(offset);
                 return Result(ScrollCaptureStatus.AlreadyCovered, offset, 0, confidence);
             }
 
-            // Keep space for both the assembled export and the incoming frame.
-            if (nextEnd - nextStart > _options.MaximumLength
-                || ((long)(nextEnd - nextStart) * 2 + _axisLength) * _storageRowBytes > _options.MaximumBytes)
+            if (nextEnd - nextStart > _options.MaximumLength)
                 return Result(ScrollCaptureStatus.LimitReached, offset);
-            token.ThrowIfCancellationRequested();
             var prepend = nextStart < StartOffset;
-            var begin = prepend ? offset : _end;
-            var end = prepend ? StartOffset : nextEnd;
+            if (!TryFindHandoff(pixels, offset, masked, token, out var handoff))
+                return Result(ScrollCaptureStatus.Unmatched);
+            var begin = prepend ? offset : handoff;
+            var end = prepend ? handoff : nextEnd;
+            var payload = (long)(end - begin) * _storageRowBytes;
+            var retained = RetainOutsideHandoff(handoff, prepend, out var sharedPayload,
+                out var compactPayload, out var compactIndex);
+            if (!CanAllocateStrip(inputBytes, payload + compactPayload, nextEnd - nextStart))
+                return Result(ScrollCaptureStatus.LimitReached, offset);
+            if (compactIndex >= 0) retained[compactIndex] = CompactBoundary(retained[compactIndex], token);
             var strip = CreateStrip(begin, end, offset, pixels, hdr, token);
-            var undo = new UndoState(StartOffset, _end, CurrentOffset, prepend);
-            _strips.Insert(prepend ? 0 : _strips.Count, strip);
+            token.ThrowIfCancellationRequested();
+            retained.Insert(prepend ? 0 : retained.Count, strip);
+            var undo = new UndoState(StartOffset, _end, CurrentOffset, prepend, _strips);
+            _undoExtraPayloadBytes = _storedPayloadBytes - sharedPayload;
+            _storedPayloadBytes = sharedPayload + compactPayload + payload;
+            _strips = retained;
+            _rowStripIndex = 0;
             if (_captureDirection == 0 && movement != 0) _captureDirection = movement;
             _undo = undo;
             StartOffset = nextStart;
             _end = nextEnd;
             CurrentOffset = offset;
+            CommitReference(offset);
+            if (_options.RetainHdr) _hdrRevision = Math.Max(_hdrRevision, hdr!.Revision);
             return Result(ScrollCaptureStatus.Appended, offset, added, confidence);
         }
 
@@ -159,6 +200,9 @@ namespace RitsukageGif.Core
             CurrentOffset = state.LastOffset;
             _undo = null;
             _rowStripIndex = 0;
+            _storedPayloadBytes = PayloadBytes(_strips);
+            _undoExtraPayloadBytes = 0;
+            _hasReference = false;
             Logger.ZLogDebug(
                 $"Scrolling capture edit undone: width={Width}, height={Height}, strips={_strips.Count}");
             return true;

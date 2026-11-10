@@ -79,7 +79,6 @@ namespace RitsukageGif.Core
                     if (!clipped.IsEmpty) regions.Add(item with { Region = clipped });
                 }
 
-            _hdrRevision = Math.Max(_hdrRevision, source.Revision);
             return new(begin, end, sdr, HdrPixels: output, HdrRegions: regions);
         }
 

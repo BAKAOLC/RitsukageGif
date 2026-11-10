@@ -6,7 +6,7 @@ namespace RitsukageGif.Core
     internal static class VideoMuxFinalizer
     {
         internal static async Task TrimAudioAsync(string executable, string path, VideoContainer container,
-            double duration, CancellationToken token)
+            double duration, CancellationToken token, bool matroska = false)
         {
             var output = path + ".mux";
             using var process = new Process();
@@ -20,14 +20,15 @@ namespace RitsukageGif.Core
                          "-map", "0", "-t", duration.ToString("R", CultureInfo.InvariantCulture), "-c", "copy",
                      })
                 process.StartInfo.ArgumentList.Add(argument);
-            if (container == VideoContainer.Mp4)
+            if (!matroska && container == VideoContainer.Mp4)
             {
                 process.StartInfo.ArgumentList.Add("-movflags");
                 process.StartInfo.ArgumentList.Add("+faststart");
             }
 
             process.StartInfo.ArgumentList.Add("-f");
-            process.StartInfo.ArgumentList.Add(container == VideoContainer.Mp4 ? "mp4" : "webm");
+            process.StartInfo.ArgumentList.Add(matroska ? "matroska" :
+                container == VideoContainer.Mp4 ? "mp4" : "webm");
             process.StartInfo.ArgumentList.Add(output);
             token.ThrowIfCancellationRequested();
             process.Start();

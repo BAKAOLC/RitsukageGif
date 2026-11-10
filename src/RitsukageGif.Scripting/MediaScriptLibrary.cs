@@ -6,29 +6,7 @@ namespace RitsukageGif.Scripting
             string? baseDirectory = null)
         {
             var root = Path.GetFullPath(baseDirectory ?? Environment.CurrentDirectory);
-            PixelEffectsBinding.Register(bindings);
-            bindings.RegisterEnum("MediaFormat", new Dictionary<string, string>
-            {
-                ["Gif"] = "gif", ["WebP"] = "webp", ["Png"] = "png", ["APng"] = "apng",
-            });
-            bindings.RegisterObjectSchema("MediaInfo",
-            [
-                new("path", "string"), new("bytes", "number"), new("width", "number"), new("height", "number"),
-                new("frames", "number"), new("duration", "number"), new("format", "string"),
-            ]);
-            bindings.RegisterObjectSchema("MediaOptions",
-            [
-                new("format", "MediaFormat", true), new("colors", "number", true),
-                new("width", "number", true), new("height", "number", true), new("quality", "number", true),
-                new("lossless", "boolean", true), new("dither", "boolean", true), new("overwrite", "boolean", true),
-                new("cropX", "number", true), new("cropY", "number", true),
-                new("cropWidth", "number", true), new("cropHeight", "number", true),
-                new("flipHorizontal", "boolean", true), new("flipVertical", "boolean", true),
-                new("rotation", "number", true), new("frameIndex", "number", true),
-                new("effects", "PixelEffect[]", true),
-            ]);
-            bindings.RegisterObjectSchema("MediaOutput",
-                [new("path", "string"), new("options", "MediaOptions", true)]);
+            RegisterTypes(bindings);
             var media = bindings.RegisterTable("media");
             media.Function("inspect", (args, token) => Inspect((string)args[0]!, token),
                 [new("path", "string")], "Result<MediaInfo,ServiceError>");
@@ -133,6 +111,34 @@ namespace RitsukageGif.Scripting
                     return new ScriptResult(false, ScriptServiceErrors.FromException(error, output));
                 }
             }
+        }
+
+        internal static void RegisterTypes(ScriptBindingRegistry bindings)
+        {
+            if (bindings.GetObjectSchema("MediaOptions") is not null) return;
+            PixelEffectsBinding.Register(bindings);
+            bindings.RegisterEnum("MediaFormat", new Dictionary<string, string>
+            {
+                ["Gif"] = "gif", ["WebP"] = "webp", ["Png"] = "png", ["APng"] = "apng",
+            });
+            bindings.RegisterObjectSchema("MediaInfo",
+            [
+                new("path", "string"), new("bytes", "number"), new("width", "number"), new("height", "number"),
+                new("frames", "number"), new("duration", "number"), new("format", "string"),
+            ]);
+            bindings.RegisterObjectSchema("MediaOptions",
+            [
+                new("format", "MediaFormat", true), new("colors", "number", true),
+                new("width", "number", true), new("height", "number", true), new("quality", "number", true),
+                new("lossless", "boolean", true), new("dither", "boolean", true), new("overwrite", "boolean", true),
+                new("cropX", "number", true), new("cropY", "number", true),
+                new("cropWidth", "number", true), new("cropHeight", "number", true),
+                new("flipHorizontal", "boolean", true), new("flipVertical", "boolean", true),
+                new("rotation", "number", true), new("frameIndex", "number", true),
+                new("effects", "PixelEffect[]", true),
+            ]);
+            bindings.RegisterObjectSchema("MediaOutput",
+                [new("path", "string"), new("options", "MediaOptions", true)]);
         }
 
         internal static Dictionary<string, object?> Info(MediaInfo info)

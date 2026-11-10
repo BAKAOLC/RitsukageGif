@@ -26,7 +26,9 @@ namespace RitsukageGif.Scripting
         IFormulaDocumentService? formulaDocumentService = null,
         ITableDataService? tableDataService = null,
         ITableEditService? tableEditService = null,
-        bool manageRecordingLifecycle = true)
+        bool manageRecordingLifecycle = true,
+        Func<PresetScriptSession?>? sceneHostProvider = null,
+        ScriptResourceScope? resourceScope = null)
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Scripting.Session");
         private readonly ConcurrentQueue<string> _events = new();
@@ -42,8 +44,11 @@ namespace RitsukageGif.Scripting
         private bool _pumping;
         private bool _recordingEnded;
         public PresetRuntime Runtime { get; } = new();
+        private ScriptResourceScope Resources { get; } = resourceScope ?? new();
+        internal PresetScriptSession SceneHost => sceneHostProvider?.Invoke() ?? this;
         public ScriptParameters Parameters { get; } = parameters ?? new ScriptParameters();
         internal IInputChannelReader? InputReader { get; } = inputReader;
+        public object? LastResult { get; private set; }
         public string? LastError { get; private set; }
         public ScriptDiagnostic? LastDiagnostic { get; private set; }
         private IReadOnlyList<ScriptStackFrame>? LastStackFrames { get; set; }
@@ -60,6 +65,7 @@ namespace RitsukageGif.Scripting
             try
             {
                 var result = await RunCoreAsync(token);
+                LastResult = result;
                 token.ThrowIfCancellationRequested();
                 if (result is ScriptResult { IsOk: false } failure)
                 {
@@ -99,6 +105,17 @@ namespace RitsukageGif.Scripting
             }
             finally
             {
+                try
+                {
+                    await Resources.DisposeAsync().ConfigureAwait(false);
+                }
+                catch (Exception error)
+                {
+                    LastError ??= "Script resources could not be released.";
+                    LastDiagnostic ??= new(1, 1, LastError, preset.SourceFile);
+                    Logger.ZLogError($"Script resource disposal failed. ExceptionType={error.GetType().Name}");
+                }
+
                 Logger.ZLogInformation(
                     $"Script session ended. Failed={LastError is not null} Canceled={token.IsCancellationRequested}");
                 if (isCurrent?.Invoke() != false) debugger?.Complete(LastError, LastDiagnostic, LastStackFrames);
@@ -119,13 +136,19 @@ namespace RitsukageGif.Scripting
 
         private async Task<object?> RunCoreAsync(CancellationToken token)
         {
-            Runtime.Publish(_values, _layers);
+            KeyValuePair<string, object>[] initialValues;
+            lock (Runtime.StateGate)
+            {
+                Runtime.Publish(_values, _layers);
+                initialValues = [.. _values];
+            }
+
             var bindings = CaptureScriptLibrary.CreateBindings(this);
             configureBindings?.Invoke(bindings);
             var engine = new ScriptEngine(debugger, bindings);
             _engine = engine;
             foreach (var pair in preset.Constants) engine.Define(pair.Key, pair.Value);
-            foreach (var pair in _values) engine.Define(pair.Key, pair.Value, false);
+            foreach (var pair in initialValues) engine.Define(pair.Key, pair.Value, false);
             return await engine.RunAsync(preset.Program!,
                 preset.SourceFile ?? Path.Combine(Environment.CurrentDirectory, "capture.rgpreset"), token);
         }

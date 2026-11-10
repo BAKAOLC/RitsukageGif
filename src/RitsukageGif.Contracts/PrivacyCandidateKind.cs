@@ -8,5 +8,9 @@ namespace RitsukageGif.Contracts
         IdentityNumber,
         PaymentCard,
         QrCode,
+        ImageStructure,
+        Barcode,
+        ImageBlock,
+        RelatedStructure,
     }
 }

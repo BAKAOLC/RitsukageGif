@@ -41,19 +41,17 @@ namespace RitsukageGif.Core
                 (long)recognized.Width * recognized.Height > 16 * 1024 * 1024)
                 throw new ArgumentException("Invalid OCR dimensions.", nameof(recognized));
             var result = new List<PrivacyCandidate>();
-            foreach (var line in recognized.Lines.Take(4096))
+            foreach (var line in recognized.Lines)
             {
                 token.ThrowIfCancellationRequested();
-                if (result.Count >= 4096) break;
                 if (line.Text.Length > 16384) continue;
                 var sensitive = new List<PixelRect>();
                 AddMatches(EmailPattern(), PrivacyCandidateKind.Email);
                 AddMatches(IdentityPattern(), PrivacyCandidateKind.IdentityNumber);
                 AddMatches(CardPattern(), PrivacyCandidateKind.PaymentCard);
                 AddMatches(PhonePattern(), PrivacyCandidateKind.Phone);
-                foreach (var word in line.Words.Take(4096))
+                foreach (var word in line.Words)
                 {
-                    if (result.Count >= 4096) break;
                     var bounds = Clip(word.Bounds, recognized.Width, recognized.Height);
                     if (bounds.IsEmpty || sensitive.Any(region => !region.Intersect(bounds).IsEmpty)) continue;
                     result.Add(new(Id, PrivacyCandidateKind.Text, bounds, word.Text));
@@ -72,7 +70,6 @@ namespace RitsukageGif.Core
                     foreach (Match match in pattern.Matches(line.Text))
                     {
                         token.ThrowIfCancellationRequested();
-                        if (result.Count >= 4096) return;
                         if ((kind == PrivacyCandidateKind.IdentityNumber && !ValidIdentity(match.ValueSpan)) ||
                             (kind == PrivacyCandidateKind.PaymentCard && !ValidCard(match.ValueSpan))) continue;
                         var bounds = MatchBounds(line, match.Index, match.Length, recognized.Width, recognized.Height);
@@ -90,7 +87,7 @@ namespace RitsukageGif.Core
         {
             PixelRect? union = null;
             var offset = 0;
-            foreach (var word in line.Words.Take(4096))
+            foreach (var word in line.Words)
             {
                 var index = line.Text.IndexOf(word.Text, offset, StringComparison.Ordinal);
                 if (index < 0) return Clip(line.Bounds, width, height);

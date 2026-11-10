@@ -6,10 +6,14 @@ namespace RitsukageGif.Core
     internal sealed class HdrVideoFrameSource(
         IFrameSource owner,
         IColorFrameSource source,
-        VideoRecordingOptions options) : IFrameSource
+        VideoRecordingOptions options) : IFrameSource, IRecordingCaptureMetadataSource
     {
         private static readonly ushort[] PqValues = CreatePqValues();
         private byte[]? _sdrBuffer;
+
+        internal long CaptureTimestamp { get; private set; }
+        internal CaptureAlphaMode HdrAlphaMode { get; private set; }
+        internal CaptureAlphaMode SdrAlphaMode { get; private set; }
 
         public byte[] Capture()
         {
@@ -26,17 +30,54 @@ namespace RitsukageGif.Core
             owner.Dispose();
         }
 
+        public object? CaptureMetadata => (source as IRecordingCaptureMetadataSource)?.CaptureMetadata;
+
         internal byte[] Capture(byte[]? destination, CancellationToken token)
         {
             var frames = source.CaptureFrames(token);
+            CaptureTimestamp = frames.TimestampTicks;
             var hdr = frames.Hdr ?? throw new NotSupportedException(UiText.Get("HdrRecordingUnavailable"));
+            HdrAlphaMode = hdr.AlphaMode;
+            SdrAlphaMode = frames.Sdr.AlphaMode;
             if (hdr.PixelFormat != CapturePixelFormat.Rgba16FloatScRgb ||
                 hdr.Width != options.Capture.Width || hdr.Height != options.Capture.Height ||
                 hdr.Stride < checked(hdr.Width * 8) || hdr.Pixels.Length < (long)hdr.Stride * hdr.Height)
                 throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
-            if (!hdr.ColorInfo.IsHdrSource && !hdr.ColorRegions.Any(region => region.ColorInfo.IsHdrSource))
+            if (options.Profile == VideoRecordingProfile.Standard && !hdr.ColorInfo.IsHdrSource &&
+                !hdr.ColorRegions.Any(region => region.ColorInfo.IsHdrSource))
                 throw new NotSupportedException(UiText.Get("HdrRecordingUnavailable"));
             var both = options.ColorMode == OutputColorMode.Both;
+            if (options.Profile == VideoRecordingProfile.ReviewIntermediate)
+            {
+                var stride64 = checked(hdr.Width * 8 * (both ? 2 : 1));
+                var length64 = checked(stride64 * hdr.Height);
+                var lossless = destination is not null && destination.Length == length64
+                    ? destination
+                    : new byte[length64];
+                if (both && (frames.Sdr.PixelFormat != CapturePixelFormat.Bgra8Srgb ||
+                             frames.Sdr.Width != hdr.Width || frames.Sdr.Height != hdr.Height ||
+                             frames.Sdr.Stride < hdr.Width * 4))
+                    throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
+                for (var y = 0; y < hdr.Height; y++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    hdr.Pixels.Span.Slice(y * hdr.Stride, hdr.Width * 8)
+                        .CopyTo(lossless.AsSpan(y * stride64));
+                    if (!both) continue;
+                    var low = frames.Sdr.Pixels.Span.Slice(y * frames.Sdr.Stride, hdr.Width * 4);
+                    var row = lossless.AsSpan(y * stride64 + hdr.Width * 8, hdr.Width * 8);
+                    for (var x = 0; x < hdr.Width; x++)
+                    {
+                        BinaryPrimitives.WriteUInt16LittleEndian(row[(x * 8)..], (ushort)(low[x * 4 + 2] << 8));
+                        BinaryPrimitives.WriteUInt16LittleEndian(row[(x * 8 + 2)..], (ushort)(low[x * 4 + 1] << 8));
+                        BinaryPrimitives.WriteUInt16LittleEndian(row[(x * 8 + 4)..], (ushort)(low[x * 4] << 8));
+                        BinaryPrimitives.WriteUInt16LittleEndian(row[(x * 8 + 6)..], (ushort)(low[x * 4 + 3] << 8));
+                    }
+                }
+
+                return lossless;
+            }
+
             if (both) _sdrBuffer ??= new byte[checked(hdr.Width * hdr.Height * 4)];
             var sdr = both ? HdrToneMapping.Map(hdr, options.ToneMap, _sdrBuffer, token) : null;
             var stride = checked(hdr.Width * 6 * (both ? 2 : 1));

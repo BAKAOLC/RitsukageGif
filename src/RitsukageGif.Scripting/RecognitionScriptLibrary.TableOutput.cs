@@ -7,6 +7,12 @@ namespace RitsukageGif.Scripting
         private static void RegisterTableOutput(ScriptBindingRegistry bindings, ScriptTableBinding table,
             ITableOutputService? service, ITableDataService? dataService, ITableEditService? editService, string root)
         {
+            bindings.RegisterEnum("TableBorderStyle",
+                Enum.GetValues<TableBorderStyle>().ToDictionary(value => value.ToString(), value => value));
+            bindings.RegisterEnum("TableContentAlignment",
+                Enum.GetValues<TableContentAlignment>().ToDictionary(value => value.ToString(), value => value));
+            bindings.RegisterObjectSchema("TableOutputStyle",
+                [new("borders", "TableBorderStyle", true), new("alignment", "TableContentAlignment", true)]);
             bindings.RegisterEnum("TableOutputFormat",
                 Enum.GetValues<TableOutputFormat>().ToDictionary(value => value.ToString(), value => value));
             bindings.RegisterEnum("TableCellValueKind",
@@ -23,7 +29,10 @@ namespace RitsukageGif.Scripting
                 new("value", "TableCellValue", true),
             ]);
             bindings.RegisterObjectSchema("TableExportData",
-                [new("rows", "number"), new("columns", "number"), new("cells", "TableExportCell[]")]);
+            [
+                new("rows", "number"), new("columns", "number"), new("cells", "TableExportCell[]"),
+                new("outputStyle", "TableOutputStyle", true),
+            ]);
             table.Function("export", async (args, token) =>
             {
                 try
@@ -116,13 +125,45 @@ namespace RitsukageGif.Scripting
                     { Value = value };
             }).ToArray();
             return new(TableInteger(fields, "rows"), TableInteger(fields, "columns"),
-                TableInteger(fields, "width", 0), TableInteger(fields, "height", 0), cells);
+                TableInteger(fields, "width", 0), TableInteger(fields, "height", 0), cells)
+            {
+                OutputStyle = ReadTableOutputStyle(fields),
+            };
+        }
+
+        private static TableOutputStyle ReadTableOutputStyle(Dictionary<string, object?> fields)
+        {
+            if (!fields.TryGetValue("outputStyle", out var value)) return TableOutputStyle.Default;
+            if (value is not Dictionary<string, object?> style)
+                throw new ArgumentException("The table output style must be an object.");
+            var borders = TableBorderStyle.None;
+            if (style.TryGetValue("borders", out var borderValue))
+            {
+                if (borderValue is not TableBorderStyle border || !Enum.IsDefined(border))
+                    throw new ArgumentException("The table border style is invalid.");
+                borders = border;
+            }
+
+            var alignment = TableContentAlignment.Auto;
+            if (style.TryGetValue("alignment", out var alignmentValue))
+            {
+                if (alignmentValue is not TableContentAlignment align || !Enum.IsDefined(align))
+                    throw new ArgumentException("The table content alignment is invalid.");
+                alignment = align;
+            }
+
+            return new() { Borders = borders, Alignment = alignment };
         }
 
         private static Dictionary<string, object?> TableResult(TableRecognitionResult result)
         {
             return new()
             {
+                ["outputStyle"] = new Dictionary<string, object?>
+                {
+                    ["borders"] = (result.OutputStyle ?? TableOutputStyle.Default).Borders,
+                    ["alignment"] = (result.OutputStyle ?? TableOutputStyle.Default).Alignment,
+                },
                 ["rows"] = (double)result.Rows, ["columns"] = (double)result.Columns,
                 ["width"] = (double)result.Width, ["height"] = (double)result.Height,
                 ["structureConfidence"] = result.StructureConfidence is { } score ? (double)score : null,

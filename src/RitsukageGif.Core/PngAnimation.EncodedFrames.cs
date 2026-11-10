@@ -48,6 +48,11 @@ namespace RitsukageGif.Core
             return ReadEncodedFramesCore(path, true, token);
         }
 
+        public static IEnumerable<EncodedPngFrame> ReadRawEncodedFrames(string path, CancellationToken token = default)
+        {
+            return ReadEncodedFramesCore(path, false, token);
+        }
+
         private static IEnumerable<EncodedPngFrame> ReadEncodedFramesCore(string path, bool previewDelay,
             CancellationToken token)
         {

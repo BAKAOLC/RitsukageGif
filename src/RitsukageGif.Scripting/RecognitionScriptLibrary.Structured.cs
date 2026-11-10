@@ -19,6 +19,7 @@ namespace RitsukageGif.Scripting
             [
                 new("rows", "number"), new("columns", "number"), new("width", "number"),
                 new("height", "number"), new("cells", "TableCell[]"), new("structureConfidence", "number?"),
+                new("outputStyle", "TableOutputStyle", true),
             ]);
             bindings.RegisterObjectSchema("RecognizedFormula",
                 [new("latex", "string"), new("bounds", "OcrBounds"), new("detectionConfidence", "number?")]);

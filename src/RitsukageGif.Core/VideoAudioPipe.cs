@@ -57,7 +57,7 @@ namespace RitsukageGif.Core
             }
         }
 
-        public async Task RunAsync(CancellationToken token)
+        public async Task RunAsync(CancellationToken token, RecordingControl? control = null)
         {
             if (_listener is not null)
             {
@@ -67,6 +67,8 @@ namespace RitsukageGif.Core
                 {
                     await _source.RunAsync(async (bytes, cancellation) =>
                     {
+                        if (control?.IsPaused == true) return;
+                        var generation = control?.Generation ?? 0;
                         if (stream is null)
                         {
                             var connection = await accepted.WaitAsync(cancellation);
@@ -74,6 +76,7 @@ namespace RitsukageGif.Core
                             _listener.Dispose();
                         }
 
+                        if (control is not null && !control.IsCurrentCapture(generation)) return;
                         await stream.WriteAsync(bytes, cancellation);
                     }, token);
                 }
@@ -101,13 +104,16 @@ namespace RitsukageGif.Core
             {
                 await _source.RunAsync(async (bytes, cancellation) =>
                 {
+                    if (control?.IsPaused == true) return;
+                    var generation = control?.Generation ?? 0;
                     await connectionTask.WaitAsync(cancellation);
+                    if (control is not null && !control.IsCurrentCapture(generation)) return;
                     await pipe.WriteAsync(bytes, cancellation);
                 }, token);
             }
             finally
             {
-                if (!connectionTask.IsCompleted) await pipe.DisposeAsync();
+                await pipe.DisposeAsync();
                 try
                 {
                     await connectionTask;

@@ -7,6 +7,8 @@ namespace RitsukageGif.Scripting
         private PresetRuntimeSnapshot _snapshot = new(new Dictionary<string, object>(),
             new Dictionary<string, PresetLayerState>());
 
+        internal Lock StateGate { get; private set; } = new();
+
         public PresetRuntimeSnapshot Snapshot => Volatile.Read(ref _snapshot);
         public double Now => _clock.Now;
 
@@ -18,14 +20,16 @@ namespace RitsukageGif.Scripting
         internal void ShareClock(PresetRuntime other)
         {
             _clock = other._clock;
+            StateGate = other.StateGate;
         }
 
         public void Publish(IReadOnlyDictionary<string, object> variables,
             IReadOnlyDictionary<string, PresetLayerState> layers)
         {
-            Volatile.Write(ref _snapshot,
-                new(new Dictionary<string, object>(variables),
-                    new Dictionary<string, PresetLayerState>(layers)));
+            lock (StateGate)
+                Volatile.Write(ref _snapshot,
+                    new(new Dictionary<string, object>(variables),
+                        new Dictionary<string, PresetLayerState>(layers)));
         }
     }
 }

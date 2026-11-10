@@ -7,14 +7,19 @@ namespace RitsukageGif.Core
         public static (int Width, int Height) ReadDimensions(byte[] png)
         {
             ArgumentNullException.ThrowIfNull(png);
+            return ReadDimensions(png.AsSpan());
+        }
+
+        public static (int Width, int Height) ReadDimensions(ReadOnlySpan<byte> png)
+        {
             if (png.Length < 33 || png.Length > MaximumEncodedBytes ||
-                !png.AsSpan(0, 8).SequenceEqual(Signature) ||
-                BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(8)) != 13 ||
-                !png.AsSpan(12, 4).SequenceEqual("IHDR"u8) ||
-                ComputeTransformPngCrc(png.AsSpan(12, 17)) != BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(29)))
+                !png[..8].SequenceEqual(Signature) ||
+                BinaryPrimitives.ReadInt32BigEndian(png[8..]) != 13 ||
+                !png.Slice(12, 4).SequenceEqual("IHDR"u8) ||
+                ComputeTransformPngCrc(png.Slice(12, 17)) != BinaryPrimitives.ReadUInt32BigEndian(png[29..]))
                 throw new InvalidDataException();
-            var width = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16));
-            var height = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20));
+            var width = BinaryPrimitives.ReadInt32BigEndian(png[16..]);
+            var height = BinaryPrimitives.ReadInt32BigEndian(png[20..]);
             if (width <= 0 || height <= 0 || (long)width * height > 128L * 1024 * 1024)
                 throw new InvalidDataException();
             return (width, height);

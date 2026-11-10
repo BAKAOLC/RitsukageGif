@@ -1,4 +1,9 @@
 namespace RitsukageGif.Core
 {
-    internal sealed record FfmpegVideoFrame(double Time, double Duration, byte[] Pixels);
+    internal sealed record FfmpegVideoFrame(
+        double Time,
+        double Duration,
+        byte[] Pixels,
+        byte[]? HdrPixels = null,
+        CaptureAlphaMode AlphaMode = CaptureAlphaMode.Straight);
 }

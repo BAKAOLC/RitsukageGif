@@ -11,17 +11,24 @@ namespace RitsukageGif.Core
         private static readonly ILogger Logger = LogHub.GetLogger("Core.Video");
 
         public async Task<bool> RunAsync(VideoRecordingOptions options, string outputPath,
-            IProgress<RecordingProgress>? progress, CancellationToken stop, CancellationToken cancel)
+            IProgress<RecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
+            RecordingControl? control = null)
         {
+            control ??= new();
             options.Validate();
+            control.SetCanPause(options.AudioInputs.Count == 0);
+            await using var timelineStop = stop.Register(control.RecordStop);
             Logger.ZLogInformation(
                 $"Video recording started: container={options.Container.ToString()}, colorMode={options.ColorMode.ToString()}, width={options.Capture.Width}, height={options.Capture.Height}, fps={options.Capture.Fps}, configuredAudioInputs={options.AudioInputs.Count}");
             ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+            if (options.Profile == VideoRecordingProfile.ReviewIntermediate &&
+                !Path.GetExtension(outputPath).Equals(".mkv", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Review intermediates require a Matroska .mkv path.", nameof(outputPath));
             cancel.ThrowIfCancellationRequested();
             if (stop.IsCancellationRequested) return false;
             var executable = FfmpegEncoder.FindExecutable()
                              ?? throw new FfmpegDependencyException(UiText.Get("FfmpegMissing"));
-            if (options.ColorMode != OutputColorMode.Sdr)
+            if (options.Profile == VideoRecordingProfile.Standard && options.ColorMode != OutputColorMode.Sdr)
             {
                 var capabilities = await VideoRecordingCapabilities.ProbeAsync(cancel);
                 if (!(options.Container == VideoContainer.Mp4 ? capabilities.Mp4Hdr : capabilities.WebMHdr))
@@ -51,8 +58,9 @@ namespace RitsukageGif.Core
                 if (audioSources.Count + options.AudioInputs.Count > 8)
                     throw new ArgumentOutOfRangeException(nameof(options));
                 foreach (var audioSource in audioSources) pipes.Add(new(audioSource));
-                var first = await Task.Run(() =>
+                var first = await Task.Run(async () =>
                 {
+                    await control.WaitWhilePausedAsync(captureStop.Token);
                     source = sourceFactory(options.Capture);
                     if (options.ColorMode != OutputColorMode.Sdr)
                     {
@@ -61,33 +69,56 @@ namespace RitsukageGif.Core
                         source = new HdrVideoFrameSource(source, color, options);
                     }
 
-                    return source.Capture(captureStop.Token);
+                    while (true)
+                    {
+                        await control.WaitWhilePausedAsync(captureStop.Token);
+                        var generation = control.Generation;
+                        if (control.IsPaused) continue;
+                        var pixels = source.Capture(captureStop.Token);
+                        var capture = control.CaptureCompleted(source);
+                        var captureTimestamp = source is HdrVideoFrameSource hdr
+                            ? hdr.CaptureTimestamp
+                            : Stopwatch.GetTimestamp();
+                        if (!control.IsCurrentCapture(generation)) continue;
+                        return (Pixels: pixels, CaptureTimestamp: captureTimestamp, Capture: capture);
+                    }
                 }, captureStop.Token);
                 var frameBytes = checked(options.Capture.Width * options.Capture.Height *
                                          options.ColorMode switch
                                          {
-                                             OutputColorMode.Sdr => 4, OutputColorMode.Hdr => 6,
-                                             OutputColorMode.Both => 12,
+                                             OutputColorMode.Sdr => 4,
+                                             OutputColorMode.Hdr => options.Profile ==
+                                                                    VideoRecordingProfile.ReviewIntermediate
+                                                 ? 8
+                                                 : 6,
+                                             OutputColorMode.Both => options.Profile ==
+                                                                     VideoRecordingProfile.ReviewIntermediate
+                                                 ? 16
+                                                 : 12,
                                              _ => throw new ArgumentOutOfRangeException(nameof(options)),
                                          });
-                ValidateFrame(first, frameBytes);
+                ValidateFrame(first.Pixels, frameBytes);
                 Logger.ZLogInformation(
-                    $"Video capture produced its first frame: bytes={first.Length}, liveAudioSources={audioSources.Count}");
-                process.StartInfo = BuildStartInfo(executable, options, pipes, staging, hdrStaging);
+                    $"Video capture produced its first frame: bytes={first.Pixels.Length}, liveAudioSources={audioSources.Count}");
+                process.StartInfo = BuildStartInfo(executable, options, pipes, staging, hdrStaging,
+                    source as HdrVideoFrameSource);
                 cancel.ThrowIfCancellationRequested();
-                var clock = Stopwatch.StartNew();
+                var clock = new RecordingClock(control);
+                control.BindTimeline(clock.RawStartedAt, clock.Origin);
                 process.Start();
                 started = true;
                 Logger.ZLogDebug($"Video encoder process started: processId={process.Id}");
                 errors = ReadErrorsAsync(process.StandardError);
                 // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
-                foreach (var pipe in pipes) audioTasks.Add(pipe.RunAsync(audioStop.Token));
+                foreach (var pipe in pipes) audioTasks.Add(pipe.RunAsync(audioStop.Token, control));
                 var input = process.StandardInput.BaseStream;
                 var captureCancellation = captureStop.Token;
                 var cancellation = abort.Token;
                 var frameSource = source!;
-                pump = Task.Run(() => WriteFramesAsync(input, frameSource, first, options.Capture, frameBytes,
-                    clock, progress, stop, captureCancellation, cancellation), cancellation);
+                pump = Task.Run(() => WriteFramesAsync(input, frameSource, first.Pixels, first.CaptureTimestamp,
+                    first.Capture.Sequence, first.Capture.Metadata,
+                    options.Capture, frameBytes,
+                    clock, control, progress, stop, captureCancellation, cancellation), cancellation);
                 audioObserver = ObserveAudioAsync(audioTasks, audioStop.Token);
                 var exited = process.WaitForExitAsync(abort.Token);
                 var winner = await Task.WhenAny(pump, audioObserver, exited);
@@ -103,9 +134,9 @@ namespace RitsukageGif.Core
                     $"Video capture stopped; finalizing encoder: captured={recorded.Captured}, encoded={recorded.Encoded}, elapsedSeconds={recorded.ElapsedSeconds}");
                 process.StandardInput.Close();
                 progress?.Report(recorded with { Stage = RecordingStage.Encoding });
-                // -shortest closes live audio when the final video frame has been muxed.
-                await exited.WaitAsync(TimeSpan.FromSeconds(30), cancel);
                 await audioStop.CancelAsync();
+                // Closing live PCM supplies EOF even when capture was paused; apad covers the final video tail.
+                await exited.WaitAsync(TimeSpan.FromSeconds(30), cancel);
                 var error = await errors;
                 if (process.ExitCode != 0)
                     throw new InvalidOperationException(UiText.Format("FfmpegFailed", process.ExitCode, error));
@@ -116,10 +147,11 @@ namespace RitsukageGif.Core
                 if (audioSources.Count + options.AudioInputs.Count != 0)
                 {
                     var duration = (double)recorded.Encoded / options.Capture.Fps;
-                    await VideoMuxFinalizer.TrimAudioAsync(executable, staging, options.Container, duration, cancel);
+                    await VideoMuxFinalizer.TrimAudioAsync(executable, staging, options.Container, duration, cancel,
+                        options.Profile == VideoRecordingProfile.ReviewIntermediate);
                     if (hdrStaging is not null)
                         await VideoMuxFinalizer.TrimAudioAsync(executable, hdrStaging, options.Container, duration,
-                            cancel);
+                            cancel, options.Profile == VideoRecordingProfile.ReviewIntermediate);
                 }
 
                 cancel.ThrowIfCancellationRequested();
@@ -219,10 +251,15 @@ namespace RitsukageGif.Core
         }
 
         private static async Task<RecordingProgress> WriteFramesAsync(Stream stream, IFrameSource source, byte[] first,
-            RecordingOptions options, int frameBytes, Stopwatch clock, IProgress<RecordingProgress>? progress,
+            long firstCaptureTimestamp, long firstCaptureSequence, object? firstMetadata,
+            RecordingOptions options, int frameBytes, RecordingClock clock, RecordingControl control,
+            IProgress<RecordingProgress>? progress,
             CancellationToken stop, CancellationToken captureToken, CancellationToken cancel)
         {
             var previous = first;
+            var previousTimestamp = firstCaptureTimestamp;
+            var previousSequence = firstCaptureSequence;
+            var previousMetadata = firstMetadata;
             byte[]? spare = null;
             var written = 0;
             var captured = 1;
@@ -232,29 +269,45 @@ namespace RitsukageGif.Core
                 // ReSharper disable once AccessToModifiedClosure
                 stop.Register(() => Interlocked.CompareExchange(ref stoppedTicks, clock.ElapsedTicks, -1));
             await stream.WriteAsync(previous, cancel);
+            control.NotifyFrameAccepted(new(TimeSpan.Zero, previousTimestamp, options.Region,
+                options.Width, options.Height, CaptureSequence: previousSequence, SourceMetadata: previousMetadata));
             written++;
             while (!stop.IsCancellationRequested)
-            {
-                var wait = written * period - clock.Elapsed.TotalMilliseconds;
                 try
                 {
-                    if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait), captureToken);
+                    await clock.WaitUntilAsync(written * period, captureToken);
                     if (stop.IsCancellationRequested) break;
+                    var generation = control.Generation;
+                    if (control.IsPaused) continue;
                     var next = source is HdrVideoFrameSource hdr
                         ? hdr.Capture(spare, captureToken)
                         : source.Capture(captureToken);
+                    var capture = control.CaptureCompleted(source);
+                    var captureTimestamp = source is HdrVideoFrameSource hdrSource
+                        ? hdrSource.CaptureTimestamp
+                        : Stopwatch.GetTimestamp();
                     ValidateFrame(next, frameBytes);
                     if (stop.IsCancellationRequested) break;
+                    if (!control.IsCurrentCapture(generation)) continue;
                     var slot = (int)Math.Min(int.MaxValue - 1, Math.Floor(clock.Elapsed.TotalMilliseconds / period));
                     while (written < slot)
                     {
                         await stream.WriteAsync(previous, cancel);
+                        control.NotifyFrameAccepted(new(TimeSpan.FromSeconds(written / (double)options.Fps),
+                            previousTimestamp, options.Region, options.Width, options.Height,
+                            CaptureSequence: previousSequence, SourceMetadata: previousMetadata));
                         written++;
                     }
 
                     if (source is HdrVideoFrameSource) spare = previous;
                     previous = next;
+                    previousTimestamp = captureTimestamp;
+                    previousSequence = capture.Sequence;
+                    previousMetadata = capture.Metadata;
                     await stream.WriteAsync(previous, cancel);
+                    control.NotifyFrameAccepted(new(TimeSpan.FromSeconds(written / (double)options.Fps),
+                        previousTimestamp, options.Region, options.Width, options.Height,
+                        CaptureSequence: previousSequence, SourceMetadata: previousMetadata));
                     written++;
                     captured++;
                     var elapsed = clock.Elapsed.TotalSeconds;
@@ -266,7 +319,6 @@ namespace RitsukageGif.Core
                 {
                     break;
                 }
-            }
 
             cancel.ThrowIfCancellationRequested();
             var ticks = Interlocked.Read(ref stoppedTicks);
@@ -275,15 +327,19 @@ namespace RitsukageGif.Core
             while (written < finalCount)
             {
                 await stream.WriteAsync(previous, cancel);
+                control.NotifyFrameAccepted(new(TimeSpan.FromSeconds(written / (double)options.Fps),
+                    previousTimestamp, options.Region, options.Width, options.Height, CaptureSequence: previousSequence,
+                    SourceMetadata: previousMetadata));
                 written++;
             }
 
+            control.CompleteTimeline(TimeSpan.FromSeconds(ended));
             return new(RecordingStage.Live, captured, written,
                 ended > 0 ? captured / ended : 0, ended);
         }
 
         private static ProcessStartInfo BuildStartInfo(string executable, VideoRecordingOptions options,
-            List<VideoAudioPipe> pipes, string output, string? hdrOutput)
+            List<VideoAudioPipe> pipes, string output, string? hdrOutput, HdrVideoFrameSource? colorSource)
         {
             var info = new ProcessStartInfo(executable)
             {
@@ -292,7 +348,8 @@ namespace RitsukageGif.Core
             };
 
             Add("-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-thread_queue_size", "8",
-                "-f", "rawvideo", "-pixel_format", options.ColorMode == OutputColorMode.Sdr ? "bgra" : "rgb48le",
+                "-f", "rawvideo", "-pixel_format", options.ColorMode == OutputColorMode.Sdr ? "bgra" :
+                options.Profile == VideoRecordingProfile.ReviewIntermediate ? "rgba64le" : "rgb48le",
                 "-video_size",
                 $"{options.Capture.Width * (options.ColorMode == OutputColorMode.Both ? 2 : 1)}x{options.Capture.Height}",
                 "-framerate", options.Capture.Fps.ToString(CultureInfo.InvariantCulture), "-i", "pipe:0");
@@ -320,7 +377,7 @@ namespace RitsukageGif.Core
                 filters.Add(
                     $"[0:v]split=2[hdrraw][sdrraw];[hdrraw]crop={options.Capture.Width}:{options.Capture.Height}:0:0[hdr];" +
                     $"[sdrraw]crop={options.Capture.Width}:{options.Capture.Height}:{options.Capture.Width}:0[sdr]");
-            if (audioCount > 1)
+            if (audioCount > 1 && options.Profile == VideoRecordingProfile.Standard)
             {
                 var labels = string.Concat(Enumerable.Range(1, audioCount).Select(index => $"[{index}:a:0]"));
                 filters.Add(
@@ -339,6 +396,37 @@ namespace RitsukageGif.Core
             void WriteOutput(string path, bool hdr, string video, string audio)
             {
                 Add("-map", video);
+                if (options.Profile == VideoRecordingProfile.ReviewIntermediate)
+                {
+                    var alpha = hdr
+                        ? colorSource?.HdrAlphaMode ?? CaptureAlphaMode.Straight
+                        : colorSource?.SdrAlphaMode ?? CaptureAlphaMode.Straight;
+                    Add("-c:v", "ffv1", "-level", "3", "-coder", "1", "-context", "1",
+                        "-pix_fmt", hdr ? "rgba64le" : "bgra", "-metadata:s:v:0",
+                        "rg_pixel_encoding=" + (hdr ? "scrgb-f16-bits" : "bgra8"),
+                        "-metadata:s:v:0", "rg_alpha_mode=" + alpha,
+                        "-metadata:s:v:0", "rg_scrgb_unit_nits=80");
+                    for (var index = 0; index < audioCount; index++)
+                    {
+                        Add("-map", $"{index + 1}:a:0", $"-filter:a:{index}", "apad");
+                        var kind = index < options.AudioTrackKinds.Count
+                            ? options.AudioTrackKinds[index]
+                            : VideoAudioTrackKind.Other;
+                        var name = kind switch
+                        {
+                            VideoAudioTrackKind.SystemAudio => "system-audio",
+                            VideoAudioTrackKind.Microphone => "microphone",
+                            _ => "other",
+                        };
+                        Add($"-metadata:s:a:{index}", "rg_source_kind=" + name);
+                    }
+
+                    if (audioCount > 0) Add("-shortest", "-c:a", "pcm_f64le");
+                    else Add("-an");
+                    Add("-f", "matroska", path);
+                    return;
+                }
+
                 var format = hdr ? "yuv420p10le" : "yuv420p";
                 var matrix = hdr ? "bt2020" : "bt709";
                 var filter =

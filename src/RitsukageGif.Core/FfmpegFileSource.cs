@@ -11,6 +11,8 @@ namespace RitsukageGif.Core
     {
         private readonly SemaphoreSlim _access = new(1);
         private readonly double _estimatedDuration;
+        private readonly FfmpegFrameColor _color;
+        private readonly int _decodeWidth, _decodeHeight;
         private readonly string _executable;
         private readonly double _fallbackDuration;
         private readonly string _input;
@@ -28,9 +30,13 @@ namespace RitsukageGif.Core
         private Task _reader = Task.CompletedTask;
 
         private FfmpegFileSource(string executable, string input, int width, int height, double fallbackDuration,
-            double startTime, double seekBase, double estimatedDuration)
+            double startTime, double seekBase, double estimatedDuration, FfmpegFrameColor color, int sourceWidth,
+            int sourceHeight)
         {
             _executable = executable;
+            _color = color;
+            _decodeWidth = color.IsHdr ? sourceWidth : width;
+            _decodeHeight = color.IsHdr ? sourceHeight : height;
             _input = input;
             Width = width;
             Height = height;
@@ -43,6 +49,7 @@ namespace RitsukageGif.Core
 
         public int Width { get; }
         public int Height { get; }
+        public bool IsHdrSource => _color.IsHdr;
 
         public void Dispose()
         {
@@ -70,7 +77,8 @@ namespace RitsukageGif.Core
             foreach (var argument in new[]
                      {
                          "-v", "error", "-select_streams", "v:0", "-show_entries",
-                         "stream=width,height,avg_frame_rate,start_time,duration:format=start_time,duration", "-of",
+                         "stream=width,height,avg_frame_rate,start_time,duration,color_transfer,color_primaries,color_space,pix_fmt:stream_tags:format=start_time,duration",
+                         "-of",
                          "json", "-i", options.Input,
                      }) process.StartInfo.ArgumentList.Add(argument);
             process.Start();
@@ -108,7 +116,8 @@ namespace RitsukageGif.Core
                 var duration = JsonNumber(stream, "duration");
                 if (duration <= 0) duration = Math.Max(0, JsonNumber(format, "duration") - Math.Max(0, startTime));
                 return new(executable, options.Input, width, height, fallback, startTime, seekBase,
-                    duration);
+                    duration, FfmpegFrameColor.Read(stream), stream.GetProperty("width").GetInt32(),
+                    stream.GetProperty("height").GetInt32());
             }
             finally
             {
@@ -126,6 +135,45 @@ namespace RitsukageGif.Core
         public async Task<byte[]?> FrameAtAsync(double position, bool loop, bool holdLast,
             CancellationToken token = default)
         {
+            var frame = await FrameAtCoreAsync(position, loop, holdLast, token).ConfigureAwait(false);
+            return frame is null
+                ? null
+                : CapturedFramePixels.ToStraightBgra(new(Width, Height, Width * 4,
+                    CapturePixelFormat.Bgra8Srgb, (byte[])frame.Pixels.Clone(), new(IsHdrSource), frame.AlphaMode, 0,
+                    []), token);
+        }
+
+        public async Task<CapturedFrameSet?> FrameAtPlanesAsync(double position, bool loop, bool holdLast,
+            CancellationToken token = default)
+        {
+            var frame = await FrameAtCoreAsync(position, loop, holdLast, token).ConfigureAwait(false);
+            if (frame is null) return null;
+            var pixels = (byte[])frame.Pixels.Clone();
+            if (frame.AlphaMode != CaptureAlphaMode.Premultiplied)
+            {
+                pixels = CapturedFramePixels.ToStraightBgra(new(Width, Height, Width * 4,
+                    CapturePixelFormat.Bgra8Srgb, pixels, new(IsHdrSource), frame.AlphaMode, 0, []), token);
+                for (var offset = 0; offset < pixels.Length; offset += 4)
+                {
+                    var alpha = pixels[offset + 3];
+                    for (var channel = 0; channel < 3; channel++)
+                        pixels[offset + channel] = (byte)((pixels[offset + channel] * alpha + 127) / 255);
+                }
+            }
+
+            var sdr = new CapturedFrame(Width, Height, Width * 4, CapturePixelFormat.Bgra8Srgb, pixels,
+                new(IsHdrSource), CaptureAlphaMode.Premultiplied, 0, []);
+            var hdr = frame.HdrPixels is null
+                ? null
+                : new CapturedFrame(Width, Height, Width * 8,
+                    CapturePixelFormat.Rgba16FloatScRgb, (byte[])frame.HdrPixels.Clone(), new(true), _color.Alpha, 0,
+                    []);
+            return new(sdr, hdr, Stopwatch.GetTimestamp());
+        }
+
+        private async Task<FfmpegVideoFrame?> FrameAtCoreAsync(double position, bool loop, bool holdLast,
+            CancellationToken token = default)
+        {
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
             if (!double.IsFinite(position) || position < 0) throw new ArgumentOutOfRangeException(nameof(position));
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
@@ -137,7 +185,7 @@ namespace RitsukageGif.Core
                 {
                     case true when _duration > 0: position %= _duration; break;
                     case false when _ended && position >= _duration:
-                        return holdLast && _current is not null ? (byte[])_current.Pixels.Clone() : null;
+                        return holdLast && _current is not null ? _current : null;
                 }
 
                 if ((_current is not null && position < _current.Time)
@@ -171,8 +219,8 @@ namespace RitsukageGif.Core
                         _next = await ReadFrameAsync(timeout.Token).ConfigureAwait(false);
                     }
 
-                    if (!_ended || position < _duration) return (byte[])_current.Pixels.Clone();
-                    if (!loop) return holdLast ? (byte[])_current.Pixels.Clone() : null;
+                    if (!_ended || position < _duration) return _current;
+                    if (!loop) return holdLast ? _current : null;
                     position %= _duration;
                     await RestartAsync(position).ConfigureAwait(false);
                 }
@@ -228,8 +276,9 @@ namespace RitsukageGif.Core
                          "-noaccurate_seek", "-ss",
                          Math.Max(0, position + _seekBase).ToString("R", CultureInfo.InvariantCulture), "-i", _input,
                          "-map", "0:v:0", "-an", "-sn", "-dn", "-vf",
-                         $"scale={Width}:{Height},setpts=PTS-({_startTime.ToString("R", CultureInfo.InvariantCulture)})/TB,showinfo=checksum=0",
-                         "-fps_mode", "passthrough", "-pix_fmt", "bgra", "-f", "rawvideo", "pipe:1",
+                         $"scale={_decodeWidth}:{_decodeHeight}:in_color_matrix={(_color.Matrix.StartsWith("bt2020", StringComparison.Ordinal) ? "bt2020" : "auto")},setpts=PTS-({_startTime.ToString("R", CultureInfo.InvariantCulture)})/TB,showinfo=checksum=0",
+                         "-fps_mode", "passthrough", "-pix_fmt", IsHdrSource ? "rgba64le" : "bgra", "-f", "rawvideo",
+                         "pipe:1",
                      })
                 process.StartInfo.ArgumentList.Add(argument);
             using var parsingStop = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -243,7 +292,7 @@ namespace RitsukageGif.Core
                 errors = ReadTimesAsync(process.StandardError, times.Writer, parsingStop.Token);
                 while (true)
                 {
-                    var pixels = new byte[checked(Width * Height * 4)];
+                    var pixels = new byte[checked(_decodeWidth * _decodeHeight * (IsHdrSource ? 8 : 4))];
                     var read = 0;
                     while (read < pixels.Length)
                     {
@@ -256,7 +305,19 @@ namespace RitsukageGif.Core
                     if (read == 0) break;
                     if (read != pixels.Length) throw new EndOfStreamException();
                     var timing = await times.Reader.ReadAsync(token).ConfigureAwait(false);
-                    await frames.WriteAsync(new(timing.Time, timing.Duration, pixels), token)
+                    byte[]? hdrPixels = null;
+                    var alpha = _color.Alpha;
+                    if (IsHdrSource)
+                    {
+                        hdrPixels = _color.DecodeLinear(pixels, _decodeWidth, _decodeHeight, Width, Height, token);
+                        var hdrFrame = new CapturedFrame(Width, Height, Width * 8,
+                            CapturePixelFormat.Rgba16FloatScRgb, hdrPixels, new(true), alpha, 0, []);
+                        var mapped = HdrToneMapping.Map(hdrFrame, token: token);
+                        pixels = CapturedFramePixels.ToStraightBgra(mapped, token);
+                        alpha = mapped.AlphaMode;
+                    }
+
+                    await frames.WriteAsync(new(timing.Time, timing.Duration, pixels, hdrPixels, alpha), token)
                         .ConfigureAwait(false);
                 }
 

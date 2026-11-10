@@ -8,6 +8,8 @@ namespace RitsukageGif.Core
         public int Quality { get; init; } = 23;
         public bool Overwrite { get; init; } = true;
         public IReadOnlyList<VideoAudioInput> AudioInputs { get; init; } = [];
+        public VideoRecordingProfile Profile { get; init; }
+        public IReadOnlyList<VideoAudioTrackKind> AudioTrackKinds { get; init; } = [];
 
         public IReadOnlyList<string> GetOutputPaths(string path)
         {
@@ -25,6 +27,11 @@ namespace RitsukageGif.Core
         {
             ArgumentNullException.ThrowIfNull(Capture);
             ArgumentNullException.ThrowIfNull(AudioInputs);
+            ArgumentNullException.ThrowIfNull(AudioTrackKinds);
+            if (!Enum.IsDefined(Profile)) throw new ArgumentOutOfRangeException(nameof(Profile));
+            foreach (var kind in AudioTrackKinds)
+                if (!Enum.IsDefined(kind))
+                    throw new ArgumentOutOfRangeException(nameof(AudioTrackKinds));
             Capture.Validate();
             if (!Enum.IsDefined(ColorMode) || !Enum.IsDefined(ToneMap))
                 throw new ArgumentOutOfRangeException(nameof(ColorMode));

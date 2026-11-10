@@ -98,6 +98,13 @@ namespace RitsukageGif.Core
                 (long)range.Rows * range.Columns;
         }
 
+        public bool WouldMergeDiscardContent(IReadOnlyList<TableCellRange> ranges)
+        {
+            var selected = SelectCells(ranges);
+            return CanMerge(selected, out var range) && selected.Any(cell =>
+                (cell.Row != range.Row || cell.Column != range.Column) && cell.Text.Length != 0);
+        }
+
         public void Merge(IReadOnlyList<TableCellRange> ranges)
         {
             var selected = SelectCells(ranges);
@@ -108,8 +115,10 @@ namespace RitsukageGif.Core
             var top = selected.Min(cell => cell.Bounds.Y);
             var bounds = new OcrBounds(left, top, selected.Max(cell => cell.Bounds.X + cell.Bounds.Width) - left,
                 selected.Max(cell => cell.Bounds.Y + cell.Bounds.Height) - top);
-            var merged = new TableCell(range.Row, range.Column, range.Rows, range.Columns,
-                string.Join("\n", ordered.Select(cell => cell.Text).Where(text => text.Length != 0)), bounds);
+            var merged = ordered[0] with
+            {
+                RowSpan = range.Rows, ColumnSpan = range.Columns, Bounds = bounds,
+            };
             Table = Table with { Cells = Ordered(Table.Cells.Where(cell => !selected.Contains(cell)).Append(merged)) };
         }
 

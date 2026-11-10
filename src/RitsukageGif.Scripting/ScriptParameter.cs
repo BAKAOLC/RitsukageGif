@@ -8,5 +8,6 @@ namespace RitsukageGif.Scripting
         bool Variadic = false,
         bool ReceiverElement = false,
         IReadOnlyList<string>? CallbackParameters = null,
-        string? CallbackReturnType = null);
+        string? CallbackReturnType = null,
+        int? MaximumCount = null);
 }

@@ -43,18 +43,21 @@ namespace RitsukageGif.Scripting
 
         private void InitializePlayback(double now)
         {
-            Runtime.SetTime(now);
-            foreach (var layer in preset.Layout?.Layers ?? [])
+            lock (Runtime.StateGate)
             {
-                if (layer.Media is not { } media) continue;
-                var state = _layers.GetValueOrDefault(layer.Name) ?? new PresetLayerState();
-                var playback = state.Playback is { } existing
-                    ? existing with { UpdatedAt = now }
-                    : new(media.Position, media.Speed, false, media.Loop, media.HoldLast, now);
-                _layers[layer.Name] = state with { Playback = playback };
-            }
+                Runtime.SetTime(now);
+                foreach (var layer in preset.Layout?.Layers ?? [])
+                {
+                    if (layer.Media is not { } media) continue;
+                    var state = _layers.GetValueOrDefault(layer.Name) ?? new PresetLayerState();
+                    var playback = state.Playback is { } existing
+                        ? existing with { UpdatedAt = now }
+                        : new(media.Position, media.Speed, false, media.Loop, media.HoldLast, now);
+                    _layers[layer.Name] = state with { Playback = playback };
+                }
 
-            Runtime.Publish(_values, _layers);
+                Runtime.Publish(_values, _layers);
+            }
         }
     }
 }

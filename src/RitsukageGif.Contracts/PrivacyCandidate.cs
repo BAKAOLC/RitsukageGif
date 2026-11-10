@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace RitsukageGif.Contracts
 {
     public sealed record PrivacyCandidate(
@@ -10,6 +12,14 @@ namespace RitsukageGif.Contracts
         // ReSharper disable once NotAccessedPositionalProperty.Global
         bool BoundsApproximate = false)
     {
-        public bool IsSensitive => Kind != PrivacyCandidateKind.Text;
+        public ulong? AppearanceSignature { get; init; }
+
+        [JsonIgnore]
+        public bool IsImageStructure => Kind is PrivacyCandidateKind.ImageStructure or PrivacyCandidateKind.ImageBlock
+            or PrivacyCandidateKind.RelatedStructure;
+
+        public bool IsSensitive => Kind is PrivacyCandidateKind.Email or PrivacyCandidateKind.Phone
+            or PrivacyCandidateKind.IdentityNumber or PrivacyCandidateKind.PaymentCard or PrivacyCandidateKind.QrCode
+            or PrivacyCandidateKind.ImageBlock or PrivacyCandidateKind.RelatedStructure;
     }
 }

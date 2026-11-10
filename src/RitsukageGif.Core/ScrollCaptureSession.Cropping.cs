@@ -43,7 +43,11 @@ namespace RitsukageGif.Core
             token.ThrowIfCancellationRequested();
             if (retained.Count == 0) return false;
             _undo = new(StartOffset, _end, CurrentOffset, false, _strips);
+            var retainedPayload = PayloadBytes(retained);
+            _undoExtraPayloadBytes = _storedPayloadBytes - retainedPayload;
+            _storedPayloadBytes = retainedPayload;
             _strips = retained;
+            _hasReference = false;
             StartOffset = start;
             _end = end;
             _rowStripIndex = 0;

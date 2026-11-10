@@ -69,10 +69,12 @@ namespace RitsukageGif.Scripting
                 args.Count == 0 || args[0] is null ? null : settings.Read(args[0]), token);
             ScriptParameter[] startParameters = [new("options", RecordingSettingsBinding.SchemaName, true)];
             recording.Function("start", start, startParameters, "void");
-            recording.Function("startMany", (args, token) => Host().StartManyBound(outputs.Read(args[0]), token),
+            recording.Function("startMany",
+                (args, token) => Host().SceneHost.StartManyBound(outputs.Read(args[0]), token),
                 [new("outputs", RecordingOutputsBinding.SchemaName + "[]")], "void");
             recording.Function("status", (_, token) => Host().StatusBound(token), [], "RecordingStatus");
-            recording.Function("outputs", (_, token) => Host().OutputsBound(token), [], "RecordingStreamStatus[]");
+            recording.Function("outputs", (_, token) => Host().SceneHost.OutputsBound(token), [],
+                "RecordingStreamStatus[]");
             bindings.RegisterFunction("start", start, startParameters, "void");
             foreach (var name in new[] { "stop", "cancel", "copy", "select", "show", "hide" })
             {
@@ -96,7 +98,7 @@ namespace RitsukageGif.Scripting
                 new("visible", "boolean", true), new("opacity", "number", true), new("effects", "PixelEffect[]", true),
                 new("playback", "PlaybackOptions", true),
             ]);
-            scene.Function("set", ScriptEngine.Native(args => Host().SetLayerBound((string)args[0]!,
+            scene.Function("set", ScriptEngine.Native(args => Host().SceneHost.SetLayerBound((string)args[0]!,
                     (Dictionary<string, object?>)args[1]!)),
                 [new("name", "string"), new("options", "SceneUpdate")], "void");
             ScriptParameter[] rectangle =
@@ -104,35 +106,39 @@ namespace RitsukageGif.Scripting
                 new("name", "string"), new("x", "number"), new("y", "number"), new("width", "number"),
                 new("height", "number"),
             ];
-            scene.Function("move", ScriptEngine.Native(args => Host().UpdateLayerBound("move", args)), rectangle,
+            scene.Function("move", ScriptEngine.Native(args => Host().SceneHost.UpdateLayerBound("move", args)),
+                rectangle,
                 "void");
-            scene.Function("crop", ScriptEngine.Native(args => Host().UpdateLayerBound("crop", args)), rectangle,
+            scene.Function("crop", ScriptEngine.Native(args => Host().SceneHost.UpdateLayerBound("crop", args)),
+                rectangle,
                 "void");
-            scene.Function("animate", ScriptEngine.Native(args => Host().UpdateLayerBound("animate", args)),
+            scene.Function("animate", ScriptEngine.Native(args => Host().SceneHost.UpdateLayerBound("animate", args)),
                 [.. rectangle, new("seconds", "number"), new("easing", "Easing", true, "linear")], "void");
-            scene.Function("visible", ScriptEngine.Native(args => Host().UpdateLayerBound("visible", args)),
+            scene.Function("visible", ScriptEngine.Native(args => Host().SceneHost.UpdateLayerBound("visible", args)),
                 [new("name", "string"), new("visible", "boolean")], "void");
-            scene.Function("opacity", ScriptEngine.Native(args => Host().UpdateLayerBound("opacity", args)),
+            scene.Function("opacity", ScriptEngine.Native(args => Host().SceneHost.UpdateLayerBound("opacity", args)),
                 [new("name", "string"), new("opacity", "number")], "void");
-            scene.Function("get", ScriptEngine.Native(args => Host().ReadLayerBound((string)args[0]!)),
+            scene.Function("get", ScriptEngine.Native(args => Host().SceneHost.ReadLayerBound((string)args[0]!)),
                 [new("name", "string")], "SceneLayer");
-            scene.Function("setFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                    .SetLayerBound((string)args[1]!, (Dictionary<string, object?>)args[2]!)),
+            scene.Function("setFor", ScriptEngine.Native(args => Host().SceneHost.SetOutputLayerBound((string)args[0]!,
+                    (string)args[1]!, (Dictionary<string, object?>)args[2]!)),
                 [new("output", "string"), new("name", "string"), new("options", "SceneUpdate")], "void");
-            scene.Function("effects", ScriptEngine.Native(args => Host().SetLayerBound((string)args[0]!,
+            scene.Function("effects", ScriptEngine.Native(args => Host().SceneHost.SetLayerBound((string)args[0]!,
                     new() { ["effects"] = args[1] })),
                 [new("name", "string"), new("effects", "PixelEffect[]")], "void");
-            scene.Function("effectsFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                    .SetLayerBound((string)args[1]!, new() { ["effects"] = args[2] })),
+            scene.Function("effectsFor", ScriptEngine.Native(args => Host().SceneHost.SetOutputLayerBound(
+                    (string)args[0]!,
+                    (string)args[1]!, new() { ["effects"] = args[2] })),
                 [new("output", "string"), new("name", "string"), new("effects", "PixelEffect[]")], "void");
-            scene.Function("playback", ScriptEngine.Native(args => Host().SetLayerBound((string)args[0]!,
+            scene.Function("playback", ScriptEngine.Native(args => Host().SceneHost.SetLayerBound((string)args[0]!,
                     new() { ["playback"] = args[1] })),
                 [new("name", "string"), new("options", "PlaybackOptions")], "void");
-            scene.Function("playbackFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                    .SetLayerBound((string)args[1]!, new() { ["playback"] = args[2] })),
+            scene.Function("playbackFor", ScriptEngine.Native(args => Host().SceneHost.SetOutputLayerBound(
+                    (string)args[0]!,
+                    (string)args[1]!, new() { ["playback"] = args[2] })),
                 [new("output", "string"), new("name", "string"), new("options", "PlaybackOptions")], "void");
-            scene.Function("getFor", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                    .ReadLayerBound((string)args[1]!)),
+            scene.Function("getFor", ScriptEngine.Native(args => Host().SceneHost.ReadOutputLayerBound((string)args[0]!,
+                    (string)args[1]!)),
                 [new("output", "string"), new("name", "string")], "SceneLayer");
             foreach (var operation in new[] { "move", "crop", "animate", "visible", "opacity" })
             {
@@ -143,8 +149,8 @@ namespace RitsukageGif.Scripting
                     "animate" => [.. rectangle, new("seconds", "number"), new("easing", "Easing", true, "linear")],
                     _ => rectangle,
                 };
-                scene.Function(operation + "For", ScriptEngine.Native(args => Host().OutputScene((string)args[0]!)
-                        .UpdateLayerBound(operation, [.. args.Skip(1)])),
+                scene.Function(operation + "For", ScriptEngine.Native(args => Host().SceneHost
+                        .UpdateOutputLayerBound((string)args[0]!, operation, [.. args.Skip(1)])),
                     [new("output", "string"), .. parameters], "void");
             }
 

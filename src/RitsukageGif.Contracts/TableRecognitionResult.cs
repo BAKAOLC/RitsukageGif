@@ -6,5 +6,8 @@ namespace RitsukageGif.Contracts
         int Width,
         int Height,
         IReadOnlyList<TableCell> Cells,
-        float? StructureConfidence = null);
+        float? StructureConfidence = null)
+    {
+        public TableOutputStyle? OutputStyle { get; init; }
+    }
 }

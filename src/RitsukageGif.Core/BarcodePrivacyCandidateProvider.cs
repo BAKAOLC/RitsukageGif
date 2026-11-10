@@ -1,9 +1,11 @@
 namespace RitsukageGif.Core
 {
-    public sealed class BarcodePrivacyCandidateProvider(IBarcodeRecognitionService recognition)
+    public sealed class BarcodePrivacyCandidateProvider(
+        IBarcodeRecognitionService recognition,
+        bool includeAllBarcodeKinds = false)
         : IPrivacyCandidateProvider
     {
-        public string Id => "qr";
+        public string Id => includeAllBarcodeKinds ? "barcode" : "qr";
 
         public async Task<IReadOnlyList<PrivacyCandidate>> DetectAsync(CapturedFrame frame,
             CancellationToken token = default)
@@ -17,7 +19,8 @@ namespace RitsukageGif.Core
             foreach (var code in codes)
             {
                 token.ThrowIfCancellationRequested();
-                if (code.Format is not ("QR_CODE" or "MICRO_QR_CODE" or "RMQR_CODE")) continue;
+                var qrCode = code.Format is "QR_CODE" or "MICRO_QR_CODE" or "RMQR_CODE";
+                if (!qrCode && !includeAllBarcodeKinds) continue;
                 var hasOutline = code.Outline.Count >= 3;
                 var points = hasOutline ? code.Outline : code.Points;
                 if (points.Count < 3 || points.Any(point => !float.IsFinite(point.X) || !float.IsFinite(point.Y)))
@@ -56,10 +59,16 @@ namespace RitsukageGif.Core
                 var y2 = (int)Math.Clamp(hasOutline ? Math.Floor(bottom) + 1 : Math.Ceiling(bottom + padding), 0,
                     frame.Height);
                 if (x2 > x && y2 > y)
-                    result.Add(new(Id, PrivacyCandidateKind.QrCode, new(x, y, x2 - x, y2 - y), code.Text, true));
+                    result.Add(new(Id, qrCode ? PrivacyCandidateKind.QrCode : PrivacyCandidateKind.Barcode,
+                        new(x, y, x2 - x, y2 - y), code.Text, true));
             }
 
             return result.AsReadOnly();
+        }
+
+        internal BarcodePrivacyCandidateProvider ForAnnotations()
+        {
+            return new(recognition, true);
         }
     }
 }

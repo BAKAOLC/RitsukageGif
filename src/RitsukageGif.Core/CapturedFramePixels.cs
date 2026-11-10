@@ -1,9 +1,32 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace RitsukageGif.Core
 {
     public static class CapturedFramePixels
     {
+        // ReSharper disable once UnusedMember.Global
+        public static byte[] ToRgbaF16(CapturedFrame frame, CancellationToken token = default)
+        {
+            if (frame.PixelFormat != CapturePixelFormat.Rgba16FloatScRgb || !Enum.IsDefined(frame.AlphaMode) ||
+                frame.Width <= 0 || frame.Height <= 0 || frame.Stride < (long)frame.Width * 8 ||
+                frame.Pixels.Length < (long)frame.Stride * frame.Height)
+                throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
+            token.ThrowIfCancellationRequested();
+            var rowSize = checked(frame.Width * 8);
+            var length = checked(rowSize * frame.Height);
+            if (frame.Stride == rowSize && MemoryMarshal.TryGetArray(frame.Pixels, out var segment) &&
+                segment.Offset == 0 && segment.Array!.Length == length) return segment.Array;
+            var result = new byte[length];
+            for (var y = 0; y < frame.Height; y++)
+            {
+                token.ThrowIfCancellationRequested();
+                frame.Pixels.Span.Slice(y * frame.Stride, rowSize).CopyTo(result.AsSpan(y * rowSize));
+            }
+
+            return result;
+        }
+
         public static byte[] ToStraightBgra(CapturedFrame frame, CancellationToken token = default)
         {
             if (frame.PixelFormat != CapturePixelFormat.Bgra8Srgb || !Enum.IsDefined(frame.AlphaMode) ||
@@ -13,9 +36,7 @@ namespace RitsukageGif.Core
             token.ThrowIfCancellationRequested();
             var rowSize = checked(frame.Width * 4);
             var length = checked(rowSize * frame.Height);
-            if (frame.AlphaMode == CaptureAlphaMode.Straight && frame.Stride == rowSize &&
-                MemoryMarshal.TryGetArray(frame.Pixels, out var segment) && segment.Offset == 0 &&
-                segment.Array!.Length == length) return segment.Array;
+            if (TryGetStraightBgraArray(frame, out var borrowed)) return borrowed;
             var result = new byte[length];
             for (var y = 0; y < frame.Height; y++)
             {
@@ -40,6 +61,22 @@ namespace RitsukageGif.Core
             }
 
             return result;
+        }
+
+        internal static bool TryGetStraightBgraArray(CapturedFrame frame, [NotNullWhen(true)] out byte[]? pixels)
+        {
+            var rowSize = checked(frame.Width * 4);
+            var length = checked(rowSize * frame.Height);
+            if (frame.AlphaMode == CaptureAlphaMode.Straight && frame.Stride == rowSize &&
+                MemoryMarshal.TryGetArray(frame.Pixels, out var segment) && segment.Offset == 0 &&
+                segment.Array!.Length == length)
+            {
+                pixels = segment.Array;
+                return true;
+            }
+
+            pixels = null;
+            return false;
         }
     }
 }

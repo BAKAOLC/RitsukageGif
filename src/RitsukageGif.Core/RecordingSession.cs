@@ -10,8 +10,12 @@ namespace RitsukageGif.Core
         private static readonly ILogger Logger = LogHub.GetLogger("Core.Capture");
 
         public async Task RunAsync(RecordingOptions options, string outputPath,
-            IProgress<RecordingProgress>? progress, CancellationToken stop, CancellationToken cancel)
+            IProgress<RecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
+            RecordingControl? control = null)
         {
+            control ??= new();
+            control.SetCanPause(true);
+            await using var timelineStop = stop.Register(control.RecordStop);
             options.Validate();
             Logger.ZLogInformation(
                 $"Animation recording started: width={options.Width}, height={options.Height}, fps={options.Fps}, format={options.Format.ToString()}, externalEncoderRequested={options.UseFfmpeg}");
@@ -35,7 +39,7 @@ namespace RitsukageGif.Core
             var captureCompleted = 0;
             long diskBytes = 0;
             ExceptionDispatchInfo? captureFailure = null;
-            var clock = Stopwatch.StartNew();
+            var clock = new RecordingClock(control);
             long nextLogMilliseconds = 5000;
 
             var encodingProgress = progress is null
@@ -61,23 +65,27 @@ namespace RitsukageGif.Core
                     while (!stop.IsCancellationRequested)
                     {
                         abortToken.ThrowIfCancellationRequested();
-                        var remaining = next - clock.Elapsed.TotalMilliseconds;
-                        if (remaining > 0)
-                            try
-                            {
-                                await Task.Delay(TimeSpan.FromMilliseconds(remaining), captureToken);
-                            }
-                            catch (OperationCanceledException) when (stop.IsCancellationRequested &&
-                                                                     !abortToken.IsCancellationRequested)
-                            {
-                                break;
-                            }
+                        try
+                        {
+                            await clock.WaitUntilAsync(next, captureToken);
+                        }
+                        catch (OperationCanceledException) when (stop.IsCancellationRequested &&
+                                                                 !abortToken.IsCancellationRequested)
+                        {
+                            break;
+                        }
 
                         if (stop.IsCancellationRequested) break;
+                        var generation = control.Generation;
+                        if (control.IsPaused) continue;
                         byte[] pixels;
+                        long captureTimestamp;
+                        (long Sequence, object? Metadata) capture;
                         try
                         {
                             pixels = source.Capture(captureToken);
+                            captureTimestamp = Stopwatch.GetTimestamp();
+                            capture = control.CaptureCompleted(source);
                         }
                         catch (OperationCanceledException) when (stop.IsCancellationRequested &&
                                                                  !abortToken.IsCancellationRequested)
@@ -87,12 +95,15 @@ namespace RitsukageGif.Core
 
                         abortToken.ThrowIfCancellationRequested();
                         if (stop.IsCancellationRequested) break;
+                        if (!control.IsCurrentCapture(generation)) continue;
                         if (pixels.Length != checked(options.Width * options.Height * 4))
                             throw new ArgumentException(UiText.Get("InvalidFrameBuffer"));
-                        var timestamp = clock.Elapsed.TotalMilliseconds;
+                        var activeTimestamp = control.GetTimestamp(out var rawOrigin);
+                        var timestamp = (activeTimestamp - clock.Origin) * 1000.0 / Stopwatch.Frequency;
                         if (double.IsNaN(origin))
                         {
                             origin = timestamp;
+                            control.BindTimeline(rawOrigin, activeTimestamp);
                             next = timestamp;
                             Logger.ZLogInformation(
                                 $"Animation capture produced its first frame: width={options.Width}, height={options.Height}, liveEncoding={live}");
@@ -122,6 +133,9 @@ namespace RitsukageGif.Core
                         Volatile.Write(ref capturedCount, sequence);
                         if (!channel.Writer.TryWrite(frame))
                             throw new InvalidOperationException(UiText.Get("MemoryLimit"));
+                        control.NotifyFrameAccepted(new(TimeSpan.FromMilliseconds(Math.Round(timestamp - origin)),
+                            captureTimestamp, options.Region, options.Width, options.Height,
+                            CaptureSequence: capture.Sequence, SourceMetadata: capture.Metadata));
                         Report(RecordingStage.Recording);
                         next += period;
                         var behind = clock.Elapsed.TotalMilliseconds - next;
@@ -134,6 +148,7 @@ namespace RitsukageGif.Core
                         : stopTicks * 1000.0 / Stopwatch.Frequency;
                     endTime = double.IsNaN(origin) ? 0 : Math.Max(0, ended - origin);
                     Volatile.Write(ref elapsedSeconds, endTime / 1000);
+                    control.CompleteTimeline(TimeSpan.FromMilliseconds(endTime));
                     Volatile.Write(ref captureCompleted, 1);
                     Logger.ZLogInformation(
                         $"Animation capture stopped; draining encoder: captured={sequence}, elapsedSeconds={endTime / 1000}");

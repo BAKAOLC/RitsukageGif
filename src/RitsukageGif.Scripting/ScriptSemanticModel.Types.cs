@@ -229,8 +229,9 @@ namespace RitsukageGif.Scripting
                     node.Children.All(c => c.Kind != "spread"):
                     var count = node.Children.Count - 1;
                     var required = callable.Parameters.Count(p => p is { Optional: false, Variadic: false });
-                    if (count < required ||
-                        (count > callable.Parameters.Count && callable.Parameters.All(p => !p.Variadic)))
+                    var maximum = callable.Parameters.Sum(parameter =>
+                        parameter.Variadic ? (long)(parameter.MaximumCount ?? int.MaxValue) : 1);
+                    if (count < required || count > maximum)
                         Diagnostic(node, UiText.Format("DslArguments", callable.Name));
                     for (var i = 0; i < count && callable.Parameters.Count > 0; i++)
                     {

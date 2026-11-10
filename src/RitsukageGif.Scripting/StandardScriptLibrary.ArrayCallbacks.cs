@@ -97,7 +97,7 @@ namespace RitsukageGif.Scripting
                 ], "number");
             arrays.Method("reduce", async (array, args, token) =>
             {
-                if (args.Count > 2 || (args.Count == 1 && array.Count == 0)) throw TypeError();
+                if (args.Count == 1 && array.Count == 0) throw TypeError();
                 var initial = args.Count == 2;
                 var result = initial ? args[1] : array[0];
                 var length = array.Count;
@@ -106,7 +106,7 @@ namespace RitsukageGif.Scripting
                 return result;
             }, [
                 new("callback", "function", CallbackParameters: ["$1??$element", "$element", "number", "$receiver"]),
-                new("initial", Variadic: true),
+                new("initial", Variadic: true, MaximumCount: 1),
             ], inferredReturnType: "$1??$element|$callback0");
         }
     }

@@ -13,17 +13,20 @@ namespace RitsukageGif.Core
         public Task<IReadOnlyList<MultiRecordingResult>> RunAsync(
             IReadOnlyList<MultiRecordingOutput> outputs, Func<MultiRecordingOutput, IFrameSource> sourceFactory,
             IProgress<MultiRecordingProgress>? progress, CancellationToken stop, CancellationToken cancel,
-            Action<double>? beginTick = null)
+            Action<double>? beginTick = null, RecordingControl? control = null)
         {
-            return Task.Run(() => RunCoreAsync(outputs, sourceFactory, progress, beginTick, stop, cancel),
+            control ??= new();
+            control.SetCanPause(true);
+            return Task.Run(() => RunCoreAsync(outputs, sourceFactory, progress, beginTick, control, stop, cancel),
                 CancellationToken.None);
         }
 
         private static async Task<IReadOnlyList<MultiRecordingResult>> RunCoreAsync(
             IReadOnlyList<MultiRecordingOutput> outputs, Func<MultiRecordingOutput, IFrameSource> sourceFactory,
-            IProgress<MultiRecordingProgress>? progress, Action<double>? beginTick, CancellationToken stop,
-            CancellationToken cancel)
+            IProgress<MultiRecordingProgress>? progress, Action<double>? beginTick, RecordingControl control,
+            CancellationToken stop, CancellationToken cancel)
         {
+            await using var timelineStop = stop.Register(control.RecordStop);
             if (outputs.Count is < 1 or > 8) throw new ArgumentException(UiText.Get("InvalidRecording"));
             Logger.ZLogInformation($"Multi-output animation recording started: outputs={outputs.Count}");
             var paths = new HashSet<string>(OperatingSystem.IsWindows()
@@ -41,13 +44,13 @@ namespace RitsukageGif.Core
 
             var states = new List<OutputState>();
             using var captureStop = CancellationTokenSource.CreateLinkedTokenSource(stop, cancel);
-            var clock = new Stopwatch();
+            var clock = new RecordingClock(control, false);
             var stopTime = new StopTimestamp(clock);
             await using var registration = stop.Register(stopTime.Record);
             try
             {
                 foreach (var output in outputs)
-                    states.Add(new(output, progress, cancel));
+                    states.Add(new(output, progress, control, cancel));
                 beginTick?.Invoke(0);
                 foreach (var state in states)
                 {
@@ -57,9 +60,24 @@ namespace RitsukageGif.Core
                     {
                         state.Prepare();
                         state.Source = sourceFactory(state.Output);
-                        var pixels = state.Source.Capture(captureStop.Token);
+                        byte[] pixels;
+                        long captureTimestamp;
+                        (long Sequence, object? Metadata) capture;
+                        while (true)
+                        {
+                            await control.WaitWhilePausedAsync(captureStop.Token);
+                            var generation = control.Generation;
+                            if (control.IsPaused) continue;
+                            pixels = state.Source.Capture(captureStop.Token);
+                            captureTimestamp = Stopwatch.GetTimestamp();
+                            capture = control.CaptureCompleted(state.Source);
+                            if (captureStop.IsCancellationRequested) break;
+                            if (control.IsCurrentCapture(generation)) break;
+                        }
+
                         if (captureStop.IsCancellationRequested) break;
-                        await state.EnqueueAsync(pixels, 0, cancel);
+                        await state.EnqueueAsync(pixels, 0, captureTimestamp, capture.Sequence, capture.Metadata,
+                            cancel);
                     }
                     catch (OperationCanceledException) when (captureStop.IsCancellationRequested)
                     {
@@ -72,6 +90,7 @@ namespace RitsukageGif.Core
                 }
 
                 clock.Start();
+                foreach (var state in states) control.BindTimeline(clock.RawStartedAt, clock.Origin, state.Output.Name);
                 foreach (var state in states) state.Worker = state.EncodeAsync();
                 while (!captureStop.IsCancellationRequested)
                 {
@@ -81,16 +100,14 @@ namespace RitsukageGif.Core
                         if (state.Failure is null)
                             due = Math.Min(due, state.Next);
                     if (double.IsPositiveInfinity(due)) break;
-                    var delay = due - clock.Elapsed.TotalMilliseconds;
-                    if (delay > 0)
-                        try
-                        {
-                            await Task.Delay(TimeSpan.FromMilliseconds(delay), captureStop.Token);
-                        }
-                        catch (OperationCanceledException) when (captureStop.IsCancellationRequested)
-                        {
-                            break;
-                        }
+                    try
+                    {
+                        await clock.WaitUntilAsync(due, captureStop.Token);
+                    }
+                    catch (OperationCanceledException) when (captureStop.IsCancellationRequested)
+                    {
+                        break;
+                    }
 
                     if (captureStop.IsCancellationRequested) break;
                     var now = clock.Elapsed.TotalMilliseconds;
@@ -105,10 +122,16 @@ namespace RitsukageGif.Core
                             // cadence, while this one skips deadlines until its buffer is queued.
                             if (state.EnqueueWorker.IsCompleted)
                             {
+                                var generation = control.Generation;
+                                if (control.IsPaused) break;
                                 var pixels = state.Source!.Capture(captureStop.Token);
+                                var captureTimestamp = Stopwatch.GetTimestamp();
+                                var capture = control.CaptureCompleted(state.Source);
                                 if (captureStop.IsCancellationRequested) break;
+                                if (!control.IsCurrentCapture(generation)) continue;
                                 // ReSharper disable once MethodHasAsyncOverloadWithCancellation
-                                state.Enqueue(pixels, clock.Elapsed.TotalMilliseconds);
+                                state.Enqueue(pixels, clock.Elapsed.TotalMilliseconds, captureTimestamp,
+                                    capture.Sequence, capture.Metadata);
                             }
 
                             var period = 1000.0 / state.Output.Options.Fps;
@@ -132,7 +155,12 @@ namespace RitsukageGif.Core
                     $"Multi-output capture stopped; draining encoders: outputs={states.Count}, elapsedMilliseconds={clock.ElapsedMilliseconds}");
                 var end = ticks < 0 ? clock.Elapsed.TotalMilliseconds : ticks * 1000.0 / Stopwatch.Frequency;
                 foreach (var state in states) await state.EnqueueWorker;
-                foreach (var state in states) state.Complete(end);
+                foreach (var state in states)
+                {
+                    state.Complete(end);
+                    control.CompleteTimeline(TimeSpan.FromMilliseconds(end), state.Output.Name);
+                }
+
                 await Task.WhenAll(states.Select(state => state.Worker));
                 cancel.ThrowIfCancellationRequested();
                 // Cancellation is accepted until this commit barrier. Publication is a short synchronous
@@ -162,7 +190,7 @@ namespace RitsukageGif.Core
             }
         }
 
-        private sealed class StopTimestamp(Stopwatch clock)
+        private sealed class StopTimestamp(RecordingClock clock)
         {
             private long _ticks = -1;
             public long Ticks => Interlocked.Read(ref _ticks);

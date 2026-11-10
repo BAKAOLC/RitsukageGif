@@ -53,23 +53,30 @@ namespace RitsukageGif.Scripting
 
         internal object? UpdateLayerBound(string operation, IReadOnlyList<object?> args)
         {
-            UpdateLayer(operation, args);
-            foreach (var route in _inheritedOutputScenes) route.UpdateLayerBound(operation, args);
-            return null;
+            lock (Runtime.StateGate)
+            {
+                UpdateLayer(operation, args);
+                foreach (var route in _inheritedOutputScenes) route.UpdateLayerBound(operation, args);
+                foreach (var route in _pendingInheritedOutputScenes) route.UpdateLayerBound(operation, args);
+                return null;
+            }
         }
 
         internal object ReadLayerBound(string name)
         {
-            var definition = Layer(name);
-            var state = _layers.GetValueOrDefault(name) ?? new PresetLayerState();
-            var rect = state.Motion?.At(Runtime.Now) ?? state.Placement ?? definition.Placement;
-            return new Dictionary<string, object?>
+            lock (Runtime.StateGate)
             {
-                ["x"] = (double)rect.X, ["y"] = (double)rect.Y, ["width"] = (double)rect.Width,
-                ["height"] = (double)rect.Height, ["visible"] = state.Visible, ["opacity"] = state.Opacity,
-                ["effects"] = PixelEffectsBinding.Values(state.Effects),
-                ["playback"] = PlaybackValue(definition.Media, state.Playback),
-            };
+                var definition = Layer(name);
+                var state = _layers.GetValueOrDefault(name) ?? new PresetLayerState();
+                var rect = state.Motion?.At(Runtime.Now) ?? state.Placement ?? definition.Placement;
+                return new Dictionary<string, object?>
+                {
+                    ["x"] = (double)rect.X, ["y"] = (double)rect.Y, ["width"] = (double)rect.Width,
+                    ["height"] = (double)rect.Height, ["visible"] = state.Visible, ["opacity"] = state.Opacity,
+                    ["effects"] = PixelEffectsBinding.Values(state.Effects),
+                    ["playback"] = PlaybackValue(definition.Media, state.Playback),
+                };
+            }
         }
 
         internal object? SubscribeBound(string name, object? handler)

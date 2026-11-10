@@ -2,63 +2,113 @@ namespace RitsukageGif.Scripting
 {
     public sealed partial class PresetScriptSession
     {
+        private readonly SemaphoreSlim _outputStartGate = new(1, 1);
         private List<PresetScriptSession> _inheritedOutputScenes = [];
+        private List<PresetScriptSession> _pendingInheritedOutputScenes = [];
         private Dictionary<string, PresetScriptSession> _outputScenes = new(StringComparer.OrdinalIgnoreCase);
 
         private async Task StartOutputsAsync(IReadOnlyList<PresetRecordingOutput> outputs, CancellationToken token)
         {
-            var playbackEpoch = PresetMotion.Now;
-            InitializePlayback(playbackEpoch);
-            var scenes = new Dictionary<string, PresetScriptSession>(StringComparer.OrdinalIgnoreCase);
-            var inherited = new List<PresetScriptSession>();
-            var resolved = new List<PresetRecordingOutput>(outputs.Count);
-            var catalogs = new Dictionary<string, IReadOnlyList<WindowPreset>>(OperatingSystem.IsWindows()
-                ? StringComparer.OrdinalIgnoreCase
-                : StringComparer.Ordinal);
-            foreach (var output in outputs)
+            await _outputStartGate.WaitAsync(token);
+            try
             {
-                token.ThrowIfCancellationRequested();
-                var source = preset;
-                var useCurrent = output.PresetFile is null && output.PresetName is null;
-                if (!useCurrent)
+                var playbackEpoch = PresetMotion.Now;
+                InitializePlayback(playbackEpoch);
+                var prepared = new List<(PresetRecordingOutput Output, WindowPreset Preset, bool Inherit)>();
+                var catalogs = new Dictionary<string, IReadOnlyList<WindowPreset>>(OperatingSystem.IsWindows()
+                    ? StringComparer.OrdinalIgnoreCase
+                    : StringComparer.Ordinal);
+                foreach (var output in outputs)
                 {
-                    var file = output.PresetFile ?? preset.SourceFile ??
-                        throw new ArgumentException(UiText.Get("ScriptTypeError"));
-                    if (!catalogs.TryGetValue(file, out var catalog))
-                        catalogs[file] = catalog = PresetCatalog.Load([file]);
-                    source = output.PresetName is { } name
-                        ? catalog.FirstOrDefault(item => item.Name == name)
-                        : catalog.Count == 1
-                            ? catalog[0]
-                            : null;
-                    if (source is null) throw new ArgumentException(UiText.Get("ScriptTypeError"));
+                    token.ThrowIfCancellationRequested();
+                    var source = preset;
+                    var useCurrent = output.PresetFile is null && output.PresetName is null;
+                    if (!useCurrent)
+                    {
+                        var file = output.PresetFile ?? preset.SourceFile ??
+                            throw new ArgumentException(UiText.Get("ScriptTypeError"));
+                        if (!catalogs.TryGetValue(file, out var catalog))
+                            catalogs[file] = catalog = PresetCatalog.Load([file]);
+                        source = output.PresetName is { } name
+                            ? catalog.FirstOrDefault(item => item.Name == name)
+                            : catalog.Count == 1
+                                ? catalog[0]
+                                : null;
+                        if (source is null) throw new ArgumentException(UiText.Get("ScriptTypeError"));
+                    }
+
+                    prepared.Add((output, source, useCurrent));
                 }
 
-                var scene = new PresetScriptSession(source, observe, execute);
-                scene.Runtime.ShareClock(Runtime);
-                if (useCurrent)
+                var scenes = new Dictionary<string, PresetScriptSession>(StringComparer.OrdinalIgnoreCase);
+                var inherited = new List<PresetScriptSession>();
+                var resolved = new List<PresetRecordingOutput>(outputs.Count);
+                lock (Runtime.StateGate)
                 {
-                    scene._values.Clear();
-                    foreach (var entry in _values) scene._values.Add(entry.Key, entry.Value);
-                    foreach (var entry in _layers) scene._layers.Add(entry.Key, entry.Value);
-                    inherited.Add(scene);
+                    foreach (var entry in prepared)
+                    {
+                        var scene = new PresetScriptSession(entry.Preset, observe, execute);
+                        scene.Runtime.ShareClock(Runtime);
+                        if (entry.Inherit)
+                        {
+                            scene._values.Clear();
+                            foreach (var value in _values) scene._values.Add(value.Key, value.Value);
+                            foreach (var layer in _layers) scene._layers.Add(layer.Key, layer.Value);
+                            inherited.Add(scene);
+                        }
+
+                        scene.InitializePlayback(playbackEpoch);
+                        scenes.Add(entry.Output.Name, scene);
+                        resolved.Add(entry.Output with { Preset = entry.Preset, Runtime = scene.Runtime });
+                    }
+
+                    _pendingInheritedOutputScenes = inherited;
                 }
 
-                scene.InitializePlayback(playbackEpoch);
-                scenes.Add(output.Name, scene);
-                resolved.Add(output with { Preset = source, Runtime = scene.Runtime });
+                try
+                {
+                    await ExecuteActionAsync(new("startMany", Outputs: resolved));
+                }
+                catch
+                {
+                    lock (Runtime.StateGate) _pendingInheritedOutputScenes = [];
+                    throw;
+                }
+
+                lock (Runtime.StateGate)
+                {
+                    _outputScenes = scenes;
+                    _inheritedOutputScenes = inherited;
+                    _pendingInheritedOutputScenes = [];
+                }
             }
-
-            await ExecuteActionAsync(new("startMany", Outputs: resolved));
-            _outputScenes = scenes;
-            _inheritedOutputScenes = inherited;
+            finally
+            {
+                _outputStartGate.Release();
+            }
         }
 
-        internal PresetScriptSession OutputScene(string name)
+        internal object? SetOutputLayerBound(string output, string name, Dictionary<string, object?> options)
         {
-            return _outputScenes.TryGetValue(name, out var scene)
-                ? scene
-                : throw new ArgumentException(UiText.Format("DslUnknownName", name));
+            lock (Runtime.StateGate) return OutputScene(output).SetLayerBound(name, options);
+        }
+
+        internal object? UpdateOutputLayerBound(string output, string operation, IReadOnlyList<object?> arguments)
+        {
+            lock (Runtime.StateGate) return OutputScene(output).UpdateLayerBound(operation, arguments);
+        }
+
+        internal object ReadOutputLayerBound(string output, string name)
+        {
+            lock (Runtime.StateGate) return OutputScene(output).ReadLayerBound(name);
+        }
+
+        private PresetScriptSession OutputScene(string name)
+        {
+            lock (Runtime.StateGate)
+                return _outputScenes.TryGetValue(name, out var scene)
+                    ? scene
+                    : throw new ArgumentException(UiText.Format("DslUnknownName", name));
         }
 
         internal async ValueTask<object?> OutputsBound(CancellationToken token)

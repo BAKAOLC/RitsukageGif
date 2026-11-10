@@ -30,7 +30,7 @@ namespace RitsukageGif.Core
         public Task<RecognitionProviderCapabilities> GetCapabilitiesAsync(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            return Task.FromResult(paths.Capabilities("slanet-plus.onnx", "PP-OCRv6_rec_tiny.onnx"));
+            return Task.FromResult(GetModelCapabilities());
         }
 
         public async Task<TableRecognitionResult> RecognizeAsync(ReadOnlyMemory<byte> encoded,
@@ -52,9 +52,14 @@ namespace RitsukageGif.Core
             }
         }
 
+        private RecognitionProviderCapabilities GetModelCapabilities()
+        {
+            return paths.Capabilities("slanet-plus.onnx", "PP-OCRv6_rec_small.onnx");
+        }
+
         private TableRecognitionResult Recognize(ReadOnlyMemory<byte> encoded, CancellationToken token)
         {
-            var capabilities = paths.Capabilities("slanet-plus.onnx", "PP-OCRv6_rec_tiny.onnx");
+            var capabilities = GetModelCapabilities();
             if (!capabilities.Available) throw new NotSupportedException(capabilities.UnavailableReason);
             using var image = RecognitionImageInput.Decode(encoded);
             token.ThrowIfCancellationRequested();

@@ -1,13 +1,8 @@
 namespace RitsukageGif.Scripting
 {
-    public sealed class ScriptBytes
+    public sealed class ScriptBytes(ReadOnlyMemory<byte> data)
     {
-        internal ScriptBytes(ReadOnlyMemory<byte> data)
-        {
-            Data = data;
-        }
-
-        internal ReadOnlyMemory<byte> Data { get; }
+        public ReadOnlyMemory<byte> Data { get; } = data;
         public int Length => Data.Length;
     }
 }

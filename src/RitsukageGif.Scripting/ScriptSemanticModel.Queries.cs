@@ -100,8 +100,9 @@
 
         private static string ParameterLabel(ScriptParameter parameter)
         {
-            return (parameter.Variadic ? "..." : "") + parameter.Name + (parameter.Optional ? "?" : "") + ": " +
-                   parameter.TypeName;
+            var singleOptional = parameter is { Variadic: true, MaximumCount: 1 };
+            return (parameter.Variadic && !singleOptional ? "..." : "") + parameter.Name +
+                   (parameter.Optional || singleOptional ? "?" : "") + ": " + parameter.TypeName;
         }
 
         private static string Label(ScriptCallableDescriptor callable)

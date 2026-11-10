@@ -7,6 +7,11 @@ namespace RitsukageGif.Core
 {
     public static partial class FormulaImageRenderer
     {
+        public static bool TryValidate(string latex)
+        {
+            return CreatePainter(latex, 28, 0xff000000, out _) is not null;
+        }
+
         private static bool TryRenderPng(string latex, out byte[]? png, out string? error,
             float fontSize = 28, uint textColor = 0xff000000)
         {
@@ -52,6 +57,7 @@ namespace RitsukageGif.Core
                 return null;
             }
 
+            latex = FormulaLatexFormatter.Unwrap(latex);
             if (latex.Length > 65536)
             {
                 error = "The formula is too long to render.";
