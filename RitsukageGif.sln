@@ -19,7 +19,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RitsukageGif.Diagnostics", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RitsukageGif.SettingsGenerator", "src\RitsukageGif.SettingsGenerator\RitsukageGif.SettingsGenerator.csproj", "{1171372E-B6B6-4554-8994-E89CBE1F5ADA}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RitsukageGif.Avalonia.Native", "src\RitsukageGif.Avalonia.Native\Avalonia.Native.Patched.csproj", "{37BB40AA-B9ED-4085-81A9-E2847BF1C32E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Avalonia.Native.Patched", "src\RitsukageGif.Avalonia.Native\Avalonia.Native.Patched.csproj", "{37BB40AA-B9ED-4085-81A9-E2847BF1C32E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RitsukageGif.IconGenerator", "src\RitsukageGif.IconGenerator\RitsukageGif.IconGenerator.csproj", "{0B4DA569-441E-41BC-931E-2005CA890318}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -195,6 +197,26 @@ Global
 		{37BB40AA-B9ED-4085-81A9-E2847BF1C32E}.Release|x64.Build.0 = Release|Any CPU
 		{37BB40AA-B9ED-4085-81A9-E2847BF1C32E}.Release|x86.ActiveCfg = Release|Any CPU
 		{37BB40AA-B9ED-4085-81A9-E2847BF1C32E}.Release|x86.Build.0 = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|ARM.ActiveCfg = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|ARM.Build.0 = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|ARM64.ActiveCfg = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|ARM64.Build.0 = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|x64.Build.0 = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Debug|x86.Build.0 = Debug|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|ARM.ActiveCfg = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|ARM.Build.0 = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|ARM64.ActiveCfg = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|ARM64.Build.0 = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|x64.ActiveCfg = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|x64.Build.0 = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|x86.ActiveCfg = Release|Any CPU
+		{0B4DA569-441E-41BC-931E-2005CA890318}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -207,6 +229,7 @@ Global
 		{05847003-14EB-4D3D-8C06-9AADDFB392DE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{1171372E-B6B6-4554-8994-E89CBE1F5ADA} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{37BB40AA-B9ED-4085-81A9-E2847BF1C32E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{0B4DA569-441E-41BC-931E-2005CA890318} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {59840CB1-368A-4B81-856F-D6AD3F032C10}

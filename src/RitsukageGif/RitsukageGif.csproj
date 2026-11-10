@@ -20,6 +20,10 @@
     <ProjectReference Include="../RitsukageGif.SettingsGenerator/RitsukageGif.SettingsGenerator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false"
                       GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+    <ProjectReference Include="../RitsukageGif.IconGenerator/RitsukageGif.IconGenerator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+    <AdditionalFiles Include="Assets/Icons/**/*.svg" />
     <Compile Include="Desktop/**/*.cs" />
     <PackageReference Include="JAJ.Packages.MiniAudioEx" Version="3.3.7" />
     <ProjectReference Include="../RitsukageGif.Scripting/RitsukageGif.Scripting.csproj" />
@@ -34,6 +38,7 @@
     <PackageReference Include="HtmlAgilityPack" Version="1.12.3" />
     <EmbeddedResource Include="About.md" LogicalName="RitsukageGif.About.md" />
     <AvaloniaResource Include="Background.png" />
+    <None Include="sounds/screenshot.wav" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <None Include="../../THIRD-PARTY-NOTICES/Fluent-System-Icons.txt"
           Link="THIRD-PARTY-NOTICES/Fluent-System-Icons.txt"
           CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

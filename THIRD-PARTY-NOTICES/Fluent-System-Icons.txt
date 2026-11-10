@@ -25,7 +25,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Scrolling capture icon sources (regular SVG paths, unchanged):
+Additional UI icon sources (regular SVG paths):
 - Screenshot, 24px: assets/Screenshot/SVG/ic_fluent_screenshot_24_regular.svg
 - Rectangle Landscape Sync, 24px: assets/Rectangle Landscape Sync/SVG/ic_fluent_rectangle_landscape_sync_24_regular.svg
 - Cut, 24px: assets/Cut/SVG/ic_fluent_cut_24_regular.svg
@@ -33,7 +33,3 @@ Scrolling capture icon sources (regular SVG paths, unchanged):
 - Image Edit, 24px: assets/Image Edit/SVG/ic_fluent_image_edit_24_regular.svg
 - Arrow Download, 24px: assets/Arrow Download/SVG/ic_fluent_arrow_download_24_regular.svg
 All listed assets use revision 64e5aa757d1b70c24a283256ddcb8269d0f58773 above.
-Long screenshot entry adapts the following 24px regular paths from the same revision:
-- Document One Page outer page: assets/Document One Page/SVG/ic_fluent_document_one_page_24_regular.svg
-- Dual Screen Vertical Scroll chevrons: assets/Dual Screen Vertical Scroll/SVG/ic_fluent_dual_screen_vertical_scroll_24_regular.svg
-The page body and vertically scrolling chevrons are combined; the chevrons are translated without changing their line weight.
