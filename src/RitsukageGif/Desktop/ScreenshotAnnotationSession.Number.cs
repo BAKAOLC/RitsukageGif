@@ -13,6 +13,13 @@ namespace RitsukageGif.Desktop
             (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
         ];
 
+        public Color NumberForeground(Color background)
+        {
+            return _behavior.NumberForegroundColor is { } color
+                ? Color.FromUInt32(color)
+                : AnnotationContrast.Foreground(background);
+        }
+
         private void CompleteNumber(int number)
         {
             _nextNumber = Math.Min(999999, number + 1);
@@ -42,7 +49,7 @@ namespace RitsukageGif.Desktop
                         .Contains(new Point(hover.X, hover.Y))));
         }
 
-        private static bool HitNumberCaption(ScreenshotAnnotation annotation, PixelPoint point)
+        private bool HitNumberCaption(ScreenshotAnnotation annotation, PixelPoint point)
         {
             var layout = NumberLayout(annotation);
             return layout.CaptionText is { } caption &&
@@ -56,7 +63,7 @@ namespace RitsukageGif.Desktop
             var index = _annotations.IndexOf(_selected!);
             if (index < 0) return;
             var replacement = ReferenceEquals(_selected, original) ? CloneAnnotation(original) : _selected!;
-            var origin = NumberLayout(original).CaptionOrigin;
+            var origin = NumberCaptionAnchor(original);
             var target = new Point(origin.X + point.X - _moveStart.X, origin.Y + point.Y - _moveStart.Y);
             if (replacement.Points.Count < 2) replacement.Points.Add(original.Points[0]);
             if (replacement.Points.Count < 3) replacement.Points.Add(target);
@@ -136,46 +143,51 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static AnnotationNumberLayout NumberLayout(ScreenshotAnnotation annotation)
+        private AnnotationNumberLayout NumberLayout(ScreenshotAnnotation annotation)
         {
+            annotation = NumberCaptionRenderingAnnotation(annotation);
             var center = annotation.Points[0];
             var target = annotation.Points.Count > 1 ? annotation.Points[1] : center;
             var captionAnchor = annotation.Points.Count > 2 ? annotation.Points[2] : (Point?)null;
             var properties = annotation.Properties;
             if (annotation.NumberLayout is { } cached && cached.Properties == properties &&
                 cached.Color == annotation.Color && cached.FontSize.Equals(annotation.FontSize) &&
+                cached.TextSize == _behavior.NumberTextSize && cached.ArrowSize == _behavior.NumberArrowSize &&
+                cached.ForegroundColor == _behavior.NumberForegroundColor &&
                 cached.Thickness.Equals(annotation.Thickness) && cached.Caption == annotation.Text &&
                 cached.Center == center && cached.Target == target && cached.CaptionAnchor == captionAnchor)
                 return cached;
 
             var ink = new SolidColorBrush(annotation.Color);
-            var outlineColor = properties.NumberAutomaticOutline
-                ? .2126 * annotation.Color.R + .7152 * annotation.Color.G + .0722 * annotation.Color.B > 150
-                    ? Colors.Black
-                    : Colors.White
-                : properties.NumberOutlineColor;
+            var outlineColor = NumberForeground(annotation.Color);
             var contrast = new SolidColorBrush(outlineColor);
             var typeface = CreateTypeface(properties);
             var textValue = FormatNumber(properties.Number, properties.NumberFormat);
-            var diameter = annotation.FontSize * 1.7;
-            var label = new FormattedText(textValue, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                typeface, annotation.FontSize, contrast);
-            if (properties.NumberStyle != AnnotationNumberStyle.Plain &&
-                Math.Max(label.Width, label.Height) > diameter * .8)
-                label = new(textValue, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface,
-                    annotation.FontSize * diameter * .8 / Math.Max(label.Width, label.Height), contrast);
+            var diameter = annotation.Thickness * 2 * Math.Sqrt(2);
+            var label = FitNumberLabel(textValue, typeface, contrast,
+                annotation.Thickness * _behavior.NumberTextSize switch
+                {
+                    AnnotationSizeLevel.Large => 3,
+                    AnnotationSizeLevel.Medium => 2,
+                    _ => 1.4,
+                });
+            var leaderWidth = annotation.Thickness * _behavior.NumberArrowSize switch
+            {
+                AnnotationSizeLevel.Large => .5,
+                AnnotationSizeLevel.Medium => .4,
+                _ => .3,
+            };
+            var labelBounds = label.BuildGeometry(new())?.Bounds ?? new Rect(new(label.Width, label.Height));
             var markerBounds = properties.NumberStyle == AnnotationNumberStyle.Plain
-                ? new Rect(center - new Vector(label.Width / 2, label.Height / 2), new Size(label.Width, label.Height))
+                ? new Rect(center - new Vector(labelBounds.Width / 2, labelBounds.Height / 2), labelBounds.Size)
                 : new Rect(center - new Vector(diameter / 2, diameter / 2), new Size(diameter, diameter));
             Geometry? marker = properties.NumberStyle switch
             {
                 AnnotationNumberStyle.Plain => null,
-                AnnotationNumberStyle.RoundedSquare => new RectangleGeometry(markerBounds, diameter * .15,
-                    diameter * .15),
+                AnnotationNumberStyle.RoundedSquare => new RectangleGeometry(markerBounds, diameter * .08,
+                    diameter * .08),
                 _ => new EllipseGeometry(markerBounds),
             };
-            if (properties.NumberStyle is AnnotationNumberStyle.Plain or AnnotationNumberStyle.OutlineCircle)
-                label.SetForegroundBrush(properties.NumberAutomaticOutline ? ink : contrast);
             var bounds = markerBounds.Inflate(Math.Max(1, annotation.Thickness / 2));
             var delta = new Vector(target.X - center.X, target.Y - center.Y);
             var leaderStart = center;
@@ -209,8 +221,8 @@ namespace RitsukageGif.Desktop
                 else
                 {
                     (head, filledHead) =
-                        EndpointGeometry(properties.EndEndpoint, target, direction, annotation.Thickness);
-                    var trim = Math.Min(EndpointTrim(properties.EndEndpoint, annotation.Thickness),
+                        EndpointGeometry(properties.EndEndpoint, target, direction, leaderWidth);
+                    var trim = Math.Min(EndpointTrim(properties.EndEndpoint, leaderWidth),
                         Math.Max(0, delta.Length - radius));
                     leaderEnd = target - direction * trim;
                 }
@@ -220,40 +232,75 @@ namespace RitsukageGif.Desktop
                 if (callout is not null) bounds = bounds.Union(callout.Bounds.Inflate(annotation.Thickness));
             }
 
-            FormattedText? caption = null, captionOutline = null;
+            FormattedText? caption = null;
+            Geometry? captionOutline = null;
+            IPen? captionOutlinePen = null;
             var captionOrigin = new Point();
             if (!string.IsNullOrEmpty(annotation.Text))
             {
                 caption = new(annotation.Text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                    typeface, annotation.FontSize * properties.NumberCaptionScale, ink);
-                captionOrigin = captionAnchor ?? new(markerBounds.Right + 8, center.Y - caption.Height / 2);
+                    typeface, NumberCaptionFontSize(annotation.Thickness, properties), ink);
+                captionOrigin = NumberCaptionAnchor(annotation) - new Vector(0, caption.Height / 2);
                 if (properties.NumberCaptionOutline)
-                    captionOutline = new(annotation.Text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-                        typeface, annotation.FontSize * properties.NumberCaptionScale, contrast);
+                {
+                    captionOutline = caption.BuildGeometry(default);
+                    captionOutlinePen = new Pen(new SolidColorBrush(AnnotationContrast.Foreground(annotation.Color)),
+                        NumberCaptionFontSize(annotation.Thickness, properties) * .4,
+                        lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round);
+                }
+
                 bounds = bounds.Union(new Rect(captionOrigin, new Size(caption.Width, caption.Height))
-                    .Inflate(Math.Max(2, annotation.Thickness / 2 + 2)));
+                    .Inflate(Math.Max(annotation.Thickness / 2 + 2,
+                        properties.NumberCaptionOutline
+                            ? NumberCaptionFontSize(annotation.Thickness, properties) * .2
+                            : 2)));
             }
 
             return annotation.NumberLayout = new()
             {
                 Properties = properties, Color = annotation.Color, FontSize = annotation.FontSize,
                 Thickness = annotation.Thickness, Caption = annotation.Text, Center = center, Target = target,
+                TextSize = _behavior.NumberTextSize, ArrowSize = _behavior.NumberArrowSize,
+                ForegroundColor = _behavior.NumberForegroundColor,
                 CaptionAnchor = captionAnchor,
                 MarkerBounds = markerBounds, Bounds = bounds, Marker = marker, Label = label,
-                LabelOrigin = new(center.X - label.Width / 2, center.Y - label.Height / 2), Ink = ink,
-                Outline = new Pen(properties is
-                    { NumberStyle: AnnotationNumberStyle.OutlineCircle, NumberAutomaticOutline: true }
-                    ? ink
-                    : contrast, Math.Max(1, annotation.Thickness / 2)),
-                LeaderPen = new Pen(ink, annotation.Thickness, lineCap: PenLineCap.Round),
+                LabelOrigin = new(center.X - labelBounds.Center.X, center.Y - labelBounds.Center.Y), Ink = ink,
+                Outline = new Pen(contrast, annotation.Thickness * .2),
+                LeaderPen = new Pen(ink, leaderWidth, lineCap: PenLineCap.Round),
                 LeaderStart = leaderStart, LeaderEnd = leaderEnd, LeaderHead = head, FilledHead = filledHead,
                 Callout = callout, CaptionText = caption, CaptionOutline = captionOutline,
+                CaptionOutlinePen = captionOutlinePen,
                 CaptionOrigin = captionOrigin,
             };
         }
 
-        private static void DrawNumber(DrawingContext context, ScreenshotAnnotation annotation)
+        private static FormattedText FitNumberLabel(string value, Typeface typeface, IBrush brush, double maximumSize)
         {
+            var minimum = 1;
+            var maximum = 200;
+            FormattedText? result = null;
+            while (minimum <= maximum)
+            {
+                var size = minimum + (maximum - minimum) / 2;
+                var text = new FormattedText(value, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
+                    typeface, size, brush);
+                if (text.Width <= maximumSize && text.Height <= maximumSize)
+                {
+                    result = text;
+                    minimum = size + 1;
+                }
+                else
+                {
+                    maximum = size - 1;
+                }
+            }
+
+            return result ?? new(value, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight, typeface, 1, brush);
+        }
+
+        private void DrawNumber(DrawingContext context, ScreenshotAnnotation annotation)
+        {
+            annotation = NumberCaptionRenderingAnnotation(annotation);
             var layout = NumberLayout(annotation);
             var style = annotation.Properties.NumberStyle;
             if (layout.Callout is { } callout)
@@ -275,11 +322,11 @@ namespace RitsukageGif.Desktop
             context.DrawText(layout.Label, layout.LabelOrigin);
             if (layout.CaptionText is not { } caption) return;
             if (layout.CaptionOutline is { } outline)
-                for (var direction = 0; direction < 8; direction++)
-                {
-                    var angle = direction * Math.PI / 4;
-                    context.DrawText(outline, layout.CaptionOrigin + new Vector(Math.Cos(angle), Math.Sin(angle)));
-                }
+            {
+                using var transform = context.PushTransform(Matrix.CreateTranslation(layout.CaptionOrigin.X,
+                    layout.CaptionOrigin.Y));
+                context.DrawGeometry(null, layout.CaptionOutlinePen, outline);
+            }
 
             context.DrawText(caption, layout.CaptionOrigin);
             if (annotation.Properties.NumberCaptionGuide)
@@ -295,7 +342,7 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static Rect NumberRenderBounds(ScreenshotAnnotation annotation)
+        private Rect NumberRenderBounds(ScreenshotAnnotation annotation)
         {
             return NumberLayout(annotation).Bounds;
         }

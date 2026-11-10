@@ -38,7 +38,7 @@ namespace RitsukageGif.Desktop
             var sizeRow = Row(_size, Label("SelectionGeometryWidth"), _width, Label("SelectionGeometryHeight"),
                 _height);
             var swap = new Button { Name = "ActionSwapSize", Padding = new(6, 0), MinHeight = 24 };
-            swap.Content = ToolbarIcon.Create(swap, "M3,7 L20,7 M16,3 L20,7 16,11 M21,17 L4,17 M8,13 L4,17 8,21");
+            swap.Content = ToolbarIcon.Create(swap, ToolbarIcon.GetDefinition("SelectionGeometrySwapDimensions"));
             ToolTip.SetTip(swap, UiText.Get("SelectionGeometrySwap"));
             sizeRow.Children.Add(swap);
             Children.Add(sizeRow);

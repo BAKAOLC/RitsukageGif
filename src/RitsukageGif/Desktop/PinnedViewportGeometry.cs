@@ -23,6 +23,23 @@ namespace RitsukageGif.Desktop
                 region.Y + (cursor.Y + scroll.Y) * renderScaling / zoom);
         }
 
+        internal static double MinimumThumbnailScale(PixelSize sourcePhysical, PixelSize standardDip,
+            double renderScaling)
+        {
+            return Math.Min(standardDip.Width, standardDip.Height) * renderScaling /
+                   Math.Min(sourcePhysical.Width, sourcePhysical.Height);
+        }
+
+        internal static PixelSize ThumbnailSourceSize(PixelSize standardDip, double renderScaling,
+            double actualScale)
+        {
+            return new(
+                (int)Math.Clamp(Math.Round(standardDip.Width * renderScaling / actualScale,
+                    MidpointRounding.AwayFromZero), 1, int.MaxValue),
+                (int)Math.Clamp(Math.Round(standardDip.Height * renderScaling / actualScale,
+                    MidpointRounding.AwayFromZero), 1, int.MaxValue));
+        }
+
         internal static PixelRect QuickThumbnail(PixelSize image, Point cursor, PixelSize size)
         {
             var width = Math.Min(size.Width, image.Width);

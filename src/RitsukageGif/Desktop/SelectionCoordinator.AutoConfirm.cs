@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
 
         internal bool AutoConfirm { get; init; }
         internal bool StartWithScrolling { get; init; }
+        internal bool StartWithRecording { get; init; }
 
         private void QueueAutoConfirm()
         {
@@ -29,6 +30,12 @@ namespace RitsukageGif.Desktop
                 Annotations is not { IsBusy: false, IsDrawing: false }) return;
             _autoConfirmPending = false;
             Refresh();
+            if (StartWithRecording)
+            {
+                RequestRecording();
+                return;
+            }
+
             if (StartWithScrolling)
             {
                 _scrollingTask = StartScrollingAsync(null);

@@ -9,6 +9,12 @@ namespace RitsukageGif.Desktop
         {
             if (args.Handled || Session.IsEditingText ||
                 FocusManager.GetFocusedElement() is TextBox or CompactNumberInput) return;
+            if (Session.HandleNumberCaptionKey(args.Key, args.KeyModifiers, true))
+            {
+                args.Handled = true;
+                return;
+            }
+
             switch (args)
             {
                 case { Key: Key.Escape, KeyModifiers: KeyModifiers.None } when IsStripEditing:
@@ -21,8 +27,15 @@ namespace RitsukageGif.Desktop
                     return;
             }
 
-            if (!SelectionCommands.TryResolve(args.Key, args.KeyModifiers, out var definition)) return;
-            args.Handled = ExecuteCommandCore(definition!.Command, definition.Tool);
+            if (!SelectionCommands.TryResolve(args.Key, args.KeyModifiers, out var definition,
+                    annotations: Session)) return;
+            if (definition!.Command == SelectionCommand.TogglePolylineArrows)
+            {
+                args.Handled = Session.HandlePolylineArrowKey(args.Key);
+                return;
+            }
+
+            args.Handled = ExecuteCommandCore(definition.Command, definition.Tool);
         }
 
         private void ExecuteCommand(SelectionCommand command)
@@ -39,7 +52,7 @@ namespace RitsukageGif.Desktop
                     if (Session.IsDrawing) Session.CancelGesture();
                     else Close();
                     break;
-                case SelectionCommand.SelectTool: Session.Tool = tool ?? ScreenshotTool.Select; break;
+                case SelectionCommand.SelectTool: Session.SelectDrawingTool(tool ?? ScreenshotTool.Select); break;
                 case SelectionCommand.SimulateWheelUp: _simulatedWheel.Raise(1); break;
                 case SelectionCommand.SimulateWheelDown: _simulatedWheel.Raise(-1); break;
                 case SelectionCommand.Undo: Session.Undo(); break;
@@ -56,12 +69,18 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.Print when ScreenshotPrintService.IsSupported:
                     Session.RequestComplete(ScreenshotOutputAction.Print); break;
                 case SelectionCommand.RecognizeText: Session.RequestRecognition(RecognitionMode.Text); break;
+                case SelectionCommand.RecognizeTextAndCopy:
+                    _ = RunAsync(async () =>
+                    {
+                        // ReSharper disable once InlineTemporaryVariable
+                        if (RecognitionRequested is { } recognize)
+                            await recognize(this, await ComposeSdrAsync(), RecognitionMode.Text, true, _lifetime.Token);
+                    });
+                    break;
                 case SelectionCommand.RecognizeQr: Session.RequestRecognition(RecognitionMode.Barcode); break;
                 case SelectionCommand.RecognizeTable: Session.RequestRecognition(RecognitionMode.Table); break;
                 case SelectionCommand.RecognizeFormula: Session.RequestRecognition(RecognitionMode.Formula); break;
                 case SelectionCommand.Translate: Session.RequestTranslation(); break;
-                case SelectionCommand.Confirm when Session.IsPrivacyDetectionActive:
-                    _ = RunAsync(() => Session.ApplyPrivacyMosaicAsync()); break;
                 default: return false;
             }
 

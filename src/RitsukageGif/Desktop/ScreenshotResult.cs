@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
         public OutputColorMode ColorMode { get; init; }
         public double CaptureScaling { get; init; } = 1;
         public CaptureDecoration Decoration { get; init; } = CaptureDecoration.None;
+        public CaptureWindowShape? WindowShape { get; init; }
         public PixelPoint ContentOffset { get; init; }
         public PixelPoint? OutputOrigin { get; init; }
         public PixelRect? OutputRegion { get; init; }

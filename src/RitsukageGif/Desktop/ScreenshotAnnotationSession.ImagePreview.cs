@@ -61,6 +61,10 @@ namespace RitsukageGif.Desktop
             var copy = new ScreenshotAnnotation
             {
                 Tool = original.Tool, Color = original.Color, Thickness = original.Thickness * scale,
+                Text = original.Text, WatermarkTimestamp = original.WatermarkTimestamp,
+                AutoMosaicId = original.AutoMosaicId, AutoMosaicRegions = original.AutoMosaicRegions,
+                AutoMosaicCandidates = original.AutoMosaicCandidates,
+                AutoMosaicCandidateBounds = original.AutoMosaicCandidateBounds,
                 FontSize = original.FontSize * scale,
                 MosaicSize = Math.Max(1, (int)Math.Round(original.MosaicSize * scale)),
                 MagnifierOffset = new(original.MagnifierOffset.X * layout.ScaleX,

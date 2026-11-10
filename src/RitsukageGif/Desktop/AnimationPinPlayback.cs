@@ -85,7 +85,7 @@ namespace RitsukageGif.Desktop
         {
             var index = FrameIndex;
             Pause();
-            index = Math.Clamp(index + direction, 0, _ends.Length - 1);
+            index = (index + direction + _ends.Length) % _ends.Length;
             _position = index == 0 ? 0 : _ends[index - 1];
         }
 

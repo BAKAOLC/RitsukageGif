@@ -33,7 +33,7 @@ int main(void)
         return EX_CONFIG;
     }
     bundle[length - suffix_length] = '\0';
-    char *arguments[] = {"/usr/bin/open", "-g", "-n", "-a", bundle, "--args", "--serve", NULL};
+    char *arguments[] = {"/usr/bin/open", "-g", "-n", "-a", bundle, "--args", "--startup", NULL};
     pid_t child;
     const int result = posix_spawn(&child, arguments[0], NULL, NULL, arguments, environ);
     free(bundle);

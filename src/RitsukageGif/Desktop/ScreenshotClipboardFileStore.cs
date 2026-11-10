@@ -2,14 +2,16 @@ using System.Diagnostics;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class ScreenshotClipboardFileStore(string? directory = null)
+    internal sealed class ScreenshotClipboardFileStore(
+        string? directory = null,
+        ScreenshotClipboardFileNaming? naming = null)
     {
         private readonly string _directory = Path.GetFullPath(directory ??
                                                               Path.Combine(Path.GetTempPath(), "RitsukageGif",
                                                                   "Clipboard"));
 
         public async Task<string> CreateAsync(byte[] png, ScreenshotClipboardFileFormat format, int quality,
-            CancellationToken token)
+            CancellationToken token, string suffix = "")
         {
             ArgumentNullException.ThrowIfNull(png);
             if (png.Length == 0 || png.Length > PinnedImageContent.MaximumEncodedBytes ||
@@ -23,21 +25,26 @@ namespace RitsukageGif.Desktop
                 ScreenshotClipboardFileFormat.Bmp => ".bmp",
                 ScreenshotClipboardFileFormat.Webp => ".webp",
                 ScreenshotClipboardFileFormat.Avif => ".avif",
+                ScreenshotClipboardFileFormat.Disabled or ScreenshotClipboardFileFormat.Auto =>
+                    throw new ArgumentOutOfRangeException(nameof(format)),
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
-            var path = Path.Combine(_directory, "Screenshot-" + Guid.NewGuid().ToString("N") + extension);
-            var info = await ScreenshotOutputStorage.SaveAsync(png, path, new()
-            {
-                Quality = quality, ConflictPolicy = ScreenshotConflictPolicy.Fail,
-            }, token).ConfigureAwait(false);
+            var identifier = "Screenshot-" + Guid.NewGuid().ToString("N");
+            var path = naming is null
+                ? Path.Combine(_directory, identifier + extension)
+                : Path.Combine(_directory, identifier, naming.CreateName(extension, suffix));
             try
             {
+                var info = await ScreenshotOutputStorage.SaveAsync(png, path, new()
+                {
+                    Quality = quality, ConflictPolicy = ScreenshotConflictPolicy.Fail,
+                }, token).ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
                 return info.Path;
             }
             catch
             {
-                Delete(info.Path);
+                Delete(path);
                 throw;
             }
         }
@@ -49,16 +56,12 @@ namespace RitsukageGif.Desktop
                 if (!Directory.Exists(_directory)) return;
                 foreach (var path in
                          Directory.EnumerateFiles(_directory, "Screenshot-*", SearchOption.TopDirectoryOnly))
+                    CleanupFile(path, protectedPaths);
+                foreach (var directory in Directory.EnumerateDirectories(_directory, "Screenshot-*"))
                 {
-                    if (!Owns(path) || protectedPaths.Contains(path)) continue;
-                    try
-                    {
-                        if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddDays(-7)) Delete(path);
-                    }
-                    catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-                    {
-                        Trace.TraceWarning("Could not inspect clipboard image: {0}", error.Message);
-                    }
+                    if (!IsIdentifier(Path.GetFileName(directory)) ||
+                        (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
+                    foreach (var path in Directory.EnumerateFiles(directory)) CleanupFile(path, protectedPaths);
                 }
             });
         }
@@ -69,6 +72,10 @@ namespace RitsukageGif.Desktop
             try
             {
                 File.Delete(path);
+                var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
+                if (!SamePath(directory, _directory) && Directory.Exists(directory) &&
+                    !Directory.EnumerateFileSystemEntries(directory).Any())
+                    Directory.Delete(directory);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -79,13 +86,37 @@ namespace RitsukageGif.Desktop
         private bool Owns(string path)
         {
             var resolved = Path.GetFullPath(path);
-            if (!string.Equals(Path.GetDirectoryName(resolved), _directory,
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
-                return false;
-            var stem = Path.GetFileNameWithoutExtension(resolved);
+            if (Path.GetExtension(resolved) is not (".png" or ".jpg" or ".bmp" or ".webp" or ".avif")) return false;
+            var directory = Path.GetDirectoryName(resolved)!;
+            if (SamePath(directory, _directory)) return IsIdentifier(Path.GetFileNameWithoutExtension(resolved));
+            return SamePath(Path.GetDirectoryName(directory), _directory) &&
+                   IsIdentifier(Path.GetFileName(directory)) &&
+                   (!Directory.Exists(directory) || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) == 0);
+        }
+
+        private void CleanupFile(string path, IReadOnlySet<string> protectedPaths)
+        {
+            if (!Owns(path) || protectedPaths.Contains(path)) return;
+            try
+            {
+                if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddDays(-7)) Delete(path);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                Trace.TraceWarning("Could not inspect clipboard image: {0}", error.Message);
+            }
+        }
+
+        private static bool SamePath(string? left, string right)
+        {
+            return string.Equals(left, right,
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        }
+
+        private static bool IsIdentifier(string stem)
+        {
             return stem.StartsWith("Screenshot-", StringComparison.Ordinal) &&
-                   Guid.TryParseExact(stem[11..], "N", out _) &&
-                   Path.GetExtension(resolved) is ".png" or ".jpg" or ".bmp" or ".webp" or ".avif";
+                   Guid.TryParseExact(stem[11..], "N", out _);
         }
     }
 }

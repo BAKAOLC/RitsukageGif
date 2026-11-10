@@ -6,7 +6,7 @@ using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class ScopedCaptureInputSubscription : IDisposable
+    internal sealed class ScopedCaptureInputSubscription : IDisposable, IAsyncDisposable
     {
         [ThreadStatic] private static ScopedCaptureInputSubscription? _current;
         private readonly CancellationToken _cancellation;
@@ -37,7 +37,13 @@ namespace RitsukageGif.Desktop
         }
 
         internal Task<IDisposable> Ready => _ready.Task;
-        internal Task Completion => _completion.Task;
+        private Task Completion => _completion.Task;
+
+        public async ValueTask DisposeAsync()
+        {
+            Dispose();
+            await Completion.ConfigureAwait(false);
+        }
 
         public void Dispose()
         {

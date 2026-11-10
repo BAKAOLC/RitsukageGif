@@ -74,6 +74,7 @@ namespace RitsukageGif.Desktop
         private void ReleaseSelectionKey(Key key)
         {
             _selectionKeys.Remove(key);
+            Annotations?.ReleasePolylineArrowKey(key);
             _enter = _confirmationKey is { } confirm && _selectionKeys.Contains(confirm);
             _escape = _cancellationKey is { } cancel && _selectionKeys.Contains(cancel);
             ResumeAutoConfirm();
@@ -111,11 +112,17 @@ namespace RitsukageGif.Desktop
                 _shiftTimer = null;
             }
 
-            if (!SelectionCommands.TryResolve(key, modifiers, out var definition, ShortcutBindings) ||
+            if (!SelectionCommands.TryResolve(key, modifiers, out var definition, ShortcutBindings, Annotations) ||
                 definition is null)
                 return;
             var first = _selectionKeys.Add(key);
             if (!first && !definition.Repeat) return;
+            if (definition.Command == SelectionCommand.TogglePolylineArrows)
+            {
+                Annotations!.HandlePolylineArrowKey(key);
+                return;
+            }
+
             ExecuteSelectionCommand(definition, true);
         }
 
@@ -139,7 +146,8 @@ namespace RitsukageGif.Desktop
             var snapshot = Snapshot;
             if (!SelectionCommands.IsAvailable(definition.Command, snapshot, CanDetectControls, CanSwitchSource,
                     CanToggleCursor, Annotations is { IsDrawing: true }, ScreenshotMode,
-                    ScreenshotDrawing)) return;
+                    ScreenshotDrawing, Annotations)) return;
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (definition.Command)
             {
                 case SelectionCommand.NextShapeMode: PreviewShapeMode(1, definition.Modifiers); break;
@@ -243,7 +251,7 @@ namespace RitsukageGif.Desktop
                 case SelectionCommand.FinishPolyline: Annotations?.FinishPolyline(); break;
                 case SelectionCommand.SelectTool:
                     if (Annotations is { IsBusy: false } annotations && definition.Tool is { } tool)
-                        annotations.Tool = tool;
+                        annotations.SelectDrawingTool(tool);
                     break;
                 case SelectionCommand.ToggleControls:
                     ToggleControls();

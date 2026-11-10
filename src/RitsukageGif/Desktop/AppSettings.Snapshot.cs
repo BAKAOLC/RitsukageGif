@@ -25,7 +25,11 @@ namespace RitsukageGif.Desktop
                 System = System with { DesktopToolbar = System.DesktopToolbar.Normalize() },
                 Recognition = Recognition with { },
                 Translation = Translation with { }, Network = Network with { },
-                CapturePreferences = CapturePreferences with { ColorFormats = [.. CapturePreferences.ColorFormats] },
+                CapturePreferences = CapturePreferences with
+                {
+                    ColorFormats = [.. CapturePreferences.ColorFormats],
+                    FrameDecoration = CapturePreferences.FrameDecoration with { },
+                },
                 ScrollCapture = ScrollCapture with { },
                 ScreenshotClipboard = ScreenshotClipboard with
                 {
@@ -40,8 +44,22 @@ namespace RitsukageGif.Desktop
                         OutputSize = ScreenshotSave.Automatic.OutputSize with { },
                     },
                 },
-                PinnedImages = PinnedImages with { Groups = [.. PinnedImages.Groups.Select(group => group with { })] },
+                PinnedImages = PinnedImages with
+                {
+                    Groups = [.. PinnedImages.Groups.Select(group => group with { })],
+                    TextHighlightColors = [.. PinnedImages.TextHighlightColors],
+                },
                 VideoRecording = VideoRecording with { },
+                ScreenshotRecording = ScreenshotRecording with
+                {
+                    InputEffects = ScreenshotRecording.InputEffects with { },
+                    ProgressEffects = ScreenshotRecording.ProgressEffects with { },
+                    Camera = ScreenshotRecording.Camera with
+                    {
+                        Primary = ScreenshotRecording.Camera.Primary with { },
+                        Secondary = ScreenshotRecording.Camera.Secondary with { },
+                    },
+                },
                 HotkeyPolicy = HotkeyPolicy with
                 {
                     IgnoredPrograms = [.. HotkeyPolicy.IgnoredPrograms],

@@ -20,14 +20,17 @@ namespace RitsukageGif.Desktop
             _topology = _context?.GetTopology(_displayProvider) ?? _displayProvider();
             _frame = _runtime is null ? _staticFrame : _context?.GetSnapshot(_runtime) ?? _runtime.Snapshot;
             _frameMotionTime = _context?.MotionTime ?? PresetMotion.Now;
-            if (_needsWindowTargets) _windows = _context?.GetWindows() ?? WindowLocator.List();
+            if (_needsWindowTargets)
+                _windows = _portalSource?.Session.GetAuthorizedWindows() ??
+                           _context?.GetWindows() ?? WindowLocator.List();
             _hdrTimestamp = Stopwatch.GetTimestamp();
             foreach (var layer in _layers)
             {
                 var state = _frame.Layers.GetValueOrDefault(layer.Definition.Name);
                 var placement = state?.Placement ?? layer.Definition.Placement;
                 layer.EnsureResolution(Math.Max(placement.Width, state?.Motion?.From.Width ?? 0),
-                    Math.Max(placement.Height, state?.Motion?.From.Height ?? 0), _options.Divisor);
+                    Math.Max(placement.Height, state?.Motion?.From.Height ?? 0), _options.Divisor,
+                    _options.PixelDensity);
                 if (!_hdrLayers.TryGetValue(layer, out var hdr) || hdr.Bitmap.Width != layer.Bitmap.Width ||
                     hdr.Bitmap.Height != layer.Bitmap.Height)
                 {
@@ -41,6 +44,7 @@ namespace RitsukageGif.Desktop
 
             _hdrCanvas ??= CreateHdrBitmap(_options.Width, _options.Height);
             _hdrDrawing ??= new(_hdrCanvas);
+            ResetInputGeometry();
             _hdrDrawing.Clear(LinearColor(_background));
             using var paint = new SKPaint();
             paint.IsAntialias = true;
@@ -53,9 +57,9 @@ namespace RitsukageGif.Desktop
                 var hdr = RenderHdrLayer(layer, token);
                 var placement = state?.Motion?.At(_frameMotionTime) ?? state?.Placement ?? layer.Definition.Placement;
                 paint.ColorF = new(1, 1, 1, (float)Math.Clamp(state?.Opacity ?? 1, 0, 1));
-                var divisor = (float)_options.Divisor;
-                _hdrDrawing.DrawSampledBitmap(hdr.Bitmap, new(placement.X / divisor, placement.Y / divisor,
-                    placement.Right / divisor, placement.Bottom / divisor), paint);
+                var scale = (float)(_options.PixelDensity / _options.Divisor);
+                _hdrDrawing.DrawSampledBitmap(hdr.Bitmap, new(placement.X * scale, placement.Y * scale,
+                    placement.Right * scale, placement.Bottom * scale), paint);
                 isHdr |= hdr.IsHdrSource;
             }
 
@@ -98,7 +102,8 @@ namespace RitsukageGif.Desktop
                             : definition.Process is null && _preset.FixedHandle != 0
                                 ? _windows.SingleOrDefault(window => window.Handle == _preset.FixedHandle)
                                 : WindowLocator.Find(match, _windows, layer.Handle);
-                        if (target is not null) target = _context?.Refresh(target) ?? WindowLocator.Refresh(target);
+                        if (target is not null && _portalSource is null)
+                            target = _context?.Refresh(target) ?? WindowLocator.Refresh(target);
                     }
 
                     if ((target?.Handle ?? 0) != layer.Handle)
@@ -176,7 +181,8 @@ namespace RitsukageGif.Desktop
                 {
                     layer.Screen?.Dispose();
                     layer.Screen = new(_options with { Region = area, Divisor = 1 },
-                        _frameDisplayProvider, output.Bitmap.Width, output.Bitmap.Height);
+                        _frameDisplayProvider, output.Bitmap.Width, output.Bitmap.Height, _portalSource?.Session,
+                        _includedWindowTitle);
                 }
                 else if (area != layer.LastArea)
                 {
@@ -192,14 +198,15 @@ namespace RitsukageGif.Desktop
                 if (_context is not null)
                 {
                     var captured = _context.CaptureWindowFrames(target!.Handle, _options,
-                        area, output.Bitmap.Width, output.Bitmap.Height, token);
+                        area, output.Bitmap.Width, output.Bitmap.Height, token, _portalSource?.Session);
                     if (captured.Frames is null) return false;
                     frames = captured.Frames;
                     actualBounds = captured.Bounds;
                 }
                 else
                 {
-                    layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps);
+                    layer.Window ??= new(target!.Handle, _options.Cursor, _options.Fps,
+                        nativeSource: _portalSource?.Session);
                     layer.Window.ConfigureRegion(area, output.Bitmap.Width, output.Bitmap.Height);
                     frames = layer.Window.CaptureFrames(token);
                     actualBounds = layer.Window.CoordinateBounds;
@@ -217,6 +224,7 @@ namespace RitsukageGif.Desktop
             if (frames.Hdr is null && frames.Sdr.ColorInfo.IsHdrSource)
                 throw new NotSupportedException(UiText.Get("HdrSceneFrameUnavailable"));
             DrawHdrFrame(output, frames.Hdr ?? frames.Sdr, source, token);
+            RecordInputArea(layer, area);
             return true;
         }
 

@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
                        current.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))?.Tag;
         }
 
-        internal static async Task<string> RecognizeAsync(ReadOnlyMemory<byte> image,
+        internal static async Task<OcrRecognitionResult> RecognizeAsync(ReadOnlyMemory<byte> image,
             RecognitionPreferences preferences,
             ITextRecognitionService service, CancellationToken token)
         {
@@ -24,7 +24,7 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             var result = await service.RecognizeImageAsync(image, Language(preferences, capabilities.Languages), token);
             token.ThrowIfCancellationRequested();
-            return RecognitionTextFormatter.Format(result, preferences);
+            return result;
         }
     }
 }

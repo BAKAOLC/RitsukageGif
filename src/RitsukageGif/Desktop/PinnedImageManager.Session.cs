@@ -36,6 +36,7 @@ namespace RitsukageGif.Desktop
             ObjectDisposedException.ThrowIf(_disposed, this);
             _sessionDirectory = fullDirectory;
             _rejectedSession = rejectedSession;
+            await ReadVisibilityMaskAsync(token);
             if (recovery is not null)
             {
                 PinLogger.ZLogWarning($"Unsupported pin session preserved. RecoveryDirectory={recovery}");
@@ -84,6 +85,8 @@ namespace RitsukageGif.Desktop
                     try
                     {
                         var state = element.Deserialize(PinnedImageJsonContext.Default.PinnedImageState);
+                        if (state?.Annotations is { } annotations)
+                            ScreenshotAnnotationSession.ValidateDocument(annotations);
                         if (state is null || !ValidState(state))
                         {
                             RejectSessionRecord("session.json", element);
@@ -94,8 +97,9 @@ namespace RitsukageGif.Desktop
                             states.Add(state);
                         }
                     }
-                    catch (JsonException)
+                    catch (Exception error) when (error is JsonException or InvalidDataException)
                     {
+                        PinLogger.ZLogWarning(error, $"Pin session record validation failed. Manifest=session.json");
                         RejectSessionRecord("session.json", element);
                         rejected++;
                     }
@@ -192,6 +196,8 @@ namespace RitsukageGif.Desktop
                         ObjectDisposedException.ThrowIf(_disposed, this);
                         var content = await Task.Run(() => PinnedImageContent.Decode(png, token), token);
                         var original = await ReadOriginalAsync(state, content, token);
+                        state.Annotations = await ReadAnnotationImagesAsync(state.Annotations, token);
+                        state.Translation = await ReadTranslationImageAsync(state.Translation, png, token);
                         token.ThrowIfCancellationRequested();
                         content = content with
                         {
@@ -281,24 +287,29 @@ namespace RitsukageGif.Desktop
             {
                 if (_disposed) return;
                 await _rejectedSession.WriteAsync(directory, token);
-                await WriteDocumentsAsync(token);
+                var documents = await WriteDocumentsAsync(token);
                 var images = _windows.Select(window =>
                 {
                     var live = window.CaptureLiveSnapshot();
                     if (live is not null) liveSnapshots.Add(live);
+                    var state = _pendingRestore.TryGetValue(window, out var pending)
+                        ? pending.Copy()
+                        : window.CaptureState();
+                    CaptureMaskVisibility(window, state);
                     return (
-                        State: _pendingRestore.TryGetValue(window, out var pending)
-                            ? pending.Copy()
-                            : window.CaptureState(),
+                        State: state,
                         Png: window.CurrentPng, Original: window.OriginalContent, window.AnimationActive,
                         Live: live);
                 }).ToArray();
                 Directory.CreateDirectory(directory);
+                await WriteVisibilityMaskAsync(directory, token);
                 var savedImages =
                     new Dictionary<string, (ReadOnlyMemory<byte> Png, PinnedImageOriginal Original, string ImageId)>(
                         StringComparer.Ordinal);
                 foreach (var (state, originalPng, original, animationActive, live) in images)
                 {
+                    await WriteAnnotationImagesAsync(state.Annotations, createdImages, token);
+                    await WriteTranslationImageAsync(state.Translation, createdImages, token);
                     if (live is null && _sessionImageReferences.TryGetValue(state.Id, out var saved) &&
                         saved.Png.Equals(originalPng) && saved.Original == original)
                     {
@@ -358,6 +369,9 @@ namespace RitsukageGif.Desktop
                 }
 
                 var current = states.Select(state => state.ImageId).ToHashSet(StringComparer.Ordinal);
+                current.UnionWith(states.Where(state => state.Translation?.Cache is not null)
+                    .Select(state => state.Translation!.Cache!.ImageId));
+                CleanupAnnotationImages(states, documents);
                 current.UnionWith(_rejectedSession.ImageIds);
                 foreach (var path in Directory.EnumerateFiles(directory, "*.png*"))
                 {
@@ -403,6 +417,7 @@ namespace RitsukageGif.Desktop
             window.ShowActivated = false;
             window.SetGroup(state.Group);
             window.Presentation.Restore(state);
+            MaskRestoredWindow(window, state);
             if (state.Group != Preferences.ActiveGroup)
             {
                 var visible = state.GroupHidden ? state.VisibleInGroup : state.Visible;
@@ -412,9 +427,12 @@ namespace RitsukageGif.Desktop
                 state.Visible = false;
             }
 
-            if (state.Group != Preferences.ActiveGroup || (!state.Visible && CanRestoreHidden()) || !CanRestoreNow())
+            if (AllPinsHidden || state.Group != Preferences.ActiveGroup ||
+                (!state.Visible && CanRestoreHidden()) || !CanRestoreNow())
             {
+                window.RestoreHiddenState(state);
                 _pendingRestore.Add(window, state);
+                window.InitializeTextRecognition();
                 return;
             }
 
@@ -425,7 +443,7 @@ namespace RitsukageGif.Desktop
         public void ResumeDeferred()
         {
             Dispatcher.UIThread.VerifyAccess();
-            if (_disposed || !CanRestoreNow()) return;
+            if (_disposed || AllPinsHidden || !CanRestoreNow()) return;
             ResumeDocumentWindows();
             ResumeGroupRestore();
             foreach (var (window, state) in _pendingRestore.ToArray())
@@ -433,19 +451,13 @@ namespace RitsukageGif.Desktop
                 if (state.Group != Preferences.ActiveGroup || (!state.Visible && CanRestoreHidden())) continue;
                 _pendingRestore.Remove(window);
                 window.Show();
-                window.RestoreState(state);
+                if (!state.Visible) window.HideImage();
             }
         }
 
         private void RevealWindow(PinnedImageWindow window)
         {
-            if (_pendingRestore.Remove(window, out var state))
-            {
-                state.Visible = true;
-                window.Show();
-                window.RestoreState(state);
-            }
-
+            _pendingRestore.Remove(window);
             window.RevealImage();
         }
 
@@ -455,24 +467,31 @@ namespace RitsukageGif.Desktop
             return Path.Combine(_sessionDirectory!, id + ".png");
         }
 
-        private bool ValidState(PinnedWindowState? state)
+        private bool ValidState(PinnedWindowState? state, bool thumbnail = false)
         {
-            return state is { CustomTitle.Length: <= 32767 } &&
+            return state is { CustomTitle.Length: <= 32767, WindowShape: null or { IsValid: true } } &&
                    (state.Group is "" || Guid.TryParseExact(state.Group, "N", out _)) &&
                    GroupDefinitions.Any(group => group.Id == state.Group) &&
                    Guid.TryParseExact(state.Id, "N", out _) &&
-                   double.IsFinite(state.Zoom) && state.Zoom is > 0 and <= 8 &&
+                   double.IsFinite(state.Zoom) && state.Zoom > 0 &&
+                   (state.Zoom <= 8 || thumbnail || state is PinnedImageState { Thumbnail: true }) &&
                    double.IsFinite(state.CaptureScaling) && state.CaptureScaling is >= 1 and <= 16 &&
-                   double.IsFinite(state.Opacity) && state.Opacity is >= 0.15 and <= 1 &&
+                   double.IsFinite(state.Opacity) && state.Opacity is >= 0 and <= 1 &&
                    double.IsFinite(state.ScrollX) && state.ScrollX >= 0 &&
                    double.IsFinite(state.ScrollY) && state.ScrollY >= 0 &&
                    state is not PinnedImageState { LiveSource.IsValid: false } &&
                    (state is not PinnedImageState image ||
-                    (Guid.TryParseExact(image.ImageId, "N", out _) &&
+                    (Enum.IsDefined(image.Orientation) && image.ColorProcessing.Matrix is not { IsFinite: false } &&
+                     Guid.TryParseExact(image.ImageId, "N", out _) &&
+                     image.Translation is not { IsValid: false } &&
+                     image.Ocr is not { IsValid: false } &&
+                     (image.TransparentLayer is null || Enum.IsDefined(image.TransparentLayer.Value)) &&
+                     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+                     image.TextMarks is not null && image.TextMarks.All(mark => mark is { IsValid: true }) &&
                      image is { ThumbnailStandardWidth: 0, ThumbnailStandardHeight: 0 } or
                          { ThumbnailStandardWidth: > 0, ThumbnailStandardHeight: > 0 } &&
                      double.IsFinite(image.ThumbnailNormalZoom) && image.ThumbnailNormalZoom is >= 0 and <= 8 &&
-                     double.IsFinite(image.ThumbnailSavedZoom) && image.ThumbnailSavedZoom is >= 0 and <= 8 &&
+                     double.IsFinite(image.ThumbnailSavedZoom) && image.ThumbnailSavedZoom >= 0 &&
                      double.IsFinite(image.ThumbnailFullScrollX) && image.ThumbnailFullScrollX >= 0 &&
                      double.IsFinite(image.ThumbnailFullScrollY) && image.ThumbnailFullScrollY >= 0));
         }

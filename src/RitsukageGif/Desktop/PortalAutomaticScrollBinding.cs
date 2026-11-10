@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
         PixelRect CoordinateBounds,
         Func<bool> IsCurrent,
         Func<PortalPointerObservation?> ReadPointer,
+        Func<PixelRect, CancellationToken, AutomaticScrollInputResult> PreparePointer,
         Func<ScrollCaptureAxis, PixelRect, CancellationToken, AutomaticScrollInputResult> SendScroll,
         Func<string?> FaultReason);
 }

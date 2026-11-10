@@ -38,6 +38,7 @@ namespace RitsukageGif.Desktop
                    SameSequence(left.GlobalActions, right.GlobalActions, static (a, b) => Same(a, b)) &&
                    SameSequence(left.GlobalMouseBindings, right.GlobalMouseBindings, static (a, b) => Same(a, b)) &&
                    Same(left.VideoRecording, right.VideoRecording) &&
+                   left.ScreenshotRecording == right.ScreenshotRecording &&
                    EqualityComparer<int>.Default.Equals(left.Fps, right.Fps) &&
                    EqualityComparer<int>.Default.Equals(left.Divisor, right.Divisor) &&
                    EqualityComparer<OutputFormat>.Default.Equals(left.Format, right.Format) &&
@@ -45,7 +46,6 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<HdrToneMapMode>.Default.Equals(left.CaptureToneMap, right.CaptureToneMap) &&
                    EqualityComparer<GifQuality>.Default.Equals(left.Quality, right.Quality) &&
                    EqualityComparer<bool>.Default.Equals(left.UseFfmpeg, right.UseFfmpeg) &&
-                   EqualityComparer<bool>.Default.Equals(left.Cursor, right.Cursor) &&
                    EqualityComparer<CaptureSourceKind>.Default.Equals(left.CaptureSource, right.CaptureSource) &&
                    EqualityComparer<bool>.Default.Equals(left.Sound, right.Sound) &&
                    EqualityComparer<string>.Default.Equals(left.StartSound, right.StartSound) &&
@@ -100,8 +100,7 @@ namespace RitsukageGif.Desktop
         {
             if (ReferenceEquals(left, right)) return true;
             if (left is null || right is null) return false;
-            return EqualityComparer<ScreenshotClipboardMode>.Default.Equals(left.Mode, right.Mode) &&
-                   EqualityComparer<ScreenshotClipboardFileFormat>.Default.Equals(left.FileFormat, right.FileFormat) &&
+            return EqualityComparer<ScreenshotClipboardFileFormat>.Default.Equals(left.FileFormat, right.FileFormat) &&
                    Same(left.OutputSize, right.OutputSize) &&
                    EqualityComparer<int>.Default.Equals(left.HdpiTargetPercent, right.HdpiTargetPercent) &&
                    EqualityComparer<bool>.Default.Equals(left.PasteAfterCopy, right.PasteAfterCopy);
@@ -122,6 +121,9 @@ namespace RitsukageGif.Desktop
                        right.ConflictPolicy) &&
                    Same(left.Quick, right.Quick) &&
                    Same(left.Automatic, right.Automatic) &&
+                   left.AutoSaveEnabled == right.AutoSaveEnabled &&
+                   left.AutomaticCleanupMaxAgeDays == right.AutomaticCleanupMaxAgeDays &&
+                   left.QuickNotificationAction == right.QuickNotificationAction &&
                    EqualityComparer<ScreenshotAutoSaveTriggers>.Default.Equals(left.AutoSaveTriggers,
                        right.AutoSaveTriggers) &&
                    EqualityComparer<bool>.Default.Equals(left.RememberExtension, right.RememberExtension) &&
@@ -169,6 +171,9 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<bool>.Default.Equals(left.RenumberOnDelete, right.RenumberOnDelete) &&
                    EqualityComparer<bool>.Default.Equals(left.NumberStartsAtZero, right.NumberStartsAtZero) &&
                    EqualityComparer<bool>.Default.Equals(left.GlobalNumberCounter, right.GlobalNumberCounter) &&
+                   EqualityComparer<uint?>.Default.Equals(left.NumberForegroundColor, right.NumberForegroundColor) &&
+                   EqualityComparer<AnnotationSizeLevel>.Default.Equals(left.NumberTextSize, right.NumberTextSize) &&
+                   EqualityComparer<AnnotationSizeLevel>.Default.Equals(left.NumberArrowSize, right.NumberArrowSize) &&
                    EqualityComparer<bool>.Default.Equals(left.SmoothBrush, right.SmoothBrush) &&
                    EqualityComparer<AnnotationPencilShiftMode>.Default.Equals(left.PencilShiftMode,
                        right.PencilShiftMode) &&
@@ -201,6 +206,7 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<bool>.Default.Equals(left.Topmost, right.Topmost) &&
                    EqualityComparer<bool>.Default.Equals(left.ShowWindowShadow, right.ShowWindowShadow) &&
                    EqualityComparer<bool>.Default.Equals(left.AutoFit, right.AutoFit) &&
+                   left.SmoothScaling == right.SmoothScaling &&
                    left.MaximumWindowSize == right.MaximumWindowSize &&
                    left.QuickThumbnailWidth == right.QuickThumbnailWidth &&
                    left.QuickThumbnailHeight == right.QuickThumbnailHeight &&
@@ -211,7 +217,8 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<double>.Default.Equals(left.MouseThroughOpacity, right.MouseThroughOpacity) &&
                    EqualityComparer<bool>.Default.Equals(left.SelectableText, right.SelectableText) &&
                    EqualityComparer<bool>.Default.Equals(left.ThumbnailSelectableText, right.ThumbnailSelectableText) &&
-                   EqualityComparer<bool>.Default.Equals(left.CopyVisibleRegion, right.CopyVisibleRegion) &&
+                   left.ShowTextPopupMenu == right.ShowTextPopupMenu &&
+                   SameSequence(left.TextHighlightColors, right.TextHighlightColors, SameColor) &&
                    left.OutputContent == right.OutputContent &&
                    left.ReplacementAction == right.ReplacementAction &&
                    EqualityComparer<bool>.Default.Equals(left.ResizeFromBorder, right.ResizeFromBorder) &&
@@ -234,9 +241,11 @@ namespace RitsukageGif.Desktop
         {
             if (ReferenceEquals(left, right)) return true;
             if (left is null || right is null) return false;
-            return EqualityComparer<ScrollCaptureAxis>.Default.Equals(left.InitialAxis, right.InitialAxis) &&
+            return EqualityComparer<ScrollCaptureInitialAction>.Default.Equals(left.InitialAction,
+                       right.InitialAction) &&
                    EqualityComparer<bool>.Default.Equals(left.RespondShortcuts, right.RespondShortcuts) &&
-                   left.AutoCropOnReverse == right.AutoCropOnReverse;
+                   left.AutoCropOnReverse == right.AutoCropOnReverse &&
+                   left.SkipClearConfirmation == right.SkipClearConfirmation;
         }
 
         internal static bool Same(CapturePreferences? left, CapturePreferences? right)
@@ -249,6 +258,14 @@ namespace RitsukageGif.Desktop
                    left.BlockedWindowsKeys == right.BlockedWindowsKeys &&
                    left.PersistHistory == right.PersistHistory &&
                    left.DoubleClickAction == right.DoubleClickAction &&
+                   left.MiddleClickAction == right.MiddleClickAction &&
+                   left.WheelFunctions == right.WheelFunctions &&
+                   left.PinAndCopy == right.PinAndCopy &&
+                   left.ShowSecondaryButtons == right.ShowSecondaryButtons &&
+                   left.PolygonCornerRadius == right.PolygonCornerRadius &&
+                   left.SoundTiming == right.SoundTiming &&
+                   left.InformationUnit == right.InformationUnit &&
+                   left.InformationItems == right.InformationItems &&
                    EqualityComparer<bool>.Default.Equals(left.RelativeCoordinates, right.RelativeCoordinates) &&
                    EqualityComparer<CaptureDetectionMode>.Default.Equals(left.DetectionMode, right.DetectionMode) &&
                    EqualityComparer<int>.Default.Equals(left.ElementMargin, right.ElementMargin) &&
@@ -279,6 +296,9 @@ namespace RitsukageGif.Desktop
                        right.MagnifierSelectionBorder) &&
                    EqualityComparer<bool>.Default.Equals(left.MagnifierSelectionHandles,
                        right.MagnifierSelectionHandles) &&
+                   EqualityComparer<bool>.Default.Equals(left.MagnifierAnnotations, right.MagnifierAnnotations) &&
+                   EqualityComparer<bool>.Default.Equals(left.MagnifierAnnotationControls,
+                       right.MagnifierAnnotationControls) &&
                    EqualityComparer<bool>.Default.Equals(left.MagnifierCoordinates, right.MagnifierCoordinates) &&
                    EqualityComparer<bool>.Default.Equals(left.MagnifierShortcuts, right.MagnifierShortcuts) &&
                    EqualityComparer<string>.Default.Equals(left.MagnifierGridColor, right.MagnifierGridColor) &&
@@ -286,8 +306,8 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<string>.Default.Equals(left.MagnifierColorFormatId, right.MagnifierColorFormatId) &&
                    EqualityComparer<bool>.Default.Equals(left.SmoothMagnifier, right.SmoothMagnifier) &&
                    EqualityComparer<bool>.Default.Equals(left.KeepDecoration, right.KeepDecoration) &&
-                   EqualityComparer<CaptureDecoration>.Default.Equals(left.RememberedDecoration,
-                       right.RememberedDecoration) &&
+                   EqualityComparer<CaptureFrameDecorationPreferences>.Default.Equals(left.FrameDecoration,
+                       right.FrameDecoration) &&
                    EqualityComparer<bool>.Default.Equals(left.FrameRoundEnabled, right.FrameRoundEnabled) &&
                    EqualityComparer<double>.Default.Equals(left.FrameRoundRadius, right.FrameRoundRadius);
         }
@@ -349,6 +369,7 @@ namespace RitsukageGif.Desktop
             if (ReferenceEquals(left, right)) return true;
             if (left is null || right is null) return false;
             return EqualityComparer<bool>.Default.Equals(left.StartWithWindows, right.StartWithWindows) &&
+                   left.StartupHidden == right.StartupHidden &&
                    left.IgnoreCopyMacros == right.IgnoreCopyMacros &&
                    left.ExplorerContextMenu == right.ExplorerContextMenu &&
                    Same(left.DesktopToolbar, right.DesktopToolbar) &&
@@ -369,7 +390,9 @@ namespace RitsukageGif.Desktop
                    left.LatexFormat == right.LatexFormat &&
                    left.ShowOriginalImage == right.ShowOriginalImage &&
                    EqualityComparer<bool>.Default.Equals(left.ShowDialogOnRecognition, right.ShowDialogOnRecognition) &&
+                   left.ShowDialogOnCopySelected == right.ShowDialogOnCopySelected &&
                    EqualityComparer<bool>.Default.Equals(left.ShowDialogOnCopyAll, right.ShowDialogOnCopyAll) &&
+                   left.Dialog == right.Dialog &&
                    EqualityComparer<string>.Default.Equals(left.LanguageTag, right.LanguageTag);
         }
 

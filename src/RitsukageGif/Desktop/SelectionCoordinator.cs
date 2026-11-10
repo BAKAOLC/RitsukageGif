@@ -132,6 +132,8 @@ namespace RitsukageGif.Desktop
             ScreenshotCursor?.Dispose();
             ScreenshotCursor = null;
             _shapeModeTimer?.Dispose();
+            _polygonCornerPaint?.Dispose();
+            _polygonCornerPaint = null;
             Annotations?.Dispose();
         }
 
@@ -168,7 +170,8 @@ namespace RitsukageGif.Desktop
                 try
                 {
                     await Task.WhenAll(_screenshotTask ?? Task.CompletedTask,
-                        _scrollingTask ?? Task.CompletedTask, _codeDetection?.Pending ?? Task.CompletedTask);
+                        _scrollingTask ?? Task.CompletedTask, _codeDetection?.Pending ?? Task.CompletedTask,
+                        _candidateRefreshTask ?? Task.CompletedTask);
                 }
                 finally
                 {
@@ -215,9 +218,12 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                if (OperatingSystem.IsMacOS()) await Task.Run(MacWindowSystem.EnsurePermission, _cancel.Token);
+                if (OperatingSystem.IsMacOS()) await MacWindowSystem.EnsurePermissionAsync(_cancel.Token);
                 if (_finished) return;
-                _targets = await Task.Run(WindowLocator.List, _cancel.Token);
+                if (OperatingSystem.IsWindows()) _windowMonitor = new(CandidatesChanged);
+                _targets = await Task.Run(WindowLocator.ListCandidates, _cancel.Token);
+                _candidatesInitialized = true;
+                if (_candidatesDirty) CandidatesChanged();
                 if (OperatingSystem.IsMacOS())
                 {
                     var controlsAvailable =
@@ -321,6 +327,7 @@ namespace RitsukageGif.Desktop
 
         internal void FocusChanged()
         {
+            Annotations?.ReleasePolylineArrowKey();
             if (_selectionDialogDepth > 0) return;
             if (!_showing) StopFrameRefresh();
             CancelModifierTap();
@@ -451,6 +458,7 @@ namespace RitsukageGif.Desktop
         {
             if (_finished) return;
             if (HandleTextInputKey(key, down)) return;
+            if (Annotations?.HandleNumberCaptionKey(key, modifiers, down) == true) return;
             try
             {
                 if (!down) ReleaseSelectionKey(key);
@@ -465,7 +473,7 @@ namespace RitsukageGif.Desktop
                 AuxiliaryVisible = CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Always ||
                                    (modifiers.HasFlag(KeyModifiers.Alt) &&
                                     CapturePreferences.AuxiliaryPolicy == CaptureAuxiliaryPolicy.Alt);
-                if (SelectionCommands.TryResolve(key, modifiers, out var definition, ShortcutBindings))
+                if (SelectionCommands.TryResolve(key, modifiers, out var definition, ShortcutBindings, Annotations))
                 {
                     if (definition!.Command == SelectionCommand.Confirm) _confirmationKey = key;
                     if (definition.Command == SelectionCommand.Cancel) _cancellationKey = key;
@@ -575,7 +583,7 @@ namespace RitsukageGif.Desktop
             ApplyPendingInitialGeometry();
             if (!UsesLocalSource && (forceCandidate || _state is { Dragging: false, Selected.IsEmpty: true }))
             {
-                _hoveredTarget = _targets.FirstOrDefault(candidate => candidate.Bounds.Contains(_pointer));
+                _hoveredTarget = CandidateAtPoint(_pointer);
                 _hovered = _hoveredTarget is { } target
                     ? WindowSource ? target.Client : target.Bounds
                     : default;
@@ -610,10 +618,13 @@ namespace RitsukageGif.Desktop
                 var token = _cancel.Token;
                 var hierarchy = await FindControlHierarchyAsync(target, point, token);
                 if (_finished || !Controls || revision != _controlRevision || windowSource != WindowSource ||
-                    _pointer != point || CurrentControlTarget?.Handle != target.Handle) return;
+                    _pointer != point || CurrentControlTarget is not { } currentTarget ||
+                    currentTarget.Handle != target.Handle || currentTarget.ProcessId != target.ProcessId ||
+                    currentTarget.Bounds != target.Bounds || currentTarget.Client != target.Client) return;
                 _controlWindow = target.Handle;
                 _controlPoint = point;
                 _controlHierarchy = hierarchy;
+                UpdateCandidateHierarchy(target, point, hierarchy);
                 var result = hierarchy.Count == 0 ? null : hierarchy[^1];
                 _controlBounds = result is not null &&
                                  (!OperatingSystem.IsWindows() ||
@@ -665,6 +676,7 @@ namespace RitsukageGif.Desktop
             var basis = WindowSource ? target.Client : target.Bounds;
             if (_controlPoint == _pointer && _controlWindow == target.Handle && !_controlBounds.IsEmpty)
                 return ApplyDetectionMargin(_controlBounds.Intersect(basis));
+            if (!OperatingSystem.IsWindows()) return ApplyDetectionMargin(basis);
             try
             {
                 // Resolve a quick click before committing it; the native walk is strictly bounded.
@@ -779,6 +791,8 @@ namespace RitsukageGif.Desktop
             if (error is not null)
                 SelectionLogger.ZLogError(error, $"Selection completion failure. SelectionId={_selectionId}");
             _finished = true;
+            _windowMonitor?.Dispose();
+            _windowMonitor = null;
             DisposeCodeDetection();
             DisposeWindowsKeyGuard();
             StopFrameRefresh();

@@ -15,14 +15,25 @@ namespace RitsukageGif.Desktop
         public bool AnnotationsVisible { get; private set; } = true;
         public bool IsDrawingPolyline => _gesture?.Tool == ScreenshotTool.Polyline;
 
+        public bool GlobalNumberCounter => _behavior.GlobalNumberCounter;
+
+        public int MinimumNumber => _behavior.NumberStartsAtZero &&
+                                    (Tool == ScreenshotTool.Number
+                                        ? Properties
+                                        : StyleFor(ScreenshotTool.Number).Properties)
+                                    .NumberFormat == AnnotationNumberFormat.Decimal
+            ? 0
+            : 1;
+
         public int NextNumber => _behavior.GlobalNumberCounter
-            ? Math.Clamp(Volatile.Read(ref _globalNumber) + (_behavior.NumberStartsAtZero ? 0 : 1), 0, 999999)
-            : _nextNumber;
+            ? Math.Clamp(Volatile.Read(ref _globalNumber) + (_behavior.NumberStartsAtZero ? 0 : 1), MinimumNumber,
+                999999)
+            : Math.Max(MinimumNumber, _nextNumber);
 
         public void SetNextNumber(int number)
         {
             if (_disposed || IsBusy || IsDrawing) return;
-            _nextNumber = Math.Clamp(number, 0, 999999);
+            _nextNumber = Math.Clamp(number, MinimumNumber, 999999);
             if (_behavior.GlobalNumberCounter)
                 Interlocked.Exchange(ref _globalNumber, _nextNumber - (_behavior.NumberStartsAtZero ? 0 : 1));
             var style = StyleFor(ScreenshotTool.Number);
@@ -31,6 +42,7 @@ namespace RitsukageGif.Desktop
             Changed?.Invoke();
         }
 
+        // ReSharper disable once UnusedMember.Global
         public void SetWatermarkImage(byte[]? image, string? sourcePath = null)
         {
             if (_disposed || IsBusy || IsDrawing) return;
@@ -64,7 +76,7 @@ namespace RitsukageGif.Desktop
 
         public Task UpdateSelectedPropertiesAsync(ScreenshotAnnotationProperties properties)
         {
-            if (_disposed || !CanAnnotate || IsBusy || IsDrawing) return Task.CompletedTask;
+            if (_disposed || !CanAnnotate || IsBusy || (IsDrawing && !IsDrawingPolyline)) return Task.CompletedTask;
             var numberFormatChanged = Properties.NumberFormat != properties.NumberFormat;
             Properties = properties.Normalize();
             if (numberFormatChanged && (_selected?.Tool ?? Tool) == ScreenshotTool.Number)
@@ -73,13 +85,22 @@ namespace RitsukageGif.Desktop
                 SynchronizeNumberCounter();
             }
 
+            if (_gesture is { Tool: ScreenshotTool.Polyline } draft)
+            {
+                _gesture = CloneAnnotation(draft, properties: Properties);
+                draft.Dispose();
+                StoreToolStyle(ScreenshotTool.Polyline);
+                Changed?.Invoke();
+                return Task.CompletedTask;
+            }
+
             if (IsEditingText)
             {
                 NotifyTextEditState();
                 return Task.CompletedTask;
             }
 
-            if (_selected is not { } annotation || annotation.Properties == Properties)
+            if (ActiveStyleAnnotation is not { } annotation || annotation.Properties == Properties)
             {
                 Changed?.Invoke();
                 return Task.CompletedTask;
@@ -87,7 +108,7 @@ namespace RitsukageGif.Desktop
 
             var replacement = CloneAnnotation(annotation, properties: Properties);
             NormalizeGeometryPoints(replacement);
-            StoreToolStyle(annotation.Tool);
+            StoreToolStyle(AnnotationTool(annotation));
             return numberFormatChanged && annotation.Tool == ScreenshotTool.Number
                 ? ReplaceNumberPropertiesAsync(annotation, replacement)
                 : ReplaceAnnotationAsync(_annotations.IndexOf(annotation), replacement);
@@ -198,17 +219,19 @@ namespace RitsukageGif.Desktop
         {
             var text = new FormattedText(annotation.DisplayText, CultureInfo.CurrentUICulture,
                 FlowDirection.LeftToRight,
-                CreateTypeface(annotation.Properties), annotation.FontSize, brush);
+                CreateTypeface(annotation.Properties),
+                annotation.Tool == ScreenshotTool.Text ? annotation.FontSize * 4 / 3 : annotation.FontSize, brush);
             if (_behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap)
                 text.MaxTextWidth = annotation.Properties.WrapWidth > 0
                     ? annotation.Properties.WrapWidth
                     : Math.Max(1,
-                        AnnotationBounds.Right - annotation.Points[0].X - annotation.Properties.TextPadding * 2);
+                        AnnotationBounds.Right - annotation.Points[0].X - TextPadding(annotation.Properties) * 2);
             return text;
         }
 
         private void DrawLabel(DrawingContext context, ScreenshotAnnotation annotation)
         {
+            using var textOptions = context.PushTextOptions(new() { TextRenderingMode = TextRenderingMode.Antialias });
             if (annotation.Tool == ScreenshotTool.Number)
             {
                 DrawNumber(context, annotation);
@@ -222,47 +245,47 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            var text = FormatLabel(annotation, new SolidColorBrush(annotation.Color));
-            var padding = properties.TextPadding;
-            var size = new Size(text.Width + padding * 2, text.Height + padding * 2);
-            using var opacity =
-                context.PushOpacity(annotation.Tool == ScreenshotTool.Watermark ? properties.Opacity : 1);
-            if (annotation.Tool == ScreenshotTool.Watermark && properties.Tiled)
-                for (var y = (double)AnnotationBounds.Y;
-                     y < AnnotationBounds.Bottom;
-                     y += Math.Max(24, size.Height * 2))
-                for (var x = (double)AnnotationBounds.X;
-                     x < AnnotationBounds.Right;
-                     x += Math.Max(48, size.Width * 1.5))
-                    DrawAt(new(x, y));
-            else
-                DrawAt(annotation.Tool == ScreenshotTool.Watermark && properties.NineGrid
-                    ? WatermarkOrigin(size, properties.Anchor)
-                    : annotation.Points[0]);
-            return;
-
-            void DrawAt(Point origin)
+            if (annotation.Tool == ScreenshotTool.Watermark)
             {
-                context.DrawRectangle(new SolidColorBrush(properties.TextBackground), null, new(origin, size));
-                var location = origin + new Vector(padding, padding);
-                if (properties is { TextOutline.A: > 0, TextOutlineWidth: > 0 })
-                {
-                    var outline = FormatLabel(annotation, new SolidColorBrush(properties.TextOutline));
-                    var radius = properties.TextOutlineWidth;
-                    for (var direction = 0; direction < 8; direction++)
-                    {
-                        var angle = direction * Math.PI / 4;
-                        context.DrawText(outline,
-                            location + new Vector(Math.Cos(angle) * radius, Math.Sin(angle) * radius));
-                    }
-                }
-
-                context.DrawText(text, location);
-                if (properties.StrikeThrough)
-                    context.DrawLine(
-                        new Pen(new SolidColorBrush(annotation.Color), Math.Max(1, annotation.FontSize / 16)),
-                        location + new Vector(0, text.Height / 2), location + new Vector(text.Width, text.Height / 2));
+                DrawTextWatermark(context, annotation);
+                return;
             }
+
+            var text = FormatLabel(annotation, new SolidColorBrush(annotation.Color));
+            var padding = TextPadding(properties);
+            var size = new Size(text.Width, text.Height);
+            var origin = annotation.Points[0];
+            if (properties.TextBackgroundEnabled)
+            {
+                var color = Color.FromArgb((byte)Math.Round(properties.TextBackgroundOpacity * 255),
+                    properties.TextBackground.R, properties.TextBackground.G, properties.TextBackground.B);
+                context.DrawRectangle(new SolidColorBrush(color), null, new Rect(origin, size).Inflate(padding),
+                    properties.TextBackgroundRadius, properties.TextBackgroundRadius);
+            }
+
+            if (properties is { TextOutlineEnabled: true, TextOutlineWidth: > 0 } && annotation.Color.A > 0)
+            {
+                if (annotation.TextGeometry is not { } geometry || !geometry.MaxWidth.Equals(text.MaxTextWidth))
+                    annotation.TextGeometry = new(text.BuildGeometry(default), text.MaxTextWidth);
+                if (annotation.TextGeometry.Path is { } path)
+                {
+                    using var transform = context.PushTransform(Matrix.CreateTranslation(origin.X, origin.Y));
+                    var outline = Color.FromArgb(annotation.Color.A, properties.TextOutline.R,
+                        properties.TextOutline.G, properties.TextOutline.B);
+                    context.DrawGeometry(null, new Pen(new SolidColorBrush(outline), properties.TextOutlineWidth * 2,
+                        lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), path);
+                }
+            }
+
+            context.DrawText(text, origin);
+            if (properties.StrikeThrough)
+                context.DrawLine(new Pen(new SolidColorBrush(annotation.Color), Math.Max(1, annotation.FontSize / 16)),
+                    origin + new Vector(0, text.Height / 2), origin + new Vector(text.Width, text.Height / 2));
+        }
+
+        private static double TextPadding(ScreenshotAnnotationProperties properties)
+        {
+            return properties.TextBackgroundEnabled ? properties.TextPadding : 0;
         }
 
         private Point WatermarkOrigin(Size size, int anchor)
@@ -306,8 +329,9 @@ namespace RitsukageGif.Desktop
                     }
                     else
                     {
-                        var text = FormatLabel(annotation, Brushes.Black);
-                        size = new(text.Width + properties.TextPadding * 2, text.Height + properties.TextPadding * 2);
+                        var text = FormatWatermark(annotation);
+                        var padding = annotation.FontSize * 4 / 3 * .1;
+                        size = new(text.Width + padding * 2, text.Height + padding * 2);
                     }
 
                     return new(properties.NineGrid ? WatermarkOrigin(size, properties.Anchor) : annotation.Points[0],

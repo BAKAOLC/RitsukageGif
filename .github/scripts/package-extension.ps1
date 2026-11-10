@@ -1,7 +1,8 @@
 param(
     [ValidateSet('win-x64', 'linux-x64', 'linux-arm64', 'osx-arm64')]
     [string]$RuntimeIdentifier = '',
-    [string]$Output = ''
+    [string]$Output = '',
+    [string]$DesktopAssembly = ''
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -20,8 +21,20 @@ if ($outputPath.StartsWith($staging + [IO.Path]::DirectorySeparatorChar, [String
 if (Test-Path -LiteralPath $staging) { [IO.Directory]::Delete($staging, $true) }
 New-Item -ItemType Directory -Force -Path $staging, (Split-Path -Parent $outputPath) | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'extensions/vscode/extension.js'), (Join-Path $root 'extensions/vscode/package.json'), (Join-Path $root 'extensions/vscode/package.nls.json'), (Join-Path $root 'extensions/vscode/package.nls.zh-cn.json'), (Join-Path $root 'extensions/vscode/language-configuration.json'), (Join-Path $root 'extensions/vscode/syntax.json'), (Join-Path $root 'LICENSE') -Destination $staging -Force
-& dotnet publish (Join-Path $root 'src/RitsukageGif.LanguageServer') -c Release -r $RuntimeIdentifier -o (Join-Path $staging 'server')
+$metadataHost = Join-Path $staging 'metadata-host'
+if (!$DesktopAssembly) {
+    & dotnet build (Join-Path $root 'src/RitsukageGif') -c Release -r $RuntimeIdentifier -p:PublishAot=false -p:SelfContained=false -o $metadataHost
+    if ($LASTEXITCODE -ne 0) { throw 'Metadata host build failed.' }
+    $DesktopAssembly = Join-Path $metadataHost 'RitsukageGif.dll'
+}
+else { $DesktopAssembly = [IO.Path]::GetFullPath($DesktopAssembly, $root) }
+$catalog = Join-Path $staging 'RitsukageGif.ScriptMetadata.json'
+& dotnet $DesktopAssembly --export-script-metadata $catalog
+if ($LASTEXITCODE -ne 0) { throw 'Script metadata export failed.' }
+& dotnet publish (Join-Path $root 'src/RitsukageGif.LanguageServer') -c Release -r $RuntimeIdentifier -o (Join-Path $staging 'server') "-p:ScriptMetadataCatalog=$catalog"
 if ($LASTEXITCODE -ne 0) { throw 'Language server publish failed.' }
+[IO.File]::Delete($catalog)
+if (Test-Path -LiteralPath $metadataHost) { [IO.Directory]::Delete($metadataHost, $true) }
 @('server/**/*.pdb', 'server/**/*.xml', 'server/**/*.dbg', 'server/**/*.dSYM/**') | Set-Content -LiteralPath (Join-Path $staging '.vscodeignore')
 Push-Location $staging
 try {

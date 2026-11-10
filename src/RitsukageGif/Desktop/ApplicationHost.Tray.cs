@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Platform;
-using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -20,6 +19,8 @@ namespace RitsukageGif.Desktop
                                                  View is { IsVisible: true } view &&
                                                  !view.OwnedWindows.Any(window => window.IsVisible);
         private NativeMenuItem? _trayClearRecords;
+        private NativeMenuItem? _trayDisableFullscreen;
+        private NativeMenuItem? _trayGuide, _trayUpdate;
 
         private void InitializeTray()
         {
@@ -27,47 +28,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 using var stream = AssetLoader.Open(new("avares://RitsukageGif/!__AvaloniaDefaultWindowIcon"));
-                _trayShow = new();
-                _trayExit = new();
-                _trayActionAnchor = new();
-                _trayPresets = new();
-                _traySettings = new();
-                _trayClearRecords = new();
-                _trayClearRecords.Click += (_, _) => _ = RunTrayActionAsync(OpenClearRecordsAsync);
-                _trayToggleShortcuts = new() { ToggleType = MenuItemToggleType.CheckBox };
-                _trayToggleShortcuts.Click += (_, _) => _ = RunTrayActionAsync(() =>
-                {
-                    ToggleGlobalShortcuts();
-                    return Task.CompletedTask;
-                });
-                _traySettings.Click += (_, _) => Dispatcher.UIThread.Post(() => _ = OpenTraySettingsAsync());
-                _trayShow.Click += (_, _) =>
-                {
-                    if (View is { IsVisible: true }) HideToTray();
-                    else ShowMainWindow();
-                };
-                _trayExit.Click += async (_, _) => await ShutdownAsync();
-                var menu = new NativeMenu();
-                menu.NeedsUpdate += (_, _) =>
-                {
-                    RebuildPinGroupMenus();
-                    RefreshTray();
-                };
-                menu.Items.Add(_trayToggleShortcuts);
-                menu.Items.Add(_trayActionAnchor);
-                InitializePinMenus(menu);
-                _traySeparatorSlots.Add((_trayActionAnchor, _trayPinGroups!));
-                var presetSeparator = new NativeMenuItemSeparator();
-                menu.Items.Add(presetSeparator);
-                menu.Items.Add(_trayPresets);
-                _traySeparatorSlots.Add((presetSeparator, _trayPresets));
-                var systemSeparator = new NativeMenuItemSeparator();
-                menu.Items.Add(systemSeparator);
-                menu.Items.Add(_trayClearRecords);
-                menu.Items.Add(_trayShow);
-                _traySeparatorSlots.Add((systemSeparator, _trayClearRecords));
-                menu.Items.Add(_traySettings);
-                menu.Items.Add(_trayExit);
+                var menu = CreateTrayMenu();
                 _tray = new() { Icon = new(stream), Menu = menu, ToolTipText = "RitsukageGif" };
                 var icons = TrayIcon.GetIcons(application);
                 if (icons is null)
@@ -83,7 +44,6 @@ namespace RitsukageGif.Desktop
                 _pinnedImages.Changed += PinnedImagesChanged;
                 UiText.LanguageChanged += RefreshTray;
                 UiText.LanguageChanged += RebuildPinGroupMenus;
-                RebuildActionMenus();
                 RefreshTray();
             }
             catch (Exception error)
@@ -141,6 +101,11 @@ namespace RitsukageGif.Desktop
         {
             if (_tray is null) return;
             RefreshTrayAppearance();
+            if (_tray.Menu is { } menu) RefreshTrayMenu(menu);
+        }
+
+        private void RefreshTrayMenu(NativeMenu menu)
+        {
             var mainVisible = View is { IsVisible: true };
             _trayShow!.Header = UiText.Get(mainVisible ? "TrayHideMain" : "TrayShowMain");
             _trayShow.IsEnabled = mainVisible ? CanHideMainWindowToTray : !IsClosing && !IsSelecting;
@@ -150,9 +115,16 @@ namespace RitsukageGif.Desktop
             _traySettings.IsEnabled = !IsClosing && !IsSelecting && !IsConfiguring;
             _trayExit!.Header = UiText.Get("TrayExit");
             _trayExit.IsEnabled = !IsClosing;
+            _trayGuide!.Header = UiText.Get("TrayNativeGuide");
+            _trayGuide.IsEnabled = !IsClosing && !IsSelecting;
+            _trayUpdate!.IsVisible = AvailableUpdate is not null;
+            _trayUpdate.IsEnabled = !IsClosing && !IsSelecting && AvailableUpdate is not null;
+            _trayUpdate.Header = AvailableUpdate is { } release
+                ? UiText.Format("UpdateAvailable", release.Version)
+                : UiText.Get("CheckUpdate");
             RefreshActionMenus();
             RefreshPinMenus();
-            if (_tray.Menu is { } menu) NormalizeTraySeparators(menu);
+            NormalizeTraySeparators(menu);
         }
 
         private void NormalizeTraySeparators(NativeMenu menu)
@@ -190,14 +162,6 @@ namespace RitsukageGif.Desktop
             if (pending is not null) menu.Items.Remove(pending);
         }
 
-        private async Task PinClipboardOrFileAsync()
-        {
-            if (IsClosing || IsSelecting) return;
-            var context = _services.Context;
-            if (context.Clipboard is not { } clipboard || !await _pinnedImages.PinClipboardAsync(clipboard))
-                await _pinnedImages.OpenImageAsync(context);
-        }
-
         private static KeyGesture? ParseTrayGesture(string shortcut)
         {
             if (string.IsNullOrWhiteSpace(shortcut)) return null;
@@ -214,6 +178,9 @@ namespace RitsukageGif.Desktop
         private void DisposeTray()
         {
             DisposeTrayInput();
+            DisposeTrayGroupIcons();
+            _trayDisableFullscreen = null;
+            _trayGuide = _trayUpdate = null;
             _trayAppearance = null;
             Changed -= RefreshTray;
             _pinnedImages.Changed -= PinnedImagesChanged;

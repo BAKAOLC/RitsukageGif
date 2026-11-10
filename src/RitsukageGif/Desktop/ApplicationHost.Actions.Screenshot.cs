@@ -1,6 +1,6 @@
-using System.Runtime.InteropServices;
 using Avalonia.Controls;
 using Avalonia.Input.Platform;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -16,8 +16,11 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        private async Task ExecuteScreenshotActionAsync(GlobalActionBinding action, PixelRect? requestedRegion = null)
+        private async Task<ScreenshotInvocation> ExecuteScreenshotActionAsync(GlobalActionBinding action,
+            PixelRect? requestedRegion = null,
+            bool propagateErrors = false, CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             var source = ActionScreenshotSource(action);
             var output = GlobalActions.ScreenshotOutput(action);
             var region = requestedRegion;
@@ -26,14 +29,8 @@ namespace RitsukageGif.Desktop
             switch (action.Kind)
             {
                 case GlobalActionKind.CaptureActiveWindow:
-                    if (!OperatingSystem.IsWindows())
+                    if (!WindowLocator.CanFindActiveWindow)
                         throw new PlatformNotSupportedException(UiText.Get("GlobalActionActiveWindowUnavailable"));
-                    var foreground = ActionForegroundWindow();
-                    if (foreground == 0) throw new InvalidOperationException(UiText.Get("WindowNotFound"));
-                    target = await Task.Run(() =>
-                        WindowLocator.List().FirstOrDefault(window => window.Handle == foreground));
-                    if (target is null) throw new InvalidOperationException(UiText.Get("WindowNotFound"));
-                    region = source == CaptureSourceKind.Window ? target.Client : target.Bounds;
                     break;
                 case GlobalActionKind.CaptureLastRegion:
                     if (DesktopCapture.UsesSourceSelection)
@@ -44,7 +41,7 @@ namespace RitsukageGif.Desktop
                     if (source == CaptureSourceKind.Window)
                     {
                         target = previous.Target is { } previousTarget
-                            ? await Task.Run(() => WindowLocator.Refresh(previousTarget))
+                            ? await Task.Run(() => WindowLocator.Refresh(previousTarget), token).WaitAsync(token)
                             : null;
                         if (target is null) throw new InvalidOperationException(UiText.Get("WindowNotFound"));
                         region = previous.Region.Intersect(target.Client);
@@ -53,7 +50,8 @@ namespace RitsukageGif.Desktop
                     break;
             }
 
-            if (GlobalActions.IsDirectScreenshot(action.Kind) && region is not { IsEmpty: false })
+            if (GlobalActions.IsDirectScreenshot(action.Kind) && action.Kind != GlobalActionKind.CaptureActiveWindow &&
+                region is not { IsEmpty: false })
                 throw new InvalidOperationException(UiText.Get("GlobalActionLastRegionMissing"));
 
             var confirm = output switch
@@ -87,16 +85,17 @@ namespace RitsukageGif.Desktop
                         ActionScreenshotOutput.RecognizeFormula => RecognitionMode.Formula,
                         _ => RecognitionMode.Text,
                     };
-                    handler = (owner, result, token) =>
-                        RecognizeActionScreenshotAsync(owner, result, recognitionMode, token);
+                    handler = (owner, result, captureToken) =>
+                        RecognizeActionScreenshotAsync(owner, result, recognitionMode, captureToken);
                     break;
                 case ActionScreenshotOutput.QuickSave:
                     var directory = action.Arguments.GetValueOrDefault("directory");
-                    directory = Path.GetFullPath(
-                        string.IsNullOrWhiteSpace(directory)
-                            ? Settings.ScreenshotSave.Quick.ResolveDirectory(Settings.OutputDirectory)
-                            : directory);
-                    handler = (owner, result, token) => QuickSaveActionScreenshotAsync(owner, result, directory, token);
+                    if (string.IsNullOrWhiteSpace(directory))
+                        directory = string.IsNullOrWhiteSpace(Settings.ScreenshotSave.Quick.Directory)
+                            ? Settings.OutputDirectory
+                            : Settings.ScreenshotSave.Quick.Directory;
+                    handler = (owner, result, captureToken) =>
+                        QuickSaveActionScreenshotAsync(owner, result, directory, captureToken);
                     break;
                 case ActionScreenshotOutput.Copy:
                 case ActionScreenshotOutput.Pin:
@@ -106,12 +105,22 @@ namespace RitsukageGif.Desktop
                     throw new ArgumentOutOfRangeException(nameof(action));
             }
 
-            await ScreenshotAsync(source, region, confirm, GlobalActions.Definition(action.Kind).AutoConfirm,
+            token.ThrowIfCancellationRequested();
+            var invocation = new ScreenshotInvocation(propagateErrors);
+            var operation = ScreenshotAsync(source, region, confirm, GlobalActions.Definition(action.Kind).AutoConfirm,
                 target, handler, action.Kind == GlobalActionKind.CaptureActiveWindow,
                 GlobalActions.ScreenshotDelay(action), GlobalActions.Definition(action.Kind).StartWithScrolling,
                 output is ActionScreenshotOutput.CopyText or ActionScreenshotOutput.CopyCodeText,
                 output == ActionScreenshotOutput.Translate,
-                GlobalActions.ScreenshotGeometry(action));
+                GlobalActions.ScreenshotGeometry(action), action.Kind == GlobalActionKind.CaptureActiveWindow,
+                GlobalActions.Definition(action.Kind).StartWithRecording, invocation);
+            var cancellation = _screenshotCancellation;
+            await using var registration = token.Register(() => Dispatcher.UIThread.Post(() =>
+            {
+                if (cancellation is not null && ReferenceEquals(_screenshotCancellation, cancellation))
+                    CancelScreenshot();
+            }));
+            return await operation;
         }
 
         private async Task<bool> RecognizeActionScreenshotAsync(Window? owner, ScreenshotResult result,
@@ -121,10 +130,12 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             await RecognitionWindow.ShowAsync(owner ?? _services.Context, result.Png, mode,
                 preferences: Settings.Recognition, token: token, translationPreferences: Settings.Translation,
-                pinFormula: (_, source) => _pinnedImages.PinFormulas(source),
                 copyFormatChanged: PersistFormulaCopyFormat,
                 originalImageVisibilityChanged: PersistRecognitionOriginalImage,
-                latexFormatChanged: PersistFormulaLatexFormat);
+                latexFormatChanged: PersistFormulaLatexFormat,
+                imageSaveQuality: () => Settings.ScreenshotSave.Quality,
+                copyDirectlyNextTime: () => DisableRecognitionConfirmation(RecognitionConfirmationKind.Screenshot),
+                dialogPreferencesChanged: PersistRecognitionDialog);
             return true;
         }
 
@@ -132,19 +143,29 @@ namespace RitsukageGif.Desktop
             CancellationToken token)
         {
             if (result.Action != ScreenshotOutputAction.Copy) return await OutputScreenshotAsync(owner, result, token);
-            var text = await RecognitionOutput.RecognizeAsync(result.Png, Settings.Recognition,
+            var recognition = await RecognitionOutput.RecognizeAsync(result.Png, Settings.Recognition,
                 _pinnedImages.TextRecognitionService, token);
+            var text = RecognitionTextFormatter.Format(recognition, Settings.Recognition);
             token.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
-            var clipboard = (owner ?? _services.Context).Clipboard ??
-                            throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-            await clipboard.SetTextAsync(text);
-            await clipboard.FlushAsync();
-            token.ThrowIfCancellationRequested();
-            if (Settings.Recognition.ShowDialogOnCopyAll && owner is not null)
+            if (Settings.Recognition.ShowDialogOnRecognition)
+            {
                 await RecognitionWindow.ShowAsync(owner, result.Png, RecognitionMode.Text,
-                    preferences: Settings.Recognition, initialText: text, token: token,
-                    translationPreferences: Settings.Translation);
+                    preferences: Settings.Recognition, initialResult: recognition, token: token,
+                    translationPreferences: Settings.Translation,
+                    originalImageVisibilityChanged: PersistRecognitionOriginalImage,
+                    copyDirectlyNextTime: () => DisableRecognitionConfirmation(RecognitionConfirmationKind.Screenshot),
+                    dialogPreferencesChanged: PersistRecognitionDialog);
+            }
+            else
+            {
+                var clipboard = (owner ?? _services.Context).Clipboard ??
+                                throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
+                await clipboard.SetTextAsync(text);
+                await clipboard.FlushAsync();
+                token.ThrowIfCancellationRequested();
+            }
+
             return true;
         }
 
@@ -155,18 +176,17 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             var preferences = Settings.ScreenshotSave.Normalize().Quick;
             var format = result.ColorMode == OutputColorMode.Sdr ? preferences.Format : StaticImageFormat.Png;
-            var path = Path.Combine(directory, preferences.CreateFileName(ScreenshotName(result), format));
+            var path = (preferences with { Directory = directory }).CreatePath(Settings.OutputDirectory,
+                ScreenshotName(result), format);
             return await SaveScreenshotAsync(result, path, preferences, false, false, token);
         }
 
-        private async Task PinActionClipboardAsync()
+        private async Task PinActionClipboardAsync(CancellationToken token)
         {
             var clipboard = _services.Context.Clipboard ??
                             throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-            if (!await _pinnedImages.PinClipboardAsync(clipboard)) SetStatus(UiText.Get("GlobalActionClipboardEmpty"));
+            if (!await _pinnedImages.PinClipboardAsync(clipboard, token))
+                SetStatus(UiText.Get("GlobalActionClipboardEmpty"));
         }
-
-        [LibraryImport("user32.dll", EntryPoint = "GetForegroundWindow")]
-        private static partial nint ActionForegroundWindow();
     }
 }

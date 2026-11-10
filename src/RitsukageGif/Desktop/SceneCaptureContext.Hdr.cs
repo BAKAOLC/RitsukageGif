@@ -6,21 +6,26 @@ namespace RitsukageGif.Desktop
     internal sealed partial class SceneCaptureContext
     {
         // Cache source frames only within BeginFrame; each scene applies its own crop and tone mapping.
-        private readonly Dictionary<(nint Handle, bool Cursor, int Fps), ColorWindowEntry> _colorWindows = [];
+        private readonly
+            Dictionary<(nint Handle, bool Cursor, int Fps, NativeCaptureSession? NativeSource), ColorWindowEntry>
+            _colorWindows = [];
 
         public (CapturedFrameSet? Frames, PixelRect? Bounds) CaptureWindowFrames(nint handle, RecordingOptions options,
-            PixelRect region, int outputWidth, int outputHeight, CancellationToken token)
+            PixelRect region, int outputWidth, int outputHeight, CancellationToken token,
+            NativeCaptureSession? nativeSource = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
             var fps = _captureFps ?? options.Fps;
-            var key = (handle, options.Cursor, fps);
+            var key = (Handle: handle, options.Cursor, Fps: fps, NativeSource: nativeSource);
             if (_unavailable.Contains(key)) return (null, null);
             try
             {
                 if (!_colorWindows.TryGetValue(key, out var entry))
                 {
-                    entry = new(_windowFactory(handle, options.Cursor, fps));
+                    entry = new(key.NativeSource is { } source
+                        ? new WindowSource(handle, options.Cursor, fps, source)
+                        : _windowFactory(handle, options.Cursor, fps));
                     _colorWindows.Add(key, entry);
                 }
 
@@ -58,7 +63,7 @@ namespace RitsukageGif.Desktop
                 null, Stopwatch.GetTimestamp());
         }
 
-        private void DropColorWindow((nint Handle, bool Cursor, int Fps) key)
+        private void DropColorWindow((nint Handle, bool Cursor, int Fps, NativeCaptureSession? NativeSource) key)
         {
             if (_colorWindows.Remove(key, out var entry)) entry.Capture.Dispose();
             _unavailable.Add(key);

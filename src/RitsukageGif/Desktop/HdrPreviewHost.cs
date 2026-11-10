@@ -16,6 +16,8 @@ namespace RitsukageGif.Desktop
         private (nint Monitor, bool Hdr, float WhiteLevel)? _displayState;
         private bool _failed;
         private PreviewFrame? _frame;
+        private HdrNearestStaging? _nearestStaging;
+        private HdrPremultipliedStaging? _premultipliedStaging;
         private nint _monitor;
         private WindowsHdrPresenter? _presenter;
         private MacOsHdrPresenter? _macPresenter;
@@ -30,6 +32,31 @@ namespace RitsukageGif.Desktop
         }
 
         internal static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
+        internal bool TransparentComposition { get; init; }
+
+        internal float CurrentDisplayWhiteLevel => OperatingSystem.IsWindows()
+            ? _displayState?.WhiteLevel ?? _frame?.HdrReferenceWhiteLevel ?? 1
+            : _frame?.HdrReferenceWhiteLevel ?? 1;
+
+        internal PreviewFrame? PresentedFrame => IsVisible ? _frame : null;
+
+        internal bool SmoothScaling
+        {
+            get;
+            set
+            {
+                if (field == value) return;
+                field = value;
+                if (value)
+                {
+                    _nearestStaging?.Dispose();
+                    _nearestStaging = null;
+                }
+
+                QueueRefresh();
+            }
+        } = true;
 
         public void Dispose()
         {
@@ -72,7 +99,8 @@ namespace RitsukageGif.Desktop
             if (OperatingSystem.IsMacOS()) return CreateMac(parent);
             if (!OperatingSystem.IsWindows()) return base.CreateNativeControlCore(parent);
             _parent = TopLevel.GetTopLevel(this)?.TryGetPlatformHandle()?.Handle ?? parent.Handle;
-            _window = CreateWindowEx(0, "STATIC", "", 0x40000000 | 0x04000000, 0, 0, 1, 1, parent.Handle, 0, 0, 0);
+            _window = CreateWindowEx(TransparentComposition ? 0x00200000u : 0, "STATIC", "",
+                0x40000000 | 0x04000000, 0, 0, 1, 1, parent.Handle, 0, 0, 0);
             if (_window == 0) throw new Win32Exception(Marshal.GetLastPInvokeError());
             var data = (nuint)Interlocked.Increment(ref _nextSubscription);
             _subscription = data;
@@ -97,6 +125,10 @@ namespace RitsukageGif.Desktop
 
         private void DestroyWindows()
         {
+            _premultipliedStaging?.Dispose();
+            _premultipliedStaging = null;
+            _nearestStaging?.Dispose();
+            _nearestStaging = null;
             _presenter?.Dispose();
             _presenter = null;
             if (_subscription != 0)
@@ -171,12 +203,44 @@ namespace RitsukageGif.Desktop
 
             try
             {
-                _presenter ??= new(_window, _frame.Width, _frame.Height);
-                _presenter.Present(pixels.AsSpan(0, checked(_frame.Width * _frame.Height * 8)), _frame.Width,
-                    _frame.Height);
+                var width = _frame.Width;
+                var height = _frame.Height;
+                ReadOnlyMemory<byte> upload = pixels.AsMemory(0, checked(width * height * 8));
+                var targetWidth = width;
+                var targetHeight = height;
+                if (TransparentComposition || !SmoothScaling)
+                {
+                    if (GetClientRect(_window, out var client) == 0)
+                        throw new Win32Exception(Marshal.GetLastPInvokeError());
+                    targetWidth = client.Right - client.Left;
+                    targetHeight = client.Bottom - client.Top;
+                    if (targetWidth <= 0 || targetHeight <= 0)
+                    {
+                        SetPresentation(false);
+                        return;
+                    }
+
+                    if (!SmoothScaling && (targetWidth != width || targetHeight != height))
+                    {
+                        _nearestStaging ??= new();
+                        upload = _nearestStaging.Sample(upload.Span, width, height, targetWidth, targetHeight);
+                        width = targetWidth;
+                        height = targetHeight;
+                    }
+                }
+
+                if (TransparentComposition && _frame.HdrAlphaMode != CaptureAlphaMode.Premultiplied)
+                {
+                    _premultipliedStaging ??= new();
+                    upload = _premultipliedStaging.Convert(upload.Span, _frame.HdrAlphaMode);
+                }
+
+                _presenter ??= new(_window, width, height, TransparentComposition);
+                _presenter.Present(upload.Span, width, height, checked(width * 8), targetWidth, targetHeight);
                 SetPresentation(true);
             }
-            catch (Exception exception) when (exception is ExternalException or NotSupportedException)
+            catch (Exception exception) when (exception is ExternalException or NotSupportedException or
+                                                  OverflowException)
             {
                 _presenter?.Dispose();
                 _presenter = null;
@@ -202,6 +266,10 @@ namespace RitsukageGif.Desktop
                     host._failed = false;
                     host.QueueRefresh();
                 }
+                else if (window == host._window && message == 5)
+                {
+                    host.QueueRefresh();
+                }
             }
 
             return DefSubclassProc(window, message, wParam, lParam);
@@ -217,6 +285,9 @@ namespace RitsukageGif.Desktop
 
         [LibraryImport("user32.dll")]
         private static partial int IsWindow(nint window);
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        private static partial int GetClientRect(nint window, out NativeMethods.Rect rect);
 
         [LibraryImport("comctl32.dll")]
         private static partial int SetWindowSubclass(nint window,

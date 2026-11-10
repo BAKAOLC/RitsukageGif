@@ -7,7 +7,20 @@ namespace RitsukageGif.Desktop
         private List<ScreenshotAnnotation> CaptureHighPrecisionAnnotations(bool includeDraft)
         {
             var annotations = AnnotationsVisible
-                ? _annotations.Select(annotation => CloneAnnotation(annotation)).ToList()
+                ? _annotations.Select(annotation =>
+                {
+                    var copy = CloneAnnotation(NumberCaptionRenderingAnnotation(annotation),
+                        text: includeDraft && IsNumberCaptionEditing && ReferenceEquals(annotation, _textEditOriginal)
+                            ? TextEditValue
+                            : null);
+                    if (includeDraft && IsNumberCaptionEditing && ReferenceEquals(annotation, _textEditOriginal))
+                    {
+                        if (copy.Points.Count < 2) copy.Points.Add(copy.Points[0]);
+                        if (copy.Points.Count < 3) copy.Points.Add(NumberCaptionAnchor(copy));
+                    }
+
+                    return copy;
+                }).ToList()
                 : [];
             if (includeDraft && AnnotationsVisible && _gesture is { } draft) annotations.Add(CloneAnnotation(draft));
             return annotations;

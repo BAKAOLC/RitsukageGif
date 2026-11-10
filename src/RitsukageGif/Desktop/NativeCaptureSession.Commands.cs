@@ -20,7 +20,9 @@ namespace RitsukageGif.Desktop
                     !uint.TryParse(geometry.StreamId, CultureInfo.InvariantCulture, out var stream)) return null;
                 return new(geometry.Generation, stream, geometry.Bounds,
                     () => IsPointerCurrent(geometry), () => ReadPointer(geometry, stream),
-                    (axis, region, token) => SendScroll(geometry, axis, region, token),
+                    (region, token) =>
+                        SendPointerCommand("prepare-pointer", geometry, ScrollCaptureAxis.Vertical, region, token),
+                    (axis, region, token) => SendPointerCommand("scroll", geometry, axis, region, token),
                     () => _pointerReason ?? _sourceReason);
             }
         }
@@ -43,17 +45,18 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private AutomaticScrollInputResult SendScroll(NativeCaptureGeometry geometry, ScrollCaptureAxis axis,
-            PixelRect region, CancellationToken token)
+        private AutomaticScrollInputResult SendPointerCommand(string command, NativeCaptureGeometry geometry,
+            ScrollCaptureAxis axis, PixelRect region, CancellationToken token)
         {
             if (!IsPointerCurrent(geometry)) return AutomaticScrollInputResult.Unavailable;
             try
             {
-                var reply = SendCommandAsync("scroll", geometry, axis, region, token: token).GetAwaiter().GetResult();
+                var reply = SendCommandAsync(command, geometry, axis, region, token: token).GetAwaiter().GetResult();
                 lock (_gate) _pointerReason = reply.Reason;
                 return reply.Result switch
                 {
-                    "sent" => AutomaticScrollInputResult.Sent,
+                    "sent" when command == "scroll" => AutomaticScrollInputResult.Sent,
+                    "prepared" when command == "prepare-pointer" => AutomaticScrollInputResult.Sent,
                     "unavailable" => AutomaticScrollInputResult.Unavailable,
                     _ => AutomaticScrollInputResult.Failed,
                 };
@@ -67,7 +70,7 @@ namespace RitsukageGif.Desktop
 
         private async Task<NativeCaptureMetadata> SendCommandAsync(string command, NativeCaptureGeometry? geometry,
             ScrollCaptureAxis axis, PixelRect region, int? outputWidth = null, int? outputHeight = null,
-            CancellationToken token = default)
+            int? fps = null, bool? retainHdr = null, CancellationToken token = default)
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
             var request = Interlocked.Increment(ref _nextRequest);
@@ -78,6 +81,8 @@ namespace RitsukageGif.Desktop
             {
                 writer.WriteStartObject();
                 writer.WriteString("command", command);
+                if (fps is { } rate) writer.WriteNumber("fps", rate);
+                if (retainHdr is { } hdr) writer.WriteBoolean("retainHdr", hdr);
                 if (outputWidth is { } width) writer.WriteNumber("outputWidth", width);
                 if (outputHeight is { } height) writer.WriteNumber("outputHeight", height);
                 writer.WriteNumber("requestId", request);
@@ -85,6 +90,12 @@ namespace RitsukageGif.Desktop
                 {
                     writer.WriteNumber("generation", geometry.Generation);
                     writer.WriteString("streamId", geometry.StreamId);
+                    if (command == "prepare-pointer")
+                    {
+                        writer.WriteNumber("sourceWidth", geometry.Width);
+                        writer.WriteNumber("sourceHeight", geometry.Height);
+                    }
+
                     writer.WriteString("axis", axis == ScrollCaptureAxis.Vertical ? "vertical" : "horizontal");
                     writer.WriteStartObject("region");
                     writer.WriteNumber("x", region.X);
@@ -146,7 +157,7 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
-                candidate = new(previous._window ? "window" : "screen", previous._cursor, previous._fps,
+                candidate = new(previous.IsWindowSource ? "window" : "screen", previous._cursor, previous._fps,
                     retainHdr: previous._retainHdr, pointerInput: true);
                 await candidate._first.Task.WaitAsync(TimeSpan.FromSeconds(155), token).ConfigureAwait(false);
                 lock (candidate._gate)

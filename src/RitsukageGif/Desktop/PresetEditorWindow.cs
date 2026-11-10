@@ -77,7 +77,7 @@ namespace RitsukageGif.Desktop
         private string? _semanticText;
         private bool _settingsMode;
 
-        public PresetEditorWindow(ApplicationHost owner, string? file = null)
+        public PresetEditorWindow(ApplicationHost owner, string? file = null, string? initialText = null)
         {
             _owner = owner;
             _sources = new(path => _openSources.GetValueOrDefault(path));
@@ -209,7 +209,7 @@ namespace RitsukageGif.Desktop
                 if (new FileInfo(_path).Length > 1024 * 1024) throw new FormatException(UiText.Get("DslTooComplex"));
             }
 
-            LoadText(_path, _path is null ? "" : File.ReadAllText(_path));
+            LoadText(_path, _path is null ? "" : initialText ?? File.ReadAllText(_path));
             if (workspacePath is not null) OpenWorkspace(workspacePath);
             UpdateDebugControls();
             UiText.LanguageChanged += RefreshLanguage;
@@ -462,7 +462,8 @@ namespace RitsukageGif.Desktop
             var file = _path;
             var result = await Task.Run(() => (Tokens: PresetLanguage.Scan(text),
                 Diagnostics: PresetLanguage.Diagnose(text, file: file),
-                Model: PresetLanguage.Analyze(text, file: file, sources: _sources)));
+                Model: PresetLanguage.Analyze(text, AutomationScriptLibrary.CreateBindings(Path.GetDirectoryName(file)),
+                    file, _sources)));
             if (revision != _revision || _allowClose) return;
             _semantic = result.Model;
             _semanticText = text;
@@ -483,7 +484,9 @@ namespace RitsukageGif.Desktop
             if (_editor.IsReadOnly || _completion is not null) return;
             if (_semanticText != _editor.Text || _semantic is null)
             {
-                _semantic = PresetLanguage.Analyze(_editor.Text, file: _path, sources: _sources);
+                _semantic = PresetLanguage.Analyze(_editor.Text,
+                    AutomationScriptLibrary.CreateBindings(_path is null ? null : Path.GetDirectoryName(_path)), _path,
+                    _sources);
                 _semanticText = _editor.Text;
             }
 

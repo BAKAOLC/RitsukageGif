@@ -30,17 +30,19 @@ namespace RitsukageGif.Desktop
 
         internal async Task OpenSettingsEditorAsync(Window owner, string file)
         {
-            if (_editor is null)
+            var editor = _editor;
+            if (editor is null)
             {
-                _editor = new(this, file);
-                _editor.Closed += (_, _) => _editor = null;
+                editor = new(this, file);
+                _editor = editor;
+                editor.Closed += (_, _) => _editor = null;
             }
             else
             {
-                await _editor.OpenLocationAsync(file);
+                await editor.OpenLocationAsync(file);
             }
 
-            var editor = _editor;
+            if (IsClosing || !ReferenceEquals(_editor, editor)) return;
             editor.SetSettingsMode(true);
             if (editor.IsVisible) editor.Hide();
             try
@@ -64,23 +66,36 @@ namespace RitsukageGif.Desktop
             {
                 await OpenEditorAsync(file);
             }
+            catch (OperationCanceledException) when (IsClosing)
+            {
+            }
             catch (Exception error)
             {
                 SetStatus(error.Message);
             }
         }
 
-        private async Task OpenEditorAsync(string? file)
+        private async Task OpenEditorAsync(string? file, CancellationToken token = default)
         {
-            if (_editor is not null)
+            if (IsClosing) return;
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token, _hostCancellation.Token);
+            token = lifetime.Token;
+            token.ThrowIfCancellationRequested();
+            var initialText = _editor is null && file is not null && !Directory.Exists(file)
+                ? await PresetEditorWindow.ReadEditorFileAsync(file, token)
+                : null;
+            token.ThrowIfCancellationRequested();
+            if (_editor is { } existing)
             {
-                if (file is not null) await _editor.OpenLocationAsync(file);
-                _editor.Show();
-                _editor.Activate();
+                if (file is not null) await existing.OpenLocationAsync(file, initialText, token);
+                token.ThrowIfCancellationRequested();
+                if (IsClosing || !ReferenceEquals(_editor, existing)) return;
+                existing.Show();
+                existing.Activate();
                 return;
             }
 
-            _editor = new(this, file);
+            _editor = new(this, file, initialText);
             _editor.Closed += (_, _) => _editor = null;
             _editor.Show();
         }
@@ -98,11 +113,21 @@ namespace RitsukageGif.Desktop
         internal async Task StopScriptAsync(PresetDebugger? debugger)
         {
             if (debugger is null || !ReferenceEquals(debugger, _presets.Debugger)) return;
-            if (_abort is { } abort) await abort.CancelAsync();
-            if (_stop is { } stop) await stop.CancelAsync();
+            var operation = _operation;
+            var abort = _abort;
+            var stop = _stop;
+            var abortCancellation = abort?.CancelAsync() ?? Task.CompletedTask;
+            var stopCancellation = stop?.CancelAsync() ?? Task.CompletedTask;
             DeactivatePreset();
-            if (_operation is not null) await _operation;
             Volatile.Write(ref _captureRegion, null);
+            try
+            {
+                await Task.WhenAll(abortCancellation, stopCancellation);
+            }
+            finally
+            {
+                if (operation is not null) await operation;
+            }
         }
 
         private void SetRegion(PixelRect region, bool requireMonitor = true)

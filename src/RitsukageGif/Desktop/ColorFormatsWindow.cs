@@ -197,7 +197,7 @@ namespace RitsukageGif.Desktop
                 Width = 28, Height = 28, MinHeight = 0, MinWidth = 0,
                 Padding = new(2), Background = Brushes.Transparent,
             };
-            button.Content = ToolbarIcon.Create(button, ToolbarIcon.Geometry(icon));
+            button.Content = ToolbarIcon.Create(button, ToolbarIcon.GetDefinition(icon));
             AutomationProperties.SetName(button, UiText.Get(name));
             ToolTip.SetTip(button, UiText.Get(name));
             return button;

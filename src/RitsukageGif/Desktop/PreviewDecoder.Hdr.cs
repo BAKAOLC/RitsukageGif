@@ -6,13 +6,16 @@ namespace RitsukageGif.Desktop
 {
     internal static partial class PreviewDecoder
     {
-        private static IEnumerable<PreviewFrame> ReadHdr(string path, bool preserveHdr, CancellationToken token)
+        private static IEnumerable<PreviewFrame> ReadHdr(string path, bool preserveHdr, bool preserveAlpha,
+            CancellationToken token)
         {
             byte[]? canvas = null;
             var canvasWidth = 0;
             var canvasHeight = 0;
             using var decoded = new SKBitmap();
-            foreach (var frame in PngAnimation.ReadEncodedFrames(path, token))
+            foreach (var frame in preserveAlpha
+                         ? PngAnimation.ReadRawEncodedFrames(path, token)
+                         : PngAnimation.ReadEncodedFrames(path, token))
             {
                 token.ThrowIfCancellationRequested();
                 if (frame.Poster) continue;
@@ -97,11 +100,12 @@ namespace RitsukageGif.Desktop
                             var alpha = Math.Clamp((float)linear[i + 3], 0, 1);
                             for (var channel = 0; channel < 3; channel++)
                                 linear[i + channel] = (Half)((float)linear[i + channel] * alpha);
-                            linear[i + 3] = (Half)1;
+                            if (!preserveAlpha) linear[i + 3] = (Half)1;
                         }
                     }
 
-                    preview = new(buffer, canvasWidth, canvasHeight, frame.DelayMs, hdrPixels);
+                    preview = new(buffer, canvasWidth, canvasHeight, frame.DelayMs, hdrPixels,
+                        hdrAlphaMode: preserveAlpha ? CaptureAlphaMode.Premultiplied : CaptureAlphaMode.Opaque);
                 }
                 catch
                 {

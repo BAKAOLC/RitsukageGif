@@ -18,6 +18,7 @@ namespace RitsukageGif.Desktop
         private readonly bool _formula;
         private readonly SplitButton _formulaCopy = new();
         private readonly ReadOnlyMemory<byte> _image;
+        private readonly Func<int>? _imageSaveQuality;
         private readonly Button _install = new();
 
         private readonly TextBox _latex = new()
@@ -49,15 +50,20 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _work;
 
         private StructuredRecognitionWindow(ReadOnlyMemory<byte> image, bool formula,
-            Func<CancellationToken, Task>? recognized, Action<Window, IReadOnlyList<string>>? pinFormula,
+            Func<CancellationToken, Task>? recognized,
             FormulaCopyFormat copyFormat, Action<FormulaCopyFormat>? copyFormatChanged,
             bool showOriginalImage, Action<bool>? originalImageVisibilityChanged,
             FormulaLatexFormat latexFormat, Action<FormulaLatexFormat>? latexFormatChanged,
-            RecognitionDocumentOutput? documentOutput = null, TableRecognitionResult? initialTable = null)
+            RecognitionDocumentOutput? documentOutput = null, TableRecognitionResult? initialTable = null,
+            Func<int>? imageSaveQuality = null, RecognitionDialogPreferences? dialogPreferences = null,
+            Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged = null)
         {
             showOriginalImage &= initialTable is null;
             _documentOutput = documentOutput ?? RecognitionDocumentOutput.Shared;
+            _dialogOptions = (dialogPreferences ?? new()).Normalize();
+            _dialogPreferencesChanged = dialogPreferencesChanged;
             _image = image;
+            _imageSaveQuality = imageSaveQuality;
             _formula = formula;
             _recognized = recognized;
             _copyFormat = copyFormat;
@@ -88,18 +94,6 @@ namespace RitsukageGif.Desktop
             toolbar.Children.Add(_formulaCopy);
             toolbar.Children.Add(_save);
             if (formula) toolbar.Children.Add(CreateFormulaOpenWordButton());
-            if (formula && pinFormula is { } pin)
-            {
-                var pinButton = new Button();
-                BindButton(pinButton, "ScreenshotPin", () =>
-                {
-                    if (_busy || _lifetime.IsCancellationRequested) return;
-                    var sources = FormulaSourcesForOutput();
-                    if (sources.Length > 0) pin(this, sources);
-                });
-                toolbar.Children.Add(pinButton);
-            }
-
             var showOriginal = new CheckBox
             {
                 IsChecked = showOriginalImage, VerticalAlignment = VerticalAlignment.Center,
@@ -107,8 +101,17 @@ namespace RitsukageGif.Desktop
             };
             showOriginal.Bind(ContentProperty, LiveText.Resource("RecognitionOriginalImage"));
             toolbar.Children.Add(showOriginal);
-            if (formula) toolbar.Children.Add(CreateFormulaSettingsButton());
-            else AddTableOutputButtons(toolbar);
+            if (formula)
+            {
+                toolbar.Children.Add(CreateFormulaSettingsButton());
+            }
+            else
+            {
+                AddTableOutputButtons(toolbar);
+                toolbar.Children.Add(CreateTableSettingsButton());
+                _table.ContentAlignment = _dialogOptions.Table.Alignment;
+            }
+
             toolbar.Children.Add(_install);
             var originalPane = _original;
             originalPane.IsVisible = showOriginalImage;
@@ -173,6 +176,7 @@ namespace RitsukageGif.Desktop
                 _renderTimer.Stop();
                 _lifetime.Cancel();
             };
+            if (_formula) AddHandler(KeyDownEvent, OnFormulaCopyShortcut, RoutingStrategies.Tunnel);
             AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Bubble, true);
         }
 
@@ -182,21 +186,35 @@ namespace RitsukageGif.Desktop
             button.Click += (_, _) => action();
         }
 
-        internal static async Task ShowAsync(Window owner, ReadOnlyMemory<byte> image, bool formula,
+        internal static async Task ShowAsync(Window? owner, ReadOnlyMemory<byte> image, bool formula,
             Func<CancellationToken, Task>? recognized, CancellationToken token,
-            Action<Window, IReadOnlyList<string>>? pinFormula = null,
             FormulaCopyFormat copyFormat = FormulaCopyFormat.Latex, Action<FormulaCopyFormat>? copyFormatChanged = null,
             bool showOriginalImage = true, Action<bool>? originalImageVisibilityChanged = null,
             FormulaLatexFormat latexFormat = FormulaLatexFormat.DisplayDollar,
-            Action<FormulaLatexFormat>? latexFormatChanged = null)
+            Action<FormulaLatexFormat>? latexFormatChanged = null, Func<int>? imageSaveQuality = null,
+            RecognitionDialogPreferences? dialogPreferences = null,
+            Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged = null)
         {
-            var window = new StructuredRecognitionWindow(image, formula, recognized, pinFormula, copyFormat,
+            var window = new StructuredRecognitionWindow(image, formula, recognized, copyFormat,
                 copyFormatChanged,
-                showOriginalImage, originalImageVisibilityChanged, latexFormat, latexFormatChanged);
+                showOriginalImage, originalImageVisibilityChanged, latexFormat, latexFormatChanged,
+                imageSaveQuality: imageSaveQuality, dialogPreferences: dialogPreferences,
+                dialogPreferencesChanged: dialogPreferencesChanged);
             await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));
             try
             {
-                await window.ShowDialog(owner);
+                if (owner is { IsVisible: true })
+                {
+                    await window.ShowDialog(owner);
+                }
+                else
+                {
+                    var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    window.Closed += (_, _) => completion.TrySetResult();
+                    window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    window.Show();
+                    await completion.Task;
+                }
             }
             finally
             {
@@ -219,6 +237,7 @@ namespace RitsukageGif.Desktop
         {
             if (_busy || _lifetime.IsCancellationRequested) return;
             if (!_table.CommitEdit()) return;
+            CloseOtherFormulaWindows();
             using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _work = work;
             SetBusy(true);
@@ -365,7 +384,9 @@ namespace RitsukageGif.Desktop
 
                     if (_table.Document is { } document)
                     {
-                        var result = _table.HasSelection ? document.Extract(_table.SelectedRanges) : document.Table;
+                        var result = WithTableOutputStyle(_table.HasSelection
+                            ? document.Extract(_table.SelectedRanges)
+                            : document.Table);
                         var transfer = new DataTransfer();
                         var item = DataTransferItem.CreateText(TableRecognitionExport.ToTsv(result));
                         var html = TableRecognitionExport.ToHtml(result);
@@ -386,6 +407,10 @@ namespace RitsukageGif.Desktop
                     {
                         new FilePickerFileType("LaTeX") { Patterns = ["*.tex"] },
                         new FilePickerFileType("PNG") { Patterns = ["*.png"] },
+                        new FilePickerFileType("BMP") { Patterns = ["*.bmp"] },
+                        new FilePickerFileType("JPEG") { Patterns = ["*.jpg", "*.jpeg"] },
+                        new FilePickerFileType("WebP") { Patterns = ["*.webp"] },
+                        new FilePickerFileType("AVIF") { Patterns = ["*.avif"] },
                         new FilePickerFileType("SVG") { Patterns = ["*.svg"] },
                         new FilePickerFileType(UiText.Get("FormulaDocxFilter")) { Patterns = ["*.docx"] },
                     }
@@ -410,6 +435,11 @@ namespace RitsukageGif.Desktop
                             await SaveFormulaDocxAsync(sources, path);
                             break;
                         case ".png":
+                        case ".bmp":
+                        case ".jpg":
+                        case ".jpeg":
+                        case ".webp":
+                        case ".avif":
                         {
                             var rendered = await StructuredRecognitionProcess.Shared.RenderManyPngAsync(sources,
                                 token: _lifetime.Token);
@@ -419,7 +449,15 @@ namespace RitsukageGif.Desktop
                                 return;
                             }
 
-                            await AtomicFileOutput.WriteBytesAsync(path, rendered.Png!, _lifetime.Token);
+                            if (extension == ".png")
+                                await AtomicFileOutput.WriteBytesAsync(path, rendered.Png!, _lifetime.Token);
+                            else
+                                await new StaticImageService().SaveAsync(rendered.Png!, path,
+                                    new()
+                                    {
+                                        Quality = Math.Clamp(_imageSaveQuality?.Invoke() ?? 100, 0, 100),
+                                        Overwrite = true,
+                                    }, _lifetime.Token);
                             break;
                         }
                         case ".svg":
@@ -445,7 +483,9 @@ namespace RitsukageGif.Desktop
                 }
                 else if (_table.Document is { } document)
                 {
-                    var result = _table.HasSelection ? document.Extract(_table.SelectedRanges) : document.Table;
+                    var result = WithTableOutputStyle(_table.HasSelection
+                        ? document.Extract(_table.SelectedRanges)
+                        : document.Table);
                     switch (extension)
                     {
                         case ".tsv":
@@ -480,7 +520,8 @@ namespace RitsukageGif.Desktop
             SetBusy(true);
             try
             {
-                await RecognitionComponentInstaller.InstallAsync(_formula,
+                await RecognitionComponentInstaller.InstallAsync(
+                    _formula ? StructuredRecognitionKind.Formula : StructuredRecognitionKind.Table,
                     new Progress<string>(text =>
                     {
                         if (!_lifetime.IsCancellationRequested) _status.Text = text;
@@ -506,7 +547,7 @@ namespace RitsukageGif.Desktop
         private void SetBusy(bool busy)
         {
             _busy = busy;
-            _run.IsEnabled = !busy;
+            _run.IsEnabled = _tableSettings.IsEnabled = !busy;
             _cancel.IsEnabled = busy;
             _latex.IsEnabled = _table.IsEnabled = !busy;
             _copy.IsEnabled = _save.IsEnabled =
@@ -522,12 +563,11 @@ namespace RitsukageGif.Desktop
         private void OnShortcut(object? sender, KeyEventArgs e)
         {
             if (_busy) return;
-            if (e.Handled &&
-                !(_formula && _latex.IsFocused && e.Key == Key.C && _latex.SelectedText.Length == 0)) return;
+            if (e.Handled) return;
             switch (_formula)
             {
                 case true when _latex.IsFocused &&
-                               (e.Key is not (Key.C or Key.S) || (e.Key == Key.C && _latex.SelectedText.Length > 0)):
+                               e.Key is not (Key.C or Key.S):
                     return;
                 case false when e is { Key: Key.Delete, KeyModifiers: KeyModifiers.None } &&
                                 _table is

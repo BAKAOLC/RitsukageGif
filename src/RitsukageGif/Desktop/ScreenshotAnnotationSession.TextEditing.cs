@@ -16,11 +16,15 @@ namespace RitsukageGif.Desktop
         public long TextEditGeneration { get; private set; }
         public Point TextEditPosition { get; private set; }
         public string TextEditValue { get; private set; } = "";
-        public bool TextEditWraps => _behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap;
+
+        public double TextEditFontSize =>
+            IsNumberCaptionEditing ? NumberCaptionFontSize(Thickness, Properties) : FontSize * 4 / 3;
+
+        public bool TextEditWraps => !IsNumberCaptionEditing && _behavior.TextWrapMode != AnnotationTextWrapMode.NoWrap;
 
         public double TextEditWrapWidth => Properties.WrapWidth > 0
             ? Properties.WrapWidth
-            : Math.Max(1, AnnotationBounds.Right - TextEditPosition.X - Properties.TextPadding * 2);
+            : Math.Max(1, AnnotationBounds.Right - TextEditPosition.X - TextPadding(Properties) * 2);
 
         public event Action? TextEditStateChanged;
 
@@ -28,10 +32,17 @@ namespace RitsukageGif.Desktop
         {
             if (_disposed || !CanAnnotate || IsBusy || !AnnotationBounds.Contains(point)) return false;
             CommitTextEdit();
-            var target = FindAnnotation(point) is { Tool: ScreenshotTool.Text } found ? found : null;
+            var found = FindAnnotation(point);
+            var target = found?.Tool == ScreenshotTool.Text ||
+                         (found is { Tool: ScreenshotTool.Number } && HitNumberCaption(found, point))
+                ? found
+                : null;
             if (target is null && (existingOnly || Tool != ScreenshotTool.Text || _annotations.Count >= 1024))
                 return false;
-            StartTextEdit(target, target?.Points[0] ?? new(point.X, point.Y), true, false);
+            StartTextEdit(target,
+                target?.Tool == ScreenshotTool.Number
+                    ? NumberCaptionOrigin(target)
+                    : target?.Points[0] ?? new(point.X, point.Y), true, false);
             return true;
         }
 
@@ -39,7 +50,7 @@ namespace RitsukageGif.Desktop
         {
             if (_disposed || !CanAnnotate || IsBusy || IsDrawing) return false;
             CommitTextEdit();
-            var target = _selected is
+            var target = ActiveStyleAnnotation is
                 { Tool: ScreenshotTool.Arrow or ScreenshotTool.Watermark or ScreenshotTool.Number } value
                 ? value
                 : null;
@@ -62,11 +73,11 @@ namespace RitsukageGif.Desktop
             _textEditPreviousText = Text;
             _textEditOriginal = target;
             _textEditIndex = target is null ? _annotations.Count : _annotations.IndexOf(target);
-            _textEditDetached = canvas && target is not null;
+            _textEditDetached = canvas && target?.Tool == ScreenshotTool.Text;
             _textEditCreatesAnnotation = canvas && target is null;
             _textEditWatermarkText = watermarkText;
             if (_textEditDetached) _annotations.RemoveAt(_textEditIndex);
-            _selected = target;
+            _selected = watermarkText ? null : target;
             TextEditPosition = position;
             TextEditValue = target?.Text ?? (canvas ? "" : Text);
             IsEditingText = true;
@@ -79,6 +90,7 @@ namespace RitsukageGif.Desktop
         {
             if (!IsEditingText || TextEditValue == value) return;
             TextEditValue = value;
+            UpdateNumberCaptionEditorPosition();
             TextEditStateChanged?.Invoke();
         }
 
@@ -98,7 +110,8 @@ namespace RitsukageGif.Desktop
                 Properties = Properties with { WatermarkText = TextEditValue, WatermarkImagePath = null };
             if (original is not null)
             {
-                if (original.Tool == ScreenshotTool.Text && string.IsNullOrWhiteSpace(TextEditValue))
+                if ((original.Tool == ScreenshotTool.Text && string.IsNullOrWhiteSpace(TextEditValue)) ||
+                    (_textEditWatermarkText && TextEditValue.Length == 0))
                 {
                     SaveHistory();
                     _annotations.RemoveAt(index);
@@ -108,13 +121,25 @@ namespace RitsukageGif.Desktop
                          !original.FontSize.Equals(FontSize) || original.Properties != Properties ||
                          (_textEditWatermarkText && original.WatermarkImage is not null))
                 {
-                    var replacement = CloneAnnotation(original, text: TextEditValue, color: Color,
+                    var replacement = CloneAnnotation(original, text: TextEditValue, color: Color, thickness: Thickness,
                         fontSize: FontSize, properties: Properties, replaceImage: _textEditWatermarkText);
                     SaveHistory();
                     _retained.Add(replacement);
                     _annotations[index] = replacement;
-                    _selected = replacement;
+                    _selected = _textEditWatermarkText ? null : replacement;
                 }
+            }
+            else if (_textEditWatermarkText && TextEditValue.Length != 0)
+            {
+                var annotation = new ScreenshotAnnotation
+                {
+                    Tool = ScreenshotTool.Watermark, Text = TextEditValue, Color = Color, Thickness = Thickness,
+                    FontSize = FontSize, MosaicSize = MosaicSize, Properties = Properties.Normalize(),
+                    WatermarkTimestamp = DateTimeOffset.Now,
+                };
+                annotation.Points.Add(new(AnnotationBounds.X, AnnotationBounds.Y));
+                Commit(annotation);
+                _selected = null;
             }
             else if (_textEditCreatesAnnotation && !string.IsNullOrWhiteSpace(TextEditValue))
             {
@@ -145,7 +170,7 @@ namespace RitsukageGif.Desktop
             if (_textEditOriginal is { } original)
             {
                 if (_textEditDetached) _annotations.Insert(Math.Clamp(_textEditIndex, 0, _annotations.Count), original);
-                _selected = original;
+                _selected = _textEditWatermarkText ? null : original;
             }
             else
             {
@@ -173,6 +198,8 @@ namespace RitsukageGif.Desktop
 
         private void NotifyTextEditState()
         {
+            ClearNumberCaptionPreview();
+            UpdateNumberCaptionEditorPosition();
             TextEditStateChanged?.Invoke();
             Changed?.Invoke();
         }

@@ -15,21 +15,10 @@ namespace RitsukageGif.Desktop
             AppDomain.CurrentDomain.ProcessExit += (_, _) => Close();
         }
 
-        internal static void EnsurePermission()
+        internal static async Task EnsurePermissionAsync(CancellationToken token)
         {
-            var start = new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "RitsukageGif.Capture"))
-                { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-            start.ArgumentList.Add("request-permission");
-            using var process = Process.Start(start) ?? throw new IOException(UiText.Get("CaptureHelperMissing"));
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            if (!process.WaitForExit(60_000))
-            {
-                process.Kill();
-                throw new IOException(UiText.Get("CaptureSourceTimeout"));
-            }
-
-            if (process.ExitCode != 0) throw new IOException(UiText.Get("PlatformCapturePermission"));
+            using var result = await ReadCommandAsync("request-permission", token).ConfigureAwait(false);
+            if (!result.RootElement.GetBoolean()) throw new IOException(UiText.Get("PlatformCapturePermission"));
         }
 
         internal static IReadOnlyList<WindowTarget> List()

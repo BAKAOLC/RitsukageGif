@@ -66,7 +66,8 @@ namespace RitsukageGif.Desktop
             try
             {
                 _macPresenter.Present(pixels.AsSpan(0, checked(_frame.Width * _frame.Height * 8)),
-                    _frame.Width, _frame.Height, _frame.HdrReferenceWhiteLevel, _frame.HdrAlphaMode);
+                    _frame.Width, _frame.Height, _frame.HdrReferenceWhiteLevel, _frame.HdrAlphaMode,
+                    smoothScaling: SmoothScaling);
                 SetPresentation(true);
             }
             catch (ExternalException error)

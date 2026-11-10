@@ -8,8 +8,10 @@ namespace RitsukageGif.Desktop
         private static readonly ILogger CleanupLogger = LogHub.GetLogger("Desktop.Retention");
 
         private readonly RecordingRetentionService _retention = new(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RitsukageGif",
-            "recordings.json"));
+            ApplicationStorage.DataDirectory, "recordings.json"));
+
+        private readonly RecordingRetentionService _automaticScreenshotRetention = new(Path.Combine(
+            ApplicationStorage.DataDirectory, "automatic-screenshots.json"));
 
         private CancellationTokenSource _cleanupCancellation = new();
         private Task _cleanupTask = Task.CompletedTask;
@@ -25,7 +27,7 @@ namespace RitsukageGif.Desktop
 
         private void StartCleanup()
         {
-            if (!_startServices || _cleanupTimer is not null) return;
+            if (IsTaskHost || !_startServices || _cleanupTimer is not null) return;
             _cleanupTimer = new() { Interval = TimeSpan.FromMinutes(15) };
             _cleanupTimer.Tick += (_, _) =>
             {
@@ -37,7 +39,7 @@ namespace RitsukageGif.Desktop
 
         private void QueueCleanup(IReadOnlyList<string>? newFiles = null, IReadOnlyList<string>? clipboardPaths = null)
         {
-            if (!_startServices || IsClosing) return;
+            if (IsTaskHost || !_startServices || IsClosing) return;
             var policy = new RecordingRetentionPolicy(Settings.CleanupEnabled, Settings.CleanupMaxAgeDays,
                 Settings.CleanupMaxFiles, Settings.CleanupMaxSizeMiB);
             if (newFiles is null && clipboardPaths is null && !policy.HasRules) return;
@@ -46,12 +48,22 @@ namespace RitsukageGif.Desktop
             var previous = _cleanupTask;
             var protect = LastOutputs.ToArray();
             _cleanupTask = RunCleanupAsync(previous, policy, newFiles?.ToArray() ?? [], protect,
-                clipboardPaths?.ToArray(), _cleanupCancellation.Token);
+                clipboardPaths?.ToArray(), _retention, _cleanupCancellation.Token);
         }
 
-        private async Task RunCleanupAsync(Task previous, RecordingRetentionPolicy policy,
+        private void QueueAutomaticScreenshotCleanup(IReadOnlyList<string> newFiles)
+        {
+            if (IsTaskHost || !_startServices || IsClosing) return;
+            var days = Settings.ScreenshotSave.AutomaticCleanupMaxAgeDays;
+            var policy = new RecordingRetentionPolicy(days is > 0, days);
+            _cleanupTask = RunCleanupAsync(_cleanupTask, policy, [.. newFiles],
+                LastScreenshotOutput?.Paths.ToArray() ?? [], null, _automaticScreenshotRetention,
+                _cleanupCancellation.Token);
+        }
+
+        private static async Task RunCleanupAsync(Task previous, RecordingRetentionPolicy policy,
             string[] newFiles, string[] protect, IReadOnlyList<string>? clipboardPaths,
-            CancellationToken token)
+            RecordingRetentionService retention, CancellationToken token)
         {
             try
             {
@@ -60,14 +72,14 @@ namespace RitsukageGif.Desktop
                 {
                     CleanupLogger.ZLogDebug(
                         $"Recording retention pass started. NewFileCount={newFiles.Length} ProtectedFileCount={protect.Length}");
-                    await _retention.ApplyAsync(policy, newFiles, protect, clipboardPaths, token);
+                    await retention.ApplyAsync(policy, newFiles, protect, clipboardPaths, token);
                     CleanupLogger.ZLogInformation(
                         $"Recording retention pass completed. NewFileCount={newFiles.Length} ProtectedFileCount={protect.Length}");
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
                     // Keep ownership metadata even when disabling cleanup cancels pending deletion.
-                    await _retention.ApplyAsync(new(), newFiles, protect, clipboardPaths, CancellationToken.None);
+                    await retention.ApplyAsync(new(), newFiles, protect, clipboardPaths, CancellationToken.None);
                     CleanupLogger.ZLogDebug(
                         $"Recording retention deletion cancelled; ownership metadata preserved. NewFileCount={newFiles.Length}");
                 }

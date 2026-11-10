@@ -9,5 +9,6 @@ namespace RitsukageGif.Desktop
         AnnotationToolStyle DefaultStyle)
     {
         public string StyleKey => ObjectKind;
+        public bool SupportsRecording { get; init; } = true;
     }
 }

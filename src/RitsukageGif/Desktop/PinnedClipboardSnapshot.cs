@@ -14,14 +14,59 @@ namespace RitsukageGif.Desktop
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.Pins.ClipboardSnapshot");
 
+        private List<(CaptureWindowShape? Shape, double CaptureScaling)>? ImageShapes { get; init; }
+
+        internal IReadOnlyDictionary<string, (CaptureWindowShape? Shape, double CaptureScaling)>? FileShapes
+        {
+            get;
+            init;
+        }
+
+        internal CaptureWindowShape? BitmapWindowShape { get; init; }
+        internal double BitmapCaptureScaling { get; init; } = 1;
+
         public string? FormulaSource { get; private init; }
         public string? HtmlSourceUrl { get; private init; }
         public PinnedHtmlSelection? HtmlSelection { get; private init; }
+        public string? SourceHtml { get; private init; } = Html;
+        public string? SourceText { get; private init; } = Text;
+
+        internal (CaptureWindowShape? Shape, double CaptureScaling) ShapeForFile(string path)
+        {
+            return FileShapes is not null && FileShapes.TryGetValue(path, out var shape) ? shape : (null, 1);
+        }
+
+        internal (CaptureWindowShape? Shape, double CaptureScaling) ShapeForImage(int index)
+        {
+            return ImageShapes is not null && index < ImageShapes.Count ? ImageShapes[index] : (null, 1);
+        }
 
         public static async Task<PinnedClipboardSnapshot> ReadEnabledAsync(IAsyncDataTransfer transfer,
             PinnedContentKinds kinds, CancellationToken token)
         {
             var images = new List<(string, byte[])>();
+            List<(CaptureWindowShape? Shape, double CaptureScaling)>? imageShapes = null;
+            Dictionary<IAsyncDataTransferItem, (CaptureWindowShape? Shape, double CaptureScaling)>? itemShapes = null;
+            Dictionary<string, (CaptureWindowShape? Shape, double CaptureScaling)>? fileShapes = null;
+            if ((kinds & PinnedContentKinds.Images) != 0)
+                foreach (var item in transfer.Items)
+                    if (item.Formats.Contains(ClipboardWindowShape.Format))
+                    {
+                        var raw = await ReadOptionalAsync(
+                            async () => await item.TryGetRawAsync(ClipboardWindowShape.Format), token);
+                        var shape = ClipboardWindowShape.Read(raw as byte[]);
+                        if (shape.Shape is null && shape.CaptureScaling is 1) continue;
+                        (itemShapes ??= [])[item] = shape;
+                        if (item.Formats.Contains(DataFormat.File))
+                        {
+                            var file = await ReadOptionalAsync(async () => await item.TryGetFileAsync(), token);
+                            if (file?.TryGetLocalPath() is { } path)
+                                (fileShapes ??= new(OperatingSystem.IsWindows()
+                                    ? StringComparer.OrdinalIgnoreCase
+                                    : StringComparer.Ordinal))[path] = shape;
+                        }
+                    }
+
             if ((kinds & PinnedContentKinds.Images) != 0)
                 foreach (var name in ClipboardPlatformFormats.ImageNames)
                 {
@@ -38,11 +83,15 @@ namespace RitsukageGif.Desktop
                             if (data.Length > PinnedImageContent.MaximumEncodedBytes)
                                 continue;
                             images.Add((name, data));
+                            if (itemShapes is not null)
+                                (imageShapes ??= []).Add(itemShapes.TryGetValue(item, out var shape)
+                                    ? shape
+                                    : (null, 1));
                         }
                     }
                 }
 
-            var bitmapBytes = images.Count == 0 && (kinds & PinnedContentKinds.Images) != 0
+            var bitmapInput = images.Count == 0 && (kinds & PinnedContentKinds.Images) != 0
                 ? await ReadOptionalAsync(() => ReadBitmapAsync(transfer, token), token)
                 : null;
 
@@ -50,13 +99,15 @@ namespace RitsukageGif.Desktop
                 ? await ReadOptionalAsync(async () => await transfer.TryGetFilesAsync(), token)
                 : null;
             var paths = files?.Select(item => item.TryGetLocalPath()).OfType<string>().ToArray() ?? [];
-            var text = (kinds & (PinnedContentKinds.Text | PinnedContentKinds.Color)) != 0
+            var text = kinds != PinnedContentKinds.None
                 ? await ReadOptionalAsync(async () => await transfer.TryGetTextAsync(), token)
                 : null;
+            var sourceText = OperatingSystem.IsWindows() ? text?.Replace("\r\n", "\n") : text;
             string? html = null;
+            string? sourceHtml = null;
             string? htmlSourceUrl = null;
             PinnedHtmlSelection? htmlSelection = null;
-            if ((kinds & (PinnedContentKinds.Text | PinnedContentKinds.Color)) != 0)
+            if (kinds != PinnedContentKinds.None)
                 foreach (var name in ClipboardPlatformFormats.HtmlNames)
                 {
                     foreach (var item in transfer.Items)
@@ -70,6 +121,7 @@ namespace RitsukageGif.Desktop
                             if (raw is byte[] windowsHtml && name == "HTML Format")
                             {
                                 (html, htmlSelection) = PinnedHtmlFragment.ReadWindows(windowsHtml);
+                                sourceHtml = htmlSelection.HasContext ? html.Replace("\r", "") : null;
                             }
                             else
                             {
@@ -80,6 +132,7 @@ namespace RitsukageGif.Desktop
                                     _ => null,
                                 };
                                 htmlSelection = html is null ? null : PinnedHtmlSelection.FromMarkers(html);
+                                sourceHtml = html;
                             }
 
                             htmlSourceUrl = html is not null && raw is byte[] windowsBytes && name == "HTML Format"
@@ -91,6 +144,7 @@ namespace RitsukageGif.Desktop
                             Logger.ZLogWarning(
                                 $"Clipboard HTML representation is invalid. ErrorType={error.GetType().Name}");
                             html = null;
+                            sourceHtml = null;
                         }
 
                         if (html is not null) break;
@@ -121,9 +175,13 @@ namespace RitsukageGif.Desktop
                 }
 
             token.ThrowIfCancellationRequested();
-            return new(images, bitmapBytes, paths, text, html)
+            return new(images, bitmapInput?.Png, paths, text, html)
             {
                 FormulaSource = formula, HtmlSourceUrl = htmlSourceUrl, HtmlSelection = htmlSelection,
+                ImageShapes = imageShapes, FileShapes = fileShapes,
+                BitmapWindowShape = bitmapInput?.WindowShape ?? default,
+                BitmapCaptureScaling = bitmapInput?.CaptureScaling ?? 1,
+                SourceHtml = sourceHtml, SourceText = sourceText,
             };
         }
 
@@ -146,15 +204,26 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public static async Task<byte[]?> ReadBitmapAsync(IAsyncDataTransfer transfer, CancellationToken token)
+        public static async Task<PinnedBitmapInput?> ReadBitmapAsync(IAsyncDataTransfer transfer,
+            CancellationToken token)
         {
-            using var bitmap = await transfer.TryGetBitmapAsync();
-            if (bitmap is null) return null;
-            if ((long)bitmap.PixelSize.Width * bitmap.PixelSize.Height > 128L * 1024 * 1024)
-                throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
-            using var stream = new MemoryStream();
-            await Task.Run(() => bitmap.Save(stream, PngBitmapEncoderOptions.Default), token);
-            return stream.ToArray();
+            foreach (var item in transfer.Items)
+            {
+                token.ThrowIfCancellationRequested();
+                using var bitmap = await item.TryGetBitmapAsync();
+                if (bitmap is null) continue;
+                if ((long)bitmap.PixelSize.Width * bitmap.PixelSize.Height > 128L * 1024 * 1024)
+                    throw new InvalidDataException(UiText.Get("InvalidFrameBuffer"));
+                using var stream = new MemoryStream();
+                await Task.Run(() => bitmap.Save(stream, PngBitmapEncoderOptions.Default), token);
+                var raw = item.Formats.Contains(ClipboardWindowShape.Format)
+                    ? await ReadOptionalAsync(async () => await item.TryGetRawAsync(ClipboardWindowShape.Format), token)
+                    : null;
+                var (shape, captureScaling) = ClipboardWindowShape.Read(raw as byte[]);
+                return new(stream.ToArray(), shape, captureScaling);
+            }
+
+            return null;
         }
     }
 }

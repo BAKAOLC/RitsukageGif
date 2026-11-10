@@ -64,6 +64,7 @@ namespace RitsukageGif.Desktop
                     new PresetRecordingStreamStatus(output.Name, "recording", 0, 0, 0, output.Path)),
             ];
             IsBusy = IsRecording = true;
+            BeginRecordingControl();
             _recordClock.Restart();
             _stop = new();
             _abort = new();
@@ -123,7 +124,7 @@ namespace RitsukageGif.Desktop
                         return toneMap == HdrToneMapMode.HighlightCompression
                             ? scene
                             : new ToneMappedFrameSource(scene, toneMap);
-                    }, sink, stop, cancel, context.BeginFrame);
+                    }, sink, stop, cancel, context.BeginFrame, _recordingControl);
                 }, CancellationToken.None);
                 _streams =
                 [
@@ -189,6 +190,7 @@ namespace RitsukageGif.Desktop
             finally
             {
                 finished = true;
+                CompleteRecordingControl();
                 _recordClock.Stop();
                 IsRecording = IsBusy = false;
                 _stop?.Dispose();

@@ -25,6 +25,7 @@ namespace RitsukageGif.Desktop
             Observe<ToggleButton>(ToggleButton.IsCheckedProperty);
             Observe<SelectingItemsControl>(SelectingItemsControl.SelectedIndexProperty);
             Observe<NumericUpDown>(NumericUpDown.ValueProperty);
+            Observe<Slider>(RangeBase.ValueProperty);
             Observe<ColorPicker>(ColorView.ColorProperty);
             Closing += ClosingSettings;
             RegisterContentCleanup(() => Closing -= ClosingSettings);

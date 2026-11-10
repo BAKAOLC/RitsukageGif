@@ -1,23 +1,38 @@
 namespace RitsukageGif.Desktop
 {
     internal sealed class ActionScriptRunner(
-        Func<WindowPreset, PresetDebugger, Action<ScriptBindingRegistry>, PresetScriptSession> createSession,
-        Func<GlobalActionBinding, CancellationToken, Task> execute)
+        Func<WindowPreset, PresetDebugger, PresetScriptSession> createSession)
     {
+        internal object? LastResult { get; private set; }
+
         internal async Task<ScriptDiagnostic?> RunAsync(GlobalActionBinding action, PresetDebugger debugger,
-            CancellationToken token)
+            string? sourceFile = null,
+            IReadOnlyDictionary<string, object?>? parameters = null, WindowPreset? context = null,
+            CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            var program = ActionScriptCompilation.Compile(action.Script);
-            var preset = WindowPreset.ForWindow("*", "*") with
+            sourceFile = Path.GetFullPath(sourceFile ?? ActionScriptCompilation.SourceFile);
+            ScriptNode program;
+            try
             {
-                Name = GlobalActions.Label(action), Absolute = true, Program = program,
-                SourceFile = ActionScriptCompilation.SourceFile,
+                program = ActionScriptCompilation.Compile(action.Script);
+            }
+            catch (PresetSyntaxException error) when (error.SourceFile is null)
+            {
+                throw new PresetSyntaxException(error.Line, error.Column, error.RawMessage, sourceFile);
+            }
+
+            var basis = context ?? WindowPreset.ForWindow("*", "*") with { Absolute = true };
+            var preset = basis with
+            {
+                Name = GlobalActions.Label(action), Program = program,
+                SourceFile = sourceFile,
             };
-            var session = createSession(preset, debugger,
-                bindings => ActionScriptLibrary.Register(bindings, execute));
+            var session = createSession(preset, debugger);
+            if (parameters is not null) session.Parameters.Update(parameters);
             await Task.Run(() => session.RunAsync(token), CancellationToken.None);
             token.ThrowIfCancellationRequested();
+            LastResult = session.LastResult;
             return session.LastDiagnostic;
         }
     }

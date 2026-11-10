@@ -8,6 +8,7 @@ namespace RitsukageGif.Desktop
         private void ApplyMouseThrough(bool enabled)
         {
             PinnedWindowPlatform.SetMouseThrough(this, enabled, ref _inputStyle);
+            InvalidateInputUi();
         }
     }
 }

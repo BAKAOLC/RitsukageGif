@@ -14,28 +14,39 @@ namespace RitsukageGif.Desktop
             var output = await CaptureOutputAsync(OutputColorMode.Sdr, _lifetime.Token);
             var png = output.Png;
             var preferences = RecognitionPreferencesProvider().Normalize();
-            var text = await RecognitionOutput.RecognizeAsync(png, preferences,
+            var recognition = await RecognitionOutput.RecognizeAsync(png, preferences,
                 TextRecognitionServiceProvider?.Invoke() ?? DefaultTextRecognition, _lifetime.Token);
+            var text = RecognitionTextFormatter.Format(recognition, preferences);
             if (string.IsNullOrEmpty(text)) throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
-            var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-            await clipboard.SetTextAsync(text);
-            await clipboard.FlushAsync();
-            await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output);
             if (preferences.ShowDialogOnCopyAll)
+            {
                 await RecognitionWindow.ShowAsync(this, png, RecognitionMode.Text,
-                    preferences: preferences, initialText: text, token: _lifetime.Token);
+                    preferences: preferences, initialResult: recognition, token: _lifetime.Token,
+                    copyDirectlyNextTime: () =>
+                        DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.PinAllText),
+                    dialogPreferencesChanged: RecognitionDialogPreferencesChanged,
+                    originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged);
+            }
+            else
+            {
+                var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
+                await clipboard.SetTextAsync(text);
+                await clipboard.FlushAsync();
+            }
+
+            await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output);
         }
 
         private Task ToggleAnnotationToolbarAsync()
         {
             if (_annotation is null) return BeginAnnotationAsync();
-            _annotationToolbar?.IsVisible = !_annotationToolbar.IsVisible;
+            EndAnnotation();
             return Task.CompletedTask;
         }
 
         private async Task DragContentAsync(PointerPressedEventArgs args)
         {
-            var png = await CurrentImageAsync();
+            var (png, windowShape, captureScaling) = await CurrentImageAsync();
             var sdr = _hdrSource is null
                 ? png
                 : (await Task.Run(() => PinnedImageContent.Decode(png, _lifetime.Token), _lifetime.Token)).SdrPng!;
@@ -50,6 +61,7 @@ namespace RitsukageGif.Desktop
                 var transfer = new DataTransfer();
                 var item = new DataTransferItem();
                 ClipboardPlatformFormats.SetImage(item, png, "image/png", sdr);
+                ClipboardWindowShape.Write(item, windowShape, captureScaling);
                 item.Set(DataFormat.File, file);
                 transfer.Add(item);
                 _mouseGesture.Reset();

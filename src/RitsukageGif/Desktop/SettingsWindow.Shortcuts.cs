@@ -56,12 +56,7 @@ namespace RitsukageGif.Desktop
             {
                 var selected = Math.Max(0, tabs.SelectedIndex);
                 statuses.Clear();
-                var contexts = new[]
-                {
-                    "BuiltinShortcutSelectionContext", "BuiltinShortcutScreenshotContext",
-                    "BuiltinShortcutPinnedContext", "BuiltinShortcutPinnedTextContext",
-                    "BuiltinShortcutLongshotContext",
-                };
+                var contexts = BuiltinShortcuts.ContextKeys;
                 tabs.ItemsSource = contexts.Select(context =>
                 {
                     var rows = new StackPanel();
@@ -94,6 +89,8 @@ namespace RitsukageGif.Desktop
                 var issues = SelectionCommands.ValidateIssues(draft.SelectionShortcuts, draft.MixingKeypadMainKeyboard);
                 diagnostics.Text = string.Join(Environment.NewLine, issues.Select(issue => issue.Message));
                 diagnostics.IsVisible = issues.Count > 0;
+                var overrides = BuiltinShortcuts.DefaultOverrides(draft.SelectionShortcuts,
+                    draft.MixingKeypadMainKeyboard);
                 foreach (var (definition, status) in statuses)
                 {
                     var issue = issues.FirstOrDefault(item =>
@@ -102,6 +99,18 @@ namespace RitsukageGif.Desktop
                          (item.Id == selection || item.ConflictingId == selection)));
                     SetMouseBindingStatus(status, issue?.Message,
                         !string.IsNullOrWhiteSpace(BuiltinShortcuts.GetGesture(definition, draft.SelectionShortcuts)));
+                    if (issue is not null) continue;
+                    var descriptions = overrides
+                        .Where(item => item.Parent.Id == definition.Id || item.Child.Id == definition.Id)
+                        .Select(item => item.Child.Id == definition.Id
+                            ? UiText.Format("BuiltinDefaultOverridesParent", UiText.Get(item.Child.ContextKey),
+                                UiText.Get(item.Parent.DescriptionKey))
+                            : UiText.Format("BuiltinDefaultOverridden", UiText.Get(item.Child.DescriptionKey),
+                                UiText.Get(item.Child.ContextKey))).ToArray();
+                    if (descriptions.Length == 0) continue;
+                    var description = string.Join(Environment.NewLine, descriptions);
+                    ToolTip.SetTip(status, description);
+                    AutomationProperties.SetName(status, description);
                 }
             }
 
@@ -127,7 +136,7 @@ namespace RitsukageGif.Desktop
                 AutomationProperties.SetName(editor, name);
                 GlobalInputCapture.Observe(editor);
                 editor.Bind(ToolTip.TipProperty, LiveText.Resource("EnterHotkey"));
-                var clear = BindingButton("Clear", "M6,6 L18,18 M18,6 L6,18");
+                var clear = BindingButton("Clear", ToolbarIcon.GetDefinition("Clear"));
                 var row = new Grid { ColumnDefinitions = new("*,210,28,24"), ColumnSpacing = 8, MinHeight = 32 };
                 row.Children.Add(label);
                 SettingsField.Track(row, label.Children[0],

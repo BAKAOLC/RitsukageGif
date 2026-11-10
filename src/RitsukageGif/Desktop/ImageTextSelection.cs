@@ -27,6 +27,13 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        internal bool ContainsSelected(Point point)
+        {
+            if (!HasSelection) return false;
+            var hit = Hit(point);
+            return hit >= Math.Min(_anchor, _end) && hit <= Math.Max(_anchor, _end);
+        }
+
         internal int Hit(Point point, bool nearest = false)
         {
             var spans = document.Spans;
@@ -82,6 +89,20 @@ namespace RitsukageGif.Desktop
             return false;
         }
 
+        internal bool SelectLine(Point point)
+        {
+            var hit = Hit(point);
+            if (hit < 0) return false;
+            var spans = document.Spans;
+            var line = spans[hit].Line;
+            _anchor = _end = hit;
+            while (_anchor > 0 && spans[_anchor - 1].Line == line) _anchor--;
+            while (_end + 1 < spans.Length && spans[_end + 1].Line == line) _end++;
+            _pending = -1;
+            IsDragging = false;
+            return true;
+        }
+
         internal bool Extend(Point point)
         {
             if (_pending < 0) return false;
@@ -99,7 +120,17 @@ namespace RitsukageGif.Desktop
             IsDragging = false;
         }
 
-        private void Clear()
+        internal bool SelectAll()
+        {
+            if (document.Spans.IsEmpty) return false;
+            _anchor = 0;
+            _end = document.Spans.Length - 1;
+            _pending = -1;
+            IsDragging = false;
+            return true;
+        }
+
+        internal void Clear()
         {
             _pending = _anchor = _end = -1;
             IsDragging = false;

@@ -5,8 +5,8 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class AnnotationCurvePreview : Control
     {
-        private static readonly Geometry Curve = Geometry.Parse("M2,17 C4,1 16,1 18,17");
-        private static readonly Geometry Straight = Geometry.Parse("M2,17 L18,3");
+        private static readonly Geometry Curve = IconCatalog.GetGeometry("AnnotationCurvePreviewCurve");
+        private static readonly Geometry Straight = IconCatalog.GetGeometry("AnnotationCurvePreviewStraight");
 
         public AnnotationCurvePreview()
         {
@@ -14,7 +14,7 @@ namespace RitsukageGif.Desktop
             Height = 20;
         }
 
-        public bool Curved { get; set; }
+        public bool Curved { get; init; }
         public IBrush Stroke { get; set; } = AppTheme.Ink;
 
         public override void Render(DrawingContext context)

@@ -17,12 +17,13 @@ namespace RitsukageGif.Desktop
 
         internal bool ShowDetectedCodeContents => CapturePreferences.CodeDetection == CaptureCodeDetectionMode.Contents;
 
-        internal bool CodeOverlayVisible => CodeDetectionEnabled && !_scrolling && !SelectionManipulating &&
+        internal bool CodeOverlayVisible => CodeDetectionEnabled && RectangularSelection && !_scrolling &&
+                                            !SelectionManipulating &&
                                             Snapshot.Phase == SelectionPhase.Selected && (!WindowSource ||
                                                 UsesLocalSource || _frozenWindow is not null);
 
         internal bool CanShowCodeDetectionToggle =>
-            CapturePreferences.CodeDetection != CaptureCodeDetectionMode.Disabled &&
+            RectangularSelection && CapturePreferences.CodeDetection != CaptureCodeDetectionMode.Disabled &&
             DetectedCodes is { } detection &&
             detection.Codes.Any(code => CodeCenterInSelection(code, detection.Region));
 
@@ -35,7 +36,7 @@ namespace RitsukageGif.Desktop
 
         internal void SetCodeDetectionEnabled(bool enabled)
         {
-            if (!ScreenshotMode || _scrolling ||
+            if (!ScreenshotMode || _scrolling || !RectangularSelection ||
                 CapturePreferences.CodeDetection == CaptureCodeDetectionMode.Disabled) return;
             _codeDetectionEnabled = enabled;
             Refresh();
@@ -53,7 +54,7 @@ namespace RitsukageGif.Desktop
             var snapshot = Snapshot;
             if (!ScreenshotMode || _scrolling ||
                 CapturePreferences.CodeDetection == CaptureCodeDetectionMode.Disabled ||
-                snapshot.ShapeMode != SelectionShapeMode.Rectangle ||
+                !RectangularSelection ||
                 (WindowSource && !UsesLocalSource && _frozenWindow is null))
             {
                 _codeDetection?.Clear();

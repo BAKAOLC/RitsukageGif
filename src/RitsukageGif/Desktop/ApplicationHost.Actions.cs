@@ -16,12 +16,14 @@ namespace RitsukageGif.Desktop
 
         private bool CanExecuteAction(GlobalActionBinding action)
         {
-            if (IsClosing || !action.Enabled) return false;
+            if (IsClosing || !action.Enabled || GlobalActionUnavailableReasonKey(action.Kind) is not null)
+                return false;
             return action.Kind switch
             {
-                GlobalActionKind.StopRecording => IsRecording,
+                GlobalActionKind.StopRecording => CanStopActiveRecording,
                 GlobalActionKind.ToggleRecording => CanToggleRecording,
                 GlobalActionKind.StartRecording => !IsRecording && CanToggleRecording,
+                GlobalActionKind.ScreenshotAndRecord => CanTakeScreenshot && CanEditRecordingSettings && !IsBusy,
                 GlobalActionKind.Screenshot or GlobalActionKind.ScreenshotAndCopy or GlobalActionKind.ScreenshotAndPin
                     or GlobalActionKind.ScreenshotAndSave or GlobalActionKind.ScreenshotQuickSave
                     or GlobalActionKind.ScreenshotAndCopyText
@@ -30,7 +32,7 @@ namespace RitsukageGif.Desktop
                     or GlobalActionKind.ScreenshotAndRecognizeText or GlobalActionKind.ScreenshotAndRecognizeTable
                     or GlobalActionKind.ScreenshotAndRecognizeFormula
                     or GlobalActionKind.ScreenshotAndScroll => CanTakeScreenshot,
-                GlobalActionKind.CaptureActiveWindow => OperatingSystem.IsWindows() && CanTakeScreenshot,
+                GlobalActionKind.CaptureActiveWindow => WindowLocator.CanFindActiveWindow && CanTakeScreenshot,
                 GlobalActionKind.CaptureLastRegion => !DesktopCapture.UsesSourceSelection && CanTakeScreenshot &&
                                                       _lastScreenshotSelection is { Region.IsEmpty: false },
                 GlobalActionKind.SelectRegion => CanEditRecordingSettings && !IsSelecting && !IsConfiguring,
@@ -45,6 +47,10 @@ namespace RitsukageGif.Desktop
                 GlobalActionKind.RestoreLastPinnedImage => _pinnedImages.CanRestoreClosed && !IsSelecting &&
                                                            !IsConfiguring,
                 GlobalActionKind.PinClipboard => !IsSelecting && !IsConfiguring,
+                GlobalActionKind.PinFile or GlobalActionKind.PinSelectedFiles
+                    or GlobalActionKind.ToggleWindowTopmostAtPointer => !IsSelecting && !IsConfiguring,
+                GlobalActionKind.TogglePinnedMouseThrough => !IsSelecting && !IsConfiguring &&
+                                                             _pinnedImages.CanToggleMouseThrough,
                 GlobalActionKind.TranslateClipboard => !IsSelecting && !IsConfiguring,
                 GlobalActionKind.ToggleGlobalShortcuts => !IsConfiguring,
                 GlobalActionKind.OpenScriptEditor or GlobalActionKind.OpenImageEditor
@@ -53,6 +59,21 @@ namespace RitsukageGif.Desktop
                     GlobalActionKind.OpenOutputDirectory or GlobalActionKind.ShowMainWindow =>
                     !IsSelecting && !IsConfiguring,
                 _ => false,
+            };
+        }
+
+        private static string? GlobalActionUnavailableReasonKey(GlobalActionKind kind)
+        {
+            return kind switch
+            {
+                GlobalActionKind.TogglePinnedMouseThrough when !PinnedGroupPointer.IsSupported =>
+                    "PinnedMouseThroughUnavailable",
+                GlobalActionKind.PinSelectedFiles when !ActiveFileSelection.IsSupported =>
+                    "GlobalActionFileSelectionUnavailable",
+                GlobalActionKind.ToggleWindowTopmostAtPointer when
+                    !ExternalWindowTopmost.IsSupported || !PinnedGroupPointer.IsSupported =>
+                    "GlobalActionTopmostUnavailable",
+                _ => null,
             };
         }
 
@@ -68,7 +89,11 @@ namespace RitsukageGif.Desktop
             HostLogger.ZLogInformation($"Global action started. Kind={action.Kind.ToString()} State={CurrentState}");
             try
             {
-                await ExecuteActionCoreAsync(action);
+                await ExecuteActionCoreAsync(action, _hostCancellation.Token);
+            }
+            catch (OperationCanceledException) when (IsClosing)
+            {
+                HostLogger.ZLogDebug($"Global action cancelled during shutdown. Kind={action.Kind.ToString()}");
             }
             catch (Exception error)
             {
@@ -78,17 +103,21 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async Task ExecuteActionCoreAsync(GlobalActionBinding action)
+        private async Task<ScreenshotInvocation?> ExecuteActionCoreAsync(GlobalActionBinding action,
+            CancellationToken token,
+            bool propagateScreenshotErrors = false, bool waitForPreset = false)
         {
             switch (action.Kind)
             {
                 case GlobalActionKind.SelectRegion:
-                    await SelectAsync();
+                    await SelectAsync(token);
                     break;
                 case GlobalActionKind.ToggleRecording:
                 case GlobalActionKind.StartRecording:
+                    await RunRecordingCommandAsync(token);
+                    break;
                 case GlobalActionKind.StopRecording:
-                    await ToggleRecordingAsync();
+                    await StopActiveRecordingAsync();
                     break;
                 case GlobalActionKind.Screenshot:
                 case GlobalActionKind.ScreenshotAndCopy:
@@ -102,15 +131,16 @@ namespace RitsukageGif.Desktop
                 case GlobalActionKind.ScreenshotAndRecognizeTable:
                 case GlobalActionKind.ScreenshotAndRecognizeFormula:
                 case GlobalActionKind.ScreenshotAndScroll:
+                case GlobalActionKind.ScreenshotAndRecord:
                 case GlobalActionKind.CaptureActiveWindow:
                 case GlobalActionKind.CaptureLastRegion:
-                    await ExecuteScreenshotActionAsync(action);
-                    break;
+                    return await ExecuteScreenshotActionAsync(action, token: token,
+                        propagateErrors: propagateScreenshotErrors);
                 case GlobalActionKind.TranslateClipboard:
-                    await TranslateClipboardAsync();
+                    await TranslateClipboardAsync(token);
                     break;
                 case GlobalActionKind.RunScript:
-                    var diagnostic = await RunActionScriptAsync(action, new(), CancellationToken.None);
+                    var diagnostic = await RunActionScriptAsync(action, new(), token);
                     if (diagnostic is not null)
                         throw new ScriptExecutionException(diagnostic.Line, diagnostic.Column, diagnostic.Message,
                             sourceFile: diagnostic.Source);
@@ -120,22 +150,36 @@ namespace RitsukageGif.Desktop
                     var preset = string.IsNullOrWhiteSpace(action.PresetName)
                         ? presets.Single()
                         : presets.Single(item => item.Name == action.PresetName);
-                    ActivatePreset(preset,
-                        parameters: ScriptParameters.Parse(action.Arguments.Select(pair =>
-                            pair.Key + "=" + pair.Value)));
+                    var presetParameters = ScriptParameters.Parse(action.Arguments.Select(pair =>
+                        pair.Key + "=" + pair.Value));
+                    if (IsTaskHost || waitForPreset)
+                    {
+                        var presetDebugger = new PresetDebugger { DefaultSource = preset.SourceFile };
+                        var reply = await RunOwnedPresetCommandAsync(presetDebugger,
+                            () => ActivatePreset(preset, presetDebugger, presetParameters), token);
+                        if (reply.Diagnostic is { } presetDiagnostic)
+                            throw new ScriptExecutionException(presetDiagnostic.Line, presetDiagnostic.Column,
+                                presetDiagnostic.Message, sourceFile: presetDiagnostic.Source);
+                        if (!reply.Success) throw new InvalidOperationException(reply.Message);
+                    }
+                    else
+                    {
+                        ActivatePreset(preset, parameters: presetParameters);
+                    }
+
                     break;
                 case GlobalActionKind.OpenScriptEditor:
-                    await OpenEditorAsync(string.IsNullOrWhiteSpace(action.Parameter) ? null : action.Parameter);
+                    await OpenEditorAsync(string.IsNullOrWhiteSpace(action.Parameter) ? null : action.Parameter, token);
                     break;
                 case GlobalActionKind.OpenImageEditor:
                     await ShowImageEditorAsync(string.IsNullOrWhiteSpace(action.Parameter)
                         ? null
-                        : action.Parameter);
+                        : action.Parameter, token);
                     break;
                 case GlobalActionKind.OpenAnimationEditor:
                     await ShowAnimationEditorAsync(string.IsNullOrWhiteSpace(action.Parameter)
                         ? null
-                        : action.Parameter);
+                        : action.Parameter, token);
                     break;
                 case GlobalActionKind.OpenVideoRecorder:
                     await OpenVideoRecorderAsync();
@@ -158,17 +202,35 @@ namespace RitsukageGif.Desktop
                     _pinnedImages.HideAll();
                     break;
                 case GlobalActionKind.RestoreLastPinnedImage:
-                    await _pinnedImages.RestoreLastClosedAsync();
+                    await _pinnedImages.RestoreLastClosedAsync(token);
                     break;
                 case GlobalActionKind.PinClipboard:
-                    await PinActionClipboardAsync();
+                    await PinActionClipboardAsync(token);
+                    break;
+                case GlobalActionKind.PinFile:
+                    await PinActionFilesAsync([action.Parameter], token);
+                    break;
+                case GlobalActionKind.PinSelectedFiles:
+                    var files = await ActiveFileSelection.ReadAsync(token);
+                    if (files.Count == 0) throw new IOException(UiText.Get("GlobalActionNoSelectedFiles"));
+                    await PinActionFilesAsync(files, token);
+                    break;
+                case GlobalActionKind.ToggleWindowTopmostAtPointer:
+                    var targetPoint = PinnedGroupPointer.Read() ??
+                                      throw new NotSupportedException(UiText.Get("GlobalActionTopmostUnavailable"));
+                    var topmost = await ExternalWindowTopmost.ToggleAtPointerAsync(targetPoint, token);
+                    SetStatusKey(topmost ? "GlobalActionWindowTopmostEnabled" : "GlobalActionWindowTopmostDisabled");
+                    break;
+                case GlobalActionKind.TogglePinnedMouseThrough:
+                    var point = PinnedGroupPointer.Read() ??
+                                throw new NotSupportedException(UiText.Get("PinnedMouseThroughUnavailable"));
+                    _pinnedImages.ToggleMouseThroughAtPointer(point);
                     break;
                 case GlobalActionKind.ClosePinnedImages:
                     _pinnedImages.CloseAll();
                     break;
                 case GlobalActionKind.TogglePinnedImages:
-                    if (_pinnedImages.HasVisibleImages) _pinnedImages.HideAll();
-                    else _pinnedImages.ShowAll();
+                    _pinnedImages.ToggleAllPinnedVisibility();
                     break;
                 case GlobalActionKind.ToggleOtherPinnedImages:
                     if (!_pinnedImages.ToggleOtherPins()) SetStatusKey("PinnedNoSelection");
@@ -182,11 +244,19 @@ namespace RitsukageGif.Desktop
                 default:
                     throw new ArgumentOutOfRangeException(nameof(action));
             }
+
+            return null;
         }
 
         private void RebuildActionMenus()
         {
-            if (_tray?.Menu is not { } menu || _trayActionAnchor is null) return;
+            if (_tray?.Menu is not { } menu) return;
+            PopulateActionMenus(menu);
+        }
+
+        private void PopulateActionMenus(NativeMenu menu)
+        {
+            if (_trayActionAnchor is null) return;
             foreach (var (_, item) in _actionMenus) menu.Items.Remove(item);
             _actionMenus.Clear();
             var index = 0;
@@ -200,7 +270,12 @@ namespace RitsukageGif.Desktop
                         ? MenuItemToggleType.CheckBox
                         : MenuItemToggleType.None,
                 };
-                item.Click += async (_, _) => await ExecuteActionAsync(action);
+                item.Click += async (_, _) =>
+                {
+                    if (HasStoppableScreenshotRecording && action.Kind == GlobalActionKind.ToggleRecording)
+                        await RunTrayActionAsync(StopActiveRecordingAsync);
+                    else await ExecuteActionAsync(action);
+                };
                 menu.Items.Insert(index++, item);
                 _actionMenus.Add((action, item));
             }
@@ -251,19 +326,28 @@ namespace RitsukageGif.Desktop
 
             if (_trayToggleShortcuts is { } toggle)
             {
-                toggle.Header = UiText.Get("GlobalActionToggleGlobalShortcuts");
+                toggle.Header = UiText.Get("TrayNativeDisableShortcuts");
                 toggle.IsChecked = _globalShortcutsSuspended;
                 toggle.IsEnabled = !IsClosing && !IsConfiguring;
-                toggle.IsVisible =
-                    _actionMenus.All(pair => pair.Action.Kind != GlobalActionKind.ToggleGlobalShortcuts);
+                toggle.IsVisible = true;
             }
 
-            _trayActionAnchor.IsVisible = _actionMenus.Count > 0 || _trayToggleShortcuts is { IsVisible: true };
+            if (_trayDisableFullscreen is { } fullscreen)
+            {
+                fullscreen.Header = UiText.Get("TrayNativeDisableFullscreen");
+                fullscreen.IsChecked = Settings.HotkeyPolicy.DisableInFullscreen;
+                fullscreen.IsEnabled = !IsClosing && !IsConfiguring;
+                fullscreen.IsVisible = true;
+            }
+
+            _trayActionAnchor.IsVisible = _actionMenus.Count > 0;
             foreach (var (action, item) in _actionMenus)
             {
-                item.Header = GlobalActions.Label(action);
+                var stopScreenshot = HasStoppableScreenshotRecording && action.Kind == GlobalActionKind.ToggleRecording;
+                item.Header = stopScreenshot ? UiText.Get("GlobalActionStopRecording") : GlobalActions.Label(action);
+                item.Gesture = stopScreenshot ? null : ParseTrayGesture(action.Shortcut);
                 item.IsVisible = true;
-                item.IsEnabled = CanExecuteAction(action);
+                item.IsEnabled = stopScreenshot ? CanStopActiveRecording : CanExecuteAction(action);
                 item.IsChecked = action.Kind == GlobalActionKind.ToggleGlobalShortcuts && _globalShortcutsSuspended;
             }
         }

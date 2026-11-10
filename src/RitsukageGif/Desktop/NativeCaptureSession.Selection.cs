@@ -29,7 +29,7 @@ namespace RitsukageGif.Desktop
                 if (current is not null &&
                     (current._cursor == cursor || current._capabilities is { SeparateCursor: true }) &&
                     current._fps >= fps
-                    && current._window == window && current._retainHdr == retainHdr && current.IsAvailable)
+                    && current.IsWindowSource == window && current._retainHdr == retainHdr && current.IsAvailable)
                     return current.Read(token);
 
                 using var selection =

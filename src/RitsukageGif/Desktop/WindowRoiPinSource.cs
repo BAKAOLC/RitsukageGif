@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
         private readonly WindowTarget _target;
         private readonly Func<HdrToneMapMode> _toneMapProvider;
         private WindowRoiSharedCapture? _capture;
-        private WindowRoiPinDescriptor _descriptor;
+        private readonly WindowRoiPinDescriptor _descriptor;
         private WindowRoiPinDescriptor? _lastDescriptor;
         private long _lastRevision = -2;
         private HdrToneMapMode _lastToneMap;
@@ -59,16 +59,11 @@ namespace RitsukageGif.Desktop
                 .FirstOrDefault(target => target.Handle == -1 && target.NativeAuthorization == authorization);
         }
 
-        internal void SetDescriptor(WindowRoiPinDescriptor descriptor)
-        {
-            Volatile.Write(ref _descriptor, descriptor);
-        }
-
         internal (WindowRoiCaptureState State, WindowRoiPinFrame? Frame, WindowRoiPinDescriptor Descriptor)
             Capture(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            var descriptor = Volatile.Read(ref _descriptor);
+            var descriptor = _descriptor;
             WindowTarget? current;
             if (descriptor.NativeAuthorization is { } authorization)
             {

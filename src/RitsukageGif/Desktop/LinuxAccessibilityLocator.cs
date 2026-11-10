@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace RitsukageGif.Desktop
 {
-    internal static class LinuxAccessibilityLocator
+    internal static partial class LinuxAccessibilityLocator
     {
         private static readonly SemaphoreSlim Query = new(1, 1);
         private static readonly SemaphoreSlim Probe = new(1, 1);

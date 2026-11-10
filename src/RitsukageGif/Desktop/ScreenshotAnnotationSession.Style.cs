@@ -4,13 +4,18 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotAnnotationSession
     {
-        public ScreenshotTool? SelectedTool => _selected?.Tool;
+        public ScreenshotTool? SelectedTool => _selected is { } annotation ? AnnotationTool(annotation) : null;
+
+        private static ScreenshotTool AnnotationTool(ScreenshotAnnotation annotation)
+        {
+            return annotation.AutoMosaicId != Guid.Empty ? ScreenshotTool.AutoMosaic : annotation.Tool;
+        }
 
         public Task UpdateSelectedStyleAsync(Color? color = null, double? thickness = null, double? fontSize = null,
             int? mosaicSize = null)
         {
-            if (_disposed || !CanAnnotate || IsBusy || IsDrawing) return Task.CompletedTask;
-            var tool = _selected?.Tool ?? Tool;
+            if (_disposed || !CanAnnotate || IsBusy || (IsDrawing && !IsDrawingPolyline)) return Task.CompletedTask;
+            var tool = SelectedTool ?? Tool;
             var brush = tool == ScreenshotTool.Brush || (IsPixelTool(tool) &&
                                                          (_selected?.Properties ?? Properties).PixelPath ==
                                                          AnnotationPixelPath.Brush);
@@ -19,24 +24,33 @@ namespace RitsukageGif.Desktop
                 throw new ArgumentOutOfRangeException(nameof(thickness));
             if (fontSize is { } size && (!double.IsFinite(size) || size is < 1 or > 1024))
                 throw new ArgumentOutOfRangeException(nameof(fontSize));
-            if (mosaicSize is < 2 or > 256) throw new ArgumentOutOfRangeException(nameof(mosaicSize));
+            if (mosaicSize is < 2 or > 28) throw new ArgumentOutOfRangeException(nameof(mosaicSize));
 
             if (color is { } newColor)
             {
                 Color = newColor;
-                if (_sharedColor) _masterColor = newColor;
+                if (_sharedColor && tool != ScreenshotTool.Highlight) _masterColor = newColor;
             }
 
             if (thickness is { } newThickness) Thickness = newThickness;
             if (fontSize is { } newFontSize) FontSize = newFontSize;
             if (mosaicSize is { } newMosaicSize) MosaicSize = newMosaicSize;
+            if (_gesture is { Tool: ScreenshotTool.Polyline } draft)
+            {
+                _gesture = CloneAnnotation(draft, color: Color, thickness: Thickness);
+                draft.Dispose();
+                StoreToolStyle(ScreenshotTool.Polyline);
+                Changed?.Invoke();
+                return Task.CompletedTask;
+            }
+
             if (IsEditingText)
             {
                 NotifyTextEditState();
                 return Task.CompletedTask;
             }
 
-            if (_selected is not { } annotation)
+            if (ActiveStyleAnnotation is not { } annotation)
             {
                 Changed?.Invoke();
                 return Task.CompletedTask;

@@ -97,6 +97,7 @@ namespace RitsukageGif.Desktop
                 case GlobalActionKind.ScreenshotAndRecognizeTable:
                 case GlobalActionKind.ScreenshotAndRecognizeFormula:
                 case GlobalActionKind.ScreenshotAndScroll:
+                case GlobalActionKind.ScreenshotAndRecord:
                     await ExecuteScreenshotActionAsync(action, bounds);
                     break;
                 case GlobalActionKind.SelectRegion:

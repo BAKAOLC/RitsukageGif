@@ -7,6 +7,7 @@ namespace RitsukageGif.Desktop
         private void AttachDrop(IPinnedWindow source)
         {
             var gate = new SemaphoreSlim(1);
+            source.Presentation.PasteRequested = () => ReplaceWithClipboardAsync(source, gate);
             source.Presentation.ConnectDrop(source, CanDrop, () => Preferences.SupportedContentKinds, ConsumeAsync);
             return;
 
@@ -26,16 +27,7 @@ namespace RitsukageGif.Desktop
                     var result = await PinInputSnapshotAsync(snapshot, kinds, () => input.ReadBitmapAsync(token), true,
                         token);
                     if (result.Created is not { } created) return;
-                    created.Presentation.SetScreenCenter(source.Presentation.ScreenCenter);
-                    // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
-                    switch (Preferences.ReplacementAction)
-                    {
-                        case PinnedReplacementAction.KeepSource: break;
-                        case PinnedReplacementAction.CloseSource: CloseSelection(source, false); break;
-                        case PinnedReplacementAction.DestroySource: CloseSelection(source, true); break;
-                    }
-
-                    ScheduleSave();
+                    CompleteInputReplacement(source, created);
                     PinLogger.ZLogInformation($"Pinned input drop completed. Replaced={Preferences.ReplacementAction}");
                 }
                 finally

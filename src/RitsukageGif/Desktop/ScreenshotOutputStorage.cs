@@ -28,7 +28,8 @@ namespace RitsukageGif.Desktop
             var normalized = preferences.Normalize();
             var format = colorMode == OutputColorMode.Sdr ? normalized.Format : StaticImageFormat.Png;
             var extension = normalized.DialogExtension(colorMode);
-            var name = Path.ChangeExtension(normalized.CreateFileName(context ?? new(DateTime.Now), format), extension);
+            context ??= new(DateTime.Now);
+            var name = Path.ChangeExtension(normalized.CreateFileName(context, format), extension);
             FilePickerFileType[] formats =
             [
                 new("PNG") { Patterns = ["*.png"] }, new("JPEG") { Patterns = ["*.jpg", "*.jpeg"] },
@@ -43,7 +44,8 @@ namespace RitsukageGif.Desktop
                 OutputColorMode.Both => [new("PNG") { Patterns = ["*.png"] }],
                 _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
             };
-            if (!string.IsNullOrWhiteSpace(normalized.Directory)) outputDirectory = normalized.Directory;
+            if (!string.IsNullOrWhiteSpace(normalized.Directory) || !string.IsNullOrWhiteSpace(outputDirectory))
+                outputDirectory = normalized.ResolveDirectory(outputDirectory ?? "", context);
             using var directory = string.IsNullOrWhiteSpace(outputDirectory)
                 ? null
                 : await StoragePickerAwaiter.WaitAsync(storage.TryGetFolderFromPathAsync(outputDirectory), token);

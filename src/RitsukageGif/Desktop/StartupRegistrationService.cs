@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
             var path = Path.GetFullPath(executable);
             if (path.Contains('"'))
                 throw new ArgumentException("The executable path contains a quote.", nameof(executable));
-            return "\"" + path + "\" --serve";
+            return "\"" + path + "\" --startup";
         }
 
         internal static StartupRegistrationStatus Save(bool enabled, string executable, Action persist,
@@ -51,7 +51,7 @@ namespace RitsukageGif.Desktop
         internal static bool RelaunchIfRequired(SystemPreferences preferences, string[] arguments)
         {
             if (!OperatingSystem.IsWindows() || !preferences.RunAsAdministrator ||
-                arguments is not ([] or ["--serve"])) return false;
+                arguments is not ([] or ["--serve"] or ["--silent"] or ["--startup"])) return false;
             if (IsRunningAsAdministrator()) return false;
             if (Environment.ProcessPath is not { } executable) return false;
             var start = new ProcessStartInfo(executable) { UseShellExecute = true, Verb = "runas" };

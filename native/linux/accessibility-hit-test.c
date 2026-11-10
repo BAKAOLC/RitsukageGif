@@ -125,10 +125,85 @@ static int hierarchy(AtspiAccessible *frame, int x, int y, AtspiRect *rectangles
     g_object_unref(current); g_hash_table_unref(visited);
     return reaches_frame ? count : 0;
 }
+static AtspiAccessible *focused_match(AtspiAccessible *application)
+{
+    AtspiCollection *collection = atspi_accessible_get_collection_iface(application);
+    if (collection == NULL) return NULL;
+    AtspiStateSet *states = atspi_state_set_new(NULL);
+    atspi_state_set_add(states, ATSPI_STATE_FOCUSED);
+    AtspiMatchRule *rule = atspi_match_rule_new(states, ATSPI_Collection_MATCH_ALL,
+        NULL, ATSPI_Collection_MATCH_NONE, NULL, ATSPI_Collection_MATCH_NONE,
+        NULL, ATSPI_Collection_MATCH_NONE, FALSE);
+    g_object_unref(states);
+    GError *error = NULL;
+    GArray *matches = atspi_collection_get_matches(collection, rule,
+        ATSPI_Collection_SORT_ORDER_CANONICAL, 2, TRUE, &error);
+    g_object_unref(rule);
+    g_object_unref(collection);
+    AtspiAccessible *focus = NULL;
+    if (error == NULL && matches != NULL && matches->len == 1 &&
+        g_array_index(matches, AtspiAccessible *, 0) != NULL)
+        focus = g_object_ref(g_array_index(matches, AtspiAccessible *, 0));
+    if (error != NULL) g_error_free(error);
+    if (matches != NULL)
+    {
+        for (guint index = 0; index < matches->len; index++)
+        {
+            AtspiAccessible *item = g_array_index(matches, AtspiAccessible *, index);
+            if (item != NULL) g_object_unref(item);
+        }
+        g_array_free(matches, TRUE);
+    }
+    return focus;
+}
+static int print_focused_identity(AtspiAccessible *desktop, int pid)
+{
+    GError *error = NULL;
+    int count = atspi_accessible_get_child_count(desktop, &error);
+    if (error != NULL) { g_error_free(error); return 3; }
+    AtspiAccessible *focus = NULL;
+    for (int index = 0; index < count; index++)
+    {
+        error = NULL;
+        AtspiAccessible *app = atspi_accessible_get_child_at_index(desktop, index, &error);
+        if (error != NULL) { g_error_free(error); continue; }
+        if (app == NULL) continue;
+        error = NULL;
+        guint app_pid = atspi_accessible_get_process_id(app, &error);
+        if (error != NULL) { g_error_free(error); g_object_unref(app); continue; }
+        if (app_pid == (guint)pid)
+        {
+            AtspiAccessible *candidate = focused_match(app);
+            if (candidate != NULL)
+            {
+                if (focus != NULL)
+                {
+                    g_object_unref(focus); g_object_unref(candidate); g_object_unref(app);
+                    puts("NOFOCUS"); return 0;
+                }
+                focus = candidate;
+            }
+        }
+        g_object_unref(app);
+    }
+    if (focus == NULL) { puts("NOFOCUS"); return 0; }
+    AtspiObject *object = ATSPI_OBJECT(focus);
+    AtspiStateSet *state = atspi_accessible_get_state_set(focus);
+    int valid = object->app != NULL && object->app->bus_name != NULL && object->path != NULL &&
+        state != NULL && atspi_state_set_contains(state, ATSPI_STATE_FOCUSED);
+    if (valid) printf("FOCUS %s %s\n", object->app->bus_name, object->path);
+    else puts("NOFOCUS");
+    if (state != NULL) g_object_unref(state);
+    g_object_unref(focus);
+    return 0;
+}
 int main(int argc, char **argv)
 {
     int probe = argc == 2 && strcmp(argv[1], "--probe") == 0;
-    if (!probe && argc != 5) return 2;
+    int focus_query = argc == 3 && strcmp(argv[1], "--focus") == 0;
+    if (!probe && !focus_query && argc != 5) return 2;
+    int focus_pid = 0;
+    if (focus_query && (!number(argv[2], &focus_pid) || focus_pid <= 0 || focus_pid == (int)getppid())) return 2;
     XSetErrorHandler(protocol_error); XSetIOErrorHandler(connection_lost);
     Display *display = XOpenDisplay(NULL);
     if (display == NULL) return 2;
@@ -137,6 +212,12 @@ int main(int argc, char **argv)
     AtspiAccessible *desktop = atspi_get_desktop(0);
     if (desktop == NULL) { atspi_exit(); XCloseDisplay(display); return 2; }
     if (probe) { g_object_unref(desktop); atspi_exit(); XCloseDisplay(display); puts("AVAILABLE"); return 0; }
+    if (focus_query)
+    {
+        int status = print_focused_identity(desktop, focus_pid);
+        g_object_unref(desktop); atspi_exit(); XCloseDisplay(display);
+        return x_error ? 3 : status;
+    }
     char *end = NULL; errno = 0; unsigned long id = strtoul(argv[1], &end, 16);
     int point_x, point_y;
     if (errno || end == argv[1] || *end || id == 0 || !number(argv[2], &point_x) || !number(argv[3], &point_y)) return 2;

@@ -63,7 +63,7 @@ namespace RitsukageGif.Desktop
             var taskbar =
                 Setting(Check(display, "PinnedImageTaskbarWhenNotTopmost", preferences.ShowTaskbarWhenNotTopmost),
                     static settings => settings.PinnedImages.ShowTaskbarWhenNotTopmost);
-            var opacity = Setting(Number(display, "PinnedImageDefaultOpacity", preferences.Opacity * 100, 15, 100),
+            var opacity = Setting(Number(display, "PinnedImageDefaultOpacity", preferences.Opacity * 100, 10, 100),
                 static settings => settings.PinnedImages.Opacity);
             var titlePosition = Setting(Choice(display, "PinnedTitlePosition", (int)preferences.TitlePosition,
                 "PinnedTitleBottom", "PinnedTitleTop"), static settings => settings.PinnedImages.TitlePosition);
@@ -113,8 +113,6 @@ namespace RitsukageGif.Desktop
             var attention3 = Setting(
                 Check(behavior, "PinnedTranslucentOnAttention", preferences.TranslucentOnAttention),
                 static settings => settings.PinnedImages.TranslucentOnAttention);
-            var current = Setting(Check(behavior, "PinnedImageCopyVisibleRegion", preferences.CopyVisibleRegion),
-                static settings => settings.PinnedImages.CopyVisibleRegion);
             var outputContent = Setting(Choice(behavior, "PinnedImageOutputContent", (int)preferences.OutputContent,
                     "PinnedImageOutputCurrent", "PinnedImageOutputOriginal"),
                 static settings => settings.PinnedImages.OutputContent);
@@ -182,9 +180,30 @@ namespace RitsukageGif.Desktop
             var order = Setting(Choice(history, "PinnedImageRestoreOrder", (int)preferences.RestoreOrder,
                     "PinnedImageOrderClosed", "PinnedImageOrderCreated"),
                 static settings => settings.PinnedImages.RestoreOrder);
+            var imageText = Group("PinnedImageTextSettings");
+            var smoothScaling = Setting(Check(imageText, "PinnedImageSmoothScaling", preferences.SmoothScaling),
+                static settings => settings.PinnedImages.SmoothScaling);
+            smoothScaling.Name = "PinnedImageSmoothScaling";
+            var transparentLayer = Setting(Choice(imageText, "PinnedTransparentLayerDefault",
+                (int)preferences.TransparentLayer, "PinnedTransparentIgnoreMouse", "PinnedTransparentAcceptingMouse",
+                "PinnedTransparentCheckerboard"), static settings => settings.PinnedImages.TransparentLayer);
+            var ignoreTransparentMouse = (ComboBoxItem)transparentLayer.Items[0]!;
+            ToolTip.SetShowOnDisabled(ignoreTransparentMouse, true);
+            Opened += (_, _) => RefreshTransparentInputCapability();
+            transparentLayer.DropDownOpened += (_, _) => RefreshTransparentInputCapability();
+            var textMenu = Setting(Check(imageText, "PinnedShowTextMenu", preferences.ShowTextPopupMenu),
+                static settings => settings.PinnedImages.ShowTextPopupMenu);
+            var highlightColors = preferences.TextHighlightColors.ToList();
+            var textColors = PinnedTextColors(highlightColors);
+            Row(imageText, "PinnedTextHighlightColors", textColors);
+            Setting(textColors, static settings => settings.PinnedImages.TextHighlightColors, SettingsField.SameColors);
             read = () => (preferences with
             {
                 SupportedContentKinds = supportedKinds,
+                SmoothScaling = smoothScaling.IsChecked == true,
+                TransparentLayer = (PinnedTransparentLayerMode)transparentLayer.SelectedIndex,
+                ShowTextPopupMenu = textMenu.IsChecked == true,
+                TextHighlightColors = [.. highlightColors],
                 ShowWindowShadow = shadow.IsChecked == true,
                 TitlePosition = (PinnedTitlePosition)titlePosition.SelectedIndex,
                 HideOthersOnShake = shake.IsChecked == true,
@@ -209,7 +228,7 @@ namespace RitsukageGif.Desktop
                                    (lockPointerClose.IsChecked == true ? PinnedLockRestrictions.PointerClose : 0) |
                                    (lockKeyClose.IsChecked == true ? PinnedLockRestrictions.KeyboardClose : 0) |
                                    (lockDrop.IsChecked == true ? PinnedLockRestrictions.IncomingDrop : 0),
-                ShowMenuShortcuts = shortcuts.IsChecked == true, CopyVisibleRegion = current.IsChecked == true,
+                ShowMenuShortcuts = shortcuts.IsChecked == true,
                 OutputContent = (PinnedImageOutputContent)Math.Max(0, outputContent.SelectedIndex),
                 ReplacementAction = (PinnedReplacementAction)Math.Max(0, replacementAction.SelectedIndex),
                 ThumbnailWheelZoom = thumbnailWheel.IsChecked == true,
@@ -225,6 +244,16 @@ namespace RitsukageGif.Desktop
                 RestoreOrder = (PinnedRestoreOrder)Math.Max(0, order.SelectedIndex),
             }).Normalize();
             return page;
+
+            void RefreshTransparentInputCapability()
+            {
+                ignoreTransparentMouse.IsEnabled = PinnedInputRegionFactory.CanCreate(this);
+                var reason = ignoreTransparentMouse.IsEnabled
+                    ? null
+                    : UiText.Get("PinnedTransparentIgnoreMouseUnavailable");
+                ToolTip.SetTip(ignoreTransparentMouse, reason);
+                ToolTip.SetTip(transparentLayer, reason);
+            }
 
             void CommitMaximum()
             {

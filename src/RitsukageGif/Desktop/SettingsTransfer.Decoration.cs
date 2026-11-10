@@ -18,10 +18,8 @@ namespace RitsukageGif.Desktop
                         !property.Value.TryGetDouble(out var radius) ||
                         !double.IsFinite(radius) || radius is < 0 or > 60) throw Invalid(path);
                     return;
-                case "RememberedDecoration":
+                case "FrameDecoration":
                     if (property.Value.ValueKind != JsonValueKind.Object) throw Invalid(path);
-                    var kind = CaptureDecorationKind.None;
-                    var strength = 0;
                     foreach (var field in property.Value.EnumerateObject())
                     {
                         var name = path + "." + field.Name;
@@ -30,27 +28,22 @@ namespace RitsukageGif.Desktop
                             case "Kind":
                                 if (field.Value.ValueKind != JsonValueKind.Number ||
                                     !field.Value.TryGetInt32(out var value) ||
-                                    !Enum.IsDefined((CaptureDecorationKind)value)) throw Invalid(name);
-                                kind = (CaptureDecorationKind)value;
-                                break;
-                            case "Strength":
-                                if (field.Value.ValueKind != JsonValueKind.Number ||
-                                    !field.Value.TryGetInt32(out strength) ||
-                                    strength is < 0 or > 50) throw Invalid(name);
-                                break;
-                            case "Color":
-                                if (field.Value.ValueKind != JsonValueKind.Number || !field.Value.TryGetUInt32(out _))
+                                    (CaptureDecorationKind)value is not
+                                    (CaptureDecorationKind.Shadow or CaptureDecorationKind.Border))
                                     throw Invalid(name);
                                 break;
-                            case "CornerRadius":
+                            case "ShadowStrength" or "BorderStrength":
                                 if (field.Value.ValueKind != JsonValueKind.Number ||
-                                    !field.Value.TryGetDouble(out var corner) || corner != 0)
+                                    !field.Value.TryGetInt32(out var strength) ||
+                                    strength is < 1 or > 50) throw Invalid(name);
+                                break;
+                            case "ShadowColor" or "BorderColor":
+                                if (field.Value.ValueKind != JsonValueKind.Number || !field.Value.TryGetUInt32(out _))
                                     throw Invalid(name);
                                 break;
                         }
                     }
 
-                    if (kind != CaptureDecorationKind.None && strength == 0) throw Invalid(path + ".Strength");
                     break;
             }
         }

@@ -55,13 +55,13 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task RefreshFrozenFramesAsync(
-            Func<Action, Action, Action<Exception>, CancellationToken, Task<IDisposable>>? observe = null)
+            Func<Action, Action, Action<Exception>, CancellationToken, Task<IAsyncDisposable>>? observe = null)
         {
             var annotations = Annotations!;
             using var work = CancellationTokenSource.CreateLinkedTokenSource(_cancel.Token);
             _screenshotWork = work;
             _screenshotCompleting = true;
-            IDisposable? inputObserver = null;
+            IAsyncDisposable? inputObserver = null;
             FrozenScreenshotCursor? refreshedCursor = null;
             var previousCursor = ScreenshotCursor;
             try
@@ -170,7 +170,7 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
-                inputObserver?.Dispose();
+                if (inputObserver is not null) await inputObserver.DisposeAsync();
                 _frameRefreshRelease = null;
                 refreshedCursor?.Dispose();
                 _screenshotCompleting = false;

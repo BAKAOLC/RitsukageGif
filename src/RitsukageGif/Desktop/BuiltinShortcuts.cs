@@ -1,7 +1,5 @@
 using System.Collections.ObjectModel;
-using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.VisualTree;
 
 namespace RitsukageGif.Desktop
 {
@@ -16,6 +14,12 @@ namespace RitsukageGif.Desktop
         }
 
         private static IReadOnlyList<BuiltinShortcutDefinition> Catalog => Definitions.Value;
+
+        internal static IReadOnlyList<string> ContextKeys =>
+        [
+            .. BuiltinShortcutContexts.Keys
+                .Where(context => Catalog.Any(definition => definition.ContextKey == context)),
+        ];
 
         internal static IReadOnlyList<BuiltinShortcutDefinition> Registrations()
         {
@@ -63,11 +67,19 @@ namespace RitsukageGif.Desktop
             return _bindings;
         }
 
+        internal static IReadOnlyList<BuiltinShortcutDefaultOverride> DefaultOverrides(
+            Dictionary<string, string[]>? settings, bool mixing)
+        {
+            var overrides = new List<BuiltinShortcutDefaultOverride>();
+            BuildExternal(settings, out _, mixing, overrides);
+            SelectionCommands.CollectAnnotationOverrides(settings, mixing, overrides);
+            return overrides;
+        }
+
         internal static string? Resolve(IReadOnlyList<BuiltinShortcutBinding> bindings, string context,
             KeyEventArgs args)
         {
-            if (args.Handled || args.Source is TextBox ||
-                (args.Source is Control source && source.FindAncestorOfType<TextBox>() is not null)) return null;
+            if (args.Handled || BuiltinShortcutTextInput.OwnsKey(args)) return null;
             foreach (var binding in bindings)
                 if (binding.ContextKey == context && BuiltinKeys.Matches(binding.Gesture.Key, args.Key) &&
                     binding.Gesture.KeyModifiers == args.KeyModifiers)
@@ -104,6 +116,28 @@ namespace RitsukageGif.Desktop
         {
             return
             [
+                new("builtin.pinned.image.brightness-increase", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageBrightnessIncrease", "7", "brightness-increase"),
+                new("builtin.pinned.image.brightness-decrease", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageBrightnessDecrease", "8", "brightness-decrease"),
+                new("builtin.pinned.image.reset-processing", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedProcessingReset", "0", "reset-processing"),
+                new("builtin.pinned.image.opacity-increase", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageOpacityIncrease", "]", "opacity-increase"),
+                new("builtin.pinned.image.opacity-decrease", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageOpacityDecrease", "[", "opacity-decrease"),
+                new("builtin.pinned.image.select-all", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedTextSelectAll", "Ctrl+A", "select-all-ocr"),
+                new("builtin.pinned.image.text-selectable", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageOcrTextSelectable", "E", "ocr-text-selectable"),
+                new("builtin.pinned.image.qr", BuiltinShortcutContexts.PinnedImage,
+                    "RecognizeBarcode", "Shift+D", "recognize-barcode"),
+                new("builtin.pinned.image.translate", BuiltinShortcutContexts.PinnedImage, "PinnedInlineTranslate",
+                    "Ctrl+Q", "translate-inline"),
+                new("builtin.pinned.image.table", BuiltinShortcutContexts.PinnedImage, "PinnedMenuFormRecognition",
+                    "Shift+Q", "recognize-table"),
+                new("builtin.pinned.image.formula", BuiltinShortcutContexts.PinnedImage, "FormulaRecognition",
+                    "Shift+F", "recognize-formula"),
                 new("builtin.pinned.text.selection", "BuiltinShortcutPinnedTextContext", "PinnedTextSelectable", "",
                     "text-selection"),
                 new("builtin.pinned.text.ignore-format", "BuiltinShortcutPinnedTextContext", "PinnedTextIgnoreFormat",
@@ -121,11 +155,42 @@ namespace RitsukageGif.Desktop
                     "switch-next"),
                 new("builtin.pinned.new-group", "BuiltinShortcutPinnedContext", "PinnedImageNewGroup", "G",
                     "new-group"),
+                new("builtin.dynamic.toggle", BuiltinShortcutContexts.PinnedDynamicImage, "PinnedAnimationToggle",
+                    "Space", "animation-toggle"),
+                new("builtin.dynamic.next", BuiltinShortcutContexts.PinnedDynamicImage, "PinnedAnimationNext", "Right",
+                    "animation-next"),
+                new("builtin.dynamic.previous", BuiltinShortcutContexts.PinnedDynamicImage, "PinnedAnimationPrevious",
+                    "Left", "animation-previous"),
+                new("builtin.dynamic.speed-up", BuiltinShortcutContexts.PinnedDynamicImage, "PinnedAnimationSpeedUp",
+                    "Up", "animation-speed-up"),
+                new("builtin.dynamic.speed-down", BuiltinShortcutContexts.PinnedDynamicImage,
+                    "PinnedAnimationSpeedDown", "Down", "animation-speed-down"),
+                new("builtin.dynamic.speed-reset", BuiltinShortcutContexts.PinnedDynamicImage,
+                    "PinnedAnimationSpeedReset", "R", "animation-speed-reset"),
+                new("builtin.window-roi.convert", BuiltinShortcutContexts.PinnedWindowRoi, "PinnedLiveConvert", "P",
+                    "live-convert"),
+                new("builtin.window-roi.rotate-clockwise", BuiltinShortcutContexts.PinnedWindowRoi,
+                    "PinnedImageRotateClockwise", "1", "live-rotate-clockwise"),
+                new("builtin.window-roi.rotate-counterclockwise", BuiltinShortcutContexts.PinnedWindowRoi,
+                    "PinnedImageRotateCounterclockwise", "2", "live-rotate-counterclockwise"),
+                new("builtin.window-roi.flip-horizontal", BuiltinShortcutContexts.PinnedWindowRoi,
+                    "AnimationFlipHorizontal", "3", "live-flip-horizontal"),
+                new("builtin.window-roi.flip-vertical", BuiltinShortcutContexts.PinnedWindowRoi,
+                    "AnimationFlipVertical", "4", "live-flip-vertical"),
+                new("builtin.window-roi.reset", BuiltinShortcutContexts.PinnedWindowRoi, "MouseActionReset", "0",
+                    "live-reset"),
+                new("builtin.pinned.window-shade", "BuiltinShortcutPinnedContext", "PinnedMenuWindowShade", "Y",
+                    "window-shade"),
+                new("builtin.pinned.configuration", "BuiltinShortcutPinnedContext", "PinnedConfiguration",
+                    "Ctrl+Shift+P",
+                    "configuration"),
+                new("builtin.pinned.paste", "BuiltinShortcutPinnedContext", "BuiltinShortcutPinnedPaste", "Ctrl+V",
+                    "paste"),
                 new("builtin.pinned.lock", "BuiltinShortcutPinnedContext", "PinnedImageLock", "L", "lock"),
                 new("builtin.pinned.topmost", "BuiltinShortcutPinnedContext", "PinnedImageTopmost", "T", "topmost"),
                 new("builtin.pinned.through", "BuiltinShortcutPinnedContext", "PinnedImageMouseThrough", "", "through"),
-                new("builtin.longshot.pause", "BuiltinShortcutLongshotContext", "BuiltinShortcutTogglePause", "Alt+4",
-                    "pause"),
+                new("builtin.longshot.start-stop", "BuiltinShortcutLongshotContext", "ScrollCaptureStartStop", "Alt+4",
+                    "start-stop"),
                 new("builtin.longshot.toggleaxis", "BuiltinShortcutLongshotContext", "BuiltinShortcutToggleAxis", "",
                     "toggleaxis"),
                 new("builtin.longshot.automatic", "BuiltinShortcutLongshotContext", "ScreenshotAutoScrolling", "Alt+1",
@@ -136,6 +201,12 @@ namespace RitsukageGif.Desktop
                 new("builtin.pinned.save", "BuiltinShortcutPinnedContext", "ScreenshotSave", "Ctrl+S", "save"),
                 new("builtin.pinned.annotate", "BuiltinShortcutPinnedContext", "PinnedImageAnnotate", "Ctrl+E",
                     "annotate"),
+                new("builtin.pinned.hide-mark", "BuiltinShortcutPinnedContext", "PinnedMenuHideMark", "H", "hide-mark"),
+                new("builtin.pinned.copy-plain-text", "BuiltinShortcutPinnedContext", "PinnedCopyPlainText",
+                    "Ctrl+Shift+C",
+                    "copy-plain-text"),
+                new("builtin.pinned.copy-html", "BuiltinShortcutPinnedContext", "PinnedCopyWithHtml", "Ctrl+Alt+C",
+                    "copy-html"),
                 new("builtin.pinned.close", "BuiltinShortcutPinnedContext", "Close", "Ctrl+W", "close"),
                 new("builtin.pinned.close-alternate", "BuiltinShortcutPinnedContext", "Close", "Escape", "close"),
                 new("builtin.pinned.destroy", "BuiltinShortcutPinnedContext", "PinnedImageDestroy", "Ctrl+D",
@@ -163,16 +234,20 @@ namespace RitsukageGif.Desktop
                 new("builtin.pinned.move-right", "BuiltinShortcutPinnedContext", "MouseActionMoveWindow", "Right",
                     "move-right", DirectionKey: Key.Right),
                 new("builtin.pinned.select", "BuiltinShortcutPinnedContext", "PinnedImageMultiSelect", "", "select"),
-                new("builtin.pinned.rotate-clockwise", "BuiltinShortcutPinnedContext", "PinnedImageRotateClockwise", "",
+                new("builtin.pinned.rotate-counterclockwise", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageRotateCounterclockwise", "2",
+                    "rotate-counterclockwise"),
+                new("builtin.pinned.rotate-clockwise", BuiltinShortcutContexts.PinnedImage,
+                    "PinnedImageRotateClockwise", "1",
                     "rotate-clockwise"),
-                new("builtin.pinned.rotate180", "BuiltinShortcutPinnedContext", "PinnedImageRotate180", "",
-                    "rotate180"),
-                new("builtin.pinned.flip-horizontal", "BuiltinShortcutPinnedContext", "AnimationFlipHorizontal", "",
+                new("builtin.pinned.flip-horizontal", BuiltinShortcutContexts.PinnedImage, "AnimationFlipHorizontal",
+                    "3",
                     "flip-horizontal"),
-                new("builtin.pinned.flip-vertical", "BuiltinShortcutPinnedContext", "AnimationFlipVertical", "",
+                new("builtin.pinned.flip-vertical", BuiltinShortcutContexts.PinnedImage, "AnimationFlipVertical", "4",
                     "flip-vertical"),
-                new("builtin.pinned.grayscale", "BuiltinShortcutPinnedContext", "AnimationGrayscale", "", "grayscale"),
-                new("builtin.pinned.invert", "BuiltinShortcutPinnedContext", "AnimationInvert", "", "invert"),
+                new("builtin.pinned.grayscale", BuiltinShortcutContexts.PinnedImage, "AnimationGrayscale", "5",
+                    "grayscale"),
+                new("builtin.pinned.invert", BuiltinShortcutContexts.PinnedImage, "AnimationInvert", "6", "invert"),
                 new("builtin.pinned.menu", "BuiltinShortcutPinnedContext", "MouseActionMenu", "Apps", "menu"),
                 new("builtin.pinned.menu-alternate", "BuiltinShortcutPinnedContext", "MouseActionMenu", "Shift+F10",
                     "menu"),
@@ -188,7 +263,8 @@ namespace RitsukageGif.Desktop
         }
 
         private static ReadOnlyCollection<BuiltinShortcutBinding> BuildExternal(Dictionary<string, string[]>? settings,
-            out List<SelectionShortcutIssue> issues, bool mixing = false)
+            out List<SelectionShortcutIssue> issues, bool mixing = false,
+            List<BuiltinShortcutDefaultOverride>? overrides = null)
         {
             issues = [];
             if (settings is not null)
@@ -209,7 +285,7 @@ namespace RitsukageGif.Desktop
             }
 
             var result = new List<BuiltinShortcutBinding>();
-            var used = new Dictionary<(string Context, Key Key, KeyModifiers Modifiers), BuiltinShortcutDefinition>();
+            var used = new Dictionary<(Key Key, KeyModifiers Modifiers), List<BuiltinShortcutDefinition>>();
             foreach (var definition in Catalog.Where(definition => definition.SelectionId is null))
             {
                 var value = GetGesture(definition, settings);
@@ -233,19 +309,45 @@ namespace RitsukageGif.Desktop
                 }
 
                 var key = BuiltinKeys.Normalize(gesture.Key, mixing);
-                if (used.TryGetValue((definition.ContextKey, key, gesture.KeyModifiers), out var existing))
+                if (!used.TryGetValue((key, gesture.KeyModifiers), out var matches))
+                    used.Add((key, gesture.KeyModifiers), matches = []);
+                var conflict = false;
+                foreach (var existing in matches.Where(existing =>
+                             BuiltinShortcutContexts.Overlap(existing.ContextKey, definition.ContextKey)))
                 {
+                    if (NativeDefaultShadow(existing, definition, key, gesture.KeyModifiers, mixing))
+                    {
+                        overrides?.Add(existing.ContextKey == BuiltinShortcutContexts.Pinned
+                            ? new(existing, definition)
+                            : new(definition, existing));
+                        continue;
+                    }
+
                     issues.Add(new(definition.Id, existing.Id, UiText.Get("SelectionShortcutConflict") + ": " +
                                                                UiText.Get(existing.DescriptionKey) + " / " +
                                                                UiText.Get(definition.DescriptionKey)));
-                    continue;
+                    conflict = true;
                 }
 
-                used.Add((definition.ContextKey, key, gesture.KeyModifiers), definition);
+                if (conflict) continue;
+                matches.Add(definition);
                 result.Add(new(definition.ContextKey, definition.Action, gesture));
             }
 
             return result.AsReadOnly();
+        }
+
+        private static bool NativeDefaultShadow(BuiltinShortcutDefinition first, BuiltinShortcutDefinition second,
+            Key key, KeyModifiers modifiers, bool mixing)
+        {
+            if (first.ContextKey == second.ContextKey ||
+                (first.ContextKey != BuiltinShortcutContexts.Pinned &&
+                 second.ContextKey != BuiltinShortcutContexts.Pinned) ||
+                first.DefaultGesture.Length == 0 || second.DefaultGesture.Length == 0) return false;
+            var firstDefault = KeyGestureDisplay.Parse(first.DefaultGesture);
+            var secondDefault = KeyGestureDisplay.Parse(second.DefaultGesture);
+            return BuiltinKeys.Normalize(firstDefault.Key, mixing) == key && firstDefault.KeyModifiers == modifiers &&
+                   BuiltinKeys.Normalize(secondDefault.Key, mixing) == key && secondDefault.KeyModifiers == modifiers;
         }
     }
 }

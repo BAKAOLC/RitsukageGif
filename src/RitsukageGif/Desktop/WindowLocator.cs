@@ -103,7 +103,7 @@ namespace RitsukageGif.Desktop
                     var origin = new NativeMethods.Point();
                     if (ClientToScreen(handle, ref origin) == 0) continue;
                     result.Add(new(handle, name, new(title, 0, length), bounds.Pixels,
-                        new(origin.X, origin.Y, client.Right, client.Bottom)));
+                        new(origin.X, origin.Y, client.Right, client.Bottom)) { ProcessId = pid });
                 }
                 catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
                 {

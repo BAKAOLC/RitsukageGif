@@ -206,9 +206,9 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        private static string RibbonIcon(string key)
+        private static IconDefinition RibbonIcon(string key)
         {
-            return ToolbarIcon.Geometry(key);
+            return ToolbarIcon.GetDefinition(key);
         }
 
         private void SetPropertiesVisible(bool visible)
@@ -259,11 +259,11 @@ namespace RitsukageGif.Desktop
                 var key = (string)button.Tag!;
                 var icon = key switch
                 {
-                    "AnimationFirstFrame" => "M3,3 L3,21 M20,3 L8,12 20,21 Z",
-                    "AnimationPreviousFrame" => "M17,3 L5,12 17,21 Z",
-                    "AnimationPlay" => "M3,3 L13,12 3,21 Z M17,5 L22,5 22,19 17,19 Z",
-                    "AnimationNextFrame" => "M7,3 L19,12 7,21 Z",
-                    "AnimationLastFrame" => "M21,3 L21,21 M4,3 L16,12 4,21 Z",
+                    "AnimationFirstFrame" => ToolbarIcon.GetDefinition("AnimationTransportFirstFrame"),
+                    "AnimationPreviousFrame" => ToolbarIcon.GetDefinition("AnimationTransportPreviousFrame"),
+                    "AnimationPlay" => ToolbarIcon.GetDefinition("AnimationTransportPlay"),
+                    "AnimationNextFrame" => ToolbarIcon.GetDefinition("AnimationTransportNextFrame"),
+                    "AnimationLastFrame" => ToolbarIcon.GetDefinition("AnimationTransportLastFrame"),
                     _ => RibbonIcon("AnimationSelection"),
                 };
                 WithActionIcon(button, key, icon, key == "AnimationSelectAllFrames" ? key : null);
@@ -275,7 +275,8 @@ namespace RitsukageGif.Desktop
             return panel;
         }
 
-        private static Button WithActionIcon(Button button, string tooltipKey, string geometry, string? captionKey)
+        private static Button WithActionIcon(Button button, string tooltipKey, IconDefinition geometry,
+            string? captionKey)
         {
             var content = new StackPanel
                 { Orientation = Orientation.Horizontal, Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center };

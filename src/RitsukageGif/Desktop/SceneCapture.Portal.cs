@@ -5,7 +5,7 @@ namespace RitsukageGif.Desktop
         private void ValidatePortalSources(IReadOnlyList<PresetLayer> definitions)
         {
             if (!DesktopCapture.UsesSourceSelection) return;
-            var windowSource = NativeCaptureSession.SourceIsWindow;
+            var windowSource = _portalSource?.Session.IsWindowSource ?? NativeCaptureSession.SourceIsWindow;
             foreach (var definition in definitions)
             {
                 if (definition.Media is not null) continue;
@@ -18,7 +18,8 @@ namespace RitsukageGif.Desktop
                     var handle = definition.FixedHandle != 0 ? definition.FixedHandle :
                         definition.Process is null ? _preset.FixedHandle : 0;
                     if (!windowSource || !Unspecified(process) || !Unspecified(title) || handle is not (0 or -1) ||
-                        NativeCaptureSession.AuthorizedWindows().Count != 1)
+                        (_portalSource?.Session.GetAuthorizedWindows() ?? NativeCaptureSession.AuthorizedWindows())
+                        .Count != 1)
                         throw new NotSupportedException(UiText.Get("PortalWindowMatchingUnavailable"));
                 }
             }

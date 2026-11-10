@@ -61,9 +61,15 @@ namespace RitsukageGif.Desktop
                     };
                     var status = new ContentControl { Width = 24, VerticalAlignment = VerticalAlignment.Center };
                     statuses[target.Id] = status;
-                    var row = MouseSettingsRow(target.Id.StartsWith("builtin.mouse.", StringComparison.Ordinal)
-                        ? UiText.Get("GlobalAction" + target.Kind)
-                        : ActionLabel(target), modifiers, kindBox, status);
+                    var label = target.Id.StartsWith("builtin.mouse.", StringComparison.Ordinal)
+                        ? target.Kind switch
+                        {
+                            GlobalActionKind.Screenshot => UiText.Get("GlobalMouseScreenshotAndEdit"),
+                            GlobalActionKind.ScreenshotAndRecord => UiText.Get("GlobalMouseGifShot"),
+                            _ => UiText.Get("GlobalAction" + target.Kind),
+                        }
+                        : ActionLabel(target);
+                    var row = MouseSettingsRow(label, modifiers, kindBox, status);
                     SettingsField.Track(row, ((Grid)row.Child!).Children[0],
                         settings => settings.GlobalMouseBindings.FirstOrDefault(item => item.ActionId == target.Id));
                     row.IsEnabled = GlobalMouseService.Supported;
@@ -109,11 +115,10 @@ namespace RitsukageGif.Desktop
                 var kinds = new[]
                 {
                     GlobalActionKind.ScreenshotAndPin, GlobalActionKind.ScreenshotAndCopy,
-                    GlobalActionKind.ScreenshotAndCopyText, GlobalActionKind.ScreenshotAndTranslate,
-                    GlobalActionKind.ScreenshotAndCopyCodeText,
-                    GlobalActionKind.ScreenshotQuickSave,
-                    GlobalActionKind.Screenshot, GlobalActionKind.ScreenshotAndScroll,
-                    GlobalActionKind.StartRecording,
+                    GlobalActionKind.ScreenshotAndCopyText, GlobalActionKind.ScreenshotQuickSave,
+                    GlobalActionKind.ScreenshotAndTranslate, GlobalActionKind.Screenshot,
+                    GlobalActionKind.ScreenshotAndSave, GlobalActionKind.ScreenshotAndScroll,
+                    GlobalActionKind.ScreenshotAndRecord,
                 };
                 var result = new List<GlobalActionBinding>();
                 var included = new HashSet<string>(StringComparer.Ordinal);

@@ -40,7 +40,7 @@ namespace RitsukageGif.Desktop
                     VerticalContentAlignment = VerticalAlignment.Center,
                 };
                 var image = ToolbarIcon.CreateInViewport(button,
-                    ToolbarIcon.TryGeometry(icon) ?? ToolbarIcon.Geometry(icon));
+                    ToolbarIcon.FindDefinition(icon) ?? ToolbarIcon.GetDefinition(icon));
                 image.Width = image.Height = 20;
                 button.Content = image;
                 button.Bind(AutomationProperties.NameProperty, LiveText.Resource(key));

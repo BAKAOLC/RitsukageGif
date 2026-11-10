@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace RitsukageGif.Desktop
 {
@@ -26,6 +27,7 @@ namespace RitsukageGif.Desktop
         public List<GlobalActionBinding> GlobalActions { get; set; } = CreateDefaultActions();
         public List<GlobalMouseBinding> GlobalMouseBindings { get; set; } = [];
         public VideoRecordingPreferences VideoRecording { get; set; } = new();
+        public ScreenshotRecordingPreferences ScreenshotRecording { get; set; } = new();
         public int Fps { get; set; } = 20;
         public int Divisor { get; set; } = 2;
         public OutputFormat Format { get; set; }
@@ -33,7 +35,19 @@ namespace RitsukageGif.Desktop
         public HdrToneMapMode CaptureToneMap { get; set; }
         public GifQuality Quality { get; set; } = GifQuality.Balanced;
         public bool UseFfmpeg { get; set; }
-        public bool Cursor { get; set; }
+
+        [JsonIgnore]
+        public bool Cursor
+        {
+            get => CapturePreferences.CursorPolicy == CaptureCursorPolicy.Visible;
+            set
+            {
+                var policy = value ? CaptureCursorPolicy.Visible : CaptureCursorPolicy.Hidden;
+                if (CapturePreferences.CursorPolicy != policy)
+                    CapturePreferences = CapturePreferences with { CursorPolicy = policy };
+            }
+        }
+
         public CaptureSourceKind CaptureSource { get; set; }
         public bool Sound { get; set; }
         public string StartSound { get; set; } = "";
@@ -93,6 +107,8 @@ namespace RitsukageGif.Desktop
                 settings.ScreenshotSave = (settings.ScreenshotSave ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.Annotation = (settings.Annotation ?? new()).Normalize();
+                // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+                settings.ScreenshotRecording = (settings.ScreenshotRecording ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.PinnedImages = (settings.PinnedImages ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract

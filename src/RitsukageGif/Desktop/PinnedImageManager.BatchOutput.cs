@@ -37,7 +37,7 @@ namespace RitsukageGif.Desktop
                 {
                     progress.Report(0, images.Length);
                     progress.Show(source.Window);
-                    var snapshots = images.Select(image => image.CapturePreferredOutputAsync(mode, token)).ToArray();
+                    var snapshots = images.Select(image => image.CaptureSceneOutputAsync(mode, token)).ToArray();
                     var results = await Task.WhenAll(snapshots);
                     var stagedOutputs = new ScreenshotSavedOutput[results.Length];
                     var completed = 0;

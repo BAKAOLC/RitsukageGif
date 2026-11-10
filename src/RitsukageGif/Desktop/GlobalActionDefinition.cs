@@ -7,7 +7,8 @@ namespace RitsukageGif.Desktop
         bool DirectScreenshot = false,
         bool FileParameter = false,
         bool StartWithScrolling = false,
-        bool AutoConfirm = true)
+        bool AutoConfirm = true,
+        bool StartWithRecording = false)
     {
         internal string NameKey => "GlobalAction" + Kind;
         internal bool IsScreenshot => ScreenshotOutput is not null;

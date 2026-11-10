@@ -47,6 +47,7 @@ namespace RitsukageGif.Desktop
 
         public FrozenWindowScreenshot? WindowFrame { get; set; }
         public bool NativeHdrBackground { get; set; }
+        internal bool ExternalHintsSurface { get; init; }
         public bool Manipulating { get; set; }
         public PixelRect Selected { get; set; }
         public PixelPoint Mouse { get; set; }
@@ -155,6 +156,12 @@ namespace RitsukageGif.Desktop
             DrawFrameDecoration(context);
             if (_bitmap is ScreenshotTiledImage) return;
             if (Snapshot?.Phase == SelectionPhase.Selected || Manipulating) DrawSelectionHandles(context);
+            if (!ExternalHintsSurface) RenderHints(context);
+        }
+
+        internal void RenderHints(DrawingContext context)
+        {
+            if (_bitmap is ScreenshotTiledImage) return;
             _hintStatusBounds = _hintActionsBounds = _hintMagnifierBounds = default;
             if (_monitor.Contains(Mouse))
                 DrawHint(context, new((Mouse.X - _monitor.X) / Scale, (Mouse.Y - _monitor.Y) / Scale), true);

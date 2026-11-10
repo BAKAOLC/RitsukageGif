@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
-using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
 {
@@ -30,34 +29,26 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private static string ActionGeometry(ToolbarActionDefinition definition)
+        private static IconDefinition ActionGeometry(ToolbarActionDefinition definition)
         {
-            return ToolbarIcon.TryGeometry(definition.IconKey) ?? ToolbarIcon.Geometry("AnimationEffects");
+            return ToolbarIcon.FindDefinition(definition.IconKey) ?? ToolbarIcon.GetDefinition("AnimationEffects");
         }
 
-        private static Grid MenuContent(Button button, string key, string geometry, string? gesture)
+        private static void SetToolButtonContent(Button button, string key)
         {
-            var icon = ToolbarIcon.Create(button, geometry);
-            var label = new TextBlock
+            button.Height = AppTheme.CurrentAppearance.ToolbarIconSize switch
             {
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                [!TextBlock.ForegroundProperty] = button[!TemplatedControl.ForegroundProperty],
+                ToolbarIconSize.Small => 24, ToolbarIconSize.Large => 36, _ => 28,
             };
-            label.Bind(TextBlock.TextProperty, LiveText.Resource(key));
-            var shortcut = new TextBlock
-            {
-                Text = gesture is null ? null : KeyGestureDisplay.Format(gesture),
-                Foreground = AppTheme.Ink,
-                FontSize = 11, VerticalAlignment = VerticalAlignment.Center,
-            };
-            var content = new Grid { ColumnDefinitions = new("18,*,Auto"), ColumnSpacing = 8 };
-            content.Children.Add(icon);
-            Grid.SetColumn(label, 1);
-            content.Children.Add(label);
-            Grid.SetColumn(shortcut, 2);
-            content.Children.Add(shortcut);
-            return content;
+            var icon = ToolbarIcon.Create(button,
+                ToolbarIcon.FindDefinition(key) ?? ToolbarIcon.GetDefinition("AnimationEffects"));
+            icon.Width = icon.Height = Math.Max(12, button.Height - 12);
+            button.Content = icon;
+            button.Width = button.Height;
+            button.Padding = new(5);
+            button.Margin = new(0);
+            button.HorizontalAlignment = HorizontalAlignment.Left;
+            button.HorizontalContentAlignment = HorizontalAlignment.Center;
         }
 
         private void InitializeCustomizationMenu()
@@ -77,7 +68,7 @@ namespace RitsukageGif.Desktop
         private Button AdjustmentButton(bool tools)
         {
             var button = MenuButton("ToolbarAdjust", () => _ = EditToolbarAsync(tools),
-                ToolbarIcon.TryGeometry("GeneralHeading"));
+                ToolbarIcon.FindDefinition("GeneralHeading"));
             button.HorizontalAlignment = HorizontalAlignment.Right;
             button.Foreground = AppTheme.Muted;
             return button;
@@ -108,9 +99,11 @@ namespace RitsukageGif.Desktop
             RebuildToolColumns(preferences);
             _functionStrip.Children.Clear();
             _moreActions.Children.Clear();
-            _moreActions.ItemWidth = _moreActions.ItemHeight = _more.Height + 4;
+            _moreActions.MaxWidth = (_more.Height + 4) * 5;
+            _functionStrip.Children.Add(_undo);
             foreach (var item in preferences.Actions)
             {
+                if (!ToolbarActionCatalog.Get(item.Id).Configurable) continue;
                 if (!_actionButtons.TryGetValue(item.Id, out var button)) continue;
                 var definition = ToolbarActionCatalog.Get(item.Id);
                 button.IsVisible = true;
@@ -134,8 +127,6 @@ namespace RitsukageGif.Desktop
                         throw new ArgumentOutOfRangeException(nameof(item.Visibility));
                 }
             }
-
-            _moreActions.Width = _moreActions.ItemWidth * Math.Min(5, _moreActions.Children.Count);
         }
 
         private static SelectionCommand? ActionCommand(ToolbarActionId id)

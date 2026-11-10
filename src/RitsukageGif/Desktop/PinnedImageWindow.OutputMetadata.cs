@@ -10,6 +10,7 @@ namespace RitsukageGif.Desktop
             if (!double.IsFinite(captureScaling) || captureScaling is < 1 or > 16)
                 throw new ArgumentOutOfRangeException(nameof(captureScaling));
             OriginalCaptureScaling = captureScaling;
+            RefreshShapeSourceSize();
         }
     }
 }

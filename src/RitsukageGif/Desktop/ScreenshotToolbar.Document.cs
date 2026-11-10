@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
                 _commandRow.Children.Insert(_commandRow.Children.IndexOf(_more), Group(_documentStrip));
             }
 
-            var button = SmallButton(key, action, ToolbarIcon.TryGeometry(iconKey ?? key));
+            var button = SmallButton(key, action, ToolbarIcon.FindDefinition(iconKey ?? key));
             _documentStrip.Children.Add(button);
             return button;
         }

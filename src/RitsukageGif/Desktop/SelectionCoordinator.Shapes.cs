@@ -21,6 +21,8 @@ namespace RitsukageGif.Desktop
         private PixelPoint _shapePreviewPoint;
         private bool _shapeRefreshQueued;
         private bool _subtractRegion;
+        private SKPaint? _polygonCornerPaint;
+        private int _polygonCornerRadius = -1;
         private SelectionShapeMode ShapeMode { get; set; }
         internal SelectionShapeMode DisplayShapeMode => _previewShapeMode ?? ShapeMode;
         internal bool ShapeModePreviewVisible => _previewShapeMode.HasValue;
@@ -181,7 +183,8 @@ namespace RitsukageGif.Desktop
             using var path = BuildShapePath();
             if (ShapeMode == SelectionShapeMode.Polygon) path.LineTo(_shapePreviewPoint.X, _shapePreviewPoint.Y);
             path.Close();
-            _selectionShape = DescribeShape(path);
+            using var rounded = RoundPolygon(path);
+            _selectionShape = DescribeShape(rounded ?? path);
         }
 
         private SKPath BuildShapePath()
@@ -199,7 +202,23 @@ namespace RitsukageGif.Desktop
             path.Close();
             _shapePoints.Clear();
             _shapePreviewDirty = false;
-            CommitShape(path);
+            using var rounded = RoundPolygon(path);
+            CommitShape(rounded ?? path);
+        }
+
+        private SKPath? RoundPolygon(SKPath path)
+        {
+            var radius = CapturePreferences.PolygonCornerRadius;
+            if (ShapeMode != SelectionShapeMode.Polygon || radius == 0) return null;
+            if (_polygonCornerPaint is null || _polygonCornerRadius != radius)
+            {
+                _polygonCornerPaint?.Dispose();
+                using var effect = SKPathEffect.CreateCorner(radius);
+                _polygonCornerPaint = new() { Style = SKPaintStyle.Fill, PathEffect = effect };
+                _polygonCornerRadius = radius;
+            }
+
+            return _polygonCornerPaint.GetFillPath(path);
         }
 
         private void CommitShape(SKPath path)

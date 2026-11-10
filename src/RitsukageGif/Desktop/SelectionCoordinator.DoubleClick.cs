@@ -1,36 +1,46 @@
-﻿namespace RitsukageGif.Desktop
+namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
         internal void ExecuteScreenshotDoubleClick(PixelPoint point)
         {
+            ExecuteScreenshotClick(point, CapturePreferences.DoubleClickAction);
+        }
+
+        internal void ExecuteScreenshotMiddleClick(PixelPoint point)
+        {
+            ExecuteScreenshotClick(point, CapturePreferences.MiddleClickAction);
+        }
+
+        private void ExecuteScreenshotClick(PixelPoint point, CaptureClickAction action)
+        {
             if (!ScreenshotMode || _finished || _screenshotCompleting ||
+                action == CaptureClickAction.None ||
                 Annotations is not { IsBusy: false, IsDrawing: false } annotations) return;
             _pointer = point;
+            UpdatePoint(true);
             annotations.ClearAnnotationSelection();
-            var action = CapturePreferences.DoubleClickAction;
-            SelectionLogger.ZLogDebug($"Screenshot double-click action requested. Action={action.ToString()}");
+            SelectionLogger.ZLogDebug($"Screenshot click action requested. Action={action.ToString()}");
+            // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (action)
             {
-                case CaptureDoubleClickAction.None:
-                    return;
-                case CaptureDoubleClickAction.CopyOcrText:
+                case CaptureClickAction.CopyOcrText:
                     RecognizeSelection(RecognitionMode.Text, true);
                     return;
-                case CaptureDoubleClickAction.Copy:
+                case CaptureClickAction.Copy:
                     annotations.RequestComplete(ScreenshotOutputAction.Copy);
                     return;
-                case CaptureDoubleClickAction.QuickSave:
+                case CaptureClickAction.QuickSave:
                     annotations.RequestComplete(ScreenshotOutputAction.QuickSave);
                     return;
-                case CaptureDoubleClickAction.Save:
+                case CaptureClickAction.Save:
                     annotations.RequestComplete(ScreenshotOutputAction.Save);
                     return;
-                case CaptureDoubleClickAction.Pin:
+                case CaptureClickAction.Pin:
                     annotations.RequestComplete(ScreenshotOutputAction.Pin);
                     return;
                 default:
-                    throw new InvalidOperationException($"Unsupported screenshot double-click action: {action}.");
+                    throw new InvalidOperationException($"Unsupported screenshot click action: {action}.");
             }
         }
     }

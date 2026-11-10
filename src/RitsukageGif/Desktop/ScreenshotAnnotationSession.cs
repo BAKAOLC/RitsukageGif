@@ -41,7 +41,7 @@ namespace RitsukageGif.Desktop
         } = true;
 
         public bool CanStartScrolling =>
-            CanScroll && CanExport && !HasAnnotations && OutputColorMode == OutputColorMode.Sdr;
+            CanScroll && CanExport && !HasAnnotations;
 
         private bool CanExport => !IsBusy && !Selection.IsEmpty && !IsDrawing && !IsEditingText;
 
@@ -50,6 +50,7 @@ namespace RitsukageGif.Desktop
             get => _tool;
             set
             {
+                if (!CanUseDrawingTool(value)) return;
                 if (_tool == value) return;
                 CommitTextEdit();
                 if (IsDrawingPolyline) FinishPolyline();
@@ -58,6 +59,7 @@ namespace RitsukageGif.Desktop
                 StoreToolStyle(_styleTool);
                 _tool = value;
                 RestoreToolStyle(value);
+                EnsureManualWatermark();
                 Changed?.Invoke();
             }
         }
@@ -67,13 +69,23 @@ namespace RitsukageGif.Desktop
         public double Thickness { get; private set; } = 4;
         public double FontSize { get; private set; } = 24;
         private string Text { get; set; } = "";
-        public int MosaicSize { get; private set; } = 12;
+        public int MosaicSize { get; private set; } = 5;
         public bool IsBusy { get; private set; }
 
-        public bool IsDrawing => IsPrivacyDetectionActive || _gesture is not null || _gestureWork is not null ||
+        public bool IsDrawing => PrivacyDetectionPending || _gesture is not null || _gestureWork is not null ||
                                  _moving is not null;
 
         public bool HasAnnotations => _annotations.Count > 0;
+
+        internal ScreenshotAnnotationSession? Underlay
+        {
+            get;
+            set
+            {
+                field = value;
+                Changed?.Invoke();
+            }
+        }
 
         public bool HasMosaicAnnotations => _annotations.Any(annotation => annotation.Tool is ScreenshotTool.Mosaic
             or ScreenshotTool.Blur or ScreenshotTool.SmartErase or
@@ -98,6 +110,7 @@ namespace RitsukageGif.Desktop
             _cancel.Cancel();
             _cancel.Dispose();
             _gesture?.Dispose();
+            DisposeRecordingCanvas();
             foreach (var annotation in _retained) annotation.Dispose();
             _retained.Clear();
             _undo.Clear();
@@ -150,13 +163,17 @@ namespace RitsukageGif.Desktop
 
         private void Begin(PixelPoint point)
         {
-            if (_disposed || !CanAnnotate || IsBusy || Tool == ScreenshotTool.Select ||
+            if (_disposed || !CanAnnotate || IsBusy || !CanUseDrawingTool(Tool) || Tool == ScreenshotTool.Select ||
                 !AnnotationBounds.Contains(point)) return;
-            if (Tool == ScreenshotTool.Watermark && !WatermarkResourceReady) return;
-            if (Tool == ScreenshotTool.Eraser && (!AnnotationsVisible || _annotations.Count == 0)) return;
-            if (string.IsNullOrWhiteSpace(Text) && (Tool == ScreenshotTool.Text ||
-                                                    (Tool == ScreenshotTool.Watermark && _watermarkSource is null)))
-                return;
+            if (Tool switch
+                {
+                    ScreenshotTool.Watermark => !WatermarkResourceReady || _watermarkSource is null,
+                    ScreenshotTool.AutoMosaic => true,
+                    ScreenshotTool.Eraser => !AnnotationsVisible || _annotations.Count == 0,
+                    ScreenshotTool.Text => string.IsNullOrWhiteSpace(Text),
+                    _ => false,
+                }) return;
+
             if (_annotations.Count >= 1024 || _annotations.Concat(_retained).Distinct()
                     .Sum(annotation => annotation.Points.Count) >= 262144)
             {
@@ -183,7 +200,7 @@ namespace RitsukageGif.Desktop
             {
                 Tool = Tool, Color = Color, Thickness = Thickness,
                 Text = Tool is ScreenshotTool.Text or ScreenshotTool.Watermark ? Text : "", FontSize = FontSize,
-                MosaicSize = Math.Clamp(MosaicSize, 2, 256),
+                MosaicSize = Math.Clamp(MosaicSize, 2, 28),
                 Properties = Properties.Normalize() with
                 {
                     Number = Tool == ScreenshotTool.Number ? NextNumber : Properties.Number,
@@ -365,6 +382,7 @@ namespace RitsukageGif.Desktop
 
         public void CancelGesture()
         {
+            ReleaseNumberCaptionKey();
             CancelPrivacyDetection();
             CancelErase();
             _gesture?.Dispose();
@@ -413,6 +431,7 @@ namespace RitsukageGif.Desktop
         public void Render(DrawingContext context)
         {
             if (Selection.IsEmpty || !AnnotationsVisible) return;
+            Underlay?.Render(context);
             RefreshPixelPreviews();
             using var clip = context.PushClip(new(AnnotationBounds.X, AnnotationBounds.Y, AnnotationBounds.Width,
                 AnnotationBounds.Height));
@@ -428,6 +447,13 @@ namespace RitsukageGif.Desktop
         private void Draw(DrawingContext context, ScreenshotAnnotation annotation, bool sampleImages = true)
         {
             if (annotation.Points.Count == 0) return;
+            if (annotation.FixedStroke is { } stroke)
+            {
+                using var strokeClip = context.PushClip(stroke.Clip);
+                context.DrawGeometry(null, stroke.Pen, stroke.Path);
+                return;
+            }
+
             var first = annotation.Points[0];
             var brush = new SolidColorBrush(annotation.Color);
             var pen = new Pen(brush, annotation.Thickness, AnnotationStroke.Dashes(annotation.Properties.StrokeStyle),
@@ -448,7 +474,8 @@ namespace RitsukageGif.Desktop
                     DrawSpotlightGeometry(context, annotation);
                     break;
                 case ScreenshotTool.Eraser:
-                    DrawPixelTool(context, annotation);
+                    if (RecordingContext) DrawRecordingEraser(context, annotation);
+                    else DrawPixelTool(context, annotation);
                     break;
                 case ScreenshotTool.StrokeEraser:
                     break;
@@ -473,6 +500,8 @@ namespace RitsukageGif.Desktop
                     DrawArrowShape(context, annotation, brush, pen);
                     if (!string.IsNullOrWhiteSpace(annotation.Text))
                     {
+                        using var textOptions = context.PushTextOptions(new()
+                            { TextRenderingMode = TextRenderingMode.Antialias });
                         var comment = FormatLabel(annotation, brush);
                         context.DrawText(comment, annotation.Points[^1] + new Vector(8, 8));
                     }
@@ -491,6 +520,7 @@ namespace RitsukageGif.Desktop
                     break;
                 case ScreenshotTool.Select:
                     break;
+                case ScreenshotTool.AutoMosaic:
                 default: throw new ArgumentOutOfRangeException(nameof(annotation));
             }
         }

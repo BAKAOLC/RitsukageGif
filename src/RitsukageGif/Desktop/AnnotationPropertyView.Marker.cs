@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Layout;
 
 namespace RitsukageGif.Desktop
@@ -14,10 +14,8 @@ namespace RitsukageGif.Desktop
             controls.Children.Add(Toggle("AnnotationMarkerLine", "", p => p.MarkerPath == AnnotationMarkerPath.Line,
                 (p, _) => p with { MarkerPath = AnnotationMarkerPath.Line }, "AnnotationToolLine"));
             var width = WidthInput();
-            var corners = CornerRadius();
             controls.Children.Add(width);
-            controls.Children.Add(corners);
-            var blend = new ComboBox
+            var blend = new AnnotationChoiceComboBox
             {
                 MinWidth = 92, MinHeight = 28, VerticalAlignment = VerticalAlignment.Center,
                 ItemsSource = new[]
@@ -33,16 +31,12 @@ namespace RitsukageGif.Desktop
                 });
             };
             controls.Children.Add(blend);
-            var opacity = OpacityInput();
-            controls.Children.Add(opacity);
             controls.Children.Add(Palette());
             _refresh.Add(() =>
             {
                 var properties = _session.Properties;
                 blend.SelectedIndex = (int)properties.MarkerBlend;
-                width.IsVisible = properties.MarkerPath == AnnotationMarkerPath.Line;
-                corners.IsVisible = properties.MarkerPath == AnnotationMarkerPath.Rectangle;
-                opacity.IsVisible = properties.MarkerBlend == AnnotationMarkerBlend.Translucent;
+                width.IsEnabled = properties.MarkerPath == AnnotationMarkerPath.Line;
             });
             return controls;
         }

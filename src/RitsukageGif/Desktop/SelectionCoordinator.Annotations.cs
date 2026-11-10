@@ -18,6 +18,8 @@ namespace RitsukageGif.Desktop
         }
 
         internal ScreenshotAnnotationSession? Annotations { get; private set; }
+        internal bool PropagateOutputErrors { get; init; }
+
         internal Func<Window?, ScreenshotResult, CancellationToken, Task<bool>>? ScreenshotOutputHandler { get; set; }
 
         private Window? ScreenshotOwner =>
@@ -25,6 +27,11 @@ namespace RitsukageGif.Desktop
 
         internal bool ScreenshotDrawing => Annotations is { Tool: not ScreenshotTool.Select } or { IsDrawing: true } or
             { HasSelectedAnnotation: true };
+
+        internal void FailOutput(Exception error)
+        {
+            Finish(null, error);
+        }
 
         internal bool OwnsScreenshotToolbar(OverlayWindow window)
         {
@@ -73,14 +80,15 @@ namespace RitsukageGif.Desktop
             if (_finished || UsesLocalSource || DetectionMode == CaptureDetectionMode.None) return null;
             var target = WindowSource
                 ? _selectedTarget
-                : _targets.FirstOrDefault(candidate => candidate.Bounds.Contains(point));
+                : CandidateAtPoint(point);
             if (target is null || !target.Bounds.Contains(point)) return null;
             var bounds = WindowSource ? target.Client : target.Bounds;
             switch (Controls)
             {
                 case true when _controlPoint == point && _controlWindow == target.Handle && !_controlBounds.IsEmpty:
                     return bounds.Intersect(_controlBounds);
-                case true when WindowControlLocator.Find(target, point, _cancel.Token) is { } control:
+                case true when OperatingSystem.IsWindows() &&
+                               WindowControlLocator.Find(target, point, _cancel.Token) is { } control:
                     bounds = bounds.Intersect(control.Bounds);
                     break;
             }
@@ -92,12 +100,6 @@ namespace RitsukageGif.Desktop
         {
             if (Annotations is not { } annotations) return false;
             var command = definition.Command;
-            if (annotations.IsPrivacyDetectionActive && command == SelectionCommand.Confirm)
-            {
-                _ = annotations.ApplyPrivacyMosaicAsync();
-                return true;
-            }
-
             if (command == SelectionCommand.Cancel &&
                 (_screenshotCompleting || annotations.IsBusy || annotations.IsDrawing))
             {
@@ -205,7 +207,11 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception error)
             {
-                if (!_finished) annotations.SetExportState(false, error.Message);
+                if (!_finished)
+                {
+                    if (PropagateOutputErrors) Finish(null, error);
+                    else annotations.SetExportState(false, error.Message);
+                }
             }
             finally
             {

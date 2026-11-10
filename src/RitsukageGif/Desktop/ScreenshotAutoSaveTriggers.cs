@@ -9,6 +9,8 @@ namespace RitsukageGif.Desktop
         Recognize = 4,
         Save = 8,
         Scrolling = 16,
-        All = Copy | Pin | Recognize | Save | Scrolling,
+        Translate = 32,
+        Screenshot = 64,
+        All = Copy | Pin | Recognize | Save | Scrolling | Translate | Screenshot,
     }
 }

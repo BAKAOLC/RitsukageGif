@@ -6,8 +6,8 @@ namespace RitsukageGif.Desktop
     {
         private readonly Dictionary<string, AnnotationToolStyle> _toolStyles = [];
         private bool _limitToSelection = true;
-        private Color _masterColor = Colors.Red;
-        private bool _sharedColor = true;
+        private Color _masterColor = Color.FromRgb(216, 74, 47);
+        private bool _sharedColor;
         private ScreenshotTool _styleTool;
 
         public Func<ToolbarPreferences>? ToolbarPreferencesProvider { get; set; }
@@ -72,25 +72,24 @@ namespace RitsukageGif.Desktop
         {
             var style = StyleFor(tool);
             _styleTool = tool;
-            Color = _sharedColor ? _masterColor : Color.Parse(style.Color);
+            Color = _sharedColor && tool != ScreenshotTool.Highlight ? _masterColor : Color.Parse(style.Color);
             Thickness = tool == ScreenshotTool.Brush
                 ? Math.Min(style.Thickness, MaximumBrushThickness)
                 : style.Thickness;
             FontSize = style.FontSize;
             MosaicSize = style.MosaicSize;
-            Properties = tool is ScreenshotTool.Rectangle or ScreenshotTool.Ellipse
-                ? style.Properties with
-                {
-                    GeometryShape = ScreenshotToolCatalog.Get(tool).DefaultStyle.Properties.GeometryShape,
-                }
+            Properties = tool == ScreenshotTool.Ellipse
+                ? style.Properties with { GeometryShape = AnnotationGeometryShape.Ellipse }
                 : style.Properties;
+            if (tool == ScreenshotTool.AutoMosaic && Properties.MosaicMode == AnnotationMosaicMode.SmartErase)
+                Properties = Properties with { MosaicMode = AnnotationMosaicMode.Mosaic };
             RestoreWatermarkStyle(tool);
         }
 
         private void LoadObjectStyle(ScreenshotAnnotation annotation)
         {
             StoreToolStyle(_styleTool);
-            _styleTool = annotation.Tool;
+            _styleTool = AnnotationTool(annotation);
             Properties = annotation.Properties;
             Color = annotation.Color;
             Thickness = annotation.Thickness;
@@ -127,6 +126,7 @@ namespace RitsukageGif.Desktop
             }
 
             _tool = value.RememberLastTool ? Enum.Parse<ScreenshotTool>(value.LastTool) : ScreenshotTool.Select;
+            if (!CanUseDrawingTool(_tool)) _tool = ScreenshotTool.Select;
             RestoreToolStyle(_tool);
             _nextNumber = StyleFor(ScreenshotTool.Number).Properties.Number;
             Changed?.Invoke();

@@ -17,7 +17,7 @@ namespace RitsukageGif.Desktop
             var item = new MenuItem();
             ToolTip.SetShowOnDisabled(item, true);
             item.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("Print"));
-            item.Icon = ToolbarIcon.Create(item, ToolbarIcon.Geometry("Print"));
+            item.Icon = ToolbarIcon.Create(item, ToolbarIcon.GetDefinition("Print"));
             item.Click += (_, _) => _operation = PrintTableAsync();
             menu.Opening += (_, _) =>
             {
@@ -87,7 +87,7 @@ namespace RitsukageGif.Desktop
             _formulaOpenWord.Content = new StackPanel
             {
                 Orientation = Orientation.Horizontal, Spacing = 4,
-                Children = { ToolbarIcon.Create(_formulaOpenWord, ToolbarIcon.Geometry("WordDocument")), label },
+                Children = { ToolbarIcon.Create(_formulaOpenWord, ToolbarIcon.GetDefinition("WordDocument")), label },
             };
             _formulaOpenWord.Click += (_, _) => _operation = OpenFormulaWordAsync();
             return _formulaOpenWord;

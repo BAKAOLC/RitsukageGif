@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -10,13 +11,13 @@ namespace RitsukageGif.Desktop
         private readonly AppearanceColorPicker _borderColor = ColorPicker();
         private readonly Border _borderSwatch = Swatch();
         private readonly Slider _radius = Slider(0, 60);
-        private readonly NumericUpDown _radiusNumber = Number(0, 60);
+        private readonly TextBlock _radiusValue = ValueLabel();
         private readonly CheckBox _remember = new() { MinHeight = 26, VerticalAlignment = VerticalAlignment.Center };
         private readonly RadioButton _shadow = new() { MinHeight = 26, VerticalAlignment = VerticalAlignment.Center };
         private readonly AppearanceColorPicker _shadowColor = ColorPicker();
         private readonly Border _shadowSwatch = Swatch();
         private readonly Slider _strength = Slider(1, 50);
-        private readonly NumericUpDown _strengthNumber = Number(1, 50);
+        private readonly TextBlock _strengthValue = ValueLabel();
 
         private StackPanel CreateRoundPanel()
         {
@@ -24,14 +25,9 @@ namespace RitsukageGif.Desktop
             {
                 if (!_updating) _coordinator.SetFrameRadius(args.NewValue);
             };
-            _radiusNumber.ValueChanged += (_, args) =>
-            {
-                if (!_updating && args.NewValue is { } value) _coordinator.SetFrameRadius((double)value);
-            };
             return new()
             {
-                Spacing = 6,
-                Children = { Label("SelectionFrameCornerRadius"), ValueRow(_radius, _radiusNumber) },
+                Children = { ValueRow("SelectionFrameCornerRadius", _radius, _radiusValue) },
             };
         }
 
@@ -60,11 +56,6 @@ namespace RitsukageGif.Desktop
             {
                 if (!_updating) _coordinator.SetFrameDecorationStrength((int)Math.Round(args.NewValue));
             };
-            _strengthNumber.ValueChanged += (_, args) =>
-            {
-                if (!_updating && args.NewValue is { } value)
-                    _coordinator.SetFrameDecorationStrength((int)value);
-            };
             _shadowColor.ColorChanged += (_, args) =>
             {
                 if (!_updating)
@@ -80,8 +71,8 @@ namespace RitsukageGif.Desktop
                 Spacing = 6,
                 Children =
                 {
-                    ModeRow(_shadow, _shadowColor), ModeRow(_border, _borderColor),
-                    Label("SelectionFrameStrength"), ValueRow(_strength, _strengthNumber), _remember,
+                    ModeRow(ModeRow(_shadow, _shadowColor), ModeRow(_border, _borderColor)),
+                    ValueRow("SelectionFrameStrength", _strength, _strengthValue), _remember,
                 },
             };
         }
@@ -89,9 +80,9 @@ namespace RitsukageGif.Desktop
         private void UpdateProperties()
         {
             _radius.Value = _coordinator.FrameCornerRadius;
-            _radiusNumber.Value = (decimal)_coordinator.FrameCornerRadius;
+            _radiusValue.Text = _coordinator.FrameCornerRadius.ToString("0", CultureInfo.CurrentCulture);
             _strength.Value = _coordinator.FrameDecorationStrength;
-            _strengthNumber.Value = _coordinator.FrameDecorationStrength;
+            _strengthValue.Text = _coordinator.FrameDecorationStrength.ToString(CultureInfo.CurrentCulture);
             _shadow.IsChecked = _coordinator.FrameDecorationKind == CaptureDecorationKind.Shadow;
             _border.IsChecked = _coordinator.FrameDecorationKind == CaptureDecorationKind.Border;
             _shadowColor.Color = Color.FromUInt32(_coordinator.GetFrameDecorationColor(CaptureDecorationKind.Shadow));
@@ -108,7 +99,7 @@ namespace RitsukageGif.Desktop
             return new()
             {
                 Width = 22, Height = 14, CornerRadius = new(2), Background = Brushes.Black,
-                BorderBrush = AppTheme.Outline, BorderThickness = new(1),
+                BorderBrush = AppTheme.Muted, BorderThickness = new(1),
             };
         }
 
@@ -130,21 +121,23 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        private static NumericUpDown Number(decimal minimum, decimal maximum)
+        private static TextBlock ValueLabel()
         {
             return new()
             {
-                Minimum = minimum, Maximum = maximum, Increment = 1, FormatString = "0", Width = 56, Height = 28,
-                MinHeight = 0, FontSize = 12, Padding = new(3, 0),
+                MinWidth = 20, FontSize = 12, Foreground = AppTheme.Ink,
+                VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center,
             };
         }
 
-        private static Grid ValueRow(Control slider, Control number)
+        private static Grid ValueRow(string resource, Control slider, TextBlock value)
         {
-            var row = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 8 };
+            var row = new Grid { ColumnDefinitions = new("Auto,*,Auto"), ColumnSpacing = 6 };
+            row.Children.Add(Label(resource));
+            Grid.SetColumn(slider, 1);
             row.Children.Add(slider);
-            Grid.SetColumn(number, 1);
-            row.Children.Add(number);
+            Grid.SetColumn(value, 2);
+            row.Children.Add(value);
             return row;
         }
 
@@ -161,7 +154,7 @@ namespace RitsukageGif.Desktop
         {
             var picker = new AppearanceColorPicker
             {
-                Width = 38, Height = 26, MinWidth = 0, MinHeight = 0, Padding = new(0), IsAlphaEnabled = true,
+                Width = 52, Height = 26, MinWidth = 0, MinHeight = 0, IsAlphaEnabled = true,
                 IsAlphaVisible = true, IsColorPaletteVisible = false, IsHexInputVisible = true,
             };
             picker.Styles.Add(new AnnotationColorPickerStyles());

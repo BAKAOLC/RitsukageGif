@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -17,7 +16,7 @@ namespace RitsukageGif.Desktop
             UpdateServiceLogger.ZLogDebug($"Update download handoff requested.");
             try
             {
-                Process.Start(new ProcessStartInfo(downloadUrl) { UseShellExecute = true })?.Dispose();
+                AppLinks.OpenExternal(downloadUrl);
                 UpdateServiceLogger.ZLogInformation($"Update download handed off to the system.");
             }
             catch (Exception error)

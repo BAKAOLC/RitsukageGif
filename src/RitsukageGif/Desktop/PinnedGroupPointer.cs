@@ -4,6 +4,9 @@ namespace RitsukageGif.Desktop
 {
     internal static partial class PinnedGroupPointer
     {
+        internal static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ||
+                                            (OperatingSystem.IsLinux() && !DesktopCapture.UsesSourceSelection);
+
         internal static Avalonia.PixelPoint? Read()
         {
             if (OperatingSystem.IsWindows())

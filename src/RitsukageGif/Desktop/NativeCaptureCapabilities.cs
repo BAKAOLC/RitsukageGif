@@ -8,6 +8,11 @@ namespace RitsukageGif.Desktop
         public bool SeparateCursor { get; set; }
         public bool PointerInput { get; set; }
         public bool CanRequestPointerInput { get; set; }
+        public uint CursorMode { get; set; }
+        public uint AvailableCursorModes { get; set; }
+        public bool ProducerChecked { get; set; }
+        public uint ProducerPid { get; set; }
+        public string? Producer { get; set; }
         public string? Reason { get; set; }
     }
 }

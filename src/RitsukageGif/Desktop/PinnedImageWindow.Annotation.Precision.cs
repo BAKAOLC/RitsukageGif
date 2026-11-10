@@ -8,18 +8,19 @@ namespace RitsukageGif.Desktop
         private ScreenshotAnnotationSession? _annotationPrecisionSession;
         private PngRaster? _annotationPrecisionSource;
 
-        private bool HasAnnotationPrecisionSource => _hdrSource is null && _png.Length >= 33 && _png[24] == 16 &&
-                                                     _png.AsSpan(0, 8).SequenceEqual((ReadOnlySpan<byte>)
-                                                         [137, 80, 78, 71, 13, 10, 26, 10]);
+        private bool HasAnnotationPrecisionSource =>
+            EffectiveHdr is null && EffectivePng.Length >= 33 && EffectivePng[24] == 16 &&
+            EffectivePng.AsSpan(0, 8).SequenceEqual((ReadOnlySpan<byte>)
+                [137, 80, 78, 71, 13, 10, 26, 10]);
 
         private async Task<PngRaster?> GetAnnotationPrecisionSourceAsync(ScreenshotAnnotationSession session,
             CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            if (!HasAnnotationPrecisionSource || !ReferenceEquals(session, _annotation) ||
+            if (!HasAnnotationPrecisionSource || !ReferenceEquals(session, _annotationScene) ||
                 _annotationCancellation is null)
                 return null;
-            var png = _png;
+            var png = EffectivePng;
             if (!ReferenceEquals(_annotationPrecisionPng, png) ||
                 !ReferenceEquals(_annotationPrecisionSession, session))
             {
@@ -35,7 +36,7 @@ namespace RitsukageGif.Desktop
             if (_annotationPrecisionSource is { } cached) return cached;
             var loaded = await _annotationPrecisionLoad!.WaitAsync(token);
             token.ThrowIfCancellationRequested();
-            if (_closed || !ReferenceEquals(session, _annotation) || !ReferenceEquals(png, _png) ||
+            if (_closed || !ReferenceEquals(session, _annotationScene) || !ReferenceEquals(png, EffectivePng) ||
                 !ReferenceEquals(session, _annotationPrecisionSession) ||
                 !ReferenceEquals(png, _annotationPrecisionPng))
                 throw new OperationCanceledException(token);

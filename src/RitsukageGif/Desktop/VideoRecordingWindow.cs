@@ -210,13 +210,13 @@ namespace RitsukageGif.Desktop
             var label = Label(key);
             var geometry = key switch
             {
-                "VideoStart" => "M5,3 L21,12 5,21 Z",
-                "VideoStop" => "M4,4 L20,4 20,20 4,20 Z",
-                "VideoCancel" => "M4,4 L20,20 M20,4 L4,20",
-                "VideoRefresh" => "M19,3 L22,8 16,8 M22,8 A10,10 0 1 0 20,19",
-                "VideoSelectScreen" => ToolbarIcon.Geometry("AnimationSelection"),
-                "VideoSelectWindow" => ToolbarIcon.Geometry("AnimationRectangle"),
-                _ => ToolbarIcon.Geometry("EditorOpen"),
+                "VideoStart" => ToolbarIcon.GetDefinition("VideoStart"),
+                "VideoStop" => ToolbarIcon.GetDefinition("VideoStop"),
+                "VideoCancel" => ToolbarIcon.GetDefinition("VideoCancel"),
+                "VideoRefresh" => ToolbarIcon.GetDefinition("VideoRefresh"),
+                "VideoSelectScreen" => ToolbarIcon.GetDefinition("AnimationSelection"),
+                "VideoSelectWindow" => ToolbarIcon.GetDefinition("AnimationRectangle"),
+                _ => ToolbarIcon.GetDefinition("EditorOpen"),
             };
             button.Content = new StackPanel
             {
@@ -418,7 +418,7 @@ namespace RitsukageGif.Desktop
                             !_selecting;
             _parameters.IsEnabled = available;
             _region.Text = _host.Region is { } region
-                ? $"{region.X}, {region.Y} 路 {region.Width} 脳 {region.Height}"
+                ? $"{region.X}, {region.Y} · {region.Width} × {region.Height} px"
                 : UiText.Get("VideoNoRegion");
             _systemDevice.IsEnabled = _systemAudio.IsChecked == true;
             _microphoneDevice.IsEnabled = _microphone.IsChecked == true;

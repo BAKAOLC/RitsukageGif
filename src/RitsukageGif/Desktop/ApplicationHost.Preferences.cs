@@ -9,10 +9,6 @@ namespace RitsukageGif.Desktop
         {
             if (Settings.Cursor == enabled) return;
             Settings.Cursor = enabled;
-            Settings.CapturePreferences = Settings.CapturePreferences with
-            {
-                CursorPolicy = enabled ? CaptureCursorPolicy.Visible : CaptureCursorPolicy.Hidden,
-            };
             SaveCapturePreferences();
         }
 
@@ -43,21 +39,20 @@ namespace RitsukageGif.Desktop
                 });
             selection.ScrollCapturePreferences = Settings.ScrollCapture;
             selection.ScrollAutoCropChanged = PersistScrollAutoCrop;
+            selection.ScrollClearConfirmationChanged = PersistScrollClearConfirmation;
             selection.InitializePreferences(Settings.SelectionDetectControls, Settings.SelectionSnappingMode,
                 Settings.SelectionHints, Settings.CapturePreferences);
             selection.InitializeAppearancePreferences(Settings.Appearance);
             var capturePreferences = Settings.CapturePreferences.Normalize();
-            selection.InitialDecoration = capturePreferences.KeepDecoration
-                ? capturePreferences.RememberedDecoration
-                : CaptureDecoration.None;
             selection.KeepDecorationInitial = capturePreferences.KeepDecoration;
+            selection.InitialDecoration = capturePreferences.FrameDecoration;
             selection.FrameRoundInitialEnabled = capturePreferences.FrameRoundEnabled;
             selection.FrameRoundInitialRadius = capturePreferences.FrameRoundRadius;
+            selection.FramePreferencesChanged += () => RememberFrameDecorationPreferences(selection);
             selection.RecognitionPreferences = Settings.Recognition;
-            selection.PinFormulaRequested = (_, source) =>
-            {
-                if (!IsClosing) _pinnedImages.PinFormulas(source);
-            };
+            selection.RecognitionImageSaveQuality = () => Settings.ScreenshotSave.Quality;
+            selection.RecognitionDialogPreferencesChanged = PersistRecognitionDialog;
+            selection.DirectRecognitionCopyRequested = DisableRecognitionConfirmation;
             selection.FormulaCopyFormatChanged = PersistFormulaCopyFormat;
             selection.RecognitionOriginalImageVisibilityChanged = PersistRecognitionOriginalImage;
             selection.FormulaLatexFormatChanged = PersistFormulaLatexFormat;
@@ -65,13 +60,15 @@ namespace RitsukageGif.Desktop
             selection.ConfigureHistory(_captureHistory);
             selection.PreferencesChanged += () =>
             {
-                Settings.Cursor = selection.Snapshot.Cursor;
                 Settings.CaptureSource = selection.WindowSource ? CaptureSourceKind.Window : CaptureSourceKind.Screen;
                 if (selection.CanDetectControls) Settings.SelectionDetectControls = selection.Controls;
                 Settings.CapturePreferences = Settings.CapturePreferences with
                 {
                     DetectionMode = selection.DetectionMode,
                     RelativeCoordinates = selection.RelativeCoordinates,
+                    CursorPolicy = selection.Snapshot.Cursor ? CaptureCursorPolicy.Visible : CaptureCursorPolicy.Hidden,
+                    InformationUnit = selection.CapturePreferences.InformationUnit,
+                    InformationItems = selection.CapturePreferences.InformationItems,
                 };
                 Settings.SelectionSnappingMode = selection.SnappingMode;
                 Settings.SelectionHints = selection.HintMode;
@@ -86,11 +83,48 @@ namespace RitsukageGif.Desktop
             SaveCapturePreferences();
         }
 
+        private void PersistScrollClearConfirmation(bool skip)
+        {
+            if (IsClosing || Settings.ScrollCapture.SkipClearConfirmation == skip) return;
+            Settings.ScrollCapture = Settings.ScrollCapture with { SkipClearConfirmation = skip };
+            SaveCapturePreferences();
+        }
+
         private void PersistRecognitionOriginalImage(bool show)
         {
             if (IsClosing || Settings.Recognition.ShowOriginalImage == show) return;
             Settings.Recognition = Settings.Recognition with { ShowOriginalImage = show };
             QueueSettingsSave(Settings);
+        }
+
+        private void DisableRecognitionConfirmation(RecognitionConfirmationKind kind)
+        {
+            if (IsClosing) return;
+            var preferences = kind switch
+            {
+                RecognitionConfirmationKind.Screenshot => Settings.Recognition with { ShowDialogOnRecognition = false },
+                RecognitionConfirmationKind.PinSelectedText => Settings.Recognition with
+                {
+                    ShowDialogOnCopySelected = false,
+                },
+                RecognitionConfirmationKind.PinAllText => Settings.Recognition with { ShowDialogOnCopyAll = false },
+                _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+            };
+            if (preferences == Settings.Recognition) return;
+            Settings.Recognition = preferences;
+            if (_screenshotSelection is { } selection) selection.RecognitionPreferences = preferences;
+            SaveCapturePreferences();
+        }
+
+        private void PersistRecognitionDialog(RecognitionDialogPreferences baseline,
+            RecognitionDialogPreferences edited)
+        {
+            if (IsClosing) return;
+            var merged = Settings.Recognition.Dialog.MergeChanges(baseline, edited);
+            if (merged == Settings.Recognition.Dialog) return;
+            Settings.Recognition = Settings.Recognition with { Dialog = merged };
+            if (_screenshotSelection is { } selection) selection.RecognitionPreferences = Settings.Recognition;
+            SaveCapturePreferences();
         }
 
         private void PersistFormulaLatexFormat(FormulaLatexFormat format)
@@ -126,7 +160,7 @@ namespace RitsukageGif.Desktop
             var preferences = (Settings.CapturePreferences with
             {
                 KeepDecoration = selection.KeepDecoration,
-                RememberedDecoration = selection.RememberedDecoration,
+                FrameDecoration = selection.FrameDecorationPreferences,
                 FrameRoundEnabled = selection.FrameRoundEnabled,
                 FrameRoundRadius = selection.FrameCornerRadius,
             }).Normalize();

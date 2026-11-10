@@ -34,9 +34,19 @@ namespace RitsukageGif.Desktop
 
                 if (group is not null && entry is { Window.Group: var entryGroup } && entryGroup != group) continue;
                 token.ThrowIfCancellationRequested();
-                if (entry is null || !ValidState(entry.Window) || !ValidDocument(entry.Document) ||
-                    !double.IsFinite(entry.Width) || entry.Width is < 120 or > 32768 ||
-                    !double.IsFinite(entry.Height) || entry.Height is < 72 or > 32768)
+                if (entry is null || !ValidState(entry.Window, entry.Thumbnail is { Enabled: true }) ||
+                    !ValidDocument(entry.Document) ||
+                    !double.IsFinite(entry.Width) || entry.Width > 32768 ||
+                    entry.Width < (entry.Thumbnail is { Enabled: true }
+                        ? PinnedWindowPresentation.ShadeInset * 2 + 1
+                        : 120) ||
+                    !double.IsFinite(entry.Height) || entry.Height > 32768 ||
+                    entry.Height < (entry.Thumbnail is { Enabled: true }
+                        ? PinnedWindowPresentation.ShadeInset * 2 + 1
+                        : 72) ||
+                    !double.IsFinite(entry.AnnotationScaling) || entry.AnnotationScaling is <= 0 or > 16 ||
+                    entry.FileListMaximumSize is { IsValid: false } ||
+                    entry.Thumbnail is { IsValid: false } || entry.ThumbnailRequest is { IsValid: false })
                 {
                     RejectSessionRecord("documents.json", element);
                     rejected++;
@@ -52,12 +62,15 @@ namespace RitsukageGif.Desktop
                 try
                 {
                     if (entry.Document is PinnedHtmlDocument html) _ = PinnedRichParser.ReadHtml(html.Html);
+                    if (entry.Annotations is { } annotations) ValidateStoredDocumentAnnotations(annotations);
+                    entry.Annotations = await ReadAnnotationImagesAsync(entry.Annotations, token);
                 }
-                catch (PinnedHtmlFormatException error)
+                catch (Exception error) when (error is PinnedHtmlFormatException or InvalidDataException or
+                                                  IOException or UnauthorizedAccessException)
                 {
                     RejectSessionRecord("documents.json", element);
                     PinLogger.ZLogWarning(
-                        $"Stored HTML formatting was rejected before restoration. MaximumNestingDepth={PinnedRichParser.MaximumNestingDepth}; ErrorType={error.GetType().Name} Code={error.HResult}");
+                        $"Stored document content was rejected before restoration. ErrorType={error.GetType().Name} Code={error.HResult}");
                     rejected++;
                     continue;
                 }
@@ -69,6 +82,7 @@ namespace RitsukageGif.Desktop
                 {
                     window = CreateDocumentWindow(entry.Document);
                     window.RestoreDocumentState(entry);
+                    MaskRestoredWindow(window, entry.Window);
                     if (entry.Window.Group != Preferences.ActiveGroup)
                     {
                         var visible = entry.Window.GroupHidden ? entry.Window.VisibleInGroup : entry.Window.Visible;
@@ -78,7 +92,7 @@ namespace RitsukageGif.Desktop
                         entry.Window.Visible = false;
                     }
 
-                    if (entry.Window.Group != Preferences.ActiveGroup ||
+                    if (AllPinsHidden || entry.Window.Group != Preferences.ActiveGroup ||
                         (!entry.Window.Visible && CanRestoreHidden()) || !CanRestoreNow())
                     {
                         _pendingDocuments.Add(window, entry);
@@ -143,17 +157,26 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        private async Task WriteDocumentsAsync(CancellationToken token)
+        private async Task<PinnedDocumentState[]> WriteDocumentsAsync(CancellationToken token)
         {
-            var saved = _documentWindows.Select(window => _pendingDocuments.TryGetValue(window, out var pending)
-                    ? pending
-                    : window.CaptureDocumentState())
+            var saved = _documentWindows.Select(window =>
+                {
+                    var state = _pendingDocuments.TryGetValue(window, out var pending)
+                        ? pending with { Window = pending.Window.CopyWindowState() }
+                        : window.CaptureDocumentState();
+                    CaptureMaskVisibility(window, state.Window);
+                    return state;
+                })
                 .Concat(_unrestoredDocuments.Values).ToArray();
             Directory.CreateDirectory(_sessionDirectory!);
             var path = Path.Combine(_sessionDirectory!, "documents.json");
             var staging = path + ".tmp";
+            var createdImages = new List<string>();
+            var committed = false;
             try
             {
+                foreach (var state in saved)
+                    await WriteAnnotationImagesAsync(state.Annotations, createdImages, token);
                 await using (var stream = File.Create(staging))
                     await JsonSerializer.SerializeAsync(stream, saved,
                         PinnedImageJsonContext.Default.PinnedDocumentStateArray, token);
@@ -161,10 +184,22 @@ namespace RitsukageGif.Desktop
                 if (new FileInfo(staging).Length > MaximumSessionBytes)
                     throw new InvalidDataException(UiText.Get("PinnedImageSessionTooLarge"));
                 File.Move(staging, path, true);
+                committed = true;
+                return saved;
             }
             finally
             {
                 if (File.Exists(staging)) File.Delete(staging);
+                if (!committed)
+                    foreach (var resource in createdImages)
+                        try
+                        {
+                            File.Delete(resource);
+                        }
+                        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                        {
+                            PinLogger.ZLogWarning(error, $"Pinned document annotation resource rollback failed.");
+                        }
             }
         }
 

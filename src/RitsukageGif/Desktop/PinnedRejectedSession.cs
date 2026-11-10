@@ -11,6 +11,7 @@ namespace RitsukageGif.Desktop
 
         private bool _dirty;
         internal HashSet<string> ImageIds { get; } = new(StringComparer.Ordinal);
+        internal HashSet<string> AnnotationImageIds { get; } = new(StringComparer.Ordinal);
 
         internal static async Task<PinnedRejectedSession> ReadAsync(string directory, long maximumBytes,
             CancellationToken token)
@@ -47,6 +48,25 @@ namespace RitsukageGif.Desktop
             if (manifest == "session.json" && record.ValueKind == JsonValueKind.Object &&
                 record.TryGetProperty("ImageId", out var imageId) && imageId.ValueKind == JsonValueKind.String &&
                 imageId.GetString() is { } id && Guid.TryParseExact(id, "N", out _)) ImageIds.Add(id);
+            if (manifest is "session.json" or "documents.json" && record.ValueKind == JsonValueKind.Object &&
+                record.TryGetProperty(nameof(PinnedImageState.Annotations), out var annotations) &&
+                annotations.ValueKind == JsonValueKind.Object &&
+                annotations.TryGetProperty(nameof(ScreenshotAnnotationDocument.Layers), out var layers) &&
+                layers.ValueKind == JsonValueKind.Array)
+                foreach (var layer in layers.EnumerateArray())
+                    if (layer.ValueKind == JsonValueKind.Object &&
+                        layer.TryGetProperty(nameof(ScreenshotAnnotationRecord.ImageId), out var resource) &&
+                        resource.ValueKind == JsonValueKind.String && resource.GetString() is { } image &&
+                        Guid.TryParseExact(image, "N", out _))
+                        AnnotationImageIds.Add(image);
+            if (manifest == "session.json" && record.ValueKind == JsonValueKind.Object &&
+                record.TryGetProperty(nameof(PinnedImageState.Translation), out var translation) &&
+                translation.ValueKind == JsonValueKind.Object &&
+                translation.TryGetProperty(nameof(PinnedImageTranslationState.Cache), out var cache) &&
+                cache.ValueKind == JsonValueKind.Object &&
+                cache.TryGetProperty(nameof(PinnedImageTranslationCache.ImageId), out var translationId) &&
+                translationId.ValueKind == JsonValueKind.String && translationId.GetString() is { } translated &&
+                Guid.TryParseExact(translated, "N", out _)) ImageIds.Add(translated);
             return true;
         }
 

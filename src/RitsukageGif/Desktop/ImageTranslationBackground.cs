@@ -4,8 +4,10 @@ namespace RitsukageGif.Desktop
 {
     internal sealed record ImageTranslationBackground(byte[] Pixels, int Width, int Height, uint[] Foreground)
     {
+        internal IReadOnlyList<ImageTranslationInpaintRegion> InpaintRegions { get; private init; } = [];
+
         internal static unsafe ImageTranslationBackground Create(ImageTranslationDocument document,
-            CancellationToken token)
+            CancellationToken token, bool retainMasks = false)
         {
             using var stream = new MemoryStream(document.SourcePng.ToArray(), false);
             using var codec = SKCodec.Create(stream) ??
@@ -20,6 +22,7 @@ namespace RitsukageGif.Desktop
                 if (codec.GetPixels(info, (IntPtr)address) != SKCodecResult.Success)
                     throw new InvalidDataException("The translation source image could not be decoded.");
             var foreground = new uint[document.Blocks.Count];
+            var regions = retainMasks ? new List<ImageTranslationInpaintRegion>() : null;
             foreach (var block in document.Blocks)
             {
                 token.ThrowIfCancellationRequested();
@@ -88,6 +91,7 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
+                regions?.Add(new(new(left, top, width, height), coverage));
                 ImageInpainting.RestoreBgra(region, width, height, coverage, token: token);
                 for (var row = 0; row < height; row++)
                 for (var column = 0; column < width; column++)
@@ -98,7 +102,7 @@ namespace RitsukageGif.Desktop
                 }
             }
 
-            return new(pixels, document.Width, document.Height, foreground);
+            return new(pixels, document.Width, document.Height, foreground) { InpaintRegions = regions ?? [] };
         }
 
         private static PixelRect WordRect(OcrBounds word, int left, int top, int width, int height)

@@ -14,12 +14,15 @@ namespace RitsukageGif.Desktop
         private static HttpClient CreateClient()
         {
             var client = ApplicationHttp.CreateClient();
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("RitsukageGif");
             client.Timeout = TimeSpan.FromMinutes(20);
             return client;
         }
 
-        internal static async Task InstallAsync(bool formula, IProgress<string>? progress, CancellationToken token)
+        internal static async Task InstallAsync(StructuredRecognitionKind kind, IProgress<string>? progress,
+            CancellationToken token)
         {
+            var formula = kind == StructuredRecognitionKind.Formula;
             await Gate.WaitAsync(token).ConfigureAwait(false);
             var directory = Path.Combine(ApplicationStorage.DataDirectory, "components", "recognition");
             var temporary = Path.Combine(Path.GetTempPath(), "RitsukageGif-models-" + Guid.NewGuid().ToString("N"));
@@ -50,12 +53,16 @@ namespace RitsukageGif.Desktop
                         throw new InvalidDataException("The runtime archive contains no compatible runtime.");
                 }
 
-                var models = formula
-                    ? new[]
+                var models = kind switch
+                {
+                    StructuredRecognitionKind.Formula => new[]
                     {
                         "encoder.onnx", "decoder.onnx", "image_resizer.onnx", "tokenizer.json", "pp_doclayout_s.onnx",
-                    }
-                    : ["slanet-plus.onnx", "PP-OCRv6_rec_tiny.onnx"];
+                    },
+                    StructuredRecognitionKind.Table => ["slanet-plus.onnx", "PP-OCRv6_rec_small.onnx"],
+                    StructuredRecognitionKind.Text => ["PP-OCRv6_det_tiny.onnx", "PP-OCRv6_rec_small.onnx"],
+                    _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+                };
                 foreach (var model in models)
                 {
                     if (File.Exists(Path.Combine(directory, model))) continue;
@@ -65,14 +72,19 @@ namespace RitsukageGif.Desktop
                             ? "https://github.com/RapidAI/RapidLaTeXOCR/releases/download/v0.0.0/" + model
                             : model == "slanet-plus.onnx"
                                 ? "https://www.modelscope.cn/models/RapidAI/RapidTable/resolve/v2.0.0/slanet-plus.onnx"
-                                : "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/rec/PP-OCRv6_rec_tiny.onnx";
+                                : "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.10.0/onnx/PP-OCRv6/" +
+                                  (model.Contains("_det_", StringComparison.Ordinal) ? "det/" : "rec/") + model;
                     await DownloadAsync(url, Path.Combine(temporary, model), progress, token).ConfigureAwait(false);
                 }
 
                 await DownloadAsync(formula
                         ? "https://raw.githubusercontent.com/RapidAI/RapidLaTeXOCR/main/LICENSE"
-                        : "https://raw.githubusercontent.com/RapidAI/RapidTable/main/LICENSE",
-                    Path.Combine(temporary, formula ? "RapidLaTeXOCR-LICENSE.txt" : "RapidTable-LICENSE.txt"), progress,
+                        : kind == StructuredRecognitionKind.Table
+                            ? "https://raw.githubusercontent.com/RapidAI/RapidTable/main/LICENSE"
+                            : "https://raw.githubusercontent.com/RapidAI/RapidOCR/main/LICENSE",
+                    Path.Combine(temporary, formula ? "RapidLaTeXOCR-LICENSE.txt" :
+                        kind == StructuredRecognitionKind.Table ? "RapidTable-LICENSE.txt" : "RapidOCR-LICENSE.txt"),
+                    progress,
                     token).ConfigureAwait(false);
                 if (formula)
                     await DownloadAsync("https://raw.githubusercontent.com/RapidAI/RapidDoc/main/LICENSE",
@@ -89,7 +101,7 @@ namespace RitsukageGif.Desktop
                     File.Move(file, Path.Combine(directory, Path.GetFileName(file)), true);
                 }
 
-                Logger.ZLogInformation($"Offline recognition component installation completed. Formula={formula}");
+                Logger.ZLogInformation($"Offline recognition component installation completed. Kind={kind.ToString()}");
             }
             finally
             {

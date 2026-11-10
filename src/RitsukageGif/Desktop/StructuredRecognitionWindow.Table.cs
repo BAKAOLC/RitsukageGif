@@ -25,8 +25,13 @@ namespace RitsukageGif.Desktop
             var menu = new ContextMenu();
             var changes = new List<(MenuItem Item, Func<TableRecognitionDocument, bool>? Enabled, Key? Gesture)>();
             Change("TableClearCells", document => document.Clear(_table.SelectedRanges));
-            Change("TableMergeCells", document => document.Merge(_table.SelectedRanges),
-                document => document.CanMerge(_table.SelectedRanges));
+            var merge = new MenuItem
+            {
+                [!HeaderedSelectingItemsControl.HeaderProperty] = LiveText.Resource("TableMergeCells"),
+            };
+            merge.Click += (_, _) => _operation = MergeTableAsync();
+            changes.Add((merge, document => document.CanMerge(_table.SelectedRanges), null));
+            menu.Items.Add(merge);
             Change("TableSplitCells", document => document.Split(_table.SelectedRanges),
                 document => document.CanSplit(_table.SelectedRanges));
             menu.Items.Add(new Separator());
@@ -125,7 +130,7 @@ namespace RitsukageGif.Desktop
         {
             if (!_table.CommitEdit()) return null;
             return _table.Document is { } document
-                ? _table.HasSelection ? document.Extract(_table.SelectedRanges) : document.Table
+                ? WithTableOutputStyle(_table.HasSelection ? document.Extract(_table.SelectedRanges) : document.Table)
                 : null;
         }
     }

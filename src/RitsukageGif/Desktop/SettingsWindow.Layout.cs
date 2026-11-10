@@ -85,26 +85,26 @@ namespace RitsukageGif.Desktop
             return body;
         }
 
-        private static string NavigationIcon(string key)
+        private static IconDefinition NavigationIcon(string key)
         {
-            return ToolbarIcon.TryGeometry(key) ?? key switch
+            return ToolbarIcon.FindDefinition(key) ?? key switch
             {
-                "GeneralHeading" => "M3,6 L21,6 M3,12 L21,12 M3,18 L21,18 M8,3 L8,9 M16,9 L16,15 M9,15 L9,21",
-                "AppearanceHeading" => "M8,3 L3,6 1,12 6,14 6,22 18,22 18,14 23,12 21,6 16,3 Q12,10 8,3",
-                "SettingsGroupCapture" or "ScreenshotHeading" => ToolbarIcon.Geometry("AnimationSelection"),
-                "SettingsAnnotationHeading" => "M4,16 L16,4 20,8 8,20 3,21 Z M14,6 L18,10",
-                "SettingsPinsHeading" => "M8,3 L16,3 15,9 19,13 13,13 12,22 11,13 5,13 9,9 Z",
-                "SettingsTransferHeading" => "M3,7 L17,7 13,3 M17,7 L13,11 M21,17 L7,17 11,13 M7,17 L11,21",
-                "AboutTitle" => "M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M12,10 L12,18 M12,6 L12,7",
-                "PresetsTitle" => "M4,3 L20,3 20,21 4,21 Z M8,7 L16,7 M8,12 L16,12 M8,17 L13,17",
-                "SettingsStorageHeading" or "ScreenshotSaveHeading" => ToolbarIcon.Geometry("ImageSave"),
-                "GlobalActionsHeading" => "M5,3 L5,21 20,12 Z",
+                "GeneralHeading" => ToolbarIcon.GetDefinition("SettingsNavigationGeneralHeading"),
+                "AppearanceHeading" => ToolbarIcon.GetDefinition("SettingsNavigationAppearanceHeading"),
+                "SettingsGroupCapture" or "ScreenshotHeading" => ToolbarIcon.GetDefinition("AnimationSelection"),
+                "SettingsAnnotationHeading" => ToolbarIcon.GetDefinition("SettingsNavigationSettingsAnnotationHeading"),
+                "SettingsPinsHeading" => ToolbarIcon.GetDefinition("SettingsNavigationSettingsPinsHeading"),
+                "SettingsTransferHeading" => ToolbarIcon.GetDefinition("SettingsNavigationSettingsTransferHeading"),
+                "AboutTitle" => ToolbarIcon.GetDefinition("SettingsNavigationAboutTitle"),
+                "PresetsTitle" => ToolbarIcon.GetDefinition("SettingsNavigationPresetsTitle"),
+                "SettingsStorageHeading" or "ScreenshotSaveHeading" => ToolbarIcon.GetDefinition("ImageSave"),
+                "GlobalActionsHeading" => ToolbarIcon.GetDefinition("SettingsNavigationGlobalActionsHeading"),
                 "GlobalHotkeysHeading" or "SettingsLocalInput" =>
-                    "M2,5 L22,5 22,19 2,19 Z M5,9 L7,9 M10,9 L12,9 M15,9 L17,9 M5,13 L7,13 M10,13 L12,13 M15,13 L19,13 M7,16 L17,16",
-                "MouseShortcutsHeading" => "M6,10 C6,0 18,0 18,10 L18,16 C18,25 6,25 6,16 Z M12,3 L12,10 M6,10 L18,10",
+                    ToolbarIcon.GetDefinition("SettingsNavigationGlobalHotkeysHeading"),
+                "MouseShortcutsHeading" => ToolbarIcon.GetDefinition("SettingsNavigationMouseShortcutsHeading"),
                 "GlobalMouseHeading" =>
-                    "M3,7 L3,3 7,3 M17,3 L21,3 21,7 M21,17 L21,21 17,21 M7,21 L3,21 3,17 M9,10 C9,5 15,5 15,10 L15,15 C15,20 9,20 9,15 Z M12,7 L12,11",
-                _ => ToolbarIcon.Geometry("EditorOpen"),
+                    ToolbarIcon.GetDefinition("SettingsNavigationGlobalMouseHeading"),
+                _ => ToolbarIcon.GetDefinition("EditorOpen"),
             };
         }
 
@@ -119,7 +119,7 @@ namespace RitsukageGif.Desktop
                 };
         }
 
-        private static Button BindingButton(string label, string geometry)
+        private static Button BindingButton(string label, IconDefinition geometry)
         {
             var button = new Button
                 { Width = 28, Height = 28, Padding = new(5), VerticalAlignment = VerticalAlignment.Center };

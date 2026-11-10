@@ -90,6 +90,16 @@ namespace RitsukageGif.Desktop
             _viewport.ViewChanged += (_, _) => ViewChanged();
             InitializeStripEditing();
             AddHandler(KeyDownEvent, EditorKeyDown, RoutingStrategies.Tunnel);
+            AddHandler(KeyUpEvent, (_, args) =>
+            {
+                Session.ReleasePolylineArrowKey(args.Key);
+                if (Session.HandleNumberCaptionKey(args.Key, args.KeyModifiers, false)) args.Handled = true;
+            }, RoutingStrategies.Tunnel);
+            Deactivated += (_, _) =>
+            {
+                Session.ReleaseNumberCaptionKey();
+                Session.ReleasePolylineArrowKey();
+            };
             Opened += (_, _) =>
             {
                 InitializeHdrPreview();
@@ -101,6 +111,8 @@ namespace RitsukageGif.Desktop
                 $"Static image editor created. Width={image.Width} Height={image.Height} Hdr={_hdrSource is not null}");
         }
 
+        internal Task CleanupCompletion { get; private set; } = Task.CompletedTask;
+
         internal ScreenshotAnnotationSession Session { get; private set; } = new() { CanScroll = false };
 
         internal CapturedFrame SourceFrame => new(_sourceBounds.Width, _sourceBounds.Height,
@@ -110,7 +122,13 @@ namespace RitsukageGif.Desktop
         internal Func<AnnotationPreferences>? PreferencesProvider { get; init; }
         internal Action<AnnotationPreferences>? PreferencesChanged { get; init; }
         internal Action<bool>? TopmostChanged { get; init; }
-        internal Func<Window, byte[], RecognitionMode, CancellationToken, Task>? RecognitionRequested { get; init; }
+
+        internal Func<Window, byte[], RecognitionMode, bool, CancellationToken, Task>? RecognitionRequested
+        {
+            get;
+            init;
+        }
+
         internal Func<Window, byte[], CancellationToken, Task>? TranslationRequested { get; init; }
         internal Func<long, CancellationToken, Task>? PrivacyRequested { get; set; }
 
@@ -127,7 +145,7 @@ namespace RitsukageGif.Desktop
             Session.RecognitionRequested += mode => _ = RunAsync(async () =>
             {
                 if (RecognitionRequested is not null)
-                    await RecognitionRequested(this, await ComposeSdrAsync(), mode, _lifetime.Token);
+                    await RecognitionRequested(this, await ComposeSdrAsync(), mode, false, _lifetime.Token);
             });
             Session.TranslationRequested += () => _ = RunAsync(async () =>
             {
@@ -143,7 +161,7 @@ namespace RitsukageGif.Desktop
         private static void AddZoomButton(Grid grid, int column, string key, Action action)
         {
             var button = new Button { Padding = new(6), Margin = new(2, 0) };
-            button.Content = ToolbarIcon.Create(button, ToolbarIcon.Geometry(key));
+            button.Content = ToolbarIcon.Create(button, ToolbarIcon.GetDefinition(key));
             button.Bind(ToolTip.TipProperty, LiveText.Resource(key));
             button.Click += (_, _) => action();
             Grid.SetColumn(button, column);
@@ -234,7 +252,7 @@ namespace RitsukageGif.Desktop
             Session.TextEditStateChanged -= QueuePreview;
             _toolbar.Dispose();
             _surface.Dispose();
-            _ = DisposeDocumentAsync();
+            CleanupCompletion = DisposeDocumentAsync();
             Logger.ZLogInformation($"Static image editor closed.");
         }
 

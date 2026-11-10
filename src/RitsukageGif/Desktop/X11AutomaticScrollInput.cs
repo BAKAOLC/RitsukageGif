@@ -18,20 +18,33 @@ namespace RitsukageGif.Desktop
 
         public string? UnavailableReason { get; private set; }
 
+        public bool Prepare(PixelRect region, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            lock (_gate)
+            {
+                UnavailableReason = null;
+                if (!ValidateRegion(region)) return false;
+                var root = XDefaultRootWindow(_display);
+                var x = region.X + region.Width / 2;
+                var y = region.Y + region.Height / 2;
+                _ = XWarpPointer(_display, 0, root, 0, 0, 0, 0, x, y);
+                _ = XSync(_display, 0);
+                if (X11ErrorTrap.HasError(_display) ||
+                    XQueryPointer(_display, root, out _, out _, out var actualX, out var actualY,
+                        out _, out _, out _) == 0 || actualX != x || actualY != y)
+                    return RegionUnavailable("The X11 server could not move the pointer into the capture region.");
+                return true;
+            }
+        }
+
         public AutomaticScrollInputResult Scroll(ScrollCaptureAxis axis, PixelRect region, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             lock (_gate)
             {
                 UnavailableReason = null;
-                if (_display == 0) return Unavailable("The X11 input connection is closed.");
-                var current = WindowLocator.Refresh(_target);
-                if (current is null || current.Client != _target.Client || region.IsEmpty ||
-                    region.Intersect(current.Client) != region)
-                    return Unavailable("The selected window or capture region changed.");
-                X11ErrorTrap.Clear(_display);
-                if (ReadProcess(_display, _target.Handle) != _process)
-                    return Unavailable("The selected window process changed.");
+                if (!ValidateRegion(region)) return AutomaticScrollInputResult.Unavailable;
                 var root = XDefaultRootWindow(_display);
                 var window = root;
                 var targetFound = false;
@@ -96,6 +109,25 @@ namespace RitsukageGif.Desktop
             {
                 if (display != 0) CloseDisplay(display);
             }
+        }
+
+        private bool ValidateRegion(PixelRect region)
+        {
+            if (_display == 0) return RegionUnavailable("The X11 input connection is closed.");
+            var current = WindowLocator.Refresh(_target);
+            if (current is null || current.Client != _target.Client || region.IsEmpty ||
+                region.Intersect(current.Client) != region)
+                return RegionUnavailable("The selected window or capture region changed.");
+            X11ErrorTrap.Clear(_display);
+            if (ReadProcess(_display, _target.Handle) != _process)
+                return RegionUnavailable("The selected window process changed.");
+            return true;
+        }
+
+        private bool RegionUnavailable(string reason)
+        {
+            UnavailableReason = reason;
+            return false;
         }
 
         private AutomaticScrollInputResult Unavailable(string reason)

@@ -7,5 +7,6 @@ namespace RitsukageGif.Desktop
         CopyFile,
         CopyPath,
         OpenFolder,
+        CopyFileAndPath,
     }
 }

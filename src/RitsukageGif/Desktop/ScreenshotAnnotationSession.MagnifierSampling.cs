@@ -62,7 +62,8 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task CopyMagnifierLayerAsync(MagickImage source, PixelRect region,
-            ScreenshotAnnotation annotation, CancellationToken token)
+            ScreenshotAnnotation annotation, CancellationToken token,
+            (PixelRect Region, byte[] Pixels)[]? sourceFrames = null)
         {
             var sampleRegion = MagnifierPixelBounds(annotation.Bounds).Intersect(region);
             if (sampleRegion.IsEmpty) return;
@@ -81,7 +82,7 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                var frames = PixelPreviewFrames();
+                var frames = sourceFrames ?? PixelPreviewFrames();
                 pixels = await Task.Run(() => ReadPixelPreviewSource(sampleRegion, frames, token), token);
             }
 

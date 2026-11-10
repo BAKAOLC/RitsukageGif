@@ -12,13 +12,15 @@ namespace RitsukageGif.Desktop
         public List<Point> Points { get; } = [];
         public string Text { get; init; } = "";
         public double FontSize { get; init; } = 24;
-        public int MosaicSize { get; init; } = 12;
+        public int MosaicSize { get; init; } = 5;
         public ScreenshotAnnotationProperties Properties { get; init; } = new();
         public AnnotationGeometryCache? GeometryCache { get; set; }
+        public AnnotationStrokeGeometry? FixedStroke { get; init; }
         public MagnifierPreviewCache? MagnifierPreview { get; set; }
         public MagnifierSourceState? MagnifierSourceState { get; set; }
         public Vector MagnifierOffset { get; set; }
         public AnnotationNumberLayout? NumberLayout { get; set; }
+        public AnnotationTextGeometryCache? TextGeometry { get; set; }
         public ScreenshotAnnotationImage? WatermarkImage { get; init; }
         public IReadOnlyList<(Bitmap Image, Rect Bounds)> ImageTiles { get; set; } = [];
 

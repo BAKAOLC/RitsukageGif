@@ -6,6 +6,7 @@ namespace RitsukageGif.Desktop
 
         internal void RequestRecognition(RecognitionMode mode)
         {
+            CommitTextEdit();
             if (CanExport && CanAnnotate && RecognitionRequested is not null)
             {
                 Logger.ZLogInformation(

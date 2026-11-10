@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Input;
 
 namespace RitsukageGif.Desktop
@@ -51,6 +51,15 @@ namespace RitsukageGif.Desktop
                     coordinator?.SetMouseInputHeld(_mouseButtonsPressed);
                     Release();
                     if (screenshotDoubleClick) coordinator!.ExecuteScreenshotDoubleClick(sourcePoint(args));
+                    return;
+                }
+
+                if (_session.IsPrivacyDetectionActive && properties.IsLeftButtonPressed && args.ClickCount >= 2 &&
+                    _session.HasPrivacyCandidate(sourcePoint(args)))
+                {
+                    _mouseGesture.Reset();
+                    _mouseChordCancelled = true;
+                    Release();
                     return;
                 }
 
@@ -137,7 +146,11 @@ namespace RitsukageGif.Desktop
                     _session.MovePointLinePreview(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 if (_session.IsPrivacyDetectionActive)
                 {
-                    _mouseGesture.Move(args.GetPosition(this), DragThreshold, out var _);
+                    if (_mouseGesture.Move(args.GetPosition(this), DragThreshold, out var privacyGesture) &&
+                        privacyGesture.Kind == MouseGestureKind.LeftDrag &&
+                        Resolve(privacyGesture, out var privacyBinding) && privacyBinding!.Action == MouseAction.Select)
+                        _session.BeginPrivacyDrag(_mouseStart);
+                    _session.MovePrivacyDrag(sourcePoint(args));
                     return;
                 }
 
@@ -183,33 +196,46 @@ namespace RitsukageGif.Desktop
                 _completing = true;
                 try
                 {
-                    if (click && Resolve(gesture, out var binding))
+                    switch (click)
                     {
-                        if (binding!.Action == MouseAction.Select && !_session.IsBusy)
-                        {
-                            if (_session.IsPrivacyDetectionActive)
+                        case true when coordinator is { ScreenshotMode: true } &&
+                                       gesture is
+                                       {
+                                           Kind: MouseGestureKind.MiddleClick or MouseGestureKind.MiddleDoubleClick,
+                                       }:
+                            coordinator.ExecuteScreenshotMiddleClick(sourcePoint(args));
+                            return;
+                        case false when args.InitialPressMouseButton == MouseButton.Left && _session.IsPrivacyDragging:
+                            _session.EndPrivacyDrag(sourcePoint(args));
+                            return;
+                        case true when Resolve(gesture, out var binding):
+                            if (binding!.Action == MouseAction.Select && !_session.IsBusy)
                             {
-                                _session.TogglePrivacyCandidate(sourcePoint(args));
-                                return;
+                                if (_session.IsPrivacyDetectionActive)
+                                {
+                                    _session.TogglePrivacyCandidate(sourcePoint(args));
+                                    return;
+                                }
+
+                                if (!_mouseSelecting)
+                                {
+                                    if (!_session.HitTestAnnotation(sourcePoint(args), true) &&
+                                        await _session.TryCreateQuickMarkAsync(sourcePoint(args))) return;
+                                    _mouseSelecting = true;
+                                    Begin(_session.UsesPointLineCreation ? _mouseStart : sourcePoint(args),
+                                        args.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                                }
+                            }
+                            else
+                            {
+                                var point = sourcePoint(args);
+                                _mouseClicks.Dispatch(binding, bindings, () => Execute(binding.Action, point),
+                                    Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
+                                    TimeSpan.FromMilliseconds(500),
+                                    () => !_mouseButtonsPressed && !_mouseGesture.IsActive && !_mouseChordCancelled);
                             }
 
-                            if (!_mouseSelecting)
-                            {
-                                if (!_session.HitTestAnnotation(sourcePoint(args), true) &&
-                                    await _session.TryCreateQuickMarkAsync(sourcePoint(args))) return;
-                                _mouseSelecting = true;
-                                Begin(_session.UsesPointLineCreation ? _mouseStart : sourcePoint(args),
-                                    args.KeyModifiers.HasFlag(KeyModifiers.Shift));
-                            }
-                        }
-                        else
-                        {
-                            var point = sourcePoint(args);
-                            _mouseClicks.Dispatch(binding, bindings, () => Execute(binding.Action, point),
-                                Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
-                                TimeSpan.FromMilliseconds(500),
-                                () => !_mouseButtonsPressed && !_mouseGesture.IsActive && !_mouseChordCancelled);
-                        }
+                            break;
                     }
 
                     if (_mouseSelecting)
@@ -243,7 +269,11 @@ namespace RitsukageGif.Desktop
                     args.Delta.Y < 0 ? MouseGestureKind.WheelDown :
                     args.Delta.X > 0 ? MouseGestureKind.WheelRight : MouseGestureKind.WheelLeft;
                 if (Resolve(new(kind, args.KeyModifiers), out var binding)) Execute(binding!.Action, sourcePoint(args));
-                else if (args.Delta.Y != 0) await _session.AdjustToolWheelAsync(Math.Sign(args.Delta.Y));
+                else if (coordinator is { ScreenshotMode: true } &&
+                         _session is { Tool: ScreenshotTool.Select, HasSelectedAnnotation: false })
+                    coordinator.ScreenshotWheel(sourcePoint(args), args.Delta.Y);
+                else if (args.Delta.Y != 0)
+                    await _session.AdjustToolWheelWithModifiersAsync(Math.Sign(args.Delta.Y), args.KeyModifiers);
             };
             return;
 

@@ -31,7 +31,7 @@ namespace RitsukageGif.Desktop
         }
 
         internal void Present(ReadOnlySpan<byte> pixels, int width, int height, float referenceWhite,
-            CaptureAlphaMode alphaMode, int stride = 0)
+            CaptureAlphaMode alphaMode, int stride = 0, bool smoothScaling = true)
         {
             ObjectDisposedException.ThrowIf(View == 0, this);
             if (stride == 0) stride = checked(width * 8);
@@ -43,7 +43,7 @@ namespace RitsukageGif.Desktop
                     alphaMode switch
                     {
                         CaptureAlphaMode.Straight => 1, CaptureAlphaMode.Opaque => 2, _ => 0,
-                    });
+                    }, smoothScaling ? 1 : 0);
                 if (result < 0)
                     throw new ExternalException("The macOS Metal HDR preview could not present a frame.", result);
             }
@@ -57,7 +57,7 @@ namespace RitsukageGif.Desktop
         [LibraryImport("RitsukageHdrPreview", EntryPoint = "rg_hdr_present")]
         [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
         private static partial int PresentFrame(nint view, byte* data, int width, int height, int stride, float white,
-            int alphaMode);
+            int alphaMode, int smoothScaling);
 
         [LibraryImport("RitsukageHdrPreview", EntryPoint = "rg_hdr_headroom")]
         [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

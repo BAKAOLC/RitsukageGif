@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
+            PrepareNewPinInput();
             if (Preferences.DuplicateBehavior == PinnedDuplicateBehavior.RestoreLastClosed)
             {
                 var index = _closedDocuments.FindLastIndex(item =>
@@ -56,13 +57,6 @@ namespace RitsukageGif.Desktop
         }
 
 
-        public void PinFormulas(IReadOnlyList<string> sources)
-        {
-            ArgumentNullException.ThrowIfNull(sources);
-            if (sources.Count == 0) throw new ArgumentException("At least one formula is required.", nameof(sources));
-            PinDocument(new PinnedFormulaDocument([.. sources]));
-        }
-
         private static bool SameDocument(PinnedDocument left, PinnedDocument right)
         {
             if (left is PinnedFormulaDocument leftFormula && right is PinnedFormulaDocument rightFormula)
@@ -84,8 +78,10 @@ namespace RitsukageGif.Desktop
                 SavePreferencesProvider = () => SavePreferencesProvider(),
                 ClipboardPreferencesProvider = () => ClipboardPreferencesProvider(),
                 OutputDirectoryProvider = () => OutputDirectoryProvider(),
+                DialogStyleProvider = () => DialogStyleProvider(),
                 GroupsProvider = () => Groups,
                 GroupChangeRequested = SetSelectionGroup,
+                OpacityAdjustmentRequested = AdjustSelectionOpacity,
                 NewGroupRequested = CreateAndMoveToGroupAsync,
                 SelectionRequested = ToggleSelection,
                 CloseRequested = CloseSelection,
@@ -94,11 +90,24 @@ namespace RitsukageGif.Desktop
                 ArrangeSelectionRequested = ArrangeSelection,
                 SaveSelectionRequested = SaveSelectionAsync,
                 SavedPathChanged = path => SavedPathChanged?.Invoke(path),
-                GroupVisibilityRequested = (group, visible) =>
+                AnnotationPreferencesProvider = () => AnnotationPreferences,
+                AnnotationPreferencesChanged = preferences =>
                 {
-                    if (visible) ShowGroup(group);
-                    else HideGroup(group);
+                    if (preferences == AnnotationPreferences) return;
+                    AnnotationPreferencesChanged?.Invoke(preferences);
+                    AnnotationPreferences = preferences;
                 },
+                TranslationPreferencesProvider = () => TranslationPreferencesProvider(),
+                RecognitionPreferencesProvider = () => RecognitionPreferencesProvider(),
+                TextRecognitionServiceProvider = () => TextRecognitionService,
+                ImageTranslationRequested = (owner, png, token) => ImageTranslationRequested is { } translate
+                    ? translate(owner, png, token)
+                    : ImageTranslationWindow.ShowAsync(owner, png, TranslationPreferencesProvider(),
+                        RecognitionPreferencesProvider(), TextRecognitionService, token: token),
+                DocumentOutputSaved = (paths, protectedFiles) => DocumentOutputSaved?.Invoke(paths, protectedFiles),
+                OutputNotification = message => OutputNotification?.Invoke(message),
+                AutomaticSave = (png, hdr, trigger, token, captureScaling) =>
+                    AutomaticSave?.Invoke(png, hdr, trigger, token, captureScaling) ?? Task.CompletedTask,
             };
             _documentWindows.Add(window);
             AttachPresentation(window);
@@ -132,10 +141,21 @@ namespace RitsukageGif.Desktop
             var window = CreateDocumentWindow(saved.Document);
             try
             {
-                window.Show();
-                saved.Window.Visible = true;
-                window.RestoreDocumentState(saved);
-                window.RevealImage();
+                if (AllPinsHidden)
+                {
+                    saved.Window.Visible = true;
+                    saved.Window.VisibleInGroup = true;
+                    MaskRestoredWindow(window, saved.Window);
+                    window.RestoreDocumentState(saved);
+                    _pendingDocuments.Add(window, saved);
+                }
+                else
+                {
+                    window.Show();
+                    saved.Window.Visible = true;
+                    window.RestoreDocumentState(saved);
+                    window.RevealImage();
+                }
             }
             catch
             {
@@ -153,7 +173,7 @@ namespace RitsukageGif.Desktop
         private void TrimMixedHistory()
         {
             while (_closedDocuments.Count + _closedImages.Count > Preferences.HistoryLimit ||
-                   _closedDocuments.Sum(item => DocumentBytes(item.State.Document)) +
+                   _closedDocuments.Sum(item => DocumentBytes(item.State)) +
                    _closedImages.Sum(item => item.EstimatedBytes) > 128L * 1024 * 1024)
                 if (_closedDocuments.Count > 0 && (_closedImages.Count == 0 ||
                                                    _closedDocuments[0].ClosedAt < _closedImages[0].ClosedAt))
@@ -161,17 +181,17 @@ namespace RitsukageGif.Desktop
                 else DropClosedImage(0);
         }
 
-        private static long DocumentBytes(PinnedDocument document)
+        private static long DocumentBytes(PinnedDocumentState state)
         {
-            return document switch
+            return state.Document switch
             {
                 PinnedFormulaDocument formula => formula.Sources.Sum(source => (long)source.Length * sizeof(char)),
                 PinnedHtmlDocument html => ((long)html.Html.Length + html.Text.Length) * sizeof(char),
                 PinnedColorDocument color => ((long)color.Text.Length + color.Html.Length + color.Value.Length) *
                                              sizeof(char),
                 PinnedFilesDocument files => files.Paths.Sum(path => (long)path.Length * sizeof(char)),
-                _ => (long)document.PlainText.Length * sizeof(char),
-            };
+                _ => (long)state.Document.PlainText.Length * sizeof(char),
+            } + (state.Annotations?.EstimatedBytes ?? 0) + (state.Window.SourceMime?.EstimatedBytes ?? 0);
         }
 
         private void SetSelectionGroup(IPinnedWindow source, string group)

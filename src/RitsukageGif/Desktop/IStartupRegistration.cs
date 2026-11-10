@@ -12,7 +12,10 @@ namespace RitsukageGif.Desktop
 
         bool IsEnabled(string executable)
         {
-            return string.Equals(Read(), CreateCommand(executable), StringComparison.Ordinal);
+            var command = Read();
+            return string.Equals(command, CreateCommand(executable), StringComparison.Ordinal) ||
+                   string.Equals(command, "\"" + Path.GetFullPath(executable) + "\" --serve",
+                       StringComparison.Ordinal);
         }
 
         StartupRegistrationStatus GetStatus(string executable)

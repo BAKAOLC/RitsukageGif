@@ -5,5 +5,6 @@ namespace RitsukageGif.Desktop
         string NameKey,
         string IconKey,
         ToolbarButtonVisibility DefaultVisibility,
-        SelectionCommand? Command = null);
+        SelectionCommand? Command = null,
+        bool Configurable = true);
 }

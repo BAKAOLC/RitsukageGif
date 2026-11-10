@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -79,9 +80,17 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private Task SelectAsync()
+        private async Task SelectAsync(CancellationToken token = default)
         {
-            return SelectSourceAsync(Settings.CaptureSource);
+            token.ThrowIfCancellationRequested();
+            var operation = SelectSourceAsync(Settings.CaptureSource);
+            var cancellation = _selectionCancellation;
+            await using var registration = token.Register(() => Dispatcher.UIThread.Post(() =>
+            {
+                if (cancellation is not null && ReferenceEquals(_selectionCancellation, cancellation))
+                    CancelSelection();
+            }));
+            await operation;
         }
 
         public async Task SelectSourceAsync(CaptureSourceKind source)

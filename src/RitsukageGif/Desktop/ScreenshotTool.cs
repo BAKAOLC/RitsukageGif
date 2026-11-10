@@ -20,5 +20,6 @@ namespace RitsukageGif.Desktop
         StrokeEraser,
         Blur,
         SmartErase,
+        AutoMosaic,
     }
 }

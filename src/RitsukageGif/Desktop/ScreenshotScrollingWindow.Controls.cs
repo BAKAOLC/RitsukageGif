@@ -133,17 +133,11 @@ namespace RitsukageGif.Desktop
                 UpdateObstruction();
             };
             controls.Children.Add(crop);
-            SetPauseContent("ScrollCapturePause", true);
-            _pause.Click += (_, _) =>
-            {
-                if (_outputting) return;
-                _session.Paused = !_session.Paused;
-                if (!_session.Paused) _statusNoticeKey = null;
-                SetPauseContent(_session.Paused ? "ScrollCaptureResume" : "ScrollCapturePause", !_session.Paused);
-                RefreshStatus();
-                RefreshLivePreview();
-            };
-            controls.Children.Add(_pause);
+            SetStartStopContent();
+            // ReSharper disable once AsyncVoidLambda
+            _startStop.Click += async (_, _) => await ToggleCaptureAsync();
+            _startStop.IsVisible = !_startAutomatically;
+            controls.Children.Add(_startStop);
             controls.Children.Add(Separator());
             var edit = OutputButton(new(), "ScrollCaptureEdit", "ScrollCaptureEdit", ScrollingCaptureAction.Edit);
             if (respondShortcuts) AddShortcutHint(edit, "edit");
@@ -162,7 +156,7 @@ namespace RitsukageGif.Desktop
                 OutputButton(_finish, "ScreenshotCopy", "ScreenshotCopy", ScrollingCaptureAction.Copy));
             if (respondShortcuts)
             {
-                AddShortcutHint(_pause, "pause");
+                AddShortcutHint(_startStop, "start-stop");
                 AddShortcutHint(_finish, "finish");
             }
 
@@ -201,8 +195,10 @@ namespace RitsukageGif.Desktop
         {
             enabled &= !_outputting;
             foreach (var button in _outputButtons) button.IsEnabled = enabled;
-            _move.IsEnabled = _direction.IsEnabled = _pause.IsEnabled = !_outputting;
-            _automatic.IsEnabled = !_outputting && _session.AutomaticAvailable;
+            _move.IsEnabled = !_outputting && _captureStarted;
+            _direction.IsEnabled = _startStop.IsEnabled = !_outputting;
+            _automatic.IsEnabled = !_outputting && !_connectingAutomatic &&
+                                   (_session.AutomaticAvailable || _automaticConnection?.CanRequestAccess == true);
             _autoCrop.IsEnabled = !_outputting;
             _cropLeading.IsEnabled = enabled && _session.CanCropLeading;
             _cropTrailing.IsEnabled = enabled && _session.CanCropTrailing;
@@ -245,7 +241,7 @@ namespace RitsukageGif.Desktop
         {
             if (_outputting) return;
             if (!(leading ? _session.CropLeading() : _session.CropTrailing())) return;
-            SetPauseContent("ScrollCaptureResume", false);
+            SetStartStopContent();
             RefreshStatus();
             RefreshLivePreview();
         }
@@ -268,23 +264,29 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private void ResetCapture(ScrollCaptureAxis axis, int leading, int trailing)
+        private void ResetCapture(ScrollCaptureAxis axis, int leading, int trailing, bool start)
         {
             _axis = axis;
+            _captureStarted = false;
             _session.ConfigureAxis(axis, _region);
             _session.ConfigureInsets(leading, trailing);
             SetOutputActionsEnabled(false);
             _preview.Image = null;
+            _preview.ImageSize = default;
+            _preview.Viewport = default;
+            _preview.Matched = false;
+            _preview.UpdateHdr(null);
+            _preview.InvalidateVisual();
             _bitmap?.Dispose();
             _bitmap = null;
             _size.Text = $"{_region.Width} × {_region.Height}";
             UpdateDirectionControls();
-            _session.Paused = false;
-            SetPauseContent("ScrollCapturePause", true);
+            SetStartStopContent();
             _lastCaptureStatus = null;
             _captureFailure = null;
             _statusNoticeKey = null;
             SetOutputActionsEnabled(false);
+            if (start) StartCapture();
             RefreshStatus();
             RefreshLivePreview();
         }
@@ -312,7 +314,7 @@ namespace RitsukageGif.Desktop
 
         private static void SetCompactContent(Button button, string key, string icon, bool iconOnly)
         {
-            var geometry = ToolbarIcon.TryGeometry(icon) ?? ToolbarIcon.Geometry(icon);
+            var geometry = ToolbarIcon.FindDefinition(icon) ?? ToolbarIcon.GetDefinition(icon);
             SetActionContent(button, key, geometry);
             button.MinHeight = button.Height = 32;
             button.Focusable = false;

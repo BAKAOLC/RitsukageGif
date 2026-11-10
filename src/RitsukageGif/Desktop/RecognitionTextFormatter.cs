@@ -18,31 +18,31 @@ namespace RitsukageGif.Desktop
             if (preferences.Punctuation == RecognitionPunctuation.None) return output;
             var result = new StringBuilder(output.Length);
             foreach (var character in output)
+                result.Append(ConvertPunctuation(character, preferences.Punctuation));
+
+            return result.ToString();
+        }
+
+        internal static char ConvertPunctuation(char character, RecognitionPunctuation punctuation)
+        {
+            switch (punctuation)
             {
-                var converted = character;
-                if (preferences.Punctuation == RecognitionPunctuation.FullWidth)
-                {
-                    if (character is >= '!' and <= '~' && (char.IsPunctuation(character) || char.IsSymbol(character)))
-                        converted = (char)(character + 0xFEE0);
-                }
-                else if (character is >= '\uFF01' and <= '\uFF5E' &&
-                         (char.IsPunctuation(character) || char.IsSymbol(character)))
-                {
-                    converted = (char)(character - 0xFEE0);
-                }
-                else
-                {
-                    converted = character switch
+                case RecognitionPunctuation.None:
+                    return character;
+                case RecognitionPunctuation.FullWidth:
+                    return character is >= '!' and <= '~' && (char.IsPunctuation(character) || char.IsSymbol(character))
+                        ? (char)(character + 0xFEE0)
+                        : character;
+                case RecognitionPunctuation.HalfWidth:
+                default:
+                    if (character is >= '\uFF01' and <= '\uFF5E' &&
+                        (char.IsPunctuation(character) || char.IsSymbol(character))) return (char)(character - 0xFEE0);
+                    return character switch
                     {
                         '。' => '.', '、' => ',', '“' or '”' => '"', '‘' or '’' => '\'',
                         '【' => '[', '】' => ']', '《' => '<', '》' => '>', _ => character,
                     };
-                }
-
-                result.Append(converted);
             }
-
-            return result.ToString();
         }
 
         private static string Reflow(string text, RecognitionTextLayout layout)

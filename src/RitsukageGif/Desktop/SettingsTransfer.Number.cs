@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
 {
@@ -12,10 +11,7 @@ namespace RitsukageGif.Desktop
             if (properties.TryGetProperty("NumberFormat", out var format))
                 ValidateEnum<AnnotationNumberFormat>(format, path + ".NumberFormat");
             if (properties.TryGetProperty("NumberCaptionScale", out var scale))
-                ValidateNumber(scale, path + ".NumberCaptionScale", .25, 4);
-            if (properties.TryGetProperty("NumberOutlineColor", out var color) &&
-                (color.ValueKind != JsonValueKind.String || !Color.TryParse(color.GetString(), out _)))
-                throw Invalid(path + ".NumberOutlineColor");
+                ValidateNumber(scale, path + ".NumberCaptionScale", .2, 1);
         }
     }
 }

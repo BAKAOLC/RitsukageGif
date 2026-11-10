@@ -9,9 +9,13 @@ namespace RitsukageGif.Desktop
     {
         public Control Palette()
         {
+            return Palette("AnnotationColor", () => _session.Color, color => _session.UpdateSelectedStyleAsync(color));
+        }
+
+        private StackPanel Palette(string key, Func<Color> read, Func<Color, Task> write, bool alpha = true)
+        {
             var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new(4, 0, 0, 0) };
-            panel.Children.Add(ColorPicker("AnnotationColor", () => _session.Color,
-                color => _session.UpdateSelectedStyleAsync(color)));
+            panel.Children.Add(ColorPicker(key, read, write, alpha));
             var swatches = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
             Color[] previous = [];
             _refresh.Add(() =>
@@ -23,10 +27,10 @@ namespace RitsukageGif.Desktop
                 {
                     previous = colors;
                     swatches.Children.Clear();
-                    foreach (var color in colors.Take(6)) swatches.Children.Add(PaletteButton(color));
+                    foreach (var color in colors.Take(6)) swatches.Children.Add(PaletteButton(color, read, write));
                 }
 
-                foreach (var button in swatches.Children.OfType<Button>()) RefreshPaletteButton(button);
+                foreach (var button in swatches.Children.OfType<Button>()) RefreshPaletteButton(button, read());
             });
             panel.Children.Add(swatches);
             var more = Popup("AnnotationColor", "ToolbarChevron", () =>
@@ -40,10 +44,10 @@ namespace RitsukageGif.Desktop
                     {
                         shown = colors;
                         remaining.Children.Clear();
-                        foreach (var color in colors) remaining.Children.Add(PaletteButton(color));
+                        foreach (var color in colors) remaining.Children.Add(PaletteButton(color, read, write));
                     }
 
-                    foreach (var button in remaining.Children.OfType<Button>()) RefreshPaletteButton(button);
+                    foreach (var button in remaining.Children.OfType<Button>()) RefreshPaletteButton(button, read());
                 });
                 return remaining;
             });
@@ -52,7 +56,7 @@ namespace RitsukageGif.Desktop
             return panel;
         }
 
-        private Button PaletteButton(Color color)
+        private Button PaletteButton(Color color, Func<Color> read, Func<Color, Task> write)
         {
             var button = Button("AnnotationColor");
             button.Width = 18;
@@ -62,27 +66,28 @@ namespace RitsukageGif.Desktop
             button.Classes.Add("palette-color");
             button.Content = Swatch(color, 16, out _);
             MinimalChrome(button);
-            RefreshPaletteButton(button);
+            RefreshPaletteButton(button, read());
             ToolTip.SetTip(button, color.ToString());
             button.Click += async (_, _) =>
             {
-                if (!_disposed) await _session.UpdateSelectedStyleAsync(color);
+                if (!_disposed) await write(color);
             };
             return button;
         }
 
-        private void RefreshPaletteButton(Button button)
+        private static void RefreshPaletteButton(Button button, Color selected)
         {
-            button.Classes.Set("selected-color", button.Tag is Color color && color == _session.Color);
+            button.Classes.Set("selected-color", button.Tag is Color color && color == selected);
             RefreshMinimalChrome(button);
         }
 
-        private AppearanceColorPicker ColorPicker(string key, Func<Color> read, Func<Color, Task> write)
+        private AppearanceColorPicker ColorPicker(string key, Func<Color> read, Func<Color, Task> write,
+            bool alpha = true)
         {
             var picker = new AppearanceColorPicker
             {
-                Width = 48, Height = 28, MinHeight = 0, MinWidth = 0, Padding = new(4), Margin = new(1, 2),
-                IsAlphaEnabled = true, IsAlphaVisible = true, IsColorPaletteVisible = false, IsHexInputVisible = true,
+                Width = 52, Height = 28, MinHeight = 0, MinWidth = 0, Margin = new(1, 2),
+                IsAlphaEnabled = alpha, IsAlphaVisible = alpha, IsColorPaletteVisible = false, IsHexInputVisible = true,
                 DialogScopeProvider = _dialogScopeProvider, Foreground = AppTheme.Ink,
             };
             picker.Styles.Add(new AnnotationColorPickerStyles());
@@ -112,6 +117,10 @@ namespace RitsukageGif.Desktop
             grid.Children.Add(checker);
             tint = new() { Background = new SolidColorBrush(color) };
             grid.Children.Add(tint);
+            grid.Children.Add(new Border
+            {
+                BorderBrush = AppTheme.Muted, BorderThickness = new(1), IsHitTestVisible = false,
+            });
             return grid;
         }
     }

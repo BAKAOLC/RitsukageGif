@@ -7,20 +7,72 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class AnnotationNumberStylePreview : Control
     {
+        private DrawingGroup? _drawing;
+
         public AnnotationNumberStylePreview()
         {
             Width = 24;
             Height = 22;
         }
 
-        public AnnotationNumberStyle Style { get; set; }
-        public Color Ink { get; set; } = Colors.DodgerBlue;
+        public AnnotationNumberStyle Style
+        {
+            get;
+            set
+            {
+                if (field == value) return;
+                field = value;
+                InvalidatePreview();
+            }
+        }
+
+        public Color Ink
+        {
+            get;
+            set
+            {
+                if (field == value) return;
+                field = value;
+                InvalidatePreview();
+            }
+        } = Colors.DodgerBlue;
+
+        public Color? TextColor
+        {
+            get;
+            set
+            {
+                if (field == value) return;
+                field = value;
+                InvalidatePreview();
+            }
+        }
 
         public override void Render(DrawingContext context)
         {
+            if (_drawing is null)
+            {
+                _drawing = new();
+                using var drawing = _drawing.Open();
+                DrawPreview(drawing);
+            }
+
+            using var textOptions = context.PushTextOptions(new() { TextRenderingMode = TextRenderingMode.Antialias });
+            _drawing.Draw(context);
+        }
+
+        private void InvalidatePreview()
+        {
+            _drawing = null;
+            InvalidateVisual();
+        }
+
+        private void DrawPreview(DrawingContext context)
+        {
             var ink = new SolidColorBrush(Ink);
             var box = new Rect(3, 2, 18, 18);
-            var pen = new Pen(ink, 1.5);
+            var foreground = new SolidColorBrush(TextColor ?? AnnotationContrast.Foreground(Ink));
+            var pen = new Pen(foreground, 1.5);
             switch (Style)
             {
                 case AnnotationNumberStyle.RoundedSquare:
@@ -37,14 +89,15 @@ namespace RitsukageGif.Desktop
                             ? pen
                             : null, box);
                     if (Style == AnnotationNumberStyle.BorderedCircle)
-                        context.DrawEllipse(null, new Pen(Brushes.White), box.Deflate(1.5));
+                        context.DrawEllipse(null, new Pen(foreground), box.Deflate(1.5));
                     break;
             }
 
             var text = new FormattedText("1", CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
                 Typeface.Default, 13,
-                Style is AnnotationNumberStyle.Plain or AnnotationNumberStyle.OutlineCircle ? ink : Brushes.White);
-            context.DrawText(text, new(12 - text.Width / 2, 11 - text.Height / 2));
+                foreground);
+            var bounds = text.BuildGeometry(new())?.Bounds ?? new Rect(new(text.Width, text.Height));
+            context.DrawText(text, new(12 - bounds.Center.X, 11 - bounds.Center.Y));
         }
     }
 }

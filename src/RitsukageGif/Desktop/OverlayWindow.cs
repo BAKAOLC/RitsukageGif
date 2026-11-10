@@ -23,6 +23,7 @@ namespace RitsukageGif.Desktop
         private readonly ScreenshotAnnotationSession? _annotationSession;
         private readonly ScreenshotAnnotationSurface? _annotationSurface;
         private readonly OverlayCanvas _canvas;
+        private readonly SelectionHintsSurface _hints;
         private readonly SelectionCoordinator _coordinator;
         private readonly SelectionFrameControls _frameControls;
         private readonly Grid _layers;
@@ -61,6 +62,7 @@ namespace RitsukageGif.Desktop
             Cursor = SelectionCursors[StandardCursorType.Cross];
             _canvas = new(region, pixels, radius, threshold, coordinator.ScreenshotPreview)
             {
+                ExternalHintsSurface = true,
                 ShortcutBindings = coordinator.ShortcutBindings,
                 CoordinateUnit = coordinator.SelectionCoordinateUnit,
                 Scale = scaling, ShowControls = coordinator.CanDetectControls,
@@ -68,6 +70,7 @@ namespace RitsukageGif.Desktop
                 ShowCursor = coordinator.CanToggleCursor,
                 WindowSource = coordinator.WindowSource,
             };
+            _hints = new(_canvas) { IsHitTestVisible = false };
             var layers = new Grid();
             _layers = layers;
             _screenPixels = coordinator.ScreenshotMode ? pixels : null;
@@ -113,16 +116,19 @@ namespace RitsukageGif.Desktop
                 layers.Children.Add(_selectionActions);
             }
 
+            if (_annotationSurface is not null)
+                layers.Children.Insert(layers.Children.IndexOf(_annotationSurface) + 1, _hints);
+            else layers.Children.Add(_hints);
             _selectionOptions = new(coordinator.ExecuteToolbarCommand, coordinator.ShortcutBindings)
                 { IsVisible = false };
             if (coordinator.ScreenshotPreview) _selectionOptions.AttachGeometry(coordinator);
             layers.Children.Add(_selectionOptions);
-            _frameControls = new(coordinator) { IsVisible = false };
+            _frameControls = new(coordinator) { IsVisible = false, Cursor = Cursor.Default };
             InitializeCodeOverlay();
             _frameControls.LayoutChanged += () =>
             {
                 _canvas.FrameReservedBounds = _frameControls.OccupiedBounds;
-                _canvas.InvalidateVisual();
+                InvalidateCanvas();
             };
             layers.Children.Add(new ThemeVariantScope
             {
@@ -139,7 +145,11 @@ namespace RitsukageGif.Desktop
 
             InitializeHdrBackground();
             ConfigureMouseInput(SourcePoint);
-            AddHandler(PointerMovedEvent, (_, args) => coordinator.UpdateAnnotationPointer(SourcePoint(args)),
+            AddHandler(PointerMovedEvent, (_, args) =>
+                {
+                    UpdatePointerCursorScope(args);
+                    coordinator.UpdateAnnotationPointer(SourcePoint(args));
+                },
                 RoutingStrategies.Tunnel, true);
             PointerCaptureLost += (_, _) =>
             {
@@ -153,7 +163,8 @@ namespace RitsukageGif.Desktop
                     return;
 
                 coordinator.KeyInput(args.Key, true, args.KeyModifiers);
-                if (SelectionCommands.IsCommandKey(args.Key, args.KeyModifiers, coordinator.ShortcutBindings))
+                if (SelectionCommands.IsCommandKey(args.Key, args.KeyModifiers, coordinator.ShortcutBindings,
+                        coordinator.Annotations))
                     args.Handled = true;
             }, RoutingStrategies.Tunnel, true);
             AddHandler(KeyUpEvent, (_, args) =>
@@ -162,7 +173,8 @@ namespace RitsukageGif.Desktop
                     return;
 
                 coordinator.KeyInput(args.Key, false, args.KeyModifiers);
-                if (SelectionCommands.IsCommandKey(args.Key, args.KeyModifiers, coordinator.ShortcutBindings))
+                if (SelectionCommands.IsCommandKey(args.Key, args.KeyModifiers, coordinator.ShortcutBindings,
+                        coordinator.Annotations))
                     args.Handled = true;
             }, RoutingStrategies.Tunnel, true);
             Deactivated += (_, _) => coordinator.FocusChanged();
@@ -188,6 +200,12 @@ namespace RitsukageGif.Desktop
 
         public PixelRect Region { get; }
 
+        private void InvalidateCanvas()
+        {
+            _canvas.InvalidateVisual();
+            _hints.InvalidateVisual();
+        }
+
         internal bool SimulateWheel(int direction)
         {
             return _simulatedWheel.Raise(direction);
@@ -201,7 +219,7 @@ namespace RitsukageGif.Desktop
         internal void ShowOperationError(string message)
         {
             _canvas.OperationError = message;
-            _canvas.InvalidateVisual();
+            InvalidateCanvas();
         }
 
         public PixelPoint Snap(PixelPoint point, int mode)
@@ -220,6 +238,7 @@ namespace RitsukageGif.Desktop
             _canvas.Snapshot = _coordinator.Snapshot;
             _canvas.HintMode = _coordinator.HintMode;
             _canvas.CapturePreferences = _coordinator.CapturePreferences;
+            _canvas.MagnifierAnnotations = _coordinator.Annotations;
             _canvas.ApplyAppearance(_coordinator.AppearancePreferences);
             _canvas.AuxiliaryVisible = _coordinator.AuxiliaryVisible;
             _canvas.MeasurementControlBounds = _coordinator.MeasurementReferenceControl;
@@ -309,7 +328,7 @@ namespace RitsukageGif.Desktop
             UpdateCodeOverlay(selected);
 
             RefreshHdrBackground();
-            _canvas.InvalidateVisual();
+            InvalidateCanvas();
             QueueScrollingHdrPreview(decoration);
         }
 

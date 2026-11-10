@@ -6,12 +6,12 @@ using Avalonia.Media.TextFormatting;
 namespace RitsukageGif.Desktop
 {
     internal sealed class ImageTranslationCanvas(
-        IImage image,
+        IImage? image,
         IReadOnlyList<(TextLayout Layout, Rect Bounds)> layouts) : Control
     {
         public override void Render(DrawingContext context)
         {
-            context.DrawImage(image, new(0, 0, image.Size.Width, image.Size.Height));
+            if (image is not null) context.DrawImage(image, new(0, 0, image.Size.Width, image.Size.Height));
             foreach (var (layout, bounds) in layouts)
             {
                 using var clip = context.PushClip(bounds);

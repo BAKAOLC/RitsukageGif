@@ -7,12 +7,14 @@ namespace RitsukageGif.Desktop
     public sealed partial class ApplicationHost
     {
         private readonly HashSet<ImageEditorWindow> _imageEditors = [];
+        private Task _imageEditorCleanup = Task.CompletedTask;
         private (PinnedImageContent Image, ScreenshotResult Source)? _pendingImageEdit;
 
-        private async Task ShowImageEditorAsync(string? path = null)
+        private async Task ShowImageEditorAsync(string? path = null, CancellationToken token = default)
         {
             if (IsClosing) return;
-            var token = _cleanupCancellation.Token;
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token, _hostCancellation.Token);
+            token = lifetime.Token;
             IReadOnlyList<IStorageFile> files = [];
             try
             {
@@ -78,7 +80,14 @@ namespace RitsukageGif.Desktop
             window.ApplyTopmostPreference(Settings.ImageEditorTopmost);
             if (View is { } main) window.Icon = main.Icon;
             _imageEditors.Add(window);
-            window.Closed += (_, _) => _imageEditors.Remove(window);
+            window.Closed += (_, _) =>
+            {
+                _imageEditors.Remove(window);
+                var cleanup = window.CleanupCompletion;
+                _imageEditorCleanup = _imageEditorCleanup.IsCompletedSuccessfully
+                    ? cleanup
+                    : Task.WhenAll(_imageEditorCleanup, cleanup);
+            };
             WindowActivation.Show(window);
         }
 
@@ -90,14 +99,15 @@ namespace RitsukageGif.Desktop
             Notify();
         }
 
-        private async Task RecognizeEditorImageAsync(Window owner, byte[] png, RecognitionMode mode,
+        private async Task RecognizeEditorImageAsync(Window owner, byte[] png, RecognitionMode mode, bool _,
             CancellationToken token)
         {
             var preferences = Settings.Recognition.Normalize();
             if (mode == RecognitionMode.Text && !preferences.ShowDialogOnRecognition)
             {
-                var text = await RecognitionOutput.RecognizeAsync(png, preferences,
+                var recognition = await RecognitionOutput.RecognizeAsync(png, preferences,
                     _pinnedImages.TextRecognitionService, token);
+                var text = RecognitionTextFormatter.Format(recognition, preferences);
                 if (string.IsNullOrWhiteSpace(text))
                     throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
                 var clipboard = owner.Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
@@ -108,10 +118,12 @@ namespace RitsukageGif.Desktop
 
             await RecognitionWindow.ShowAsync(owner, png, mode, preferences: preferences,
                 translationPreferences: Settings.Translation, token: token,
-                pinFormula: (_, formula) => _pinnedImages.PinFormulas(formula),
                 copyFormatChanged: PersistFormulaCopyFormat,
                 originalImageVisibilityChanged: PersistRecognitionOriginalImage,
-                latexFormatChanged: PersistFormulaLatexFormat);
+                latexFormatChanged: PersistFormulaLatexFormat,
+                imageSaveQuality: () => Settings.ScreenshotSave.Quality,
+                copyDirectlyNextTime: () => DisableRecognitionConfirmation(RecognitionConfirmationKind.Screenshot),
+                dialogPreferencesChanged: PersistRecognitionDialog);
         }
 
         private async Task DetectEditorPrivacyAsync(ImageEditorWindow window, CapturedFrame frame,
@@ -119,16 +131,13 @@ namespace RitsukageGif.Desktop
         {
             try
             {
-                var service = new PrivacyDetectionService([
-                    new OcrPrivacyCandidateProvider(_pinnedImages.TextRecognitionService,
-                        Settings.Recognition.LanguageTag),
-                    new BarcodePrivacyCandidateProvider(new BarcodeRecognitionService()),
-                ]);
+                var service = PrivacyDetectionService.ForAnnotations(_pinnedImages.TextRecognitionService,
+                    new BarcodeRecognitionService(), Settings.Recognition.LanguageTag);
                 var detected = await service.DetectAsync(frame, token);
                 token.ThrowIfCancellationRequested();
                 if (window.Session.SetPrivacyCandidates(request, detected.Candidates,
                         Settings.Annotation.AutoSelectPrivacyMosaic) && detected.Failures.Count > 0)
-                    window.Session.SetExportState(false, string.Join(Environment.NewLine,
+                    window.Session.SetPrivacyNotice(string.Join(Environment.NewLine,
                         detected.Failures.Select(failure => failure.Message)));
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)

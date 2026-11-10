@@ -1,19 +1,19 @@
-using System.Globalization;
 using System.Text.Json.Serialization;
 
 namespace RitsukageGif.Desktop
 {
     public record ScreenshotSaveProfile
     {
+        private const string DefaultTemplate = "RitsukageGif_$yyyy-MM-dd_HH-mm-ss$";
         [JsonIgnore] protected string? PreferredExtension { get; init; }
 
         public string Directory { get; set; } = "";
         public ScreenshotAfterSaveAction AfterSave { get; set; }
         public bool Notify { get; set; } = true;
         public StaticImageFormat Format { get; set; } = StaticImageFormat.Png;
-        public int Quality { get; set; } = 90;
+        public int Quality { get; set; } = 100;
         public ScreenshotOutputSize OutputSize { get; set; } = new();
-        public string NameTemplate { get; set; } = "Screenshot-{timestamp}";
+        public string NameTemplate { get; set; } = DefaultTemplate;
         public ScreenshotConflictPolicy ConflictPolicy { get; set; } = ScreenshotConflictPolicy.Rename;
 
         public ScreenshotSaveProfile Normalize()
@@ -27,7 +27,7 @@ namespace RitsukageGif.Desktop
                 Quality = Math.Clamp(Quality, 0, 100),
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 OutputSize = (OutputSize ?? new()).Normalize(),
-                NameTemplate = string.IsNullOrWhiteSpace(NameTemplate) ? "Screenshot-{timestamp}" : NameTemplate,
+                NameTemplate = string.IsNullOrWhiteSpace(NameTemplate) ? DefaultTemplate : NameTemplate,
                 ConflictPolicy = Enum.IsDefined(ConflictPolicy) ? ConflictPolicy : ScreenshotConflictPolicy.Rename,
             };
         }
@@ -50,35 +50,34 @@ namespace RitsukageGif.Desktop
         public string CreateFileName(ScreenshotNameContext context, StaticImageFormat? format = null)
         {
             var value = Normalize();
-            var timestamp = context.Timestamp;
-            var name = value.NameTemplate
-                .Replace("{timestamp}", timestamp.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture),
-                    StringComparison.Ordinal)
-                .Replace("{date}", timestamp.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
-                    StringComparison.Ordinal)
-                .Replace("{time}", timestamp.ToString("HHmmss", CultureInfo.InvariantCulture),
-                    StringComparison.Ordinal)
-                .Replace("{title}", context.Title ?? "", StringComparison.Ordinal)
-                .Replace("{process}", context.Process ?? "", StringComparison.Ordinal)
-                .Replace("{width}", context.Width.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
-                .Replace("{height}", context.Height.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal)
-                .Replace("{uuid}", context.Id.ToString("N"), StringComparison.Ordinal);
+            var name = ScreenshotPathTemplate.Expand(value.NameTemplate, context);
             var invalid = Path.GetInvalidFileNameChars();
             name = new string(name
                 .Select(character => invalid.Contains(character) || character is '/' or '\\' ? '_' : character)
                 .ToArray()).Trim(' ', '.');
             if (name.Length == 0) name = "Screenshot";
-            if (name.Length > 160) name = name[..160];
-            var extension = (format ?? value.Format) switch
+            return name + Extension(format ?? value.Format);
+        }
+
+        public string CreatePath(string fallback, ScreenshotNameContext context, StaticImageFormat? format = null)
+        {
+            var value = Normalize();
+            var directory = string.IsNullOrWhiteSpace(value.Directory) ? fallback : value.Directory;
+            var expanded = ScreenshotPathTemplate.Expand(Path.Combine(directory, value.NameTemplate), context);
+            return Path.GetFullPath(expanded + Extension(format ?? value.Format));
+        }
+
+        private static string Extension(StaticImageFormat format)
+        {
+            return format switch
             {
-                StaticImageFormat.Png => "png",
-                StaticImageFormat.Jpeg => "jpg",
-                StaticImageFormat.Bmp => "bmp",
-                StaticImageFormat.WebP => "webp",
-                StaticImageFormat.Avif => "avif",
+                StaticImageFormat.Png => ".png",
+                StaticImageFormat.Jpeg => ".jpg",
+                StaticImageFormat.Bmp => ".bmp",
+                StaticImageFormat.WebP => ".webp",
+                StaticImageFormat.Avif => ".avif",
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
-            return name + "." + extension;
         }
 
         internal static string? NormalizeExtension(string? extension)
@@ -108,9 +107,10 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        public string ResolveDirectory(string fallback)
+        public string ResolveDirectory(string fallback, ScreenshotNameContext? context = null)
         {
-            return Path.GetFullPath(string.IsNullOrWhiteSpace(Directory) ? fallback : Directory);
+            return Path.GetFullPath(ScreenshotPathTemplate.Expand(
+                string.IsNullOrWhiteSpace(Directory) ? fallback : Directory, context ?? new(DateTime.Now)));
         }
 
         public string ResolvePath(string path)

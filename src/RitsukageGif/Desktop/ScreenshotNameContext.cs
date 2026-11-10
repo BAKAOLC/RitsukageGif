@@ -7,6 +7,7 @@ namespace RitsukageGif.Desktop
         int Width = 0,
         int Height = 0)
     {
-        public Guid Id { get; init; } = Guid.NewGuid();
+        public Guid Id { get; } = Guid.NewGuid();
+        internal Guid TimeOrderedId { get; } = Guid.CreateVersion7(new(Timestamp));
     }
 }

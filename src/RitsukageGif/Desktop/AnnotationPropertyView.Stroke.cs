@@ -48,6 +48,8 @@ namespace RitsukageGif.Desktop
                 Children = { preview, DropDownChevron.Create(button) },
             };
             _refresh.Add(() => preview.Style = _session.Properties.StrokeStyle);
+            if (ScreenshotToolCatalog.Get(_tool).ObjectKind == "Geometry")
+                _refresh.Add(() => button.IsEnabled = !_session.Properties.Filled);
             BindChoiceWheel(button, values, () => _session.Properties.StrokeStyle, Update);
             return button;
 

@@ -11,7 +11,11 @@ namespace RitsukageGif.Desktop
     {
         internal override long EstimatedBytes => (long)Png.Length + Original.Png.Length +
                                                  (Original.SdrPng?.Length ?? 0) + (Original.Hdr?.Pixels.Length ?? 0) +
-                                                 (Original.Encoded?.Length ?? 0);
+                                                 (Original.Encoded?.Length ?? 0) +
+                                                 (State.Annotations?.EstimatedBytes ?? 0) +
+                                                 (State.SourceMime?.EstimatedBytes ?? 0) +
+                                                 (State.Translation?.Cache?.EstimatedBytes ?? 0) +
+                                                 (State.Ocr?.EstimatedBytes ?? 0);
 
         public override void Dispose()
         {

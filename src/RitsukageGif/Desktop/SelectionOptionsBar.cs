@@ -72,8 +72,8 @@ namespace RitsukageGif.Desktop
                 };
                 label = new() { [!TextBlock.TextProperty] = LiveText.Resource(labelKey), FontSize = 12 };
                 check = ToolbarIcon.Create(button, command == SelectionCommand.ToggleSource
-                    ? "M2,3 L22,3 22,17 2,17 Z M8,22 L16,22 M12,17 L12,22"
-                    : "M3,12 L9,18 21,5");
+                    ? ToolbarIcon.GetDefinition("SelectionOptionScreen")
+                    : ToolbarIcon.GetDefinition("SelectionOptionChecked"));
                 check.Width = check.Height = AppTheme.CurrentAppearance.ToolbarIconSize switch
                 {
                     ToolbarIconSize.Small => 10, ToolbarIconSize.Large => 20, _ => 12,
@@ -107,7 +107,7 @@ namespace RitsukageGif.Desktop
                 Foreground = Brushes.White,
             };
             var geometryIcon = ToolbarIcon.Create(_geometryButton,
-                "M3,5 L21,5 21,19 3,19 Z M7,5 L7,10 M12,5 L12,8 M17,5 L17,10");
+                ToolbarIcon.GetDefinition("SelectionGeometry"));
             geometryIcon.Width = geometryIcon.Height = 14;
             _geometryButton.Content = new StackPanel
             {

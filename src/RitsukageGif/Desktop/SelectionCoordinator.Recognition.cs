@@ -1,4 +1,3 @@
-using Avalonia.Controls;
 using Avalonia.Input.Platform;
 
 namespace RitsukageGif.Desktop
@@ -6,13 +5,22 @@ namespace RitsukageGif.Desktop
     internal sealed partial class SelectionCoordinator
     {
         internal Func<ScreenshotResult, CancellationToken, Task>? RecognitionOutputHandler { get; set; }
+        internal Action? RecognitionCopied { get; set; }
         internal ReadOnlyMemory<byte> TranslationRequestedPng { get; private set; }
         internal RecognitionPreferences RecognitionPreferences { get; set; } = new();
+        internal Func<int>? RecognitionImageSaveQuality { get; set; }
         internal TranslationPreferences TranslationPreferences { get; set; } = new();
-        internal Action<Window, IReadOnlyList<string>>? PinFormulaRequested { get; set; }
         internal Action<FormulaCopyFormat>? FormulaCopyFormatChanged { get; set; }
         internal Action<bool>? RecognitionOriginalImageVisibilityChanged { get; set; }
         internal Action<FormulaLatexFormat>? FormulaLatexFormatChanged { get; set; }
+
+        internal Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? RecognitionDialogPreferencesChanged
+        {
+            get;
+            set;
+        }
+
+        internal Action<RecognitionConfirmationKind>? DirectRecognitionCopyRequested { get; set; }
 
         private void RecognizeSelection(RecognitionMode mode, bool copyText = false, bool translate = false)
         {
@@ -72,16 +80,18 @@ namespace RitsukageGif.Desktop
                         await clipboard.SetTextAsync(text);
                         await clipboard.FlushAsync();
                         work.Token.ThrowIfCancellationRequested();
+                        RecognitionCopied?.Invoke();
                         if (RecognitionOutputHandler is { } codeOutput)
                             await ReportRecognizedScreenshotAsync(codeOutput, png, result, annotations, work.Token);
                         if (!_finished) Finish(result);
                         return;
                     }
 
-                    case RecognitionMode.Text when copyText || !RecognitionPreferences.ShowDialogOnRecognition:
+                    case RecognitionMode.Text when !RecognitionPreferences.ShowDialogOnRecognition:
                     {
-                        var resultText = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
+                        var recognition = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
                             new OcrRecognitionService(), work.Token);
+                        var resultText = RecognitionTextFormatter.Format(recognition, RecognitionPreferences);
                         work.Token.ThrowIfCancellationRequested();
                         if (_finished) return;
                         if (string.IsNullOrWhiteSpace(resultText))
@@ -95,16 +105,9 @@ namespace RitsukageGif.Desktop
                         await clipboard.SetTextAsync(resultText);
                         await clipboard.FlushAsync();
                         work.Token.ThrowIfCancellationRequested();
+                        RecognitionCopied?.Invoke();
                         if (RecognitionOutputHandler is { } handler)
                             await ReportRecognizedScreenshotAsync(handler, png, result, annotations, work.Token);
-                        if (copyText && RecognitionPreferences.ShowDialogOnCopyAll)
-                        {
-                            foreach (var window in _windows) window.Topmost = false;
-                            await RecognitionWindow.ShowAsync(owner, png, RecognitionMode.Text,
-                                preferences: RecognitionPreferences, initialText: resultText, token: work.Token,
-                                translationPreferences: TranslationPreferences);
-                        }
-
                         return;
                     }
                 }
@@ -115,16 +118,24 @@ namespace RitsukageGif.Desktop
                         ? token => ReportRecognizedScreenshotAsync(output, png, result, annotations, token)
                         : null,
                     RecognitionPreferences, token: work.Token, translationPreferences: TranslationPreferences,
-                    pinFormula: PinFormulaRequested, copyFormatChanged: FormulaCopyFormatChanged,
+                    copyFormatChanged: FormulaCopyFormatChanged,
                     originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,
-                    latexFormatChanged: FormulaLatexFormatChanged);
+                    latexFormatChanged: FormulaLatexFormatChanged,
+                    imageSaveQuality: RecognitionImageSaveQuality,
+                    copyDirectlyNextTime: () =>
+                        DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.Screenshot),
+                    dialogPreferencesChanged: RecognitionDialogPreferencesChanged);
             }
             catch (OperationCanceledException) when (work.IsCancellationRequested)
             {
             }
             catch (Exception error)
             {
-                if (!_finished) annotations.SetExportState(false, error.Message);
+                if (!_finished)
+                {
+                    if (PropagateOutputErrors) Finish(null, error);
+                    else annotations.SetExportState(false, error.Message);
+                }
             }
             finally
             {

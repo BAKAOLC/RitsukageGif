@@ -5,11 +5,13 @@ namespace RitsukageGif.Desktop
     public sealed partial class ApplicationHost
     {
         private bool _persistedStartWithWindows;
+        private bool _persistedStartupHidden;
         private SettingsPersistenceQueue<AppSettings>? _settingsPersistence;
         private bool _startupRegistrationUncertain;
 
         private void QueueSettingsSave(AppSettings settings)
         {
+            if (IsTaskHost) return;
             _settingsPersistence ??= new(PersistSettingsAsync, error =>
             {
                 Dispatcher.UIThread.Post(() =>
@@ -36,8 +38,10 @@ namespace RitsukageGif.Desktop
 
         private void PersistSettingsCore(AppSettings settings)
         {
+            if (IsTaskHost) return;
             if (_startServices && StartupRegistrationFactory.Supported &&
-                (settings.System.StartWithWindows != _persistedStartWithWindows || _startupRegistrationUncertain))
+                (settings.System.StartWithWindows != _persistedStartWithWindows ||
+                 settings.System.StartupHidden != _persistedStartupHidden || _startupRegistrationUncertain))
                 try
                 {
                     SettingsLogger.ZLogDebug($"Startup registration persistence started.");
@@ -57,6 +61,7 @@ namespace RitsukageGif.Desktop
             else PersistSettingsWithExplorer(settings);
 
             _persistedStartWithWindows = settings.System.StartWithWindows;
+            _persistedStartupHidden = settings.System.StartupHidden;
         }
 
         private Task FlushSettingsAsync()

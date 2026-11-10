@@ -6,6 +6,7 @@ namespace RitsukageGif.Desktop
 
         internal void RequestTranslation()
         {
+            CommitTextEdit();
             if (CanExport && CanAnnotate) TranslationRequested?.Invoke();
         }
     }

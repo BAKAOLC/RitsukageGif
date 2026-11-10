@@ -39,5 +39,10 @@ namespace RitsukageGif.Desktop
         SwitchPinnedGroup,
         RunScript,
         ScreenshotAndCopyCodeText,
+        ScreenshotAndRecord,
+        TogglePinnedMouseThrough,
+        PinFile,
+        PinSelectedFiles,
+        ToggleWindowTopmostAtPointer,
     }
 }

@@ -24,7 +24,8 @@ namespace RitsukageGif.Desktop
             // ReSharper disable once AsyncVoidLambda
             AddHandler(KeyDownEvent, async (_, args) =>
             {
-                if (_closed || _completed.Task.IsCompleted || _direction.IsDropDownOpen) return;
+                if (_closed || _completed.Task.IsCompleted || _clearDialog is not null ||
+                    _direction.IsDropDownOpen) return;
                 if (args.Source is Visual source &&
                     (!ReferenceEquals(GetTopLevel(source), this) || ReferenceEquals(source, _direction) ||
                      _direction.IsVisualAncestorOf(source))) return;
@@ -76,7 +77,7 @@ namespace RitsukageGif.Desktop
             }
 
             _shortcutScope = new(bindings,
-                !_outputting && !IsActive && !_direction.IsDropDownOpen, true);
+                !_outputting && _clearDialog is null && !IsActive && !_direction.IsDropDownOpen, true);
         }
 
         private void ShortcutActivationChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
@@ -93,7 +94,7 @@ namespace RitsukageGif.Desktop
         private void RefreshShortcutNativeState()
         {
             if (_shortcutScope is { } scope)
-                scope.NativeEnabled = !_outputting && !IsActive && !_direction.IsDropDownOpen;
+                scope.NativeEnabled = !_outputting && _clearDialog is null && !IsActive && !_direction.IsDropDownOpen;
         }
 
         private void ShortcutsDeactivated(object? sender, EventArgs args)
@@ -116,12 +117,12 @@ namespace RitsukageGif.Desktop
 
         private async Task ExecuteShortcut(string action)
         {
-            if (_outputting && action != "cancel") return;
+            if (_clearDialog is not null || (_outputting && action != "cancel")) return;
             switch (action)
             {
                 case "cancel": Close(); break;
-                case "pause" when _pause.IsEnabled:
-                    _pause.RaiseEvent(new(Button.ClickEvent));
+                case "start-stop" when _startStop.IsEnabled:
+                    await ToggleCaptureAsync();
                     break;
                 case "automatic" when _automatic.IsEnabled:
                     _automatic.IsChecked = _automatic.IsChecked != true;

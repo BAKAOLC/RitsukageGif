@@ -4,7 +4,6 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class AnnotationPropertyPresenter(
         ScreenshotAnnotationSession session,
-        Func<Task> loadWatermark,
         Func<IDisposable>? dialogScopeProvider = null)
         : ContentControl, IDisposable
     {
@@ -32,7 +31,7 @@ namespace RitsukageGif.Desktop
                 var definition = ScreenshotToolCatalog.Get(tool);
                 _view = definition.Properties.Count == 0
                     ? null
-                    : new(session, definition, loadWatermark, dialogScopeProvider);
+                    : new(session, definition, dialogScopeProvider);
                 _tool = tool;
                 Content = _view;
             }

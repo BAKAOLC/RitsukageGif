@@ -29,8 +29,8 @@ namespace RitsukageGif.Desktop
 
         private Button CreateMoveHandle()
         {
-            var handle = SmallButton("ToolbarMove", () => { }, ToolbarIcon.TryGeometry("ToolbarMove") ??
-                                                               ToolbarIcon.Geometry("AnimationSelection"));
+            var handle = SmallButton("ToolbarMove", () => { }, ToolbarIcon.FindDefinition("ToolbarMove") ??
+                                                               ToolbarIcon.GetDefinition("AnimationSelection"));
             handle.Width = 14;
             handle.Padding = new(2, 0);
             handle.Cursor = MoveCursor;

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include "portal-video.h"
+#include "portal-producer.h"
 #include <math.h>
 #include <spa/buffer/meta.h>
 #include <spa/param/buffers.h>
@@ -48,8 +49,11 @@ struct rgc_portal_video {
     gboolean hdr_requested, metadata_cursor, can_request_pointer, has_frame, suspended;
     uint32_t granted_devices;
     int fps;
-    gint64 last_frame;
+    gint64 next_frame_deadline;
     char *failure;
+    GThread *producer_thread;
+    uint32_t server_cookie;
+    gint producer_checked, producer_pid;
 };
 struct rgc_plane {
     GBytes *pixels;
@@ -544,8 +548,14 @@ static void capabilities_metadata(JsonBuilder *builder, struct rgc_portal_video 
     rgc_json_bool(builder, "window", video->source.source_type == 2);
     rgc_json_bool(builder, "hdr", plane && plane->hdr && !plane->reason);
     rgc_json_bool(builder, "separateCursor", video->metadata_cursor);
+    rgc_json_int(builder, "cursorMode", video->source.cursor_mode);
+    rgc_json_int(builder, "availableCursorModes", video->source.available_cursor_modes);
     rgc_json_bool(builder, "pointerInput", video->metadata_cursor && (video->granted_devices & 2));
     rgc_json_bool(builder, "canRequestPointerInput", video->metadata_cursor && video->can_request_pointer);
+    gint producer_pid = g_atomic_int_get(&video->producer_pid);
+    rgc_json_bool(builder, "producerChecked", g_atomic_int_get(&video->producer_checked));
+    rgc_json_int(builder, "producerPid", producer_pid);
+    rgc_json_string(builder, "producer", producer_pid > 0 ? "kwin" : NULL);
     rgc_json_string(builder, "reason", reason ? reason : plane ? plane->reason : NULL);
     json_builder_end_object(builder);
 }
@@ -708,7 +718,7 @@ static void on_process(void *userdata)
             failed(video, "The capture output pipe closed.");
         return;
     }
-    if (now - video->last_frame < G_TIME_SPAN_SECOND / video->fps) {
+    if (video->next_frame_deadline && now < video->next_frame_deadline) {
         pw_stream_queue_buffer(video->stream, latest);
         return;
     }
@@ -774,7 +784,12 @@ static void on_process(void *userdata)
         failed(video, "The capture output pipe closed.");
         return;
     }
-    video->last_frame = now;
+    const gint64 interval = G_TIME_SPAN_SECOND / video->fps;
+    video->next_frame_deadline = video->next_frame_deadline
+                                    ? video->next_frame_deadline + interval
+                                    : now + interval;
+    if (video->next_frame_deadline <= now)
+        video->next_frame_deadline = now + interval;
     g_mutex_lock(&video->lock);
     video->has_frame = TRUE;
     g_mutex_unlock(&video->lock);
@@ -806,11 +821,6 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
         !info.size.height || info.size.width > 32768 || info.size.height > 32768 ||
         (uint64_t)info.size.width * info.size.height * MAX(8u, input_pixel_size(info.format)) > FRAME_LIMIT) {
         failed(video, "The selected source video format or dimensions are unsupported.");
-        return;
-    }
-    if (!video->hdr_requested && ((uint32_t)info.transfer_function == RGC_TRANSFER_PQ ||
-                                  (uint32_t)info.transfer_function == RGC_TRANSFER_HLG)) {
-        failed(video, "The source cannot provide the requested SDR encoding without HDR conversion.");
         return;
     }
     g_mutex_lock(&video->lock);
@@ -848,48 +858,34 @@ static void on_param_changed(void *userdata, uint32_t id, const struct spa_pod *
 static const struct pw_stream_events stream_events = {
     PW_VERSION_STREAM_EVENTS, .state_changed = on_state_changed, .param_changed = on_param_changed,
     .process = on_process};
-static const struct pw_core_events core_events = {PW_VERSION_CORE_EVENTS, .error = on_core_error};
-
-struct rgc_portal_video *rgc_portal_video_new(int descriptor, const struct rgc_portal_source *source,
-                                              struct rgc_frame_writer *writer, int fps, gboolean hdr,
-                                              gboolean metadata_cursor, uint32_t granted_devices,
-                                              gboolean can_request_pointer, GCancellable *cancel,
-                                              GError **error)
+static gpointer identify_producer(gpointer data)
 {
-    struct rgc_portal_video *video = g_new0(struct rgc_portal_video, 1);
-    g_mutex_init(&video->lock);
-    video->source = *source;
-    video->writer = writer;
-    video->fps = fps;
-    video->hdr_requested = hdr;
-    video->metadata_cursor = metadata_cursor;
-    video->granted_devices = granted_devices;
-    video->can_request_pointer = can_request_pointer;
-    video->cancel = cancel;
-    video->loop = pw_thread_loop_new("Ritsukage capture", NULL);
-    if (!video->loop) {
-        close(descriptor);
-        goto failure;
-    }
-    video->context = pw_context_new(pw_thread_loop_get_loop(video->loop), NULL, 0);
-    if (!video->context) {
-        close(descriptor);
-        goto failure;
-    }
-    video->core = pw_context_connect_fd(video->context, descriptor, NULL, 0);
-    if (!video->core)
-        goto failure;
-    pw_core_add_listener(video->core, &video->core_listener, &core_events, video);
-    char identity[32];
-    g_snprintf(identity, sizeof(identity), "%" G_GUINT64_FORMAT,
-               source->serial ? source->serial : source->node_id);
-    video->stream =
-        pw_stream_new(video->core, "Ritsukage capture",
-                      pw_properties_new(PW_KEY_MEDIA_TYPE, "Video", PW_KEY_MEDIA_CATEGORY, "Capture",
-                                        PW_KEY_MEDIA_ROLE, "Screen", PW_KEY_TARGET_OBJECT, identity, NULL));
-    if (!video->stream)
-        goto failure;
-    pw_stream_add_listener(video->stream, &video->listener, &stream_events, video);
+    struct rgc_portal_video *video = data;
+    uint32_t pid = rgc_portal_kwin_producer(video->server_cookie, video->source.node_id,
+                                           video->source.serial, video->cancel);
+    g_atomic_int_set(&video->producer_pid, (gint)pid);
+    g_atomic_int_set(&video->producer_checked, TRUE);
+    g_mutex_lock(&video->lock);
+    gboolean negotiated = video->format.size.width && video->format.size.height;
+    g_mutex_unlock(&video->lock);
+    if (negotiated && !g_cancellable_is_cancelled(video->cancel) &&
+        !rgc_portal_video_capabilities(video, 0)) failed(video, "The capture output pipe closed.");
+    return NULL;
+}
+
+static void on_core_info(void *data, const struct pw_core_info *info)
+{
+    struct rgc_portal_video *video = data;
+    if (video->producer_thread || video->source.source_type == 2) return;
+    video->server_cookie = info->cookie;
+    video->producer_thread = g_thread_new("capture-producer", identify_producer, video);
+}
+
+static const struct pw_core_events core_events = {
+    PW_VERSION_CORE_EVENTS, .info = on_core_info, .error = on_core_error};
+
+static int configure_formats(struct rgc_portal_video *video, int fps, gboolean hdr, gboolean connect)
+{
     uint8_t storage[8192];
     struct spa_pod_builder builder = SPA_POD_BUILDER_INIT(storage, sizeof(storage));
     enum spa_video_format high_formats[] = {SPA_VIDEO_FORMAT_RGBA_F16,   SPA_VIDEO_FORMAT_RGBA_F32,
@@ -934,10 +930,55 @@ struct rgc_portal_video *rgc_portal_video_new(int descriptor, const struct rgc_p
                     SPA_FORMAT_VIDEO_colorPrimaries, SPA_POD_Id(SPA_VIDEO_COLOR_PRIMARIES_BT709));
         }
     }
-    int result = pw_stream_connect(video->stream, PW_DIRECTION_INPUT, source->node_id,
-                                   PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
-                                       PW_STREAM_FLAG_DONT_RECONNECT,
-                                   params, count);
+    if (connect)
+        return pw_stream_connect(video->stream, PW_DIRECTION_INPUT, video->source.node_id,
+                                 PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS |
+                                     PW_STREAM_FLAG_DONT_RECONNECT, params, count);
+    return pw_stream_update_params(video->stream, params, count);
+}
+
+struct rgc_portal_video *rgc_portal_video_new(int descriptor, const struct rgc_portal_source *source,
+                                              struct rgc_frame_writer *writer, int fps, gboolean hdr,
+                                              gboolean metadata_cursor, uint32_t granted_devices,
+                                              gboolean can_request_pointer, GCancellable *cancel,
+                                              GError **error)
+{
+    struct rgc_portal_video *video = g_new0(struct rgc_portal_video, 1);
+    g_mutex_init(&video->lock);
+    video->source = *source;
+    g_atomic_int_set(&video->producer_checked, source->source_type == 2);
+    video->writer = writer;
+    video->fps = fps;
+    video->hdr_requested = hdr;
+    video->metadata_cursor = metadata_cursor;
+    video->granted_devices = granted_devices;
+    video->can_request_pointer = can_request_pointer;
+    video->cancel = cancel;
+    video->loop = pw_thread_loop_new("Ritsukage capture", NULL);
+    if (!video->loop) {
+        close(descriptor);
+        goto failure;
+    }
+    video->context = pw_context_new(pw_thread_loop_get_loop(video->loop), NULL, 0);
+    if (!video->context) {
+        close(descriptor);
+        goto failure;
+    }
+    video->core = pw_context_connect_fd(video->context, descriptor, NULL, 0);
+    if (!video->core)
+        goto failure;
+    pw_core_add_listener(video->core, &video->core_listener, &core_events, video);
+    char identity[32];
+    g_snprintf(identity, sizeof(identity), "%" G_GUINT64_FORMAT,
+               source->serial ? source->serial : source->node_id);
+    video->stream =
+        pw_stream_new(video->core, "Ritsukage capture",
+                      pw_properties_new(PW_KEY_MEDIA_TYPE, "Video", PW_KEY_MEDIA_CATEGORY, "Capture",
+                                        PW_KEY_MEDIA_ROLE, "Screen", PW_KEY_TARGET_OBJECT, identity, NULL));
+    if (!video->stream)
+        goto failure;
+    pw_stream_add_listener(video->stream, &video->listener, &stream_events, video);
+    int result = configure_formats(video, fps, hdr, TRUE);
     if (result < 0) {
         g_set_error(error, G_IO_ERROR, G_IO_ERROR_FAILED, "PipeWire stream connection failed: %s",
                     spa_strerror(result));
@@ -963,6 +1004,8 @@ void rgc_portal_video_free(struct rgc_portal_video *video)
         return;
     if (video->loop)
         pw_thread_loop_stop(video->loop);
+    if (video->producer_thread)
+        g_thread_join(video->producer_thread);
     if (video->stream)
         pw_stream_destroy(video->stream);
     if (video->core)
@@ -1000,6 +1043,16 @@ void rgc_portal_video_pointer(struct rgc_portal_video *video,
                                                            .stream_id = video->source.node_id,
                                                            .width = (int)video->format.size.width,
                                                            .height = (int)video->format.size.height,
+                                                           .logical_width = video->source.has_logical_size
+                                                                                ? video->source.logical_width
+                                                                                : video->source.has_size
+                                                                                      ? video->source.size_width
+                                                                                      : 0,
+                                                           .logical_height = video->source.has_logical_size
+                                                                                 ? video->source.logical_height
+                                                                                 : video->source.has_size
+                                                                                       ? video->source.size_height
+                                                                                       : 0,
                                                            .cursor_x = video->cursor.x,
                                                            .cursor_y = video->cursor.y,
                                                            .cursor_valid = video->cursor.valid,
@@ -1009,19 +1062,33 @@ void rgc_portal_video_pointer(struct rgc_portal_video *video,
 
 gboolean rgc_portal_video_configure(struct rgc_portal_video *video, gint64 request_id, uint64_t generation,
                                     uint32_t stream_id, int x, int y, int width, int height, int output_width,
-                                    int output_height)
+                                    int output_height, int fps, gboolean hdr)
 {
+    pw_thread_loop_lock(video->loop);
     g_mutex_lock(&video->lock);
-    gboolean valid = request_id > 0 && generation == video->source.generation &&
+    struct rgc_plane current_plane = {0};
+    describe_plane(&video->format, &current_plane);
+    gboolean valid = fps > 0 && fps <= 120 && request_id > 0 && generation == video->source.generation &&
                      stream_id == video->source.node_id && x >= 0 && y >= 0 && width > 0 && height > 0 &&
                      (uint64_t)x + width <= video->format.size.width &&
                      (uint64_t)y + height <= video->format.size.height && output_width > 0 &&
                      output_height > 0 && output_width <= 32768 && output_height <= 32768 &&
-                     (uint64_t)output_width * output_height * (video->hdr_requested ? 8u : 4u) <= FRAME_LIMIT;
-    if (valid)
+                     (uint64_t)output_width * output_height * (hdr || current_plane.high ? 8u : 4u) <= FRAME_LIMIT;
+    gboolean renegotiate = valid && (video->fps != fps || video->hdr_requested != hdr);
+    g_mutex_unlock(&video->lock);
+    int result = renegotiate ? configure_formats(video, fps, hdr, FALSE) : 0;
+    if (valid && result >= 0) {
+        g_mutex_lock(&video->lock);
         video->configuration =
             (struct rgc_capture_configuration){request_id, x, y, width, height, output_width, output_height};
-    g_mutex_unlock(&video->lock);
+        g_mutex_unlock(&video->lock);
+        video->fps = fps;
+        video->hdr_requested = hdr;
+        video->next_frame_deadline = 0;
+    }
+    pw_thread_loop_unlock(video->loop);
+    if (result < 0)
+        return rgc_portal_video_reply(video, request_id, "unavailable", spa_strerror(result));
     return rgc_portal_video_reply(video, request_id, valid ? "configured" : "unavailable",
                                   valid ? NULL
                                         : "The capture configuration does not fit the authorized source.");
@@ -1034,7 +1101,7 @@ gboolean rgc_portal_video_set_active(struct rgc_portal_video *video, gint64 requ
     if (result >= 0) {
         video->suspended = !active;
         if (active)
-            video->last_frame = 0;
+            video->next_frame_deadline = 0;
     }
     pw_thread_loop_unlock(video->loop);
     return rgc_portal_video_reply(video, request_id,

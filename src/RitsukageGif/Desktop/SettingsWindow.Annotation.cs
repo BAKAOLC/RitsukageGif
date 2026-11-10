@@ -77,6 +77,36 @@ namespace RitsukageGif.Desktop
                 static settings => settings.Annotation.NumberStartsAtZero);
             Add(numbers, "AnnotationGlobalNumberCounter", globalNumbers,
                 static settings => settings.Annotation.GlobalNumberCounter);
+            var automaticNumberColor = new RadioButton
+            {
+                GroupName = "NumberForeground", IsChecked = value.NumberForegroundColor is null,
+                VerticalAlignment = VerticalAlignment.Center,
+                [!ContentProperty] = LiveText.Resource("AnnotationNumberAutomaticForeground"),
+            };
+            var customNumberColor = new RadioButton
+            {
+                GroupName = "NumberForeground", IsChecked = value.NumberForegroundColor is not null,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var numberColor = CreateAppearanceColorPicker("AnnotationNumberForegroundColor",
+                value.NumberForegroundColor ?? 0xFFFFFFFF, true, () => draft.Appearance.ColorDialogStyle);
+            numberColor.IsEnabled = customNumberColor.IsChecked == true;
+            customNumberColor.IsCheckedChanged += (_, _) => numberColor.IsEnabled = customNumberColor.IsChecked == true;
+            var numberColors = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 6,
+                Children = { automaticNumberColor, customNumberColor, numberColor },
+            };
+            Add(numbers, "AnnotationNumberForegroundColor", numberColors,
+                static settings => settings.Annotation.NumberForegroundColor);
+            var numberTextSize = Choice("AnnotationNumberTextSize", (int)value.NumberTextSize,
+                "AnnotationSizeLarge", "AnnotationSizeMedium", "AnnotationSizeSmall");
+            var numberArrowSize = Choice("AnnotationNumberArrowSize", (int)value.NumberArrowSize,
+                "AnnotationSizeLarge", "AnnotationSizeMedium", "AnnotationSizeSmall");
+            Add(numbers, "AnnotationNumberTextSize", numberTextSize,
+                static settings => settings.Annotation.NumberTextSize);
+            Add(numbers, "AnnotationNumberArrowSize", numberArrowSize,
+                static settings => settings.Annotation.NumberArrowSize);
 
             var pencil = Section("AnnotationPencilBehavior");
             var shift = Choice("AnnotationPencilShiftMode", (int)value.PencilShiftMode,
@@ -135,6 +165,9 @@ namespace RitsukageGif.Desktop
                 ControlPointVisibility = (AnnotationControlPointVisibility)controlPoints.SelectedIndex,
                 RenumberOnDelete = renumber.IsChecked == true, NumberStartsAtZero = fromZero.IsChecked == true,
                 GlobalNumberCounter = globalNumbers.IsChecked == true,
+                NumberForegroundColor = automaticNumberColor.IsChecked == true ? null : numberColor.Color.ToUInt32(),
+                NumberTextSize = (AnnotationSizeLevel)numberTextSize.SelectedIndex,
+                NumberArrowSize = (AnnotationSizeLevel)numberArrowSize.SelectedIndex,
                 PencilShiftMode = (AnnotationPencilShiftMode)shift.SelectedIndex,
                 SmoothBrush = smooth.IsChecked == true, PolylineJoin = joins[Math.Max(0, join.SelectedIndex)],
                 PolylineCap = caps[Math.Max(0, cap.SelectedIndex)],
@@ -254,7 +287,11 @@ namespace RitsukageGif.Desktop
                         HexInputAlphaPosition = AlphaComponentPosition.Leading,
                     };
                     picker.Styles.Add(new AnnotationColorPickerStyles());
-                    var swatch = new Border { Background = new SolidColorBrush(colors[item]), Margin = new(1) };
+                    var swatch = new Border
+                    {
+                        Background = new SolidColorBrush(colors[item]), Margin = new(1),
+                        BorderBrush = AppTheme.Muted, BorderThickness = new(1),
+                    };
                     picker.Content = new Panel
                     {
                         Children =

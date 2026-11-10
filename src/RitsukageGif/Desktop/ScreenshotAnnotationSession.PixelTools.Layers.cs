@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
     {
         private PixelRect PixelArea(ScreenshotAnnotation annotation, PixelRect region)
         {
+            if (annotation.AutoMosaicId != Guid.Empty && annotation.AutoMosaicRegions.IsDefaultOrEmpty) return default;
             var bounds = PixelEffectBounds(annotation);
             return new PixelRect((int)Math.Floor(bounds.Left), (int)Math.Floor(bounds.Top),
                     Math.Max(1, (int)Math.Ceiling(bounds.Right) - (int)Math.Floor(bounds.Left)),

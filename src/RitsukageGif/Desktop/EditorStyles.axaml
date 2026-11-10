@@ -5,21 +5,34 @@
     <ResourceDictionary>
       <x:Double x:Key="SearchPanelFontSize">13</x:Double>
       <FontFamily x:Key="SearchPanelFontFamily">Default</FontFamily>
-      <StaticResource x:Key="CompletionToolTipBackground" ResourceKey="ToolTipBackground" />
-      <StaticResource x:Key="CompletionToolTipForeground" ResourceKey="ToolTipForeground" />
-      <StaticResource x:Key="CompletionToolTipBorderBrush" ResourceKey="ToolTipBorderBrush" />
-      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <StaticResource x:Key="CompletionToolTipBackground" ResourceKey="ToolTipBackground" />
+          <StaticResource x:Key="CompletionToolTipForeground" ResourceKey="ToolTipForeground" />
+          <StaticResource x:Key="CompletionToolTipBorderBrush" ResourceKey="ToolTipBorderBrush" />
+          <StaticResource x:Key="OverloadViewerBackground" ResourceKey="ToolTipBackground" />
+          <StaticResource x:Key="OverloadViewerForeground" ResourceKey="ToolTipForeground" />
+          <StaticResource x:Key="OverloadViewerBorderBrush" ResourceKey="ToolTipBorderBrush" />
+          <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+          <StaticResource x:Key="SearchPanelBackgroundBrush" ResourceKey="SemiColorFill0" />
+          <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+          <StaticResource x:Key="SearchPanelBorderBrush" ResourceKey="SemiColorPrimary" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <StaticResource x:Key="CompletionToolTipBackground" ResourceKey="ToolTipBackground" />
+          <StaticResource x:Key="CompletionToolTipForeground" ResourceKey="ToolTipForeground" />
+          <StaticResource x:Key="CompletionToolTipBorderBrush" ResourceKey="ToolTipBorderBrush" />
+          <StaticResource x:Key="OverloadViewerBackground" ResourceKey="ToolTipBackground" />
+          <StaticResource x:Key="OverloadViewerForeground" ResourceKey="ToolTipForeground" />
+          <StaticResource x:Key="OverloadViewerBorderBrush" ResourceKey="ToolTipBorderBrush" />
+          <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+          <StaticResource x:Key="SearchPanelBackgroundBrush" ResourceKey="SemiColorFill0" />
+          <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
+          <StaticResource x:Key="SearchPanelBorderBrush" ResourceKey="SemiColorPrimary" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
       <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
       <StaticResource x:Key="CompletionToolTipBorderThickness" ResourceKey="ToolTipBorderThickness" />
-      <StaticResource x:Key="OverloadViewerBackground" ResourceKey="ToolTipBackground" />
-      <StaticResource x:Key="OverloadViewerForeground" ResourceKey="ToolTipForeground" />
-      <StaticResource x:Key="OverloadViewerBorderBrush" ResourceKey="ToolTipBorderBrush" />
-      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
-      <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
-      <StaticResource x:Key="SearchPanelBackgroundBrush" ResourceKey="SemiColorFill0" />
-      <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
-      <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
-      <StaticResource x:Key="SearchPanelBorderBrush" ResourceKey="SemiColorPrimary" />
       <!-- SemiTheme supplies this resource in App.Initialize before EditorStyles is loaded. -->
       <!-- ReSharper disable once Xaml.StaticResourceNotResolved -->
       <StaticResource x:Key="TextAreaSelectionBrush" ResourceKey="TextBoxSelectionBackground" />

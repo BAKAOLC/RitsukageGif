@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
         private nint _device, _context, _swapChain, _upload;
         private int _width, _height;
 
-        public WindowsHdrPresenter(nint window, int width, int height)
+        public WindowsHdrPresenter(nint window, int width, int height, bool transparentComposition = false)
         {
             try
             {
@@ -20,13 +20,15 @@ namespace RitsukageGif.Desktop
                     var description = new HdrSwapChainDescription
                     {
                         Width = (uint)width, Height = (uint)height, Format = 10, SampleCount = 1,
-                        BufferUsage = 0x20, BufferCount = 2, SwapEffect = 4, AlphaMode = 3,
+                        BufferUsage = 0x20, BufferCount = 2, SwapEffect = transparentComposition ? 3 : 4,
+                        AlphaMode = transparentComposition ? 1 : 3,
                     };
                     nint chain = 0;
-                    Check(((delegate* unmanaged[Stdcall]<nint, nint, nint, HdrSwapChainDescription*, nint, nint, nint*,
-                            int
-                            >)
-                        Table(factory)[15])(factory, _device, window, &description, 0, 0, &chain));
+                    if (transparentComposition)
+                        chain = CreateCompositionSwapChain(factory, window, &description);
+                    else
+                        Check(((delegate* unmanaged[Stdcall]<nint, nint, nint, HdrSwapChainDescription*, nint, nint,
+                            nint*, int>)Table(factory)[15])(factory, _device, window, &description, 0, 0, &chain));
                     try
                     {
                         _swapChain = Query(chain, new("94d99bdb-f1f8-4ab0-b236-7da0170edab1"));
@@ -59,18 +61,15 @@ namespace RitsukageGif.Desktop
 
         public void Dispose()
         {
+            DestroyComposition();
             Release(ref _upload);
             Release(ref _swapChain);
             Release(ref _context);
             Release(ref _device);
         }
 
-        public void Present(ReadOnlySpan<byte> pixels, int width, int height)
-        {
-            Present(pixels, width, height, checked(width * 8));
-        }
-
-        public void Present(ReadOnlySpan<byte> pixels, int width, int height, int stride)
+        public void Present(ReadOnlySpan<byte> pixels, int width, int height, int stride, int targetWidth = 0,
+            int targetHeight = 0)
         {
             ObjectDisposedException.ThrowIf(_swapChain == 0, this);
             if (width <= 0 || height <= 0 || stride < (long)width * 8 || pixels.Length < (long)stride * height)
@@ -84,6 +83,7 @@ namespace RitsukageGif.Desktop
                 CreateUpload();
             }
 
+            UpdateCompositionTransform(targetWidth, targetHeight);
             var iid = new Guid("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
             nint buffer = 0;
             Check(((delegate* unmanaged[Stdcall]<nint, uint, Guid*, nint*, int>)Table(_swapChain)[9])(

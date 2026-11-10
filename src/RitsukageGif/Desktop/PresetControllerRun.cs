@@ -32,6 +32,7 @@ namespace RitsukageGif.Desktop
         public bool Polling { get; set; }
         public PresetScriptSession? Script { get; set; }
         public Task? ScriptTask { get; set; }
+        internal TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public string? Failure { get; set; }
         public Exception? ScriptFailure { get; set; }
 
@@ -62,6 +63,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 _cancellation.Cancel();
+                if (ScriptTask is null) Completion.TrySetCanceled(Token);
             }
             finally
             {

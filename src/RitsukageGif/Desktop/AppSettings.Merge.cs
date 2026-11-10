@@ -87,6 +87,8 @@ namespace RitsukageGif.Desktop
                     ? current.GlobalMouseBindings
                     : edited.GlobalMouseBindings,
                 VideoRecording = Merge(current.VideoRecording, baseline.VideoRecording, edited.VideoRecording),
+                ScreenshotRecording = MergeRecordingPreferences(current.ScreenshotRecording,
+                    baseline.ScreenshotRecording, edited.ScreenshotRecording),
                 Fps = EqualityComparer<int>.Default.Equals(baseline.Fps, edited.Fps) ? current.Fps : edited.Fps,
                 Divisor = EqualityComparer<int>.Default.Equals(baseline.Divisor, edited.Divisor)
                     ? current.Divisor
@@ -108,9 +110,6 @@ namespace RitsukageGif.Desktop
                 UseFfmpeg = EqualityComparer<bool>.Default.Equals(baseline.UseFfmpeg, edited.UseFfmpeg)
                     ? current.UseFfmpeg
                     : edited.UseFfmpeg,
-                Cursor = EqualityComparer<bool>.Default.Equals(baseline.Cursor, edited.Cursor)
-                    ? current.Cursor
-                    : edited.Cursor,
                 CaptureSource =
                 EqualityComparer<CaptureSourceKind>.Default.Equals(baseline.CaptureSource, edited.CaptureSource)
                     ? current.CaptureSource
@@ -249,9 +248,6 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return current with
             {
-                Mode = EqualityComparer<ScreenshotClipboardMode>.Default.Equals(baseline.Mode, edited.Mode)
-                    ? current.Mode
-                    : edited.Mode,
                 FileFormat =
                 EqualityComparer<ScreenshotClipboardFileFormat>.Default.Equals(baseline.FileFormat, edited.FileFormat)
                     ? current.FileFormat
@@ -300,6 +296,15 @@ namespace RitsukageGif.Desktop
                     : edited.ConflictPolicy,
                 Quick = Merge(current.Quick, baseline.Quick, edited.Quick),
                 Automatic = Merge(current.Automatic, baseline.Automatic, edited.Automatic),
+                AutoSaveEnabled = baseline.AutoSaveEnabled == edited.AutoSaveEnabled
+                    ? current.AutoSaveEnabled
+                    : edited.AutoSaveEnabled,
+                AutomaticCleanupMaxAgeDays = baseline.AutomaticCleanupMaxAgeDays == edited.AutomaticCleanupMaxAgeDays
+                    ? current.AutomaticCleanupMaxAgeDays
+                    : edited.AutomaticCleanupMaxAgeDays,
+                QuickNotificationAction = baseline.QuickNotificationAction == edited.QuickNotificationAction
+                    ? current.QuickNotificationAction
+                    : edited.QuickNotificationAction,
                 AutoSaveTriggers =
                 EqualityComparer<ScreenshotAutoSaveTriggers>.Default.Equals(baseline.AutoSaveTriggers,
                     edited.AutoSaveTriggers)
@@ -432,6 +437,18 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<bool>.Default.Equals(baseline.GlobalNumberCounter, edited.GlobalNumberCounter)
                     ? current.GlobalNumberCounter
                     : edited.GlobalNumberCounter,
+                NumberTextSize =
+                EqualityComparer<AnnotationSizeLevel>.Default.Equals(baseline.NumberTextSize, edited.NumberTextSize)
+                    ? current.NumberTextSize
+                    : edited.NumberTextSize,
+                NumberForegroundColor =
+                EqualityComparer<uint?>.Default.Equals(baseline.NumberForegroundColor, edited.NumberForegroundColor)
+                    ? current.NumberForegroundColor
+                    : edited.NumberForegroundColor,
+                NumberArrowSize =
+                EqualityComparer<AnnotationSizeLevel>.Default.Equals(baseline.NumberArrowSize, edited.NumberArrowSize)
+                    ? current.NumberArrowSize
+                    : edited.NumberArrowSize,
                 SmoothBrush = EqualityComparer<bool>.Default.Equals(baseline.SmoothBrush, edited.SmoothBrush)
                     ? current.SmoothBrush
                     : edited.SmoothBrush,
@@ -519,6 +536,9 @@ namespace RitsukageGif.Desktop
                 AutoFit = EqualityComparer<bool>.Default.Equals(baseline.AutoFit, edited.AutoFit)
                     ? current.AutoFit
                     : edited.AutoFit,
+                SmoothScaling = baseline.SmoothScaling == edited.SmoothScaling
+                    ? current.SmoothScaling
+                    : edited.SmoothScaling,
                 MaximumWindowSize = baseline.MaximumWindowSize == edited.MaximumWindowSize
                     ? current.MaximumWindowSize
                     : edited.MaximumWindowSize,
@@ -547,6 +567,12 @@ namespace RitsukageGif.Desktop
                 SelectableText = EqualityComparer<bool>.Default.Equals(baseline.SelectableText, edited.SelectableText)
                     ? current.SelectableText
                     : edited.SelectableText,
+                ShowTextPopupMenu = baseline.ShowTextPopupMenu == edited.ShowTextPopupMenu
+                    ? current.ShowTextPopupMenu
+                    : edited.ShowTextPopupMenu,
+                TextHighlightColors = SameSequence(baseline.TextHighlightColors, edited.TextHighlightColors, SameColor)
+                    ? current.TextHighlightColors
+                    : edited.TextHighlightColors,
                 ThumbnailSelectableText =
                 EqualityComparer<bool>.Default.Equals(baseline.ThumbnailSelectableText, edited.ThumbnailSelectableText)
                     ? current.ThumbnailSelectableText
@@ -557,10 +583,6 @@ namespace RitsukageGif.Desktop
                 ReplacementAction = baseline.ReplacementAction == edited.ReplacementAction
                     ? current.ReplacementAction
                     : edited.ReplacementAction,
-                CopyVisibleRegion =
-                EqualityComparer<bool>.Default.Equals(baseline.CopyVisibleRegion, edited.CopyVisibleRegion)
-                    ? current.CopyVisibleRegion
-                    : edited.CopyVisibleRegion,
                 ResizeFromBorder =
                 EqualityComparer<bool>.Default.Equals(baseline.ResizeFromBorder, edited.ResizeFromBorder)
                     ? current.ResizeFromBorder
@@ -616,13 +638,17 @@ namespace RitsukageGif.Desktop
             if (Same(baseline, edited)) return current;
             return current with
             {
-                InitialAxis =
-                EqualityComparer<ScrollCaptureAxis>.Default.Equals(baseline.InitialAxis, edited.InitialAxis)
-                    ? current.InitialAxis
-                    : edited.InitialAxis,
+                InitialAction =
+                EqualityComparer<ScrollCaptureInitialAction>.Default.Equals(baseline.InitialAction,
+                    edited.InitialAction)
+                    ? current.InitialAction
+                    : edited.InitialAction,
                 AutoCropOnReverse = baseline.AutoCropOnReverse == edited.AutoCropOnReverse
                     ? current.AutoCropOnReverse
                     : edited.AutoCropOnReverse,
+                SkipClearConfirmation = baseline.SkipClearConfirmation == edited.SkipClearConfirmation
+                    ? current.SkipClearConfirmation
+                    : edited.SkipClearConfirmation,
                 RespondShortcuts =
                 EqualityComparer<bool>.Default.Equals(baseline.RespondShortcuts, edited.RespondShortcuts)
                     ? current.RespondShortcuts
@@ -639,6 +665,12 @@ namespace RitsukageGif.Desktop
                 QuitOnForeignActivation = baseline.QuitOnForeignActivation == edited.QuitOnForeignActivation
                     ? current.QuitOnForeignActivation
                     : edited.QuitOnForeignActivation,
+                InformationUnit = baseline.InformationUnit == edited.InformationUnit
+                    ? current.InformationUnit
+                    : edited.InformationUnit,
+                InformationItems = baseline.InformationItems == edited.InformationItems
+                    ? current.InformationItems
+                    : edited.InformationItems,
                 CycleRegionHistory = baseline.CycleRegionHistory == edited.CycleRegionHistory
                     ? current.CycleRegionHistory
                     : edited.CycleRegionHistory,
@@ -655,6 +687,20 @@ namespace RitsukageGif.Desktop
                 DoubleClickAction = baseline.DoubleClickAction == edited.DoubleClickAction
                     ? current.DoubleClickAction
                     : edited.DoubleClickAction,
+                MiddleClickAction = baseline.MiddleClickAction == edited.MiddleClickAction
+                    ? current.MiddleClickAction
+                    : edited.MiddleClickAction,
+                WheelFunctions = baseline.WheelFunctions == edited.WheelFunctions
+                    ? current.WheelFunctions
+                    : edited.WheelFunctions,
+                PinAndCopy = baseline.PinAndCopy == edited.PinAndCopy ? current.PinAndCopy : edited.PinAndCopy,
+                ShowSecondaryButtons = baseline.ShowSecondaryButtons == edited.ShowSecondaryButtons
+                    ? current.ShowSecondaryButtons
+                    : edited.ShowSecondaryButtons,
+                PolygonCornerRadius = baseline.PolygonCornerRadius == edited.PolygonCornerRadius
+                    ? current.PolygonCornerRadius
+                    : edited.PolygonCornerRadius,
+                SoundTiming = baseline.SoundTiming == edited.SoundTiming ? current.SoundTiming : edited.SoundTiming,
                 RelativeCoordinates = baseline.RelativeCoordinates == edited.RelativeCoordinates
                     ? current.RelativeCoordinates
                     : edited.RelativeCoordinates,
@@ -751,6 +797,15 @@ namespace RitsukageGif.Desktop
                     edited.MagnifierSelectionHandles)
                     ? current.MagnifierSelectionHandles
                     : edited.MagnifierSelectionHandles,
+                MagnifierAnnotations =
+                EqualityComparer<bool>.Default.Equals(baseline.MagnifierAnnotations, edited.MagnifierAnnotations)
+                    ? current.MagnifierAnnotations
+                    : edited.MagnifierAnnotations,
+                MagnifierAnnotationControls =
+                EqualityComparer<bool>.Default.Equals(baseline.MagnifierAnnotationControls,
+                    edited.MagnifierAnnotationControls)
+                    ? current.MagnifierAnnotationControls
+                    : edited.MagnifierAnnotationControls,
                 MagnifierCoordinates =
                 EqualityComparer<bool>.Default.Equals(baseline.MagnifierCoordinates, edited.MagnifierCoordinates)
                     ? current.MagnifierCoordinates
@@ -780,11 +835,7 @@ namespace RitsukageGif.Desktop
                 KeepDecoration = EqualityComparer<bool>.Default.Equals(baseline.KeepDecoration, edited.KeepDecoration)
                     ? current.KeepDecoration
                     : edited.KeepDecoration,
-                RememberedDecoration =
-                EqualityComparer<CaptureDecoration>.Default.Equals(baseline.RememberedDecoration,
-                    edited.RememberedDecoration)
-                    ? current.RememberedDecoration
-                    : edited.RememberedDecoration,
+                FrameDecoration = Merge(current.FrameDecoration, baseline.FrameDecoration, edited.FrameDecoration),
                 FrameRoundEnabled =
                 EqualityComparer<bool>.Default.Equals(baseline.FrameRoundEnabled, edited.FrameRoundEnabled)
                     ? current.FrameRoundEnabled
@@ -793,6 +844,23 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<double>.Default.Equals(baseline.FrameRoundRadius, edited.FrameRoundRadius)
                     ? current.FrameRoundRadius
                     : edited.FrameRoundRadius,
+            };
+        }
+
+        private static CaptureFrameDecorationPreferences Merge(CaptureFrameDecorationPreferences current,
+            CaptureFrameDecorationPreferences baseline, CaptureFrameDecorationPreferences edited)
+        {
+            return current with
+            {
+                Kind = baseline.Kind == edited.Kind ? current.Kind : edited.Kind,
+                ShadowStrength = baseline.ShadowStrength == edited.ShadowStrength
+                    ? current.ShadowStrength
+                    : edited.ShadowStrength,
+                ShadowColor = baseline.ShadowColor == edited.ShadowColor ? current.ShadowColor : edited.ShadowColor,
+                BorderStrength = baseline.BorderStrength == edited.BorderStrength
+                    ? current.BorderStrength
+                    : edited.BorderStrength,
+                BorderColor = baseline.BorderColor == edited.BorderColor ? current.BorderColor : edited.BorderColor,
             };
         }
 
@@ -870,6 +938,9 @@ namespace RitsukageGif.Desktop
                     EqualityComparer<bool>.Default.Equals(baseline.StartWithWindows, edited.StartWithWindows)
                         ? current.StartWithWindows
                         : edited.StartWithWindows,
+                StartupHidden = baseline.StartupHidden == edited.StartupHidden
+                    ? current.StartupHidden
+                    : edited.StartupHidden,
                 RunAsAdministrator =
                     EqualityComparer<bool>.Default.Equals(baseline.RunAsAdministrator, edited.RunAsAdministrator)
                         ? current.RunAsAdministrator
@@ -916,6 +987,10 @@ namespace RitsukageGif.Desktop
                         edited.ShowDialogOnRecognition)
                         ? current.ShowDialogOnRecognition
                         : edited.ShowDialogOnRecognition,
+                ShowDialogOnCopySelected = baseline.ShowDialogOnCopySelected == edited.ShowDialogOnCopySelected
+                    ? current.ShowDialogOnCopySelected
+                    : edited.ShowDialogOnCopySelected,
+                Dialog = current.Dialog.MergeChanges(baseline.Dialog, edited.Dialog),
                 ShowDialogOnCopyAll =
                     EqualityComparer<bool>.Default.Equals(baseline.ShowDialogOnCopyAll, edited.ShowDialogOnCopyAll)
                         ? current.ShowDialogOnCopyAll

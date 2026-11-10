@@ -69,12 +69,12 @@ namespace RitsukageGif.Desktop
                 };
                 if (_content.ContextMenu is { } menu)
                 {
-                    var convert = Command("PinnedLiveConvert", () => FreezeLiveAsync(_lifetime.Token));
+                    var convert = Command("PinnedLiveConvert", ConvertLiveToImageAsync);
                     menu.Items.Insert(0, convert);
                     menu.Opened += (_, _) =>
                     {
                         convert.IsVisible = LiveCaptureActive;
-                        convert.IsEnabled = LiveSourceReady;
+                        convert.IsEnabled = CanConvertLiveToImage;
                     };
                 }
             }
@@ -223,7 +223,15 @@ namespace RitsukageGif.Desktop
                     _liveSurfaceHeight = frame.Height;
                 }
 
-                frame.UpdateSurface(_liveSurface);
+                if (_colorMatrixState.Matrix is null)
+                {
+                    frame.UpdateSurface(_liveSurface);
+                }
+                else
+                {
+                    using var processed = CreateColorPreview(frame.Pixels, frame.Width, frame.Height, frame.Hdr);
+                    _liveSurface.Update(processed);
+                }
 
                 if (frame.Hdr is { } hdr)
                 {
@@ -265,24 +273,17 @@ namespace RitsukageGif.Desktop
                 return Task.FromException<ScreenshotResult>(new CaptureSourceLostException());
             token.ThrowIfCancellationRequested();
             var frame = displayed.Retain();
-            var region = _isThumbnail && CurrentPreferences.CopyVisibleRegion ? DisplayRegion : (PixelRect?)null;
             var scale = frame.NativePixelDensity ?? OriginalCaptureScaling;
+            var colorState = _colorMatrixState;
             // ReSharper disable once MethodSupportsCancellation
             return Task.Run(() =>
             {
                 using (frame)
                 {
                     var png = frame.EncodePng(token);
-                    var hdr = mode == OutputColorMode.Sdr ? null : frame.Hdr;
-                    if (region is { } crop)
-                    {
-                        png = PngImageCodec.Crop(png, crop, token);
-                        if (hdr is not null) hdr = CropOutputFrame(hdr, crop, token);
-                    }
-                    else if (hdr is not null)
-                    {
-                        hdr = hdr with { Pixels = hdr.Pixels.ToArray() };
-                    }
+                    var hdr = frame.Hdr;
+                    (png, hdr) = ProcessOutputSource(png, hdr, colorState, token);
+                    if (hdr is not null && colorState.Matrix is null) hdr = hdr with { Pixels = hdr.Pixels.ToArray() };
 
                     return CreateOutput(png, hdr, mode, scale);
                 }
@@ -330,6 +331,7 @@ namespace RitsukageGif.Desktop
                 if (frame.NativePixelDensity is { } density) SetOriginalCaptureScaling(density);
                 OriginalContent = new(_png, _sdrPng, content.Hdr);
                 ConfigureHdr(content.Hdr);
+                RestoreImageProcessing();
                 UpdateSize();
                 ReleaseLiveSnapshot();
                 previousBitmap.Dispose();
@@ -345,44 +347,9 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private bool CanTransformLiveImage(PinnedImageTransform transform)
+        private bool CanTransformLiveImage()
         {
-            return !LiveCaptureActive || (LiveSourceReady &&
-                                          transform is not (PinnedImageTransform.Grayscale
-                                              or PinnedImageTransform.Invert));
-        }
-
-        private async Task<bool> ApplyLiveTransformAsync(PinnedImageTransform transform, CancellationToken token)
-        {
-            token.ThrowIfCancellationRequested();
-            if (LiveDescriptor is not { } descriptor) return false;
-            if (!CanTransformLiveImage(transform)) return true;
-            var transformedDescriptor = descriptor.Transform(transform);
-            LiveDescriptor = transformedDescriptor;
-            _liveSource?.SetDescriptor(transformedDescriptor);
-            if (_liveSnapshot is { } snapshot)
-            {
-                using var retained = snapshot.Frame.Retain();
-                var transformed = await Task.Run(() => retained.Transform(transform, token), token);
-                try
-                {
-                    token.ThrowIfCancellationRequested();
-                    if (!_closed && LiveDescriptor == transformedDescriptor && ReferenceEquals(_liveSnapshot, snapshot))
-                    {
-                        var applied = transformed;
-                        transformed = null;
-                        ApplyLiveFrame(applied, transformedDescriptor);
-                    }
-                }
-                finally
-                {
-                    transformed?.Dispose();
-                }
-            }
-
-            TickLiveCapture();
-            StateChanged?.Invoke(this, EventArgs.Empty);
-            return true;
+            return !LiveCaptureActive || LiveSourceReady;
         }
 
         internal void ReleaseLiveSnapshot()
@@ -415,18 +382,18 @@ namespace RitsukageGif.Desktop
             }
 
             if (_hdrPreview is null || SnapshotLiveFrame is not { Hdr: not null } displayed ||
-                _annotation is not null || _selectedTextStart >= 0) return false;
+                _annotation is not null || HasTextSelection) return false;
             var frame = displayed.Retain();
             var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _hdrPreviewWork = work;
-            _ = RefreshLiveHdrAsync(frame, DisplayRegion, work);
+            _ = RefreshLiveHdrAsync(frame, work);
             return true;
         }
 
-        private async Task RefreshLiveHdrAsync(WindowRoiPinFrame frame, PixelRect region, CancellationTokenSource work)
+        private async Task RefreshLiveHdrAsync(WindowRoiPinFrame frame, CancellationTokenSource work)
         {
             using (frame)
-                await RefreshHdrPreviewAsync(frame.Hdr!, frame.Pixels, region, work);
+                await RefreshHdrPreviewAsync(frame.Hdr!, work);
         }
 
         private void PresentLiveState(string? error = null)

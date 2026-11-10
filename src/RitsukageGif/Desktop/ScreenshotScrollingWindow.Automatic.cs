@@ -53,27 +53,43 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                if (_session.AutomaticAvailable)
-                {
-                    _session.AutomaticEnabled = true;
-                    return;
-                }
-
                 _connectingAutomatic = true;
                 _automatic.IsEnabled = false;
                 try
                 {
-                    var connection = await Task.Run(() => AutomaticScrollInputFactory.ConnectAsync(_region,
-                            _automaticTarget, NativeCaptureSession.AuthorizePointerAsync, _automaticLifetime.Token),
-                        _automaticLifetime.Token);
-                    if (_closed)
+                    if (!_session.AutomaticAvailable)
                     {
-                        connection.Dispose();
-                        return;
+                        var connection = await Task.Run(() => AutomaticScrollInputFactory.ConnectAsync(_region,
+                                _automaticTarget, NativeCaptureSession.AuthorizePointerAsync, _automaticLifetime.Token),
+                            _automaticLifetime.Token);
+                        if (_closed)
+                        {
+                            connection.Dispose();
+                            return;
+                        }
+
+                        ReplaceAutomaticConnection(connection);
                     }
 
-                    ReplaceAutomaticConnection(connection);
-                    _session.AutomaticEnabled = connection.Input is not null;
+                    if (_automaticConnection?.Input is { } input)
+                    {
+                        var region = _region;
+                        var generation = _session.Generation;
+                        var prepared = await Task.Run(() => input.Prepare(region, _automaticLifetime.Token),
+                            _automaticLifetime.Token);
+                        if (_closed) return;
+                        if (prepared && generation == _session.Generation && region == _region)
+                        {
+                            if (_session.Paused) StartCapture();
+                            _session.AutomaticEnabled = true;
+                        }
+                        else
+                        {
+                            _session.AutomaticEnabled = false;
+                            ToolTip.SetTip(_automatic, input.UnavailableReason);
+                        }
+                    }
+
                     _updatingAutomatic = true;
                     try
                     {
@@ -104,7 +120,10 @@ namespace RitsukageGif.Desktop
                 finally
                 {
                     _connectingAutomatic = false;
-                    if (!_closed) _automatic.IsEnabled = true;
+                    if (!_closed)
+                        _automatic.IsEnabled = !_outputting &&
+                                               (_session.AutomaticAvailable ||
+                                                _automaticConnection?.CanRequestAccess == true);
                 }
             };
             _session.AutomaticChanged += AutomaticChanged;

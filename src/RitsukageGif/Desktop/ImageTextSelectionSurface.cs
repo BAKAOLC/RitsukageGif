@@ -10,6 +10,7 @@ namespace RitsukageGif.Desktop
         private static readonly Cursor TextCursor = new(StandardCursorType.Ibeam);
         private IPointer? _pointer;
         private ImageTextSelection _selection = new(ImageTextSelectionDocument.Empty);
+        private IReadOnlyList<Rect> _highlights = [];
 
         internal ImageTextSelectionSurface()
         {
@@ -61,9 +62,23 @@ namespace RitsukageGif.Desktop
 
         internal event Action<string>? CopyRequested;
 
+        internal void SetHighlights(IReadOnlyList<Rect> highlights)
+        {
+            _highlights = highlights;
+            InvalidateVisual();
+        }
+
         private void Pressed(object? sender, PointerPressedEventArgs args)
         {
             if (args.GetCurrentPoint(this).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed) return;
+            if (args.ClickCount == 2 && _selection.SelectLine(args.GetPosition(this)))
+            {
+                Focus();
+                args.Handled = true;
+                InvalidateVisual();
+                return;
+            }
+
             if (!_selection.Begin(args.GetPosition(this)))
             {
                 InvalidateVisual();
@@ -105,6 +120,8 @@ namespace RitsukageGif.Desktop
             using var opacity = context.PushOpacity(.35);
             foreach (var span in _selection.SelectedSpans)
                 context.DrawRectangle(SelectionBrush, null, span.Bounds);
+            foreach (var rectangle in _highlights)
+                context.DrawRectangle(SelectionBrush, null, rectangle);
         }
     }
 }

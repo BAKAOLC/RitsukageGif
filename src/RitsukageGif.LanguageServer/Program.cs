@@ -19,7 +19,12 @@ namespace RitsukageGif.LanguageServer
             {
                 UiText.SetLanguage(args.FirstOrDefault() ?? "system");
                 logger.ZLogInformation($"Language server process started.");
-                await new ScriptLanguageServer().RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput());
+                await using var catalog =
+                    typeof(Program).Assembly.GetManifestResourceStream("RitsukageGif.ScriptMetadata.json")
+                    ?? throw new FileNotFoundException("The language server script metadata catalog is missing.");
+                var bindings = ScriptMetadataBindings.CreateBindings(catalog);
+                await new ScriptLanguageServer(bindings: bindings)
+                    .RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput());
             }
             catch (Exception error)
             {

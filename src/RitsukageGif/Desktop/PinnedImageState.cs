@@ -20,6 +20,14 @@ namespace RitsukageGif.Desktop
         public bool HasOriginalSdrImage { get; set; }
         public bool HasOriginalEncoded { get; set; }
         public bool AnimationActive { get; set; }
+        public ImageTextMark[] TextMarks { get; set; } = [];
+        public ScreenshotAnnotationDocument? Annotations { get; set; }
+        public PinnedViewOrientation Orientation { get; set; }
+        public PinnedColorMatrixState ColorProcessing { get; set; }
+        public bool MarkHidden { get; set; }
+        public PinnedImageTranslationState? Translation { get; set; }
+        public PinnedImageOcrState? Ocr { get; set; }
+        public PinnedTransparentLayerMode? TransparentLayer { get; set; }
 
         internal PinnedImageState Copy()
         {

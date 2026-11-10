@@ -9,9 +9,15 @@ namespace RitsukageGif.Desktop
     {
         public static IEnumerable<PreviewFrame> Read(string path, CancellationToken token, bool preserveHdr = false)
         {
+            return ReadCore(path, preserveHdr, false, token);
+        }
+
+        private static IEnumerable<PreviewFrame> ReadCore(string path, bool preserveHdr, bool raw,
+            CancellationToken token)
+        {
             if (PngAnimation.HasHdrPqMetadata(path, token))
             {
-                foreach (var frame in ReadHdr(path, preserveHdr, token)) yield return frame;
+                foreach (var frame in ReadHdr(path, preserveHdr, raw, token)) yield return frame;
                 yield break;
             }
 
@@ -99,7 +105,7 @@ namespace RitsukageGif.Desktop
                         for (var y = 0; y < canvas.Height; y++)
                             Marshal.Copy(canvas.GetPixels() + y * canvas.RowBytes, buffer, y * canvas.Width * 4,
                                 canvas.Width * 4);
-                    return new(buffer, canvas.Width, canvas.Height, Math.Max(10, delay));
+                    return new(buffer, canvas.Width, canvas.Height, Math.Max(raw ? 1 : 10, delay));
                 }
                 catch
                 {
@@ -107,6 +113,13 @@ namespace RitsukageGif.Desktop
                     throw;
                 }
             }
+        }
+
+        internal static IEnumerable<PreviewFrame> ReadRawHdr(string path, CancellationToken token)
+        {
+            return PngAnimation.HasHdrPqMetadata(path, token)
+                ? ReadHdr(path, true, true, token)
+                : ReadCore(path, false, true, token);
         }
 
         private static void Copy(SKBitmap source, SKBitmap target)

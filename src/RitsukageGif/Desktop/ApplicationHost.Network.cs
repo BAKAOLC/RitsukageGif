@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
         {
             _committedNetwork = Settings.Network;
             ApplicationHttp.Configure(_committedNetwork);
-            _networkRecovery = TryRecoverNetworkPreferencesAsync();
+            if (!IsTaskHost) _networkRecovery = TryRecoverNetworkPreferencesAsync();
         }
 
         private async Task TryRecoverNetworkPreferencesAsync()
@@ -27,7 +27,7 @@ namespace RitsukageGif.Desktop
 
         private async Task RecoverNetworkPreferencesAsync()
         {
-            if (!NetworkProxyJournal.HasPending) return;
+            if (IsTaskHost || !NetworkProxyJournal.HasPending) return;
             var persisted = AppSettings.ReadPersistedNetwork();
             if (persisted != Volatile.Read(ref _committedNetwork))
             {
@@ -44,6 +44,15 @@ namespace RitsukageGif.Desktop
         private async Task<NetworkPreferences> CommitNetworkPreferencesAsync(NetworkPreferences preferences,
             string password, CancellationToken token)
         {
+            if (IsTaskHost)
+            {
+                token.ThrowIfCancellationRequested();
+                ApplyTaskSettingsAutomation(Settings with { Network = preferences },
+                    new() { ProxyPassword = password }, false);
+                _settingsWindow?.RefreshNetworkPreferences(Settings.Network);
+                return Settings.Network;
+            }
+
             await _networkRecovery;
             await RecoverNetworkPreferencesAsync();
             return await NetworkProxyTransaction.CommitAsync(AppSettings.ReadPersistedNetwork, preferences,

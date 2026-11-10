@@ -35,7 +35,7 @@ namespace RitsukageGif.Desktop
         {
             var button = new Button { Width = 30, Height = 30, Padding = new(5) };
             button.Content = ToolbarIcon.Create(button,
-                ToolbarIcon.TryGeometry(geometryKey) ?? ToolbarIcon.Geometry(geometryKey));
+                ToolbarIcon.FindDefinition(geometryKey) ?? ToolbarIcon.GetDefinition(geometryKey));
             button.Bind(ToolTip.TipProperty, LiveText.Resource(labelKey));
             return button;
         }
@@ -116,7 +116,7 @@ namespace RitsukageGif.Desktop
             _copyImage.Height = 30;
             _copyImage.Padding = new(5);
             _copyImage.Content = ToolbarIcon.Create(_copyImage,
-                ToolbarIcon.TryGeometry("ScreenshotCopy") ?? ToolbarIcon.Geometry("ScreenshotCopy"));
+                ToolbarIcon.FindDefinition("ScreenshotCopy") ?? ToolbarIcon.GetDefinition("ScreenshotCopy"));
             _copyImage.Bind(ToolTip.TipProperty, LiveText.Resource("ScreenshotAfterCopyImage"));
             _copyImage.Click += async (_, _) => await CopyImageAsync();
             var zoomIn = IconButton("AnimationZoomIn", "AnimationZoomIn");

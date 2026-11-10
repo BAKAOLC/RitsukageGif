@@ -19,8 +19,8 @@ namespace RitsukageGif.Desktop
                     : null),
                 (PinnedContentKinds.Formula,
                     snapshot => string.IsNullOrWhiteSpace(snapshot.FormulaSource)
-                        ? null
-                        : new PinnedFormulaDocument([snapshot.FormulaSource])),
+                        ? PinnedFormulaInput.TryCreate(snapshot.Text)
+                        : new([snapshot.FormulaSource])),
                 (PinnedContentKinds.Text, snapshot => !HasHtml(snapshot, out var html)
                     ? null
                     : new PinnedHtmlDocument(html,
@@ -41,12 +41,16 @@ namespace RitsukageGif.Desktop
         public static PinnedDocument? Create(PinnedClipboardSnapshot snapshot,
             PinnedContentKinds kinds = PinnedContentKinds.All)
         {
-            if (snapshot.Text?.Length > MaximumTextCharacters || snapshot.Html?.Length > MaximumTextCharacters ||
-                snapshot.FormulaSource?.Length > MaximumTextCharacters)
-                throw new InvalidDataException(UiText.Get("PinnedTextTooLarge"));
             foreach (var handler in Handlers)
-                if ((kinds & handler.Kind) != 0 && handler.Create(snapshot) is { } document)
-                    return document;
+            {
+                if ((kinds & handler.Kind) == 0) continue;
+                if (handler.Kind != PinnedContentKinds.Files &&
+                    (snapshot.Text?.Length > MaximumTextCharacters || snapshot.Html?.Length > MaximumTextCharacters ||
+                     snapshot.FormulaSource?.Length > MaximumTextCharacters))
+                    throw new InvalidDataException(UiText.Get("PinnedTextTooLarge"));
+                if (handler.Create(snapshot) is { } document) return document;
+            }
+
             return null;
         }
 

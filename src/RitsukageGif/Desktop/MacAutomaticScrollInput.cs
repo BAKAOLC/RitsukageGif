@@ -5,15 +5,21 @@ namespace RitsukageGif.Desktop
         public string? UnavailableReason { get; private set; }
         private static bool HasPermission => Native.CgPreflightPostEventAccess();
 
+        public bool Prepare(PixelRect region, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            UnavailableReason = null;
+            if (!ValidateRegion(region)) return false;
+            if (CapturePointerMovement.MoveMac(region.X + region.Width / 2d, region.Y + region.Height / 2d))
+                return true;
+            return RegionUnavailable("The pointer could not be moved into the capture region.");
+        }
+
         public AutomaticScrollInputResult Scroll(ScrollCaptureAxis axis, PixelRect region, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             UnavailableReason = null;
-            if (!HasPermission) return Unavailable("Permission to post pointer events was denied or revoked.");
-            var current = WindowLocator.Refresh(target);
-            if (current is null || current.Client != target.Client || region.IsEmpty ||
-                region.Intersect(current.Client) != region)
-                return Unavailable("The selected window or capture region changed.");
+            if (!ValidateRegion(region)) return AutomaticScrollInputResult.Unavailable;
             if (!Native.TryGetPointer(out var pointer) || pointer.X < region.X || pointer.Y < region.Y ||
                 pointer.X >= region.Right || pointer.Y >= region.Bottom)
                 return Unavailable("Move the pointer inside the capture region to use automatic scrolling.");
@@ -44,6 +50,22 @@ namespace RitsukageGif.Desktop
                 !Native.ReadWindows(target.Handle, pointer, out var process, out _))
                 return new(null, "The selected window is no longer available.");
             return new(new MacAutomaticScrollInput(target, process));
+        }
+
+        private bool ValidateRegion(PixelRect region)
+        {
+            if (!HasPermission) return RegionUnavailable("Permission to post pointer events was denied or revoked.");
+            var current = WindowLocator.Refresh(target);
+            if (current is null || current.Client != target.Client || region.IsEmpty ||
+                region.Intersect(current.Client) != region)
+                return RegionUnavailable("The selected window or capture region changed.");
+            return true;
+        }
+
+        private bool RegionUnavailable(string reason)
+        {
+            UnavailableReason = reason;
+            return false;
         }
 
         private AutomaticScrollInputResult Unavailable(string reason)

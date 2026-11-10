@@ -27,6 +27,10 @@ namespace RitsukageGif.Desktop
                         new Setter(Visual.OpacityProperty, 1d),
                     },
                 });
+            Add(new Style(s => s.OfType<NumericUpDown>().Template().OfType<ButtonSpinner>())
+            {
+                Setters = { new Setter(TemplatedControl.TemplateProperty, NumericChevron.SpinnerTemplate) },
+            });
         }
     }
 }

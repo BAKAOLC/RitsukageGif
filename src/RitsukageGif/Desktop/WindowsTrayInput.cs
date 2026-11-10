@@ -21,10 +21,6 @@ namespace RitsukageGif.Desktop
             _message = message;
         }
 
-        internal static TimeSpan DoubleClickTime => OperatingSystem.IsWindows()
-            ? TimeSpan.FromMilliseconds(GetDoubleClickTime())
-            : TimeSpan.FromMilliseconds(500);
-
         public void Dispose()
         {
             if (_disposed) return;
@@ -100,9 +96,6 @@ namespace RitsukageGif.Desktop
 
         [LibraryImport("user32.dll")]
         private static partial int GetClassNameW(nint window, char* buffer, int length);
-
-        [LibraryImport("user32.dll")]
-        private static partial uint GetDoubleClickTime();
 
         [LibraryImport("comctl32.dll")]
         private static partial int SetWindowSubclass(nint window,

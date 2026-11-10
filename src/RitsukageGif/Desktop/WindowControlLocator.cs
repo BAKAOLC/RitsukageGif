@@ -45,7 +45,7 @@ namespace RitsukageGif.Desktop
                 var parent = window.Handle;
                 var clip = window.Bounds;
                 WindowControlTarget? result = null;
-                var visited = new HashSet<nint>();
+                var inspected = 0;
                 for (var depth = 0; depth < 64; depth++)
                 {
                     if (GetClientRect(parent, out var client) == 0) break;
@@ -59,7 +59,7 @@ namespace RitsukageGif.Desktop
                          child = NativeMethods.GetWindow(child, 2))
                     {
                         if (cancellationToken.IsCancellationRequested) return null;
-                        if (visited.Count >= 4096 || !visited.Add(child) ||
+                        if (++inspected > 4096 ||
                             Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 8) return result;
                         if (GetParent(child) != parent || NativeMethods.IsWindowVisible(child) == 0 ||
                             NativeMethods.GetWindowRect(child, out var bounds) == 0) continue;

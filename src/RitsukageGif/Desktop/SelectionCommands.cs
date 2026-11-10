@@ -46,33 +46,25 @@ namespace RitsukageGif.Desktop
             new(SelectionCommand.CopyColor, Key.C, KeyModifiers.None, "SelectionCopyColor"),
             new(SelectionCommand.ToggleCoordinateMode, Key.P, KeyModifiers.None, "SelectionCoordinateMode"),
             new(SelectionCommand.CycleColorFormat, Key.LeftShift, KeyModifiers.None, "SelectionColorFormat"),
-            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationSelection",
-                Tool: ScreenshotTool.Select),
-            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationEllipse",
-                Tool: ScreenshotTool.Ellipse),
-            new(SelectionCommand.SelectTool, Key.D1, KeyModifiers.Shift, "AnimationRectangle",
+            new(SelectionCommand.SelectTool, Key.D1, KeyModifiers.Shift, "ScreenshotAnnotationGeometry",
                 Tool: ScreenshotTool.Rectangle),
             new(SelectionCommand.SelectTool, Key.D3, KeyModifiers.Shift, "ScreenshotArrow", Tool: ScreenshotTool.Arrow),
-            new(SelectionCommand.SelectTool, Key.D5, KeyModifiers.Shift, "AnimationBrush", Tool: ScreenshotTool.Brush),
-            new(SelectionCommand.SelectTool, Key.D6, KeyModifiers.Shift, "ScreenshotHighlight",
+            new(SelectionCommand.SelectTool, Key.D5, KeyModifiers.Shift, "ScreenshotAnnotationPencil",
+                Tool: ScreenshotTool.Brush),
+            new(SelectionCommand.SelectTool, Key.D6, KeyModifiers.Shift, "ScreenshotAnnotationHighlighter",
                 Tool: ScreenshotTool.Highlight),
-            new(SelectionCommand.SelectTool, Key.D8, KeyModifiers.Shift, "AnimationText", Tool: ScreenshotTool.Text),
+            new(SelectionCommand.SelectTool, Key.D8, KeyModifiers.Shift, "ScreenshotAnnotationText",
+                Tool: ScreenshotTool.Text),
             new(SelectionCommand.SelectTool, Key.D7, KeyModifiers.Shift, "AnimationMosaic",
                 Tool: ScreenshotTool.Mosaic),
-            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnimationBlur",
-                Tool: ScreenshotTool.Blur),
-            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnnotationSmartErase",
-                Tool: ScreenshotTool.SmartErase),
-            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnnotationToolLine",
-                Tool: ScreenshotTool.Line),
-            new(SelectionCommand.SelectTool, Key.D2, KeyModifiers.Shift, "AnnotationToolPolyline",
+            new(SelectionCommand.SelectTool, Key.D2, KeyModifiers.Shift, "ScreenshotAnnotationBrokenLine",
                 Tool: ScreenshotTool.Polyline),
-            new(SelectionCommand.SelectTool, Key.D4, KeyModifiers.Shift, "AnnotationToolNumber",
+            new(SelectionCommand.SelectTool, Key.D4, KeyModifiers.Shift, "ScreenshotAnnotationSerial",
                 Tool: ScreenshotTool.Number),
+            new(SelectionCommand.SelectTool, Key.OemOpenBrackets, KeyModifiers.Shift, "AnnotationAutoMosaic",
+                Tool: ScreenshotTool.AutoMosaic),
             new(SelectionCommand.SelectTool, Key.D9, KeyModifiers.Shift, "AnnotationToolEraser",
                 Tool: ScreenshotTool.Eraser),
-            new(SelectionCommand.SelectTool, Key.None, KeyModifiers.None, "AnnotationToolStrokeEraser",
-                Tool: ScreenshotTool.StrokeEraser),
             new(SelectionCommand.SelectTool, Key.D0, KeyModifiers.Shift, "AnnotationToolSpotlight",
                 Tool: ScreenshotTool.Spotlight),
             new(SelectionCommand.SelectTool, Key.OemMinus, KeyModifiers.Shift, "AnnotationToolWatermark",
@@ -92,6 +84,7 @@ namespace RitsukageGif.Desktop
             new(SelectionCommand.Undo, Key.Z, KeyModifiers.Control, "AnimationUndo"),
             new(SelectionCommand.Redo, Key.Y, KeyModifiers.Control, "AnimationRedo"),
             new(SelectionCommand.Cancel, Key.Escape, KeyModifiers.None, "SelectionCommandCancel"),
+            new(SelectionCommand.TogglePolylineArrows, Key.Tab, KeyModifiers.None, "AnnotationTogglePolylineArrows"),
             new(SelectionCommand.ToggleControls, Key.Tab, KeyModifiers.None, "SelectionCommandControls"),
             new(SelectionCommand.ToggleSource, Key.None, KeyModifiers.None, "SelectionCommandSource"),
             new(SelectionCommand.ToggleCursor, Key.OemTilde, KeyModifiers.None, "SelectionCommandCursor"),
@@ -122,15 +115,19 @@ namespace RitsukageGif.Desktop
                 DirectionKey: Key.Down),
         ];
 
-        private static SelectionCommandDefinition[] _definitions =
-            [.. DefaultDefinitions.Where(item => item.Key != Key.None)];
+        private static IReadOnlyList<SelectionCommandDefinition> _definitions =
+            Array.AsReadOnly<SelectionCommandDefinition>([.. DefaultDefinitions.Where(item => item.Key != Key.None)]);
 
         internal static bool TryResolve(Key key, KeyModifiers modifiers, out SelectionCommandDefinition? definition,
-            IReadOnlyList<SelectionCommandDefinition>? bindings = null)
+            IReadOnlyList<SelectionCommandDefinition>? bindings = null,
+            ScreenshotAnnotationSession? annotations = null)
         {
             foreach (var item in bindings ?? _definitions)
             {
-                if (item.Modifiers != modifiers || !BuiltinKeys.Matches(item.Key, key)) continue;
+                if (item.Modifiers != modifiers || !BuiltinKeys.Matches(item.Key, key) ||
+                    (item.Command == SelectionCommand.MovePointer && !CapturePointerMovement.IsSupported) ||
+                    (item.Command == SelectionCommand.TogglePolylineArrows &&
+                     annotations?.CanTogglePolylineArrows != true)) continue;
                 definition = item;
                 return true;
             }
@@ -139,15 +136,34 @@ namespace RitsukageGif.Desktop
             return false;
         }
 
-        internal static bool IsCommandKey(Key key, KeyModifiers modifiers,
-            IReadOnlyList<SelectionCommandDefinition>? bindings = null)
+        internal static bool SupportsPinnedAnnotation(SelectionCommand command)
         {
-            return TryResolve(key, modifiers, out _, bindings) || key is Key.LeftShift or Key.RightShift;
+            return command is SelectionCommand.Cancel or SelectionCommand.Confirm or SelectionCommand.Undo
+                or SelectionCommand.Redo or SelectionCommand.Clear or SelectionCommand.ClearAnnotations
+                or SelectionCommand.ToggleAnnotations or SelectionCommand.RenumberAnnotations
+                or SelectionCommand.FinishPolyline or SelectionCommand.SelectTool or SelectionCommand.Copy
+                or SelectionCommand.Save or SelectionCommand.QuickSave or SelectionCommand.RecognizeText
+                or SelectionCommand.Translate or SelectionCommand.RecognizeQr or SelectionCommand.RecognizeTextAndCopy
+                or SelectionCommand.TogglePolylineArrows;
+        }
+
+        internal static bool TryResolvePinnedAnnotation(Key key, KeyModifiers modifiers,
+            out SelectionCommandDefinition? definition, ScreenshotAnnotationSession session)
+        {
+            return TryResolve(key, modifiers, out definition, annotations: session) &&
+                   SupportsPinnedAnnotation(definition!.Command);
+        }
+
+        internal static bool IsCommandKey(Key key, KeyModifiers modifiers,
+            IReadOnlyList<SelectionCommandDefinition>? bindings = null,
+            ScreenshotAnnotationSession? annotations = null)
+        {
+            return TryResolve(key, modifiers, out _, bindings, annotations) || key is Key.LeftShift or Key.RightShift;
         }
 
         internal static bool IsAvailable(SelectionCommand command, SelectionSnapshot snapshot,
             bool controls, bool source, bool cursor, bool drawing = false, bool screenshot = false,
-            bool editing = false)
+            bool editing = false, ScreenshotAnnotationSession? annotations = null)
         {
             if (snapshot.Phase == SelectionPhase.Confirming) return command == SelectionCommand.Cancel;
             var adjusting = snapshot is { Phase: SelectionPhase.Selected, Region.IsEmpty: false } && !drawing &&
@@ -159,9 +175,10 @@ namespace RitsukageGif.Desktop
                     or SelectionCommand.NextRegion => idle,
                 SelectionCommand.PreviousScreenshot or SelectionCommand.NextScreenshot
                     or SelectionCommand.RefreshScreenshot => screenshot && !drawing,
-                SelectionCommand.MovePointer => !drawing && !editing,
+                SelectionCommand.MovePointer => CapturePointerMovement.IsSupported && !drawing && !editing,
                 SelectionCommand.SimulateWheelUp or SelectionCommand.SimulateWheelDown => screenshot && !drawing,
                 SelectionCommand.ToggleControls => controls && idle,
+                SelectionCommand.TogglePolylineArrows => screenshot && annotations?.CanTogglePolylineArrows == true,
                 SelectionCommand.NextShapeMode or SelectionCommand.PreviousShapeMode => screenshot && !drawing,
                 SelectionCommand.ToggleSource => source && idle,
                 SelectionCommand.ToggleCursor => cursor && !drawing,

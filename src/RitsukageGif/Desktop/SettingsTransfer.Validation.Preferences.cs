@@ -44,12 +44,13 @@ namespace RitsukageGif.Desktop
             ValidateSaveProfile(save, "ScreenshotSave");
             ValidateSaveProfile(save.Quick, "ScreenshotSave.Quick");
             ValidateSaveProfile(save.Automatic, "ScreenshotSave.Automatic");
-            if ((save.AutoSaveTriggers & ~ScreenshotAutoSaveTriggers.All) != 0 ||
+            if (!Enum.IsDefined(save.QuickNotificationAction) || save.AutomaticCleanupMaxAgeDays is <= 0 or > 36500 ||
+                (save.AutoSaveTriggers & ~ScreenshotAutoSaveTriggers.All) != 0 ||
                 (save.LastFormat is { } format && !Enum.IsDefined(format)) ||
                 (save.LastExtension is { } extension && ScreenshotSaveProfile.NormalizeExtension(extension) is null))
                 throw Invalid("ScreenshotSave");
             var clipboard = settings.ScreenshotClipboard;
-            if (!Enum.IsDefined(clipboard.Mode) || !Enum.IsDefined(clipboard.FileFormat) ||
+            if (!Enum.IsDefined(clipboard.FileFormat) ||
                 clipboard.HdpiTargetPercent is not (0 or 100 or 150 or 200 or 250 or 300))
                 throw Invalid("ScreenshotClipboard");
             ValidateOutputSizeValue(clipboard.OutputSize, "ScreenshotClipboard.OutputSize");
@@ -96,7 +97,10 @@ namespace RitsukageGif.Desktop
             if (!Enum.IsDefined(profile.AfterSave) || !Enum.IsDefined(profile.Format) ||
                 !Enum.IsDefined(profile.ConflictPolicy) || profile.Quality is < 0 or > 100 ||
                 string.IsNullOrWhiteSpace(profile.NameTemplate)) throw Invalid(path);
-            if (!string.IsNullOrWhiteSpace(profile.Directory)) _ = Path.GetFullPath(profile.Directory);
+            var context = new ScreenshotNameContext(DateTime.Now);
+            _ = ScreenshotPathTemplate.Expand(profile.NameTemplate, context);
+            if (!string.IsNullOrWhiteSpace(profile.Directory))
+                _ = profile.ResolveDirectory(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), context);
             ValidateOutputSizeValue(profile.OutputSize, path + ".OutputSize");
         }
 

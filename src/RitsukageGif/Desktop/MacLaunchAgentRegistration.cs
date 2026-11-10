@@ -20,7 +20,7 @@ namespace RitsukageGif.Desktop
                         new XElement("key", "Label"), new XElement("string", Label),
                         new XElement("key", "ProgramArguments"),
                         new XElement("array", new XElement("string", Path.GetFullPath(executable)),
-                            new XElement("string", "--serve")),
+                            new XElement("string", "--startup")),
                         new XElement("key", "RunAtLoad"), new XElement("true"),
                         new XElement("key", "KeepAlive"), new XElement("false"),
                         new XElement("key", "LimitLoadToSessionType"), new XElement("string", "Aqua"))));
@@ -38,12 +38,14 @@ namespace RitsukageGif.Desktop
                 foreach (var key in dictionary.Elements("key"))
                     if (key.ElementsAfterSelf().FirstOrDefault() is { } value)
                         values[key.Value] = value;
-                return values.GetValueOrDefault("Label")?.Value == Label &&
-                       values.GetValueOrDefault("RunAtLoad")?.Name == "true" &&
-                       values.GetValueOrDefault("Disabled")?.Name != "true" &&
-                       values.GetValueOrDefault("ProgramArguments") is { Name.LocalName: "array" } arguments &&
-                       arguments.Elements("string").Select(item => item.Value)
-                           .SequenceEqual([Path.GetFullPath(executable), "--serve"], StringComparer.Ordinal);
+                if (values.GetValueOrDefault("Label")?.Value != Label ||
+                    values.GetValueOrDefault("RunAtLoad")?.Name != "true" ||
+                    values.GetValueOrDefault("Disabled")?.Name == "true" ||
+                    values.GetValueOrDefault("ProgramArguments") is not { Name.LocalName: "array" } arguments)
+                    return false;
+                var registeredArguments = arguments.Elements("string").Select(item => item.Value).ToArray();
+                return registeredArguments is [var registeredExecutable, "--startup" or "--serve"] &&
+                       string.Equals(registeredExecutable, Path.GetFullPath(executable), StringComparison.Ordinal);
             }
             catch (XmlException)
             {

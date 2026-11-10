@@ -10,6 +10,7 @@ namespace RitsukageGif.Desktop
             get
             {
                 if (!CanAnnotate || IsBusy) return StandardCursorType.Arrow;
+                if (IsPrivacyDetectionActive) return CreationCursor();
                 if (_moving is { } moving)
                 {
                     if (moving.Tool == ScreenshotTool.Number && _polylineNode == 1)
@@ -68,7 +69,7 @@ namespace RitsukageGif.Desktop
         {
             return HitTestSelectedControl(point) &&
                    (!currentToolOnly || Tool == ScreenshotTool.Select ||
-                    (_selected is not null && ScreenshotToolCatalog.Get(_selected.Tool).ObjectKind ==
+                    (_selected is not null && ScreenshotToolCatalog.Get(AnnotationTool(_selected)).ObjectKind ==
                         ScreenshotToolCatalog.Get(Tool).ObjectKind))
                 ? _selected
                 : FindAnnotation(point, currentToolOnly);

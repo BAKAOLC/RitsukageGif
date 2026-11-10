@@ -41,6 +41,19 @@ namespace Avalonia.Native
 
         public bool WindowStateGetterIsUsable => false;
 
+        public Action<WindowState>? WindowStateChanged { get; set; }
+
+        public Action<bool>? ExtendClientAreaToDecorationsChanged { get; set; }
+
+        // Extension is handled by native backend
+        public PlatformRequestedDrawnDecoration RequestedDrawnDecorations => default;
+
+        public Thickness ExtendedMargins { get; private set; }
+
+        public Thickness OffScreenMargin { get; } = new();
+
+        public IntPtr? ZOrder => Native.WindowZOrder;
+
         public void CanResize(bool value)
         {
             _canResize = value;
@@ -62,17 +75,7 @@ namespace Avalonia.Native
         {
             Native.SetTitle(title ?? "");
         }
-        public Action<WindowState>? WindowStateChanged { get; set; }
 
-        public Action<bool>? ExtendClientAreaToDecorationsChanged { get; set; }
-
-        // Extension is handled by native backend
-        public PlatformRequestedDrawnDecoration RequestedDrawnDecorations => default;
-        public Thickness ExtendedMargins { get; private set; }
-
-        public Thickness OffScreenMargin { get; } = new();
-
-        public IntPtr? ZOrder => Native.WindowZOrder;
         public bool IsClientAreaExtendedToDecorations { get; private set; }
 
         public override void Show(bool activate, bool isDialog)

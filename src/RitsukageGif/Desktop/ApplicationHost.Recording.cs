@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
         {
             HostLogger.ZLogInformation(
                 $"Recording toggle requested. Recording={IsRecording} Busy={IsBusy} Selecting={IsSelecting} Closing={IsClosing}");
-            if (IsClosing) return;
+            if (IsClosing || _screenshotRecordingActive || _screenshotRecordingPreparing) return;
             if (IsRecording)
             {
                 IsRecording = false;
@@ -24,12 +24,15 @@ namespace RitsukageGif.Desktop
 
         private Task<RecordingOutcome> StartAnimationRecordingCore(PixelRect region)
         {
+            if (_screenshotRecordingPreparing)
+                throw new InvalidOperationException(UiText.Get("CommandNotReady"));
             View?.PausePreview();
             LatestProgress = null;
             _manualCaptureCompleted = false;
             _streams = [];
             IsBusy = true;
             IsRecording = true;
+            BeginRecordingControl();
             _recordClock.Restart();
             Notify();
             _stop = new();
@@ -148,7 +151,8 @@ namespace RitsukageGif.Desktop
                             throw new NotSupportedException(UiText.Get("HdrRecordingUnavailable"));
                         var result = await ColorRecordingSession.RunAsync(colorSource,
                             new(options, settings.CaptureColorMode == OutputColorMode.Both ? path : null,
-                                hdrOutputs[0], ToneMap: settings.CaptureToneMap), progress, stop, abort);
+                                hdrOutputs[0], ToneMap: settings.CaptureToneMap), progress, stop, abort,
+                            _recordingControl);
                         hdrOutputs[0] = result.HdrPath;
                         if (result.SdrPath is { } sdrPath) outputs[0] = path = sdrPath;
                         progress.Report(new(RecordingStage.Complete, result.CapturedFrames, result.CapturedFrames,
@@ -165,7 +169,7 @@ namespace RitsukageGif.Desktop
                                 return new ToneMappedFrameSource(colorSource, settings.CaptureToneMap);
                             source.Dispose();
                             throw new NotSupportedException(UiText.Get("HdrRecordingUnavailable"));
-                        }).RunAsync(options, path, progress, stop, abort);
+                        }).RunAsync(options, path, progress, stop, abort, _recordingControl);
                     }
                 }
                 finally
@@ -255,6 +259,7 @@ namespace RitsukageGif.Desktop
             {
                 _recordSettings = null;
                 _manualCaptureCompleted = false;
+                CompleteRecordingControl();
                 _recordClock.Stop();
                 IsRecording = IsBusy = false;
                 _stop?.Dispose();

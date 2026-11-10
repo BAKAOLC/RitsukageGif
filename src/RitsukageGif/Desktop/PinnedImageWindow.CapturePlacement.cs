@@ -14,7 +14,7 @@ namespace RitsukageGif.Desktop
                 throw new ArgumentOutOfRangeException(nameof(contentOffset));
             _capturePlacement = outputOrigin;
             _captureContentOffset = contentOffset;
-            Position = new(outputOrigin.X, outputOrigin.Y);
+            Position = Presentation.ContentOriginPosition(outputOrigin);
         }
 
         private void RestoreCapturePlacement()
@@ -31,7 +31,7 @@ namespace RitsukageGif.Desktop
             var bottom = origin.Y + _bitmap.Size.Height - _captureContentOffset.Y;
             if (Screens.All.Any(screen => left < screen.Bounds.Right && right > screen.Bounds.X &&
                                           top < screen.Bounds.Bottom && bottom > screen.Bounds.Y))
-                Position = new(origin.X, origin.Y);
+                Position = Presentation.ContentOriginPosition(origin);
             else
                 RestoreToScreen();
             _capturePlacement = null;

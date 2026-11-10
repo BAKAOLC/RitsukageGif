@@ -10,6 +10,9 @@ namespace RitsukageGif.Desktop
         SelectionShape? Shape = null,
         IReadOnlyList<WindowTarget>? Windows = null)
     {
+        internal NativeCaptureSession? CaptureSession { get; init; }
+        internal string? IncludedCaptureWindowTitle { get; init; }
+
         internal static SelectionResult? Create(PixelRect region, bool windowSource, WindowTarget? target,
             bool sourceLocal = false, bool cursor = false, SelectionShape? shape = null,
             IReadOnlyList<WindowTarget>? windows = null)

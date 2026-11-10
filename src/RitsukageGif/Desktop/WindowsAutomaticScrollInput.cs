@@ -19,20 +19,21 @@ namespace RitsukageGif.Desktop
 
         public string? UnavailableReason { get; private set; }
 
+        public bool Prepare(PixelRect region, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            UnavailableReason = null;
+            if (!ValidateRegion(region)) return false;
+            var center = new PixelPoint(region.X + region.Width / 2, region.Y + region.Height / 2);
+            if (CapturePointerMovement.Move(center)) return true;
+            return RegionUnavailable("The pointer could not be moved into the capture region.");
+        }
+
         public AutomaticScrollInputResult Scroll(ScrollCaptureAxis axis, PixelRect region, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             UnavailableReason = null;
-            if (!OperatingSystem.IsWindows() || WindowLocator.IsWindow(_target.Handle) == 0 ||
-                NativeMethods.IsWindowVisible(_target.Handle) == 0 || NativeMethods.IsIconic(_target.Handle) != 0 ||
-                GetWindowThreadProcessId(_target.Handle, out var process) == 0 || process != _process ||
-                GetWindowThreadProcessId(_control, out var controlProcess) == 0 || controlProcess != _process ||
-                NativeMethods.IsWindowVisible(_control) == 0 ||
-                (_control != _target.Handle && IsChild(_target.Handle, _control) == 0))
-                return Unavailable("The selected capture window is no longer available.");
-            var current = WindowLocator.Refresh(_target);
-            if (current is null || current.Client != _client || region.Intersect(current.Client) != region)
-                return Unavailable("The selected window or capture region changed.");
+            if (!ValidateRegion(region)) return AutomaticScrollInputResult.Unavailable;
             var bar = axis == ScrollCaptureAxis.Vertical ? 1 : 0;
             var info = new WindowsAutomaticScrollInfo
                 { Size = (uint)Marshal.SizeOf<WindowsAutomaticScrollInfo>(), Mask = 7 };
@@ -51,6 +52,27 @@ namespace RitsukageGif.Desktop
             return SendMessageTimeout(_control, message, flags, coordinates, 3, 100, out _) != 0
                 ? AutomaticScrollInputResult.Sent
                 : AutomaticScrollInputResult.Failed;
+        }
+
+        private bool ValidateRegion(PixelRect region)
+        {
+            if (!OperatingSystem.IsWindows() || WindowLocator.IsWindow(_target.Handle) == 0 ||
+                NativeMethods.IsWindowVisible(_target.Handle) == 0 || NativeMethods.IsIconic(_target.Handle) != 0 ||
+                GetWindowThreadProcessId(_target.Handle, out var process) == 0 || process != _process ||
+                GetWindowThreadProcessId(_control, out var controlProcess) == 0 || controlProcess != _process ||
+                NativeMethods.IsWindowVisible(_control) == 0 ||
+                (_control != _target.Handle && IsChild(_target.Handle, _control) == 0))
+                return RegionUnavailable("The selected capture window is no longer available.");
+            var current = WindowLocator.Refresh(_target);
+            if (current is null || current.Client != _client || region.Intersect(current.Client) != region)
+                return RegionUnavailable("The selected window or capture region changed.");
+            return true;
+        }
+
+        private bool RegionUnavailable(string reason)
+        {
+            UnavailableReason = reason;
+            return false;
         }
 
         private AutomaticScrollInputResult Unavailable(string reason)

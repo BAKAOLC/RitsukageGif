@@ -61,7 +61,7 @@ namespace RitsukageGif.Desktop
                 _dragStartImage = args.GetPosition(image);
                 _dragStartPosition = Position;
                 _dragStartSize = new(Width * RenderScaling, Height * RenderScaling);
-                _dragStartZoom = _zoom;
+                _dragStartZoom = CurrentPinZoom;
                 (_dragHorizontalEdge, _dragVerticalEdge) = GetResizeEdges(args.GetPosition(this));
                 args.Pointer.Capture(image);
                 args.Handled = true;
@@ -86,7 +86,7 @@ namespace RitsukageGif.Desktop
                             : (horizontal, vertical) switch
                             {
                                 (0, 0) => CanSelectImageText &&
-                                          HitRecognizedWord(args.GetPosition(image)) >= 0
+                                          HitRecognizedText(args.GetPosition(image)) >= 0
                                     ? TextSelectionCursor
                                     : null,
                                 (_, 0) => HorizontalResizeCursor,
@@ -188,7 +188,7 @@ namespace RitsukageGif.Desktop
             };
             image.PointerCaptureLost += (_, _) =>
             {
-                _selectingText = false;
+                FinishTextSelectionGesture();
                 _pressedButtons.Clear();
                 _mouseGesture.Reset();
                 _adjustingWindow = false;
@@ -206,7 +206,7 @@ namespace RitsukageGif.Desktop
             };
             KeyDown += (_, args) =>
             {
-                if (IsAnnotationTextInputKey(args.Key)) return;
+                if (IsAnnotationTextInputKey(args)) return;
                 if (BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args) !=
                     "menu") return;
                 menu.Open(content);
@@ -218,8 +218,9 @@ namespace RitsukageGif.Desktop
         {
             if (!CurrentPreferences.ResizeFromBorder || IsOperationLocked(PinnedLockRestrictions.Move)) return (0, 0);
             const double margin = 8;
-            return (point.X < margin ? -1 : point.X > Width - margin ? 1 : 0,
-                point.Y < margin ? -1 : point.Y > Height - margin ? 1 : 0);
+            const double inset = PinnedWindowPresentation.ShadeInset;
+            return (point.X < inset + margin ? -1 : point.X > Width - inset - margin ? 1 : 0,
+                point.Y < inset + margin ? -1 : point.Y > Height - inset - margin ? 1 : 0);
         }
 
         private void UpdateWindowDrag(WindowPixelPoint pointer)
@@ -238,10 +239,12 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            var horizontal = _dragHorizontalEdge * dx / Math.Max(1, _dragStartSize.Width);
-            var vertical = _dragVerticalEdge * dy / Math.Max(1, _dragStartSize.Height);
+            var inset = PinnedWindowPresentation.ShadeInset * 2 * RenderScaling;
+            var horizontal = _dragHorizontalEdge * dx / Math.Max(1, _dragStartSize.Width - inset);
+            var vertical = _dragVerticalEdge * dy / Math.Max(1, _dragStartSize.Height - inset);
             var factor = 1 + (Math.Abs(horizontal) >= Math.Abs(vertical) ? horizontal : vertical);
-            ResizeAt(new(0, 0), _dragStartZoom * Math.Max(0.01, factor));
+            ResizeAt(new(PinnedWindowPresentation.ShadeInset, PinnedWindowPresentation.ShadeInset),
+                _dragStartZoom * Math.Max(0.01, factor));
             Position = new(_dragStartPosition.X + (int)Math.Round(_dragHorizontalEdge < 0
                     ? _dragStartSize.Width - Width * RenderScaling
                     : 0),
@@ -300,15 +303,15 @@ namespace RitsukageGif.Desktop
                 case MouseAction.Zoom when !IsOperationLocked(PinnedLockRestrictions.Move):
                     if (_isThumbnail && !CurrentPreferences.ThumbnailWheelZoom) return false;
                     ResizeAt(ZoomAnchor(point, CurrentPreferences.WheelZoomAnchor),
-                        _zoom * Math.Pow(1 + CurrentPreferences.ZoomStep, amount));
+                        CurrentPinZoom * Math.Pow(1 + CurrentPreferences.ZoomStep, amount));
                     break;
                 case MouseAction.FineZoom when !IsOperationLocked(PinnedLockRestrictions.Move):
                     if (_isThumbnail && !CurrentPreferences.ThumbnailWheelZoom) return false;
                     ResizeAt(ZoomAnchor(point, CurrentPreferences.WheelZoomAnchor),
-                        _zoom * Math.Pow(1 + CurrentPreferences.FineZoomStep, amount));
+                        CurrentPinZoom * Math.Pow(1 + CurrentPreferences.FineZoomStep, amount));
                     break;
                 case MouseAction.AdjustOpacity:
-                    Opacity = Math.Clamp(Opacity + amount * CurrentPreferences.OpacityStep, 0.15, 1); break;
+                    AdjustOpacity(amount * CurrentPreferences.OpacityStep); break;
                 case MouseAction.Reset when !IsOperationLocked(PinnedLockRestrictions.Move): ResetImage(point); break;
                 default: return false;
             }

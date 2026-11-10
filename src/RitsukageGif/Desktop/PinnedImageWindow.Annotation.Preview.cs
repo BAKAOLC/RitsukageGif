@@ -51,8 +51,9 @@ namespace RitsukageGif.Desktop
             _annotationPreviewBounds = default;
             if (_annotationSurface is { } surface)
             {
-                surface.RenderContent = true;
+                surface.RenderContent = _hdrPreview is not { IsVisible: true };
                 surface.InvalidateVisual();
+                InvalidateInputUi();
             }
 
             if (_annotationPreviewImage is not { } image) return;
@@ -65,7 +66,7 @@ namespace RitsukageGif.Desktop
         private void AnnotationPreviewChanged()
         {
             if (_closed || _annotationPreviewSession is not { } session ||
-                !ReferenceEquals(session, _annotation)) return;
+                !ReferenceEquals(session, _annotationScene)) return;
             _annotationPreviewVersion++;
             if (_annotationPreviewDrawing != session.IsDrawing || _annotationPreviewBusy != session.IsBusy ||
                 _annotationPreviewTool != session.Tool)
@@ -89,6 +90,7 @@ namespace RitsukageGif.Desktop
             {
                 surface.RenderContent = false;
                 surface.InvalidateVisual();
+                InvalidateInputUi();
             }
 
             if (!_annotationPreviewRunning) _annotationPreviewTimer?.Start();
@@ -98,14 +100,15 @@ namespace RitsukageGif.Desktop
         {
             _annotationPreviewTimer?.Stop();
             if (_annotationPreviewRunning || _closed || _annotationPreviewSession is not { } session ||
-                !ReferenceEquals(session, _annotation) || session.IsBusy || !NeedsAnnotationPreview(session)) return;
+                !ReferenceEquals(session, _annotationScene) || session.IsBusy ||
+                !NeedsAnnotationPreview(session)) return;
             var work = CancellationTokenSource.CreateLinkedTokenSource(_annotationCancellation!.Token);
             _annotationPreviewWork = work;
             _annotationPreviewRunning = true;
             var region = new PixelRect(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height);
             var bounds = session.GetPreviewBounds().Intersect(region);
             var dirty = UnionPreviewBounds(bounds, _annotationPreviewBounds).Intersect(region);
-            _ = ComposeAnnotationPreviewAsync(session, _pixels, region, dirty, bounds,
+            _ = ComposeAnnotationPreviewAsync(session, EffectivePixels, region, dirty, bounds,
                 _annotationPreviewVersion, _annotationPreviewEpoch, session.IsDrawing, work);
         }
 
@@ -124,7 +127,8 @@ namespace RitsukageGif.Desktop
 
                 var precision = await GetAnnotationPrecisionSourceAsync(session, token);
                 token.ThrowIfCancellationRequested();
-                if (_closed || !ReferenceEquals(session, _annotation) || !ReferenceEquals(source, _pixels) ||
+                if (_closed || !ReferenceEquals(session, _annotationScene) ||
+                    !ReferenceEquals(source, EffectivePixels) ||
                     epoch != _annotationPreviewEpoch || version != _annotationPreviewVersion) return;
                 var background = _annotationPreviewImage is null
                     ? precision is null
@@ -148,9 +152,9 @@ namespace RitsukageGif.Desktop
                     : await session.ComposeHighPrecisionPreviewAsync(region, precision, dirty, token);
                 var initialPixels = background is null ? null : await background;
                 token.ThrowIfCancellationRequested();
-                if (_closed || !ReferenceEquals(session, _annotation) ||
+                if (_closed || !ReferenceEquals(session, _annotationScene) ||
                     !ReferenceEquals(session, _annotationPreviewSession) ||
-                    !ReferenceEquals(source, _pixels) || epoch != _annotationPreviewEpoch ||
+                    !ReferenceEquals(source, EffectivePixels) || epoch != _annotationPreviewEpoch ||
                     (version != _annotationPreviewVersion && !(drawing && session.IsDrawing))) return;
                 var image = _annotationPreviewImage;
                 if (image is null)
@@ -169,12 +173,13 @@ namespace RitsukageGif.Desktop
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
             }
-            catch (ObjectDisposedException) when (_closed || !ReferenceEquals(session, _annotation))
+            catch (ObjectDisposedException) when (_closed || !ReferenceEquals(session, _annotationScene))
             {
             }
             catch (Exception error)
             {
-                if (!_closed && ReferenceEquals(session, _annotation) && version == _annotationPreviewVersion)
+                PinLogger.ZLogWarning(error, $"Pinned annotation preview rendering failed.");
+                if (!_closed && ReferenceEquals(session, _annotationScene) && version == _annotationPreviewVersion)
                 {
                     _status.Text = error.Message;
                     _status.IsVisible = true;
@@ -186,7 +191,8 @@ namespace RitsukageGif.Desktop
                 work.Dispose();
                 if (ReferenceEquals(_annotationPreviewWork, work)) _annotationPreviewWork = null;
                 _annotationPreviewRunning = false;
-                if (!_closed && _annotationPreviewSession is { } current && ReferenceEquals(current, _annotation) &&
+                if (!_closed && _annotationPreviewSession is { } current &&
+                    ReferenceEquals(current, _annotationScene) &&
                     NeedsAnnotationPreview(current) && !current.IsBusy &&
                     _annotationPreviewDisplayedVersion != _annotationPreviewVersion)
                     _annotationPreviewTimer?.Start();

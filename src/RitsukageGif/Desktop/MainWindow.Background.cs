@@ -36,14 +36,15 @@ namespace RitsukageGif.Desktop
             {
                 try
                 {
-                    replacement = await Task.Run(async () =>
-                    {
-                        if (string.IsNullOrWhiteSpace(location)) return LoadOriginalBackground();
-                        using var resource = await MediaResource.OpenAsync(location, cancellation.Token)
-                            .ConfigureAwait(false);
-                        cancellation.Token.ThrowIfCancellationRequested();
-                        return DecodeBackground(resource.Path);
-                    }, cancellation.Token).ConfigureAwait(false);
+                    replacement = string.IsNullOrWhiteSpace(location)
+                        ? await LoadOriginalBackgroundAsync(cancellation.Token).ConfigureAwait(false)
+                        : await Task.Run(async () =>
+                        {
+                            using var resource = await MediaResource.OpenAsync(location, cancellation.Token)
+                                .ConfigureAwait(false);
+                            cancellation.Token.ThrowIfCancellationRequested();
+                            return DecodeBackground(resource.Path);
+                        }, cancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
                 {
@@ -53,7 +54,7 @@ namespace RitsukageGif.Desktop
                 {
                     error = UiText.Get("BackgroundFailed") + exception.Message;
                     if (!cancellation.IsCancellationRequested)
-                        replacement = await Task.Run(LoadOriginalBackground, cancellation.Token).ConfigureAwait(false);
+                        replacement = await LoadOriginalBackgroundAsync(cancellation.Token).ConfigureAwait(false);
                 }
 
                 await Dispatcher.UIThread.InvokeAsync(() =>
@@ -84,10 +85,15 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static Bitmap LoadOriginalBackground()
+        private static async Task<Bitmap> LoadOriginalBackgroundAsync(CancellationToken token)
         {
-            using var stream = AssetLoader.Open(new("avares://RitsukageGif/Background.png"));
-            return new(stream);
+            await using var stream = await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                token.ThrowIfCancellationRequested();
+                return AssetLoader.Open(new("avares://RitsukageGif/Background.png"));
+            });
+            // ReSharper disable once AccessToDisposedClosure
+            return await Task.Run(() => new Bitmap(stream), token).ConfigureAwait(false);
         }
 
         private static Bitmap DecodeBackground(string path)

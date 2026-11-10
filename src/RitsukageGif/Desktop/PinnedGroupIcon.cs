@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
         internal static Control Create(TemplatedControl owner, PinnedGroupDefinition definition, bool active)
         {
             if (active && definition.Color is null)
-                return ToolbarIcon.CreateInViewport(owner, ToolbarIcon.Geometry("ScreenshotApplyText"));
+                return ToolbarIcon.CreateInViewport(owner, ToolbarIcon.GetDefinition("ScreenshotApplyText"));
             IBrush brush = definition.Color is { } color
                 ? new SolidColorBrush(Color.Parse(color))
                 : Brushes.Transparent;

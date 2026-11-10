@@ -3,16 +3,12 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Shapes;
 using Avalonia.Input;
-using Avalonia.Layout;
-using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using SkiaSharp;
-using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
@@ -109,7 +105,17 @@ namespace RitsukageGif.Desktop
                     if (_closed || !AnimationActive || !ReferenceEquals(decoder, _animationDecoder)) return;
                     if (index != _animationRequested) continue;
                     _animationSurface ??= new(frame.Width, frame.Height);
-                    _animationSurface.Update(frame);
+                    if (_colorMatrixState.Matrix is null)
+                    {
+                        _animationSurface.Update(frame);
+                    }
+                    else
+                    {
+                        using var processed = CreateColorPreview(frame.Pixels, frame.Width, frame.Height,
+                            frame.HdrPixels is null ? null : FrameHdr(frame, false));
+                        _animationSurface.Update(processed);
+                    }
+
                     _animationFrame?.Dispose();
                     _animationFrame = frame.Retain();
                     _animationDisplayed = index;
@@ -145,18 +151,17 @@ namespace RitsukageGif.Desktop
         private bool TryRefreshAnimationHdr()
         {
             if (!AnimationActive || _animationFrame is not { HdrPixels: not null } frame ||
-                _hdrPreview is null || _annotation is not null || _selectedTextStart >= 0) return false;
+                _hdrPreview is null || _annotation is not null || HasTextSelection) return false;
             var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _hdrPreviewWork = work;
-            _ = RefreshAnimationHdrAsync(frame.Retain(), DisplayRegion, work);
+            _ = RefreshAnimationHdrAsync(frame.Retain(), work);
             return true;
         }
 
-        private async Task RefreshAnimationHdrAsync(PreviewFrame frame, PixelRect region,
-            CancellationTokenSource work)
+        private async Task RefreshAnimationHdrAsync(PreviewFrame frame, CancellationTokenSource work)
         {
             using (frame)
-                await RefreshHdrPreviewAsync(FrameHdr(frame, false), frame.Pixels, region, work);
+                await RefreshHdrPreviewAsync(FrameHdr(frame, false), work);
         }
 
         private void DisposeAnimation()
@@ -192,7 +197,7 @@ namespace RitsukageGif.Desktop
             if (!AnimationActive || _animationFrame is null) return null;
             var frame = _animationFrame.Retain();
             var scale = OriginalCaptureScaling;
-            var region = _isThumbnail && CurrentPreferences.CopyVisibleRegion ? DisplayRegion : (PixelRect?)null;
+            var colorState = _colorMatrixState;
             // ReSharper disable once MethodSupportsCancellation
             return Task.Run(() =>
             {
@@ -201,12 +206,7 @@ namespace RitsukageGif.Desktop
                     token.ThrowIfCancellationRequested();
                     var png = EncodeAnimationFrame(frame, token);
                     var hdr = frame.HdrPixels is null ? null : FrameHdr(frame);
-                    if (region is { } bounds)
-                    {
-                        png = PngImageCodec.Crop(png, bounds, token);
-                        if (hdr is not null) hdr = CropOutputFrame(hdr, bounds, token);
-                    }
-
+                    (png, hdr) = ProcessOutputSource(png, hdr, colorState, token);
                     return CreateOutput(png, hdr, mode, scale);
                 }
             });
@@ -259,6 +259,7 @@ namespace RitsukageGif.Desktop
             _sdrPng = hdr is null ? null : sdrPng;
             _image.Source = bitmap;
             ConfigureHdr(hdr);
+            RestoreImageProcessing();
             UpdateSize();
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -268,7 +269,8 @@ namespace RitsukageGif.Desktop
             ReadOnlyMemory<byte> pixels = frame.HdrPixels!.AsMemory(0, checked(frame.Width * frame.Height * 8));
             if (copy) pixels = pixels.ToArray();
             return new(frame.Width, frame.Height, frame.Width * 8, CapturePixelFormat.Rgba16FloatScRgb,
-                pixels, new(true), CaptureAlphaMode.Straight, 0, []);
+                pixels, new(true, frame.HdrReferenceWhiteLevel * FrameColorInfo.ScRgbReferenceWhiteNits),
+                frame.HdrAlphaMode, 0, []);
         }
 
         private static byte[] EncodeAnimationFrame(PreviewFrame frame, CancellationToken token)
@@ -292,23 +294,25 @@ namespace RitsukageGif.Desktop
         {
             var root = new MenuItem
                 { [!HeaderedSelectingItemsControl.HeaderProperty] = LiveText.Resource("PinnedAnimation") };
-            var play = AnimationCommand("PinnedAnimationPlay", "M7,3 L21,12 7,21 Z", () =>
+            var play = AnimationCommand("PinnedAnimationPlay", ToolbarIcon.GetDefinition("PinnedAnimationPlay"), () =>
             {
                 StartAnimation();
                 return Task.CompletedTask;
             });
-            var pause = AnimationCommand("PinnedAnimationPause", "M6,4 V20 M18,4 V20", () =>
-            {
-                _animationPlayback?.Pause();
-                _animationVisiblePlaying = false;
-                _animationTimer?.Stop();
-                return Task.CompletedTask;
-            });
+            var pause = AnimationCommand("PinnedAnimationPause", ToolbarIcon.GetDefinition("PinnedAnimationPause"),
+                () =>
+                {
+                    _animationPlayback?.Pause();
+                    _animationVisiblePlaying = false;
+                    _animationTimer?.Stop();
+                    return Task.CompletedTask;
+                });
             root.Items.Add(play);
             root.Items.Add(pause);
-            root.Items.Add(AnimationCommand("PinnedAnimationPrevious", "M5,4 V20 M19,4 L7,12 19,20 Z",
+            root.Items.Add(AnimationCommand("PinnedAnimationPrevious",
+                ToolbarIcon.GetDefinition("PinnedAnimationPrevious"),
                 () => StepAnimation(-1)));
-            root.Items.Add(AnimationCommand("PinnedAnimationNext", "M19,4 V20 M5,4 L17,12 5,20 Z",
+            root.Items.Add(AnimationCommand("PinnedAnimationNext", ToolbarIcon.GetDefinition("PinnedAnimationNext"),
                 () => StepAnimation(1)));
             var speed = new MenuItem
                 { [!HeaderedSelectingItemsControl.HeaderProperty] = LiveText.Resource("PinnedAnimationSpeed") };
@@ -321,6 +325,7 @@ namespace RitsukageGif.Desktop
                 };
                 item.Click += (_, _) =>
                 {
+                    if (!CanControlAnimation) return;
                     _animationPlayback?.SetSpeed(value);
                     TickAnimation();
                 };
@@ -331,46 +336,26 @@ namespace RitsukageGif.Desktop
 
             root.Items.Add(speed);
             root.Items.Add(new Separator());
-            root.Items.Add(AnimationCommand("PinnedAnimationCopyOriginal", ToolbarIcon.Geometry("ScreenshotCopy"),
+            root.Items.Add(AnimationCommand("PinnedAnimationCopyOriginal", ToolbarIcon.GetDefinition("ScreenshotCopy"),
                 CopyOriginalAnimationAsync));
-            root.Items.Add(AnimationCommand("PinnedAnimationSaveOriginal", ToolbarIcon.Geometry("ScreenshotSave"),
+            root.Items.Add(AnimationCommand("PinnedAnimationSaveOriginal", ToolbarIcon.GetDefinition("ScreenshotSave"),
                 SaveOriginalAnimationAsync));
             menu.Opened += (_, _) =>
             {
                 root.IsVisible = _animationEncoded is not null;
-                play.IsEnabled = AnimationActive && _animationPlayback is { Playing: false };
-                pause.IsEnabled = AnimationActive && _animationPlayback is { Playing: true };
-                speed.IsEnabled = AnimationActive;
-                foreach (var item in root.Items.OfType<MenuItem>().Skip(2).Take(2)) item.IsEnabled = AnimationActive;
+                play.IsEnabled = CanControlAnimation && _animationPlayback is { Playing: false };
+                pause.IsEnabled = CanControlAnimation && _animationPlayback is { Playing: true };
+                speed.IsEnabled = CanControlAnimation;
+                foreach (var item in root.Items.OfType<MenuItem>().Skip(2).Take(2))
+                    item.IsEnabled = CanControlAnimation;
             };
             menu.Items.Add(root);
         }
 
-        private MenuItem AnimationCommand(string key, string geometry, Func<Task> action)
+        private MenuItem AnimationCommand(string key, IconDefinition definition, Func<Task> action)
         {
             var item = Command(key, action);
-            var path = new Path
-            {
-                Data = Geometry.Parse(geometry), Width = 24, Height = 24,
-                Stretch = Stretch.None,
-            };
-            if (FluentToolbarIcon.IsFilled(geometry))
-            {
-                path[!Shape.FillProperty] = item[!ForegroundProperty];
-            }
-            else
-            {
-                path.StrokeThickness = 1.6;
-                path[!Shape.StrokeProperty] = item[!ForegroundProperty];
-            }
-
-            item.Icon = new Viewbox
-            {
-                Width = 16, Height = 16, Stretch = Stretch.Uniform,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Child = new Canvas { Width = 24, Height = 24, Children = { path } },
-            };
+            item.Icon = ToolbarIcon.Create(item, definition);
             return item;
         }
 
@@ -393,6 +378,7 @@ namespace RitsukageGif.Desktop
             var item = new DataTransferItem();
             var preview = OriginalContent.SdrPng ?? OriginalContent.Png;
             ClipboardPlatformFormats.SetImage(item, encoded, metadata.MimeType, preview);
+            ClipboardWindowShape.Write(item, Presentation.WindowShape, OriginalCaptureScaling);
             transfer.Add(item);
             await clipboard.SetDataAsync(transfer);
             await clipboard.FlushAsync();

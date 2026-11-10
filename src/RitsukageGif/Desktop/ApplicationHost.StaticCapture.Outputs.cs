@@ -36,19 +36,22 @@ namespace RitsukageGif.Desktop
 
             var (plan, toneMap) = await Dispatcher.UIThread.InvokeAsync(() =>
                 (PrepareStaticCapture(options, token), options.ToneMap ?? Settings.CaptureToneMap));
-            await PrepareStaticSourceAsync(plan, requests.Any(output => output.Color == OutputColorMode.Hdr) ||
-                                                 toneMap != HdrToneMapMode.HighlightCompression, token)
+            using var plannedSource = plan.SourceReference;
+            using var source = await PrepareStaticSourceAsync(plan,
+                    requests.Any(output => output.Color == OutputColorMode.Hdr) ||
+                    toneMap != HdrToneMapMode.HighlightCompression, token)
                 .ConfigureAwait(false);
             return await Task.Run(async () =>
             {
+                // ReSharper disable once AccessToDisposedClosure
                 var frames = CaptureStaticFrames(plan, requests.Any(output => output.Color == OutputColorMode.Hdr),
-                    toneMap, token);
+                    toneMap, source?.Session, token);
                 return await SaveStaticOutputsAsync(frames, requests, token).ConfigureAwait(false);
             }, token).ConfigureAwait(false);
         }
 
         private CapturedFrameSet CaptureStaticFrames(StaticCapturePlan plan, bool needsHdr, HdrToneMapMode toneMap,
-            CancellationToken token)
+            NativeCaptureSession? nativeSource, CancellationToken token)
         {
             if (!Enum.IsDefined(toneMap)) throw new ArgumentOutOfRangeException(nameof(toneMap));
             token.ThrowIfCancellationRequested();
@@ -56,8 +59,10 @@ namespace RitsukageGif.Desktop
             var height = Math.Max(1, checked((int)Math.Round(plan.Options.Height * (plan.ScalePercent / 100d))));
             CapturedFrameSet frames;
             using (IFrameSource source = plan.Preset is { } preset
-                       ? new SceneCapture(plan.Options, plan.Monitors, preset, plan.Runtime, inputs: _inputs)
-                       : new DesktopCapture(plan.Options, plan.Monitors, plan.Options.Width, plan.Options.Height))
+                       ? new SceneCapture(plan.Options, plan.Monitors, preset, plan.Runtime, inputs: _inputs,
+                           nativeSource: nativeSource)
+                       : new DesktopCapture(plan.Options, plan.Monitors, plan.Options.Width, plan.Options.Height,
+                           nativeSource))
                 if (source is IColorFrameSource colorSource &&
                     (needsHdr || toneMap != HdrToneMapMode.HighlightCompression))
                 {
@@ -83,16 +88,26 @@ namespace RitsukageGif.Desktop
             return frames;
         }
 
-        private static async Task PrepareStaticSourceAsync(StaticCapturePlan plan, bool retainHdr,
+        private static async Task<NativeCaptureSessionReference?> PrepareStaticSourceAsync(StaticCapturePlan plan,
+            bool retainHdr,
             CancellationToken token)
         {
-            if (!DesktopCapture.UsesSourceSelection ||
-                plan.Preset?.Layout?.Layers.All(layer => layer.Media is not null) == true) return;
-            var frame = await DesktopCapture.PrepareSourceAsync(
-                plan.Preset?.Source == CaptureSourceKind.Window || NativeCaptureSession.SourceIsWindow,
+            if (plan.WindowSource is not { } window) return null;
+            var source = await NativeCaptureSession.PrepareStaticSourceAsync(plan.SourceReference?.Session, window,
                 plan.Options.Cursor, plan.Options.Fps, retainHdr, token).ConfigureAwait(false);
-            var bounds = DesktopCapture.SourceBounds ?? frame.Bounds;
-            if (plan.Options.Region.Intersect(bounds) != plan.Options.Region) throw new CaptureSourceLostException();
+            try
+            {
+                if (plan.Preset?.Layout is null &&
+                    (source.Session.NativeBounds is not { } bounds ||
+                     plan.Options.Region.Intersect(bounds) != plan.Options.Region))
+                    throw new CaptureSourceLostException();
+                return source;
+            }
+            catch
+            {
+                source.Dispose();
+                throw;
+            }
         }
 
         private static CapturedFrameSet ResizeStaticFrames(CapturedFrameSet frames, int width, int height,

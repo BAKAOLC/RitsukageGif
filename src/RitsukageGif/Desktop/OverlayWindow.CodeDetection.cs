@@ -23,7 +23,8 @@ namespace RitsukageGif.Desktop
             _codeOverlay.LayoutChanged += () =>
             {
                 _canvas.CodeReservedBounds = _codeOverlay.OccupiedBounds;
-                _canvas.InvalidateVisual();
+                _canvas.CodePopupVisible = _codeOverlay.HasVisiblePopup;
+                InvalidateCanvas();
             };
             _layers.Children.Insert(_annotationSurface is null ? 1 : _layers.Children.IndexOf(_annotationSurface) + 1,
                 _codeOverlay);

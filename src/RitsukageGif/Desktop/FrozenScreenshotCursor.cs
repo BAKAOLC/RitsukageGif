@@ -62,6 +62,11 @@ namespace RitsukageGif.Desktop
             if (!OperatingSystem.IsWindows()) return CapturePortable();
             var cursor = new NativeMethods.CursorInfo { Size = Marshal.SizeOf<NativeMethods.CursorInfo>() };
             if (NativeMethods.GetCursorInfo(ref cursor) == 0 || (cursor.Flags & 1) == 0) return null;
+            return CaptureWindows(cursor);
+        }
+
+        internal static FrozenScreenshotCursor? CaptureWindows(NativeMethods.CursorInfo cursor)
+        {
             var copy = CopyIcon(cursor.Cursor);
             if (copy == 0) return null;
             if (NativeMethods.GetIconInfo(copy, out var info) == 0)

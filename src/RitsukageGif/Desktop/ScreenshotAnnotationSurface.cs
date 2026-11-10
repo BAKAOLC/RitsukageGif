@@ -6,7 +6,8 @@ using Avalonia.Rendering;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed partial class ScreenshotAnnotationSurface : Canvas, IDisposable, ICustomHitTest
+    internal sealed partial class ScreenshotAnnotationSurface : Canvas, IDisposable, ICustomHitTest,
+        IPinnedInputCoverageSource
     {
         private static readonly Dictionary<StandardCursorType, Cursor> AnnotationCursors =
             new()
@@ -21,7 +22,6 @@ namespace RitsukageGif.Desktop
             };
 
         private readonly ScreenshotAnnotationDrawingSurface _drawingSurface;
-        private readonly PixelRect _monitor;
         private readonly ScreenshotAnnotationSession _session;
         private IPointer? _captured;
         private bool _completing;
@@ -31,9 +31,9 @@ namespace RitsukageGif.Desktop
             Func<PointerEventArgs, PixelPoint> sourcePoint, SelectionCoordinator? coordinator = null)
         {
             _session = session;
-            _monitor = monitor;
-            Scale = scale;
             _drawingSurface = new(RenderAnnotations) { IsHitTestVisible = false };
+            Scale = scale;
+            SourceOrigin = new(monitor.X, monitor.Y);
             Children.Add(_drawingSurface);
             RefreshCursor();
             _session.Changed += Refresh;
@@ -69,8 +69,11 @@ namespace RitsukageGif.Desktop
             get;
             set
             {
+                if (field.Equals(value)) return;
                 field = value;
                 _session.InteractionScale = EffectiveControlScale;
+                InvalidateAnnotations();
+                RefreshTextEditor();
             }
         }
 
@@ -83,6 +86,18 @@ namespace RitsukageGif.Desktop
                 field = value;
                 _session.InteractionScale = EffectiveControlScale;
                 InvalidateAnnotations();
+            }
+        }
+
+        public PixelPoint SourceOrigin
+        {
+            get;
+            set
+            {
+                if (field == value) return;
+                field = value;
+                InvalidateAnnotations();
+                RefreshTextEditor();
             }
         }
 
@@ -104,8 +119,8 @@ namespace RitsukageGif.Desktop
         {
             _session.InteractionScale = EffectiveControlScale;
             return _session.Tool != ScreenshotTool.Select || _session.HasSelectedAnnotation ||
-                   _session.HitTestAnnotation(new((int)(point.X * Scale + _monitor.X),
-                       (int)(point.Y * Scale + _monitor.Y)));
+                   _session.HitTestAnnotation(new((int)(point.X * Scale + SourceOrigin.X),
+                       (int)(point.Y * Scale + SourceOrigin.Y)));
         }
 
         public void Dispose()
@@ -119,6 +134,8 @@ namespace RitsukageGif.Desktop
             _captured?.Capture(null);
             _captured = null;
         }
+
+        public event Action? InputCoverageChanged;
 
         private void Refresh()
         {
@@ -136,6 +153,7 @@ namespace RitsukageGif.Desktop
         {
             var result = base.ArrangeOverride(finalSize);
             _drawingSurface.Arrange(new(result));
+            RefreshTextEditor();
             return result;
         }
 
@@ -143,14 +161,17 @@ namespace RitsukageGif.Desktop
         {
             _drawingSurface.InvalidateVisual();
             InvalidateVisual();
+            InputCoverageChanged?.Invoke();
         }
 
         private void RenderAnnotations(DrawingContext context)
         {
             using var clip = context.PushClip(new(Bounds.Size));
             using var transform =
-                context.PushTransform(new(1 / Scale, 0, 0, 1 / Scale, -_monitor.X / Scale, -_monitor.Y / Scale));
+                context.PushTransform(new(1 / Scale, 0, 0, 1 / Scale, -SourceOrigin.X / Scale,
+                    -SourceOrigin.Y / Scale));
             if (RenderContent) _session.Render(context);
+            if (!_session.CanAnnotate) return;
             _session.RenderSelection(context, EffectiveControlScale);
             if (_pointerPosition is { } point)
                 _session.RenderPencilCursor(context, new(point.X, point.Y), EffectiveControlScale);

@@ -23,10 +23,8 @@ namespace RitsukageGif.Desktop
 
                 var png = await ComposeSelectedScreenshotAsync(result, annotations, token);
                 var frame = await Task.Run(() => DecodePrivacyFrame(png, token), token);
-                var service = new PrivacyDetectionService([
-                    new OcrPrivacyCandidateProvider(new OcrRecognitionService(), RecognitionPreferences.LanguageTag),
-                    new BarcodePrivacyCandidateProvider(new BarcodeRecognitionService()),
-                ]);
+                var service = PrivacyDetectionService.ForAnnotations(new OcrRecognitionService(),
+                    new BarcodeRecognitionService(), RecognitionPreferences.LanguageTag);
                 var detected = await service.DetectAsync(frame, token);
                 token.ThrowIfCancellationRequested();
                 if (_finished) return;
@@ -37,7 +35,7 @@ namespace RitsukageGif.Desktop
                 }).ToArray();
                 if (annotations.SetPrivacyCandidates(request, translated, _autoSelectPrivacyMosaic) &&
                     detected.Failures.Count > 0)
-                    annotations.SetExportState(false, string.Join(Environment.NewLine,
+                    annotations.SetPrivacyNotice(string.Join(Environment.NewLine,
                         detected.Failures.Select(failure => failure.Message)));
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)

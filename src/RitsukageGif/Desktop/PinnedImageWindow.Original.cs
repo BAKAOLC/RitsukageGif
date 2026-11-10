@@ -30,12 +30,9 @@ namespace RitsukageGif.Desktop
         {
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_closed, this);
-            if (CaptureLiveOutputAsync(mode, token) is { } live) return live;
-            if (CurrentPreferences.OutputContent != PinnedImageOutputContent.Original)
-                return CaptureOutputAsync(mode, token);
-            return Task.FromResult(CreateOutput(
-                OriginalContent.Hdr is null ? OriginalContent.Png : OriginalContent.SdrPng ?? OriginalContent.Png,
-                OriginalContent.Hdr, mode, OriginalCaptureScaling));
+            return CurrentPreferences.OutputContent == PinnedImageOutputContent.Original
+                ? CaptureSceneOutputAsync(mode, token)
+                : CaptureOutputAsync(mode, token);
         }
     }
 }

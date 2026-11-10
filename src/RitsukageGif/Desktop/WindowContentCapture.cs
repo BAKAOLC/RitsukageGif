@@ -22,7 +22,7 @@ namespace RitsukageGif.Desktop
         private double? _requestedDensity;
 
         public WindowContentCapture(nint window, bool cursor, int fps = 60, bool retainFrames = true,
-            NativeCaptureAuthorization? authorization = null)
+            NativeCaptureAuthorization? authorization = null, NativeCaptureSession? nativeSource = null)
         {
             _retainFrames = retainFrames;
             _cursor = cursor;
@@ -33,8 +33,10 @@ namespace RitsukageGif.Desktop
                 _usesNative = true;
             else if (OperatingSystem.IsLinux() && !DesktopCapture.UsesSourceSelection)
                 _x11 = new(window, cursor);
-            else if (DesktopCapture.UsesSourceSelection && window == -1 && NativeCaptureSession.SourceIsWindow)
-                _portal = new(() => NativeCaptureSession.CurrentAuthorizedWindow(authorization));
+            else if (DesktopCapture.UsesSourceSelection && window == -1 &&
+                     (nativeSource?.IsWindowSource ?? NativeCaptureSession.SourceIsWindow))
+                _portal = new(nativeSource?.RetainWindow(authorization) ??
+                              NativeCaptureSession.RetainAuthorizedWindow(authorization));
             else
                 throw new NotSupportedException(UiText.Get(DesktopCapture.UsesSourceSelection
                     ? "PortalWindowMatchingUnavailable"
@@ -70,7 +72,7 @@ namespace RitsukageGif.Desktop
                     CoordinateBounds = value.Geometry.Bounds;
                     NativePixelDensity = value.Geometry.BackingScale;
                     result = ComposeNativeFrame(value, value.Frames.Hdr is not null, token);
-                }, _requestedRegion, _requestedDensity, false, token);
+                }, _requestedRegion, _requestedDensity, false, _fps, true, token);
                 return result!;
             }
 
@@ -97,6 +99,39 @@ namespace RitsukageGif.Desktop
                     _retainFrames ? [.. pixels] : pixels, color,
                     CaptureAlphaMode.Opaque, FrameRevision, [new(new(0, 0, Width, Height), color)]), null,
                 Stopwatch.GetTimestamp());
+        }
+
+        internal static LinuxCaptureExclusionProof ProbeSelectionIsolation(SelectionResult selection,
+            CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!OperatingSystem.IsLinux()) return default;
+            if (DesktopCapture.UsesSourceSelection) throw new CaptureSourceLostException();
+            var preset = selection.CreatePreset();
+            if (preset is null) return new(LinuxCaptureExclusionSource.X11Root);
+            long[] handles;
+            if (preset.Layout is { } layout)
+            {
+                if (layout.Layers.Count == 0 || layout.Layers.Any(layer =>
+                        layer.Source != CaptureSourceKind.Window || layer.FixedHandle == 0 || layer.Media is not null))
+                    return new(LinuxCaptureExclusionSource.X11Root);
+                handles = [.. layout.Layers.Select(layer => layer.FixedHandle).Distinct()];
+            }
+            else
+            {
+                if (preset.Source != CaptureSourceKind.Window || preset.FixedHandle == 0)
+                    return new(LinuxCaptureExclusionSource.X11Root);
+                handles = [preset.FixedHandle];
+            }
+
+            foreach (var handle in handles)
+            {
+                token.ThrowIfCancellationRequested();
+                using var capture = new WindowContentCapture(checked((nint)handle), false);
+                if (capture._x11?.HasIsolatedWindow() != true) throw new CaptureSourceLostException();
+            }
+
+            return new(LinuxCaptureExclusionSource.SelectedWindow);
         }
 
         internal void ConfigureRegion(PixelRect region, int outputWidth, int outputHeight)
@@ -155,7 +190,7 @@ namespace RitsukageGif.Desktop
                     CoordinateBounds = value.Geometry.Bounds;
                     NativePixelDensity = value.Geometry.BackingScale;
                     pixels = CapturedFramePixels.ToStraightBgra(ComposeNativeFrame(value, false, token).Sdr, token);
-                }, _requestedRegion, _requestedDensity, token: token);
+                }, _requestedRegion, _requestedDensity, token: token, fps: _fps, retainHdr: false);
                 return pixels;
             }
 

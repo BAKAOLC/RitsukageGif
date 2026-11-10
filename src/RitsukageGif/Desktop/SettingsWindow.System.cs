@@ -17,9 +17,6 @@ namespace RitsukageGif.Desktop
         private static readonly string[] SystemOcrPunctuationLabels =
             ["SystemOcrPunctuationNone", "SystemOcrPunctuationHalf", "SystemOcrPunctuationFull"];
 
-        private static readonly string[] SystemOcrDialogLabels =
-            ["SystemOcrDialogNever", "SystemOcrDialogRecognition", "SystemOcrDialogCopyAll", "SystemOcrDialogBoth"];
-
         private static readonly string[] SystemUpdateChannelLabels = ["SystemUpdateStable", "SystemUpdatePreview"];
 
         private static readonly string[] SystemExplorerModeLabels =
@@ -43,6 +40,13 @@ namespace RitsukageGif.Desktop
             var startup = Setting(SystemCheck("SystemStartWithWindows", draft.System.StartWithWindows,
                     value => draft.System = draft.System with { StartWithWindows = value }),
                 static settings => settings.System.StartWithWindows);
+            var startupHidden = Setting(SystemCheck("SystemStartupHidden", draft.System.StartupHidden,
+                    value => draft.System = draft.System with { StartupHidden = value }),
+                static settings => settings.System.StartupHidden);
+            startupHidden.Margin = new(24, 0, 0, 0);
+            startupHidden.IsEnabled = StartupRegistrationFactory.Supported && draft.System.StartWithWindows;
+            startup.IsCheckedChanged += (_, _) =>
+                startupHidden.IsEnabled = StartupRegistrationFactory.Supported && startup.IsChecked == true;
             var administrator = Setting(SystemCheck("SystemRunAsAdministrator", draft.System.RunAsAdministrator,
                     value => draft.System = draft.System with { RunAsAdministrator = value }),
                 static settings => settings.System.RunAsAdministrator);
@@ -62,6 +66,7 @@ namespace RitsukageGif.Desktop
                     value => draft.System = draft.System with { IgnoreCopyMacros = value }),
                 static settings => settings.System.IgnoreCopyMacros));
             general.Children.Add(startup);
+            general.Children.Add(startupHidden);
             general.Children.Add(StartupStatusMessage(() => draft.System.StartWithWindows));
             general.Children.Add(administrator);
             var explorer = new ComboBox
@@ -87,7 +92,8 @@ namespace RitsukageGif.Desktop
             };
             desktopToolbar.SelectionChanged += (_, _) =>
             {
-                if (desktopToolbar.SelectedIndex >= 0)
+                if (desktopToolbar.SelectedIndex >= 0 &&
+                    draft.System.DesktopToolbar.Mode != (DesktopToolbarMode)desktopToolbar.SelectedIndex)
                     draft.System = draft.System with
                     {
                         DesktopToolbar = draft.System.DesktopToolbar with
@@ -135,12 +141,19 @@ namespace RitsukageGif.Desktop
                     .Select(UiText.Get).ToArray(),
                 SelectedIndex = (int)draft.Recognition.Punctuation,
             };
-            var popup = new ComboBox
+            var popupValues = new[]
             {
-                ItemsSource = SystemOcrDialogLabels.Select(UiText.Get).ToArray(),
-                SelectedIndex = (draft.Recognition.ShowDialogOnRecognition ? 1 : 0) |
-                                (draft.Recognition.ShowDialogOnCopyAll ? 2 : 0),
+                draft.Recognition.ShowDialogOnRecognition, draft.Recognition.ShowDialogOnCopySelected,
+                draft.Recognition.ShowDialogOnCopyAll,
             };
+            var popup = ContentsSelector(popupValues,
+                ["SystemOcrDialogRecognition", "SystemOcrDialogCopySelected", "SystemOcrDialogCopyAll"],
+                () => draft.Recognition = draft.Recognition with
+                {
+                    ShowDialogOnRecognition = popupValues[0], ShowDialogOnCopySelected = popupValues[1],
+                    ShowDialogOnCopyAll = popupValues[2],
+                });
+            popup.Name = "SystemOcrDialogWhen";
             layout.SelectionChanged += (_, _) =>
             {
                 if (layout.SelectedIndex >= 0)
@@ -157,20 +170,11 @@ namespace RitsukageGif.Desktop
                         Punctuation = (RecognitionPunctuation)punctuation.SelectedIndex,
                     };
             };
-            popup.SelectionChanged += (_, _) =>
-            {
-                if (popup.SelectedIndex >= 0)
-                    draft.Recognition = draft.Recognition with
-                    {
-                        ShowDialogOnRecognition = (popup.SelectedIndex & 1) != 0,
-                        ShowDialogOnCopyAll = (popup.SelectedIndex & 2) != 0,
-                    };
-            };
             recognition.Children.Add(SettingRow("SystemOcrLayout", layout,
                 static settings => settings.Recognition.Layout));
             recognition.Children.Add(SettingRow("SystemOcrDialogWhen", popup,
                 static settings => (settings.Recognition.ShowDialogOnRecognition,
-                    settings.Recognition.ShowDialogOnCopyAll)));
+                    settings.Recognition.ShowDialogOnCopySelected, settings.Recognition.ShowDialogOnCopyAll)));
             recognition.Children.Add(SettingRow("SystemOcrPunctuation", punctuation,
                 static settings => settings.Recognition.Punctuation));
             var ocrLanguage = new ComboBox { IsEnabled = false };
@@ -197,27 +201,11 @@ namespace RitsukageGif.Desktop
                 static settings => settings.Recognition.LanguageTag));
             recognition.AttachedToVisualTree += async (_, _) =>
             {
-                if (loadingLanguages || languagesLoaded) return;
-                loadingLanguages = true;
-                try
-                {
-                    var capabilities = await new OcrRecognitionService().GetCapabilitiesAsync(contentToken);
-                    if (contentToken.IsCancellationRequested || !IsVisible) return;
-                    languages.AddRange(capabilities.Languages);
-                    languagesLoaded = true;
-                    ocrLanguage.IsEnabled = capabilities.Available;
-                    RefreshLanguages();
-                    if (!capabilities.Available) ToolTip.SetTip(ocrLanguage, UiText.Get("RecognitionUnavailable"));
-                }
-                catch (Exception error)
-                {
-                    if (!contentToken.IsCancellationRequested && IsVisible) ToolTip.SetTip(ocrLanguage, error.Message);
-                }
-                finally
-                {
-                    loadingLanguages = false;
-                }
+                Activated += RefreshRecognitionLanguages;
+                await LoadRecognitionLanguagesAsync();
             };
+            recognition.DetachedFromVisualTree += (_, _) => Activated -= RefreshRecognitionLanguages;
+
             page.Children.Add(SettingsSection("RecognizeText", recognition));
             page.Children.Add(SettingsSection("TranslationTitle", BuildTranslationSettings(draft)));
             page.Children.Add(SettingsSection("SystemTrayHeading", tray));
@@ -246,6 +234,37 @@ namespace RitsukageGif.Desktop
             SubscribeContentLanguage(Refresh);
             Refresh();
             return page;
+
+            void RefreshRecognitionLanguages(object? sender, EventArgs e)
+            {
+                languagesLoaded = false;
+                _ = LoadRecognitionLanguagesAsync();
+            }
+
+            async Task LoadRecognitionLanguagesAsync()
+            {
+                if (loadingLanguages || languagesLoaded) return;
+                loadingLanguages = true;
+                try
+                {
+                    var capabilities = await new OcrRecognitionService().GetCapabilitiesAsync(contentToken);
+                    if (contentToken.IsCancellationRequested || !IsVisible) return;
+                    languages.Clear();
+                    languages.AddRange(capabilities.Languages);
+                    languagesLoaded = true;
+                    ocrLanguage.IsEnabled = capabilities.Available;
+                    RefreshLanguages();
+                    ToolTip.SetTip(ocrLanguage, capabilities.Available ? null : UiText.Get("RecognitionUnavailable"));
+                }
+                catch (Exception error)
+                {
+                    if (!contentToken.IsCancellationRequested && IsVisible) ToolTip.SetTip(ocrLanguage, error.Message);
+                }
+                finally
+                {
+                    loadingLanguages = false;
+                }
+            }
 
             void RefreshTraySupport()
             {
@@ -285,9 +304,9 @@ namespace RitsukageGif.Desktop
                 SetLabels(layout, SystemOcrLayoutLabels);
                 SetLabels(punctuation,
                     SystemOcrPunctuationLabels);
-                SetLabels(popup,
-                    SystemOcrDialogLabels);
                 SetLabels(channel, SystemUpdateChannelLabels);
+                SetLabels(explorer, SystemExplorerModeLabels);
+                SetLabels(desktopToolbar, SystemDesktopToolbarModeLabels);
                 RefreshLanguages();
             }
         }
@@ -301,10 +320,15 @@ namespace RitsukageGif.Desktop
 
         private ComboBox TrayActionBox(SystemTrayAction value, Action<SystemTrayAction> changed)
         {
-            var values = Enum.GetValues<SystemTrayAction>();
+            SystemTrayAction[] values =
+            [
+                SystemTrayAction.None, SystemTrayAction.Screenshot, SystemTrayAction.ScreenshotAndPin,
+                SystemTrayAction.OpenSettings, SystemTrayAction.ToggleGlobalShortcuts,
+                SystemTrayAction.TogglePinnedImages,
+            ];
             var box = new ComboBox
             {
-                ItemsSource = values.Select(action => UiText.Get("SystemTrayAction" + action)).ToArray(),
+                ItemsSource = values.Select(action => UiText.Get("SystemTrayNativeAction" + action)).ToArray(),
                 SelectedIndex = Array.IndexOf(values, value),
             };
             box.SelectionChanged += (_, _) =>
@@ -318,7 +342,7 @@ namespace RitsukageGif.Desktop
 
             void Refresh()
             {
-                SetLabels(box, [.. values.Select(action => "SystemTrayAction" + action)]);
+                SetLabels(box, [.. values.Select(action => "SystemTrayNativeAction" + action)]);
             }
         }
 

@@ -21,6 +21,7 @@ private final class HdrView: NSView {
     var failed = false
     var alphaMode: Float = 2
     var white: Float = 1
+    var smoothScaling: Float = 1
     var callback: ChangeCallback?
     var context: UnsafeMutableRawPointer?
     var observer: NSObjectProtocol?
@@ -89,7 +90,8 @@ private final class HdrView: NSView {
         metalLayer.contentsScale = scale
         metalLayer.drawableSize = CGSize(width: max(1,bounds.width * scale),height: max(1,bounds.height * scale))
     }
-    func upload(_ bytes: UnsafeRawPointer, _ width: Int, _ height: Int, _ stride: Int, _ white: Float, _ alphaMode: Int32) -> Int32 {
+    func upload(_ bytes: UnsafeRawPointer, _ width: Int, _ height: Int, _ stride: Int, _ white: Float,
+                _ alphaMode: Int32, _ smoothScaling: Int32) -> Int32 {
         if failed { return -5 }
         guard inFlight.wait(timeout: .now()) == .success else { waiting = true; return 1 }
         if texture?.width != width || texture?.height != height ||
@@ -107,6 +109,7 @@ private final class HdrView: NSView {
                         withBytes: bytes,bytesPerRow: stride)
         self.white = white
         self.alphaMode = Float(alphaMode)
+        self.smoothScaling = smoothScaling != 0 ? 1 : 0
         updateSize()
         return drawFrame(reserved: true)
     }
@@ -116,7 +119,7 @@ private final class HdrView: NSView {
         pendingFrames += 1
         let layer = metalLayer, commandQueue = queue, state = pipeline
         let patch = self.patch ?? texture
-        let mode = SIMD2<Float>(self.white,self.alphaMode)
+        let mode = SIMD4<Float>(self.white,self.alphaMode,self.smoothScaling,0)
         let rect = patchRect, selected = selection, patchMode = patchAlpha
         let semaphore = inFlight
         renderQueue.async { [weak self] in
@@ -140,7 +143,7 @@ private final class HdrView: NSView {
                 encoder.setFragmentTexture(texture,index: 0)
                 encoder.setFragmentTexture(patch,index: 1)
                 var mode = mode, rect = rect, selected = selected, patchMode = patchMode
-                encoder.setFragmentBytes(&mode,length: MemoryLayout<SIMD2<Float>>.size,index: 0)
+                encoder.setFragmentBytes(&mode,length: MemoryLayout<SIMD4<Float>>.size,index: 0)
                 encoder.setFragmentBytes(&rect,length: MemoryLayout<SIMD4<Float>>.size,index: 1)
                 encoder.setFragmentBytes(&selected,length: MemoryLayout<SIMD4<Float>>.size,index: 2)
                 encoder.setFragmentBytes(&patchMode,length: MemoryLayout<Float>.size,index: 3)
@@ -175,11 +178,12 @@ public func createHdr(_ callback: (@convention(c) (UnsafeMutableRawPointer?) -> 
 }
 @_cdecl("rg_hdr_present")
 public func presentHdr(_ pointer: UnsafeMutableRawPointer?, _ pixels: UnsafeRawPointer?,
-                       _ width: Int32, _ height: Int32, _ stride: Int32, _ white: Float, _ alphaMode: Int32) -> Int32 {
+                       _ width: Int32, _ height: Int32, _ stride: Int32, _ white: Float,
+                       _ alphaMode: Int32, _ smoothScaling: Int32) -> Int32 {
     guard Thread.isMainThread, let pointer, let pixels, width > 0, height > 0,
           Int64(stride) >= Int64(width) * 8, white.isFinite, white > 0 else { return -1 }
     return Unmanaged<HdrView>.fromOpaque(pointer).takeUnretainedValue().upload(
-        pixels,Int(width),Int(height),Int(stride),white,alphaMode)
+        pixels,Int(width),Int(height),Int(stride),white,alphaMode,smoothScaling)
 }
 @_cdecl("rg_hdr_headroom")
 public func hdrHeadroom(_ pointer: UnsafeMutableRawPointer?) -> Float {

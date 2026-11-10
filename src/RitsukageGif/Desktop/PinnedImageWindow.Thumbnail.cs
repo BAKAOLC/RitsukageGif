@@ -7,14 +7,12 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class PinnedImageWindow
     {
-        private static readonly SemaphoreSlim CropGate = new(2);
         private PinnedImageCrop? _croppedImage;
         private bool _isThumbnail;
         private PixelRect _regionDragOrigin;
         private Point _regionDragStart;
         private Border? _regionOutline;
         private bool _regionSelectionMode;
-        private bool _thumbnailBeforeAnnotation;
         private PixelRect? _thumbnailRegion;
 
         private PixelRect DisplayRegion => _isThumbnail && _thumbnailRegion is { } region
@@ -23,7 +21,7 @@ namespace RitsukageGif.Desktop
 
         private void ToggleThumbnail()
         {
-            if (IsOperationLocked(PinnedLockRestrictions.Move) || _annotation is not null) return;
+            if (LiveCaptureActive || IsOperationLocked(PinnedLockRestrictions.Move) || _annotation is not null) return;
             var region = _isThumbnail
                 ? new(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height)
                 : InitialQuickThumbnailRegion();
@@ -32,6 +30,7 @@ namespace RitsukageGif.Desktop
 
         private void SetThumbnailRegion(PixelRect region)
         {
+            if (LiveCaptureActive) return;
             region = region.Intersect(new(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height));
             if (region.IsEmpty) return;
             ApplyThumbnailView(region, true, true);
@@ -39,8 +38,7 @@ namespace RitsukageGif.Desktop
 
         private void RefreshThumbnail(Vector scrollOffset = default, bool notify = true)
         {
-            if (CanSelectImageText) ClearTextSelection();
-            else ResetTextRecognition();
+            ClearTextSelection();
             RefreshHdrPreview();
             _viewport.Offset = default;
             UpdateSize();
@@ -62,7 +60,7 @@ namespace RitsukageGif.Desktop
 
         private PixelRect RegionDragSelection(Point point)
         {
-            var scale = RenderScaling / _zoom;
+            var scale = RenderScaling / CurrentPinZoom;
             var left = Math.Clamp((int)Math.Floor(Math.Min(_regionDragStart.X, point.X) * scale), 0,
                 _regionDragOrigin.Width - 1);
             var top = Math.Clamp((int)Math.Floor(Math.Min(_regionDragStart.Y, point.Y) * scale), 0,
@@ -83,11 +81,14 @@ namespace RitsukageGif.Desktop
                 HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
             };
             if (!_content.Children.Contains(_regionOutline)) _content.Children.Add(_regionOutline);
-            var scale = _zoom / RenderScaling;
-            _regionOutline.Margin = new((region.X - _regionDragOrigin.X) * scale - _viewport.Offset.X,
-                (region.Y - _regionDragOrigin.Y) * scale - _viewport.Offset.Y, 0, 0);
-            _regionOutline.Width = region.Width * scale;
-            _regionOutline.Height = region.Height * scale;
+            var scale = CurrentPinZoom / RenderScaling;
+            if (_image.TransformToVisual(_content) is not { } matrix) return;
+            var bounds = new Rect((region.X - _regionDragOrigin.X) * scale,
+                    (region.Y - _regionDragOrigin.Y) * scale, region.Width * scale, region.Height * scale)
+                .TransformToAABB(matrix);
+            _regionOutline.Margin = new(bounds.X, bounds.Y, 0, 0);
+            _regionOutline.Width = bounds.Width;
+            _regionOutline.Height = bounds.Height;
         }
 
         private void FinishRegionDrag(Point point)
@@ -100,7 +101,7 @@ namespace RitsukageGif.Desktop
         private void MoveThumbnailRegion(Point point)
         {
             if (!_isThumbnail) return;
-            var scale = RenderScaling / _zoom;
+            var scale = RenderScaling / CurrentPinZoom;
             var x = _regionDragOrigin.X - (int)Math.Round((point.X - _regionDragStart.X) * scale);
             var y = _regionDragOrigin.Y - (int)Math.Round((point.Y - _regionDragStart.Y) * scale);
             _thumbnailRegion = _regionDragOrigin with
@@ -113,45 +114,13 @@ namespace RitsukageGif.Desktop
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        private async Task<byte[]> CurrentImageAsync()
+        private async Task<(byte[] Png, CaptureWindowShape? Shape, double CaptureScaling)> CurrentImageAsync()
         {
-            if (CaptureLiveOutputAsync(OutputColorMode.Sdr, _lifetime.Token) is { } live)
-                return (await live).Png;
-            if (_annotation is not null) return await ComposeAnnotationAsync();
-            if (!_isThumbnail || !CurrentPreferences.CopyVisibleRegion) return _png;
-            var region = DisplayRegion;
-            var hdr = _hdrSource;
-            var png = hdr is null ? _png : _sdrPng ?? _png;
-            var token = _lifetime.Token;
-            await CropGate.WaitAsync(token);
-            try
-            {
-                return await Task.Run(async () =>
-                {
-                    if (hdr is not null)
-                    {
-                        var pixels = new byte[checked(region.Width * region.Height * 8)];
-                        for (var y = 0; y < region.Height; y++)
-                        {
-                            token.ThrowIfCancellationRequested();
-                            hdr.Pixels.Span.Slice((region.Y + y) * hdr.Stride + region.X * 8, region.Width * 8)
-                                .CopyTo(pixels.AsSpan(y * region.Width * 8));
-                        }
-
-                        return await HdrImageService.EncodePngAsync(hdr with
-                        {
-                            Pixels = pixels, Width = region.Width, Height = region.Height, Stride = region.Width * 8,
-                            ColorRegions = [],
-                        }, token);
-                    }
-
-                    return PngImageCodec.Crop(png, region, token);
-                }, token);
-            }
-            finally
-            {
-                CropGate.Release();
-            }
+            var output = await CaptureOutputAsync(OutputColorMode.Both, _lifetime.Token);
+            var png = output.Hdr is { } hdr
+                ? await HdrImageService.EncodePngAsync(hdr, _lifetime.Token)
+                : output.Png;
+            return (png, output.WindowShape, output.CaptureScaling);
         }
     }
 }

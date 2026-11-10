@@ -83,16 +83,19 @@ namespace RitsukageGif.Desktop
             return panel;
         }
 
-        private static async Task<string> ReadEditorFileAsync(string path)
+        internal static async Task<string> ReadEditorFileAsync(string path, CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             if (new FileInfo(path).Length > 1024 * 1024) throw new FormatException(UiText.Get("DslTooComplex"));
-            var text = await File.ReadAllTextAsync(path);
+            var text = await File.ReadAllTextAsync(path, token);
+            token.ThrowIfCancellationRequested();
             if (text.Length > 1024 * 1024) throw new FormatException(UiText.Get("DslTooComplex"));
             return text;
         }
 
-        private async Task OpenDocumentAsync(string path)
+        private async Task OpenDocumentAsync(string path, string? initialText = null, CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             if (_preparingRun) return;
             path = Path.GetFullPath(path);
             var existing = _documents.FirstOrDefault(d => SameDiagnosticSource(d.Path, path));
@@ -104,8 +107,13 @@ namespace RitsukageGif.Desktop
 
             try
             {
-                var text = await ReadEditorFileAsync(path);
+                var text = initialText ?? await ReadEditorFileAsync(path, token);
+                token.ThrowIfCancellationRequested();
                 if (!_allowClose) LoadText(path, text);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception error)
             {
@@ -114,9 +122,10 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        internal Task OpenLocationAsync(string path)
+        internal Task OpenLocationAsync(string path, string? initialText = null, CancellationToken token = default)
         {
-            if (!Directory.Exists(path)) return OpenDocumentAsync(path);
+            token.ThrowIfCancellationRequested();
+            if (!Directory.Exists(path)) return OpenDocumentAsync(path, initialText, token);
             OpenWorkspace(path);
             return Task.CompletedTask;
         }

@@ -21,6 +21,10 @@ namespace RitsukageGif.Desktop
         private static partial int XSync(nint display, int discard);
 
         [LibraryImport(X11)]
+        private static partial int XWarpPointer(nint display, nint source, nint destination, int sourceX,
+            int sourceY, uint sourceWidth, uint sourceHeight, int destinationX, int destinationY);
+
+        [LibraryImport(X11)]
         private static partial int XQueryPointer(nint display, nint window, out nint root,
             out nint child, out int rootX, out int rootY, out int windowX, out int windowY, out uint mask);
 

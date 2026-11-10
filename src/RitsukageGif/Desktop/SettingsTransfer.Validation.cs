@@ -29,6 +29,9 @@ namespace RitsukageGif.Desktop
                          or nameof(AppSettings.GlobalMouseShowMask)
                          or nameof(AppSettings.NonDefaultConfigItemsFontNotBold) &&
                      value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) ||
+                    (parent == nameof(AppSettings.PinnedImages) &&
+                     property.Name == nameof(PinnedImagePreferences.SmoothScaling) &&
+                     value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) ||
                     (parent == "GlobalActions" && property.Name == "Script" && value.ValueKind != JsonValueKind.String))
                     throw Invalid(path);
                 ValidateOutputProperty(parent, property, path);
@@ -57,11 +60,11 @@ namespace RitsukageGif.Desktop
                         case "FileFormat" when parent == "ScreenshotClipboard":
                             if (!Enum.IsDefined((ScreenshotClipboardFileFormat)number)) throw Invalid(path);
                             break;
-                        case "Mode" when parent == "ScreenshotClipboard":
-                            if (!Enum.IsDefined((ScreenshotClipboardMode)number)) throw Invalid(path);
-                            break;
                         case "ConflictPolicy":
                             if (!Enum.IsDefined((ScreenshotConflictPolicy)number)) throw Invalid(path);
+                            break;
+                        case "QuickQuality" when parent == "ScreenshotRecording":
+                            if (!Enum.IsDefined((RecordingReviewQuality)number)) throw Invalid(path);
                             break;
                         case "Container":
                             if (!Enum.IsDefined((VideoContainer)number)) throw Invalid(path);
@@ -81,6 +84,12 @@ namespace RitsukageGif.Desktop
                         case "Punctuation" when parent == "Recognition":
                             if (!Enum.IsDefined((RecognitionPunctuation)number)) throw Invalid(path);
                             break;
+                        case "Layout" when parent == "Recognition.Dialog":
+                            if (!Enum.IsDefined((RecognitionTextLayout)number)) throw Invalid(path);
+                            break;
+                        case "Punctuation" when parent == "Recognition.Dialog":
+                            if (!Enum.IsDefined((RecognitionPunctuation)number)) throw Invalid(path);
+                            break;
                         case "CopyFormat" when parent == "Recognition":
                             if (!Enum.IsDefined((FormulaCopyFormat)number)) throw Invalid(path);
                             break;
@@ -98,6 +107,8 @@ namespace RitsukageGif.Desktop
 
         private static void Validate(AppSettings settings)
         {
+            var recording = settings.ScreenshotRecording;
+            if (recording != recording.Normalize()) throw Invalid(nameof(AppSettings.ScreenshotRecording));
             if (settings.Fps is < 1 or > 100 || settings.Divisor is < 1 or > 100 ||
                 settings.SnapRadius is < 0 or > 50 || settings.EdgeThreshold is < 1 or > 765 ||
                 settings.SelectionSnappingMode is < 0 or > 3 || !Enum.IsDefined(settings.SelectionHints) ||
@@ -113,15 +124,21 @@ namespace RitsukageGif.Desktop
             if (settings.VideoRecording.Fps is < 1 or > 100 || settings.VideoRecording.Divisor is < 1 or > 100 ||
                 settings.VideoRecording.Quality is < 0 or > 51 || !Enum.IsDefined(settings.VideoRecording.Container))
                 throw Invalid("VideoRecording");
-            if (!Enum.IsDefined(settings.ScrollCapture.InitialAxis)) throw Invalid("ScrollCapture.InitialAxis");
+            if (!Enum.IsDefined(settings.ScrollCapture.InitialAction)) throw Invalid("ScrollCapture.InitialAction");
             var capture = settings.CapturePreferences;
             if (!Enum.IsDefined(capture.CodeDetection)) throw Invalid("CapturePreferences.CodeDetection");
-            if (!Enum.IsDefined(capture.DoubleClickAction) || !Enum.IsDefined(capture.DetectionMode) ||
+            if (!Enum.IsDefined(capture.DoubleClickAction) || !Enum.IsDefined(capture.MiddleClickAction) ||
+                !Enum.IsDefined(capture.WheelFunctions) || !Enum.IsDefined(capture.DetectionMode) ||
                 !Enum.IsDefined(capture.CursorPolicy) ||
                 !Enum.IsDefined(capture.AuxiliaryPolicy) ||
-                capture.RegionHistoryCapacity is < 0 or > 1000 || capture.ScreenshotHistoryCapacity is < 0 or > 1000 ||
-                capture.ScreenshotHistoryMaximumMiB is < 0 or > 512 || capture.ElementMargin is < -128 or > 128 ||
-                capture.Magnification is < 2 or > 32 ||
+                capture.RegionHistoryCapacity is < 0 or > 99999 ||
+                capture.ScreenshotHistoryCapacity is < 0 or > 99999 ||
+                capture.ScreenshotHistoryMaximumMiB is < 0 or > 512 || capture.ElementMargin is < 0 or > 999 ||
+                capture.PolygonCornerRadius is < 0 or > 10 ||
+                (capture.SoundTiming & ~ScreenshotSoundTiming.All) != 0 ||
+                !Enum.IsDefined(capture.InformationUnit) ||
+                (capture.InformationItems & ~SelectionInfoItems.All) != 0 ||
+                capture.Magnification is < 1 or > 100 ||
                 !Color.TryParse(capture.MagnifierGridColor, out _)) throw Invalid("CapturePreferences");
             ValidateColorFormats(capture);
             var reserved = settings.PresetHotkeys.Select(binding => binding.Shortcut).ToArray();
@@ -162,8 +179,9 @@ namespace RitsukageGif.Desktop
                         {
                             "Quality" when preference.Name == "ScreenshotSave" => number is >= 0 and <= 100,
                             "Thickness" or "FontSize" => number is >= 1 and <= 1024,
-                            "MosaicSize" => number is >= 2 and <= 256,
-                            "Opacity" or "MouseThroughOpacity" => number is >= 0.15 and <= 1,
+                            "MosaicSize" => number is >= 2 and <= 28,
+                            "Opacity" => number is >= 0.1 and <= 1,
+                            "MouseThroughOpacity" => number is >= 0.15 and <= 1,
                             "ZoomStep" => number is >= 0.01 and <= 1,
                             "FineZoomStep" => number is >= 0.001 and <= 0.1,
                             "OpacityStep" => number is >= 0.01 and <= 0.5,

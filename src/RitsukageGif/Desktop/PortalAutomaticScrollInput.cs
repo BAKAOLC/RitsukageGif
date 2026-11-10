@@ -4,6 +4,22 @@ namespace RitsukageGif.Desktop
     {
         public string? UnavailableReason { get; private set; }
 
+        public bool Prepare(PixelRect region, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            UnavailableReason = null;
+            if (!binding.IsCurrent() || region.IsEmpty || region.Intersect(binding.CoordinateBounds) != region)
+            {
+                UnavailableReason = binding.FaultReason() ?? "The authorized capture source changed.";
+                return false;
+            }
+
+            if (binding.PreparePointer(region, token) == AutomaticScrollInputResult.Sent && binding.IsCurrent())
+                return true;
+            UnavailableReason = binding.FaultReason() ?? "The portal rejected pointer preparation.";
+            return false;
+        }
+
         public AutomaticScrollInputResult Scroll(ScrollCaptureAxis axis, PixelRect region, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

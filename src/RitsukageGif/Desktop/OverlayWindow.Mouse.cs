@@ -71,10 +71,19 @@ namespace RitsukageGif.Desktop
                 if (wasActive && !_mouseGesture.IsActive)
                 {
                     _mouseSelecting = false;
+                    // ReSharper disable once ConvertIfStatementToSwitchStatement
                     if (wasSelecting)
                     {
                         _coordinator.PointerInput(sourcePoint(args), false, false,
                             _mouseModifiers.HasFlag(KeyModifiers.Shift));
+                    }
+                    else if (click && _coordinator.ScreenshotMode &&
+                             gesture is
+                             {
+                                 Kind: MouseGestureKind.MiddleClick or MouseGestureKind.MiddleDoubleClick,
+                             })
+                    {
+                        _coordinator.ExecuteScreenshotMiddleClick(sourcePoint(args));
                     }
                     else if (click && Resolve(gesture, out var binding))
                     {
@@ -113,6 +122,8 @@ namespace RitsukageGif.Desktop
                 if (args.Delta is { X: 0, Y: 0 }) return;
                 if (Resolve(new(kind, args.KeyModifiers), out var binding))
                     _coordinator.ExecuteMouseAction(binding!.Action, sourcePoint(args));
+                else if (_coordinator.ScreenshotMode)
+                    _coordinator.ScreenshotWheel(sourcePoint(args), args.Delta.Y);
                 else if (args.KeyModifiers == KeyModifiers.None && args.Delta.Y != 0)
                     _coordinator.CycleCandidate(sourcePoint(args), args.Delta.Y > 0);
                 args.Handled = true;

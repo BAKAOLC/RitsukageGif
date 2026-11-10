@@ -20,6 +20,7 @@ namespace RitsukageGif.Desktop
                     await copyImage();
                     break;
                 case ScreenshotAfterSaveAction.CopyFile:
+                case ScreenshotAfterSaveAction.CopyFileAndPath:
                     if (clipboard is null) throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
                     var transfer = new DataTransfer();
                     foreach (var path in paths)
@@ -29,6 +30,8 @@ namespace RitsukageGif.Desktop
                         transfer.Add(DataTransferItem.CreateFile(file));
                     }
 
+                    if (profile.AfterSave == ScreenshotAfterSaveAction.CopyFileAndPath)
+                        transfer.Add(DataTransferItem.CreateText(string.Join(Environment.NewLine, paths)));
                     token.ThrowIfCancellationRequested();
                     await clipboard.SetDataAsync(transfer);
                     await clipboard.FlushAsync();

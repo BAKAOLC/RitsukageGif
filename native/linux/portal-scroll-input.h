@@ -15,6 +15,7 @@ struct rgc_portal_pointer_observation {
     uint64_t generation;
     uint32_t stream_id;
     int width, height;
+    int logical_width, logical_height;
     int cursor_x, cursor_y;
     gboolean cursor_valid;
     gint64 observed_monotonic_us;
@@ -25,5 +26,12 @@ int rgc_portal_scroll_input_send(GDBusConnection *bus, const char *session, uint
                                  const struct rgc_portal_pointer_observation *observation, int region_x,
                                  int region_y, int region_width, int region_height, uint32_t axis, int steps,
                                  GCancellable *cancellable, GError **error);
+
+int rgc_portal_scroll_input_prepare(GDBusConnection *bus, const char *session, uint32_t granted_devices,
+                                    uint64_t generation, uint32_t stream_id,
+                                    const struct rgc_portal_pointer_observation *observation,
+                                    int source_width, int source_height, int region_x, int region_y,
+                                    int region_width, int region_height, GCancellable *cancellable,
+                                    GError **error);
 
 #endif

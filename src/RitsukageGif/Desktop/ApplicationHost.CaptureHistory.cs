@@ -14,6 +14,7 @@ namespace RitsukageGif.Desktop
         private void ConfigureCaptureHistoryPersistence()
         {
             ConfigureCaptureHistoryBudget();
+            if (IsTaskHost) return;
             _captureHistoryConfiguration = ConfigureCaptureHistoryPersistenceAsync(_captureHistoryConfiguration,
                 Settings.CapturePreferences.PersistHistory);
         }

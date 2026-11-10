@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
             _number.Text = index.ToString(CultureInfo.CurrentCulture);
             AutomationProperties.SetName(this, UiText.Format("FormulaEntry", index));
             var delete = new Button { Width = 24, Height = 24, Padding = new(2), Focusable = false };
-            delete.Content = ToolbarIcon.Create(delete, ToolbarIcon.Geometry("AnimationDelete"));
+            delete.Content = ToolbarIcon.Create(delete, ToolbarIcon.GetDefinition("AnimationDelete"));
             delete.Bind(ToolTip.TipProperty, LiveText.Resource("FormulaRemove"));
             delete.Bind(AutomationProperties.NameProperty, LiveText.Resource("FormulaRemove"));
             delete.Click += (_, args) =>

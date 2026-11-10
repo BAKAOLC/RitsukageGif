@@ -7,6 +7,11 @@ namespace RitsukageGif.Desktop
         private static void ValidateToolbarPreferences(JsonElement toolbar, string path)
         {
             if (toolbar.ValueKind != JsonValueKind.Object) throw Invalid(path);
+            if (!toolbar.TryGetProperty(nameof(ToolbarPreferences.SchemaRevision), out var revision) ||
+                revision.ValueKind != JsonValueKind.Number ||
+                !revision.TryGetInt32(out var schemaRevision) ||
+                schemaRevision != ToolbarPreferences.CurrentSchemaRevision)
+                throw Invalid(path + "." + nameof(ToolbarPreferences.SchemaRevision));
             var properties = new HashSet<string>(StringComparer.Ordinal);
             foreach (var property in toolbar.EnumerateObject())
             {
@@ -14,6 +19,7 @@ namespace RitsukageGif.Desktop
                 if (!properties.Add(property.Name)) throw Invalid(name);
                 switch (property.Name)
                 {
+                    case nameof(ToolbarPreferences.SchemaRevision): break;
                     case "Columns": ValidateToolbarColumns(property.Value, name); break;
                     case "Actions": ValidateToolbarActions(property.Value, name); break;
                     default: throw Invalid(name);
@@ -23,7 +29,7 @@ namespace RitsukageGif.Desktop
 
         private static void ValidateToolbarColumns(JsonElement columns, string path)
         {
-            var toolCount = Enum.GetValues<ScreenshotTool>().Length;
+            var toolCount = ScreenshotToolCatalog.Registered.Count;
             if (columns.ValueKind != JsonValueKind.Array || columns.GetArrayLength() > toolCount) throw Invalid(path);
             var tools = new HashSet<ScreenshotTool>();
             foreach (var column in columns.EnumerateArray())
@@ -32,7 +38,8 @@ namespace RitsukageGif.Desktop
                 foreach (var tool in column.EnumerateArray())
                 {
                     ValidateEnum<ScreenshotTool>(tool, path);
-                    if ((ScreenshotTool)tool.GetInt32() == ScreenshotTool.Select ||
+                    if (ScreenshotToolCatalog.Registered.All(definition =>
+                            definition.Tool != (ScreenshotTool)tool.GetInt32()) ||
                         !tools.Add((ScreenshotTool)tool.GetInt32()) || tools.Count > toolCount) throw Invalid(path);
                 }
             }
@@ -41,13 +48,15 @@ namespace RitsukageGif.Desktop
         private static void ValidateToolbarActions(JsonElement actions, string path)
         {
             if (actions.ValueKind != JsonValueKind.Array ||
-                actions.GetArrayLength() > Enum.GetValues<ToolbarActionId>().Length) throw Invalid(path);
+                actions.GetArrayLength() > ToolbarActionCatalog.Configurable.Count) throw Invalid(path);
             var identifiers = new HashSet<ToolbarActionId>();
             foreach (var action in actions.EnumerateArray())
             {
                 if (action.ValueKind != JsonValueKind.Object || !action.TryGetProperty("Id", out var id) ||
                     !action.TryGetProperty("Visibility", out var visibility)) throw Invalid(path);
                 ValidateEnum<ToolbarActionId>(id, path + ".Id");
+                if (!ToolbarActionCatalog.Get((ToolbarActionId)id.GetInt32()).Configurable)
+                    throw Invalid(path + ".Id");
                 ValidateEnum<ToolbarButtonVisibility>(visibility, path + ".Visibility");
                 if (!identifiers.Add((ToolbarActionId)id.GetInt32())) throw Invalid(path + ".Id");
                 var properties = new HashSet<string>(StringComparer.Ordinal);

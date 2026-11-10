@@ -8,6 +8,7 @@ namespace RitsukageGif.Desktop
         {
             _fatalFailure = true;
             IsClosing = true;
+            RunShutdownStage("failure host cancellation", _hostCancellation.Cancel);
             HostLogger.ZLogCritical(
                 $"Application entering failure suspension. Recording={IsRecording} Selecting={IsSelecting} TakingScreenshot={IsTakingScreenshot}");
             RunShutdownStage("failure global hotkeys", () => _hotkeys?.Dispose());

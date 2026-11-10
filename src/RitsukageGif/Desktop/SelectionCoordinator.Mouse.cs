@@ -53,6 +53,14 @@ namespace RitsukageGif.Desktop
 
         internal void ExecuteMouseAction(MouseAction action, PixelPoint point)
         {
+            if (ShapeDrawing && ShapeMode == SelectionShapeMode.Polygon &&
+                action is MouseAction.Confirm or MouseAction.Cancel)
+            {
+                CompleteShapeDrawing();
+                Refresh();
+                return;
+            }
+
             if (ScreenshotMode && action == MouseAction.Confirm)
             {
                 ExecuteScreenshotDoubleClick(point);

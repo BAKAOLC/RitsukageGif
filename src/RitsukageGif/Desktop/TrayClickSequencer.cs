@@ -1,9 +1,9 @@
 namespace RitsukageGif.Desktop
 {
     internal sealed class TrayClickSequencer(
-        Action<TrayMouseGesture> execute,
-        Func<Action, TimeSpan, IDisposable> schedule,
-        Func<TimeSpan> doubleClickTime) : IDisposable
+        Func<TrayMouseGesture, SystemTrayAction> resolve,
+        Action<SystemTrayAction> execute,
+        Func<Action, TimeSpan, IDisposable> schedule) : IDisposable
     {
         private bool _disposed;
         private IDisposable? _pending;
@@ -16,7 +16,7 @@ namespace RitsukageGif.Desktop
             _pending = null;
         }
 
-        internal void Process(uint message, bool hasDoubleAction)
+        internal void Process(uint message)
         {
             if (_disposed) return;
             switch (message)
@@ -28,42 +28,45 @@ namespace RitsukageGif.Desktop
                         return;
                     }
 
-                    ProcessGesture(TrayMouseGesture.SingleClick, hasDoubleAction);
+                    ProcessGesture(TrayMouseGesture.SingleClick);
                     break;
-                case 0x203 when hasDoubleAction:
+                case 0x203:
                     _suppressNextUp = true;
-                    ProcessGesture(TrayMouseGesture.DoubleClick, hasDoubleAction);
+                    ProcessGesture(TrayMouseGesture.DoubleClick);
                     break;
                 case 0x208:
-                    ProcessGesture(TrayMouseGesture.MiddleClick, hasDoubleAction);
+                    ProcessGesture(TrayMouseGesture.MiddleClick);
                     break;
             }
         }
 
-        internal void ProcessGesture(TrayMouseGesture gesture, bool hasDoubleAction)
+        internal void ProcessGesture(TrayMouseGesture gesture, bool supportsDoubleClick = true)
         {
             if (_disposed) return;
+            var action = resolve(gesture);
+            // ReSharper disable once ConvertIfStatementToSwitchStatement
             if (gesture == TrayMouseGesture.MiddleClick)
             {
-                execute(gesture);
+                execute(action);
                 return;
             }
+
+            if (gesture == TrayMouseGesture.SingleClick && action == SystemTrayAction.None) return;
 
             _pending?.Dispose();
             _pending = null;
-            if (gesture == TrayMouseGesture.DoubleClick && hasDoubleAction)
+            if (gesture == TrayMouseGesture.DoubleClick || !supportsDoubleClick ||
+                resolve(TrayMouseGesture.DoubleClick) == SystemTrayAction.None)
             {
-                execute(gesture);
+                execute(action);
                 return;
             }
 
-            if (!hasDoubleAction) execute(TrayMouseGesture.SingleClick);
-            else
-                _pending = schedule(() =>
-                {
-                    _pending = null;
-                    if (!_disposed) execute(TrayMouseGesture.SingleClick);
-                }, doubleClickTime());
+            _pending = schedule(() =>
+            {
+                _pending = null;
+                if (!_disposed) execute(action);
+            }, TimeSpan.FromMilliseconds(100));
         }
     }
 }

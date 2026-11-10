@@ -1,7 +1,7 @@
-using System.Buffers;
-using System.Runtime.InteropServices;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -13,10 +13,14 @@ namespace RitsukageGif.Desktop
 
         private readonly SemaphoreSlim _hdrPreviewGate = new(1);
 
-        private Grid? _hdrLayer;
+
         private HdrPreviewHost? _hdrPreview;
         private CancellationTokenSource? _hdrPreviewWork;
         private CapturedFrame? _hdrSource;
+        private PinnedViewportSnapshot? _hdrViewport;
+        private PinnedHdrPreviewBackground? _hdrBackground;
+        private bool _hdrTextMarkupVisible;
+        private bool _hdrViewportRefreshQueued;
         private byte[]? _sdrPng;
 
         private void ConfigureHdr(CapturedFrame? frame)
@@ -24,6 +28,7 @@ namespace RitsukageGif.Desktop
             _hdrSource = frame;
             if (frame is null)
             {
+                _hdrPreviewWork?.Cancel();
                 _hdrPreview?.SetFrame(null);
                 _hdrIndicator.IsVisible = false;
                 return;
@@ -31,15 +36,27 @@ namespace RitsukageGif.Desktop
 
             if (_hdrPreview is null)
             {
-                _hdrPreview = new();
+                _hdrPreview = new()
+                {
+                    TransparentComposition = true,
+                    SmoothScaling = CurrentPreferences.SmoothScaling, IsHitTestVisible = false,
+                    HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
+                };
                 _hdrPreview.PresentationChanged += visible =>
+                {
+                    _image.Opacity = visible ? 0 : 1;
+                    _transparentBackground.Opacity = visible ? 0 : 1;
+                    _inputRegions?.SetHdrFrame(_hdrPreview?.PresentedFrame);
+                    InvalidateInputUi();
                     _hdrIndicator.Bind(TextBlock.TextProperty,
                         LiveText.Resource(visible ? "PinnedImageHdrPreview" : "PinnedImageSdrPreview"));
-                _hdrLayer = new();
-                _viewport.Content = null;
-                _hdrLayer.Children.Add(_image);
-                _hdrLayer.Children.Add(_hdrPreview);
-                _viewport.Content = _hdrLayer;
+                    _textSelectionSurface?.InvalidateVisual();
+                    if (_annotationSurface is { } surface && _annotationScene is { } scene)
+                        surface.RenderContent = !visible && !NeedsAnnotationPreview(scene);
+                };
+                _content.Children.Insert(1, _hdrPreview);
+                _hdrPreview.DisplayColorChanged += RefreshHdrPreview;
+                _viewport.LayoutUpdated += (_, _) => QueueHdrViewportRefresh();
                 _content.RowDefinitions = new("*,Auto");
                 Grid.SetRow(_hdrIndicator, 1);
                 _hdrIndicator[!ToolTip.TipProperty] = _hdrIndicator[!TextBlock.TextProperty];
@@ -48,8 +65,7 @@ namespace RitsukageGif.Desktop
 
             _hdrIndicator.IsVisible = true;
             _hdrIndicator.Bind(TextBlock.TextProperty, LiveText.Resource("PinnedImageSdrPreview"));
-            _hdrLayer!.Width = _image.Width;
-            _hdrLayer.Height = _image.Height;
+
             RefreshHdrPreview();
             _hdrIndicator.Bind(TextBlock.TextProperty,
                 LiveText.Resource(_hdrPreview.IsVisible ? "PinnedImageHdrPreview" : "PinnedImageSdrPreview"));
@@ -61,32 +77,60 @@ namespace RitsukageGif.Desktop
             _hdrPreviewWork?.Cancel();
             if (TryRefreshAnimationHdr()) return;
             if (TryRefreshLiveHdr()) return;
-            if (_hdrPreview is null || _hdrSource is not { } source || _annotation is not null ||
-                _selectedTextStart >= 0) return;
+            if (_hdrPreview is null) return;
+            if (ProcessingSourceHdr is not { } source || _annotation is not null || HasTextSelection)
+            {
+                _hdrPreview.SetFrame(null);
+                return;
+            }
+
             var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             _hdrPreviewWork = work;
             _hdrPreview.SetFrame(null);
-            _ = RefreshHdrPreviewAsync(source, _pixels, DisplayRegion, work);
+            _ = RefreshHdrPreviewAsync(source, work);
         }
 
-        private async Task RefreshHdrPreviewAsync(CapturedFrame source, byte[] pixels, PixelRect region,
-            CancellationTokenSource work)
+        private async Task RefreshHdrPreviewAsync(CapturedFrame source, CancellationTokenSource work)
         {
             var entered = false;
+            var viewport = SnapshotInputHdrViewport();
+            var background = SnapshotHdrPreviewBackground(source);
+            _hdrViewport = viewport;
+            _hdrBackground = background;
+            _hdrTextMarkupVisible = HasTextMarkup;
+            var colorState = _colorMatrixState;
+            var colorContent = ReferenceEquals(source, ProcessingSourceHdr) ? ColorContent : null;
             try
             {
                 await _hdrPreviewGate.WaitAsync(work.Token);
                 entered = true;
+                if (colorContent?.Hdr is { } prepared)
+                    source = prepared;
+                else if (colorState.Matrix is not null)
+                    source = await Task.Run(() => PinnedColorMatrixProcessor.Apply(source, colorState, work.Token),
+                        work.Token);
+
+                if (HasTextMarkup && _textMarkupSession is { HasAnnotations: true } marks)
+                    source = await marks.ComposeHdrAsync(marks.Selection, source, token: work.Token);
+
+                if (_annotationScene is { HasAnnotations: true } scene)
+                    source = await scene.ComposeHdrAsync(scene.Selection, source, token: work.Token);
+
                 using var preview =
-                    await Task.Run(() => BuildHdrPreview(source, pixels, region, work.Token), work.Token);
-                if (!_closed && _annotation is null && _selectedTextStart < 0 && ReferenceEquals(_hdrPreviewWork, work))
+                    await Task.Run(() => PinnedViewportRasterizer.PreviewTransparent(source, viewport, background,
+                        work.Token), work.Token);
+                if (!_closed && _annotation is null && !HasTextSelection && ReferenceEquals(_hdrPreviewWork, work))
+                {
                     _hdrPreview?.SetFrame(preview);
+                    _inputRegions?.SetHdrFrame(_hdrPreview?.PresentedFrame);
+                }
             }
             catch (OperationCanceledException)
             {
             }
             catch (Exception error)
             {
+                PinLogger.ZLogWarning(error, $"Pinned HDR preview rendering failed.");
                 if (!_closed && ReferenceEquals(_hdrPreviewWork, work))
                 {
                     _status.Text = error.Message;
@@ -101,43 +145,29 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private static PreviewFrame BuildHdrPreview(CapturedFrame source, byte[] pixels, PixelRect region,
-            CancellationToken token)
+        private void QueueHdrViewportRefresh()
         {
-            token.ThrowIfCancellationRequested();
-            var size = checked(region.Width * region.Height * 8);
-            var hdr = ArrayPool<byte>.Shared.Rent(size);
-            var sdr = ArrayPool<byte>.Shared.Rent(checked(region.Width * region.Height * 4));
-            try
+            if (_closed || _hdrPreview is null || _hdrViewportRefreshQueued) return;
+            _hdrViewportRefreshQueued = true;
+            Dispatcher.UIThread.Post(() =>
             {
-                for (var y = 0; y < region.Height; y++)
+                try
                 {
-                    token.ThrowIfCancellationRequested();
-                    source.Pixels.Span.Slice((region.Y + y) * source.Stride + region.X * 8, region.Width * 8)
-                        .CopyTo(hdr.AsSpan(y * region.Width * 8));
-                    pixels.AsSpan(((region.Y + y) * source.Width + region.X) * 4, region.Width * 4)
-                        .CopyTo(sdr.AsSpan(y * region.Width * 4));
-                    if (source.AlphaMode != CaptureAlphaMode.Straight) continue;
-                    var channels = MemoryMarshal.Cast<byte, Half>(hdr.AsSpan(y * region.Width * 8, region.Width * 8));
-                    for (var index = 0; index < channels.Length; index += 4)
-                    {
-                        var alpha = Math.Clamp((float)channels[index + 3], 0, 1);
-                        for (var channel = 0; channel < 3; channel++)
-                            channels[index + channel] = (Half)((float)channels[index + channel] * alpha);
-                        channels[index + 3] = (Half)1;
-                    }
+                    if (_closed || _hdrPreview is null) return;
+                    var viewport = SnapshotInputHdrViewport();
+                    var background = ProcessingSourceHdr is { } source
+                        ? SnapshotHdrPreviewBackground(source)
+                        : (PinnedHdrPreviewBackground?)null;
+                    if (_hdrViewport == viewport && _hdrBackground == background &&
+                        _hdrTextMarkupVisible == HasTextMarkup) return;
+                    _hdrViewport = viewport;
+                    RefreshHdrPreview();
                 }
-
-                return new(sdr, region.Width, region.Height, 0, hdr,
-                    source.ColorInfo.SdrWhiteNits / FrameColorInfo.ScRgbReferenceWhiteNits,
-                    source.AlphaMode == CaptureAlphaMode.Straight ? CaptureAlphaMode.Opaque : source.AlphaMode);
-            }
-            catch
-            {
-                ArrayPool<byte>.Shared.Return(hdr);
-                ArrayPool<byte>.Shared.Return(sdr);
-                throw;
-            }
+                finally
+                {
+                    _hdrViewportRefreshQueued = false;
+                }
+            }, DispatcherPriority.Render);
         }
     }
 }

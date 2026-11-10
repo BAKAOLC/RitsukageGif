@@ -17,14 +17,15 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                var target = WindowLocator.Refresh(_target!) ?? throw new CaptureSourceLostException();
+                var target = RefreshTarget(_target!) ?? throw new CaptureSourceLostException();
                 var bounds = OperatingSystem.IsLinux() ? target.Client : target.Bounds;
                 if (region.Intersect(target.Client) != region) throw new CaptureSourceLostException();
-                _window ??= new(target.Handle, false, 10);
+                _window ??= new(target.Handle, false, 10, authorization: target.NativeAuthorization,
+                    nativeSource: _nativeSource);
                 _window.ConfigureRegion(region, Math.Max(1, (int)Math.Ceiling(region.Width * _density)),
                     Math.Max(1, (int)Math.Ceiling(region.Height * _density)));
                 frames = _window.CaptureFrames(token);
-                var refreshed = WindowLocator.Refresh(target) ?? throw new CaptureSourceLostException();
+                var refreshed = RefreshTarget(target) ?? throw new CaptureSourceLostException();
                 if (target.Client != refreshed.Client ||
                     bounds != (OperatingSystem.IsLinux() ? refreshed.Client : refreshed.Bounds))
                     throw new CaptureSourceLostException();

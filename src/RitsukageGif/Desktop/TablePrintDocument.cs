@@ -13,7 +13,8 @@ namespace RitsukageGif.Desktop
         int[] PanelStarts,
         int[] RowBands,
         IReadOnlyList<TablePrintCell> Cells,
-        IReadOnlyList<TablePrintPage> Pages) : IDisposable
+        IReadOnlyList<TablePrintPage> Pages,
+        TableOutputStyle OutputStyle) : IDisposable
     {
         public void Dispose()
         {

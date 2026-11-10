@@ -77,18 +77,6 @@ namespace RitsukageGif.Desktop
             surface.Update(_storage);
         }
 
-        internal WindowRoiPinFrame Transform(PinnedImageTransform transform, CancellationToken token)
-        {
-            using var frame = Retain();
-            var bounds = new PixelRect(0, 0, Width, Height);
-            var descriptor = new WindowRoiPinDescriptor(1, 1, "", "", bounds).Transform(transform);
-            var source = new CapturedFrame(Width, Height, Width * 4, CapturePixelFormat.Bgra8Srgb,
-                frame.Pixels.AsMemory(0, checked(Width * Height * 4)),
-                new(false), CaptureAlphaMode.Straight, 0, []);
-            return WindowRoiPinSource.CreateFrame(new(source, frame.Hdr, 0), bounds, descriptor, token,
-                nativePixelDensity: NativePixelDensity);
-        }
-
         internal byte[] EncodePng(CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();

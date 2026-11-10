@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -92,7 +92,7 @@ namespace RitsukageGif.Desktop
             close.Classes.Add("Secondary");
             close.Content = new Path
             {
-                Data = Geometry.Parse("M2,2 L12,12 M12,2 L2,12"), Stroke = AppTheme.Muted,
+                Data = IconCatalog.GetGeometry("AnimationPropertyCloseProperties"), Stroke = AppTheme.Muted,
                 StrokeThickness = 1.5,
                 Width = 14, Height = 14,
             };
@@ -118,8 +118,10 @@ namespace RitsukageGif.Desktop
                 buttons.Children.Add(button);
             }
 
-            WithActionIcon(_applyDraft, "AnimationApplyDraft", "M3,12 L9,18 21,5", "AnimationApplyDraft");
-            WithActionIcon(_discardDraft, "AnimationDiscardDraft", "M5,5 L19,19 M19,5 L5,19", "AnimationDiscardDraft");
+            WithActionIcon(_applyDraft, "AnimationApplyDraft", ToolbarIcon.GetDefinition("AnimationPropertyApplyDraft"),
+                "AnimationApplyDraft");
+            WithActionIcon(_discardDraft, "AnimationDiscardDraft",
+                ToolbarIcon.GetDefinition("AnimationPropertyDiscardDraft"), "AnimationDiscardDraft");
             _applyDraft.Classes.Add("primary");
             _applyDraft.Name = "ApplyDraft";
             _discardDraft.Name = "DiscardDraft";
@@ -421,16 +423,17 @@ namespace RitsukageGif.Desktop
             var geometry = key switch
             {
                 "AnimationMosaic" =>
-                    "M3,3 L10,3 10,10 3,10 Z M14,3 L21,3 21,10 14,10 Z M3,14 L10,14 10,21 3,21 Z M14,14 L21,14 21,21 14,21 Z",
-                "AnimationBlur" => "M12,2 C8,8 4,10 4,15 A8,8 0 0 0 20,15 C20,10 16,8 12,2 Z M8,15 A4,4 0 0 0 12,19",
-                "AnimationGrayscale" => "M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M12,2 L12,22 M6,5 L6,19 M9,3 L9,21",
+                    ToolbarIcon.GetDefinition("AnimationPropertyMosaic"),
+                "AnimationBlur" => ToolbarIcon.GetDefinition("AnimationPropertyBlur"),
+                "AnimationGrayscale" => ToolbarIcon.GetDefinition("AnimationPropertyGrayscale"),
                 "AnimationInvert" =>
-                    "M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M12,2 L12,22 M15,8 L21,8 M18,5 L18,11 M3,16 L9,16",
+                    ToolbarIcon.GetDefinition("AnimationPropertyInvert"),
                 "AnimationAddText" => RibbonIcon("AnimationAddText"),
                 "AnimationAddImage" => RibbonIcon("AnimationAddImage"),
-                "AnimationUpdateText" or "AnimationUpdateImage" => "M20,9 A9,9 0 1 0 20,17 M20,2 L20,9 13,9",
-                "AnimationBringFront" => "M3,8 L16,8 16,21 3,21 Z M8,3 L21,3 21,16 M8,3 L8,6 M18,16 L21,16",
-                "AnimationSendBack" => "M8,3 L21,3 21,16 8,16 Z M3,8 L6,8 M3,8 L3,21 16,21 16,18",
+                "AnimationUpdateText" or "AnimationUpdateImage" => ToolbarIcon.GetDefinition(
+                    "AnimationPropertyUpdateText"),
+                "AnimationBringFront" => ToolbarIcon.GetDefinition("AnimationPropertyBringFront"),
+                "AnimationSendBack" => ToolbarIcon.GetDefinition("AnimationPropertySendBack"),
                 _ => RibbonIcon("AnimationDelete"),
             };
             return WithActionIcon(button, key, geometry,
@@ -468,6 +471,7 @@ namespace RitsukageGif.Desktop
                     {
                         Width = 22, Height = 22, MinHeight = 0, Padding = new(0), Margin = new(2),
                         Background = new SolidColorBrush(color),
+                        BorderBrush = AppTheme.Muted, BorderThickness = new(1),
                     };
                     ToolTip.SetTip(swatch, color.ToString());
                     swatch.Click += (_, _) =>

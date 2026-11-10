@@ -5,7 +5,7 @@ namespace RitsukageGif.Desktop
         public double Magnification { get; set; } = 1.5;
         public bool MagnifierEllipse { get; set; } = true;
         public bool MagnifierAntialias { get; set; } = true;
-        public bool MagnifierShadow { get; set; } = true;
+        public bool MagnifierShadow { get; set; }
         public bool MagnifierShowAnnotations { get; set; }
         public AnnotationMagnifierLink MagnifierLink { get; set; }
 

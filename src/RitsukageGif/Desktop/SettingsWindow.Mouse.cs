@@ -136,9 +136,9 @@ namespace RitsukageGif.Desktop
                     {
                         new Path
                         {
-                            Data = Geometry.Parse(error is not null ? "M5,5 L19,19 M19,5 L5,19" :
-                                active ? "M4,12 L10,18 21,5" :
-                                "M12,2 A10,10 0 1 0 12,22 A10,10 0 1 0 12,2 M6,12 L18,12"),
+                            Data = IconCatalog.GetGeometry(error is not null ? "MouseBindingError" :
+                                active ? "MouseBindingActive" :
+                                "MouseBindingInactive"),
                             Width = 24, Height = 24, StrokeThickness = 2, Stretch = Stretch.None,
                             Stroke = error is not null ? AppTheme.Error : active ? AppTheme.Success : AppTheme.Muted,
                         },

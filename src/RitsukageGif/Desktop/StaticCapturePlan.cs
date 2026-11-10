@@ -5,5 +5,7 @@ namespace RitsukageGif.Desktop
         WindowPreset? Preset,
         PresetRuntime? Runtime,
         PixelRect[] Monitors,
-        int ScalePercent);
+        int ScalePercent,
+        bool? WindowSource,
+        NativeCaptureSessionReference? SourceReference);
 }

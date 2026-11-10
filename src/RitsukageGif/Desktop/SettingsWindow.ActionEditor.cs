@@ -575,7 +575,8 @@ namespace RitsukageGif.Desktop
             {
                 var keyBox = new TextBox { Text = key, PlaceholderText = UiText.Get("GlobalActionArgumentName") };
                 var valueBox = new TextBox { Text = value, PlaceholderText = UiText.Get("GlobalActionArgumentValue") };
-                var remove = BindingButton("SelectionShortcutRemove", "M6,6 L18,18 M18,6 L6,18");
+                var remove = BindingButton("SelectionShortcutRemove",
+                    ToolbarIcon.GetDefinition("SelectionShortcutRemove"));
                 var row = new Grid { ColumnDefinitions = new("*,*,28"), ColumnSpacing = 6 };
                 row.Children.Add(keyBox);
                 Grid.SetColumn(valueBox, 1);

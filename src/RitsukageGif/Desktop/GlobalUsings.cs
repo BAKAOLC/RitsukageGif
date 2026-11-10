@@ -6,3 +6,4 @@ global using RitsukageGif.Contracts;
 global using RitsukageGif.Diagnostics;
 global using Microsoft.Extensions.Logging;
 global using ZLogger;
+global using RitsukageGif.Desktop.Icons;

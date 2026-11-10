@@ -21,7 +21,7 @@ namespace RitsukageGif.Desktop
             Background = AppTheme.Surface;
             Foreground = AppTheme.Ink;
             Classes.Add("settings-window");
-            var directory = new TextBox { Text = profile.ResolveDirectory(fallback) };
+            var directory = new TextBox { Text = profile.ResolveDirectory(fallback, context) };
             var name = new TextBox { Text = Path.GetFileNameWithoutExtension(profile.CreateFileName(context)) };
             var extensions = mode switch
             {

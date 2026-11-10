@@ -19,6 +19,8 @@ namespace RitsukageGif.Desktop
             if ((_overlayFrame is null && pixels is null) ||
                 (_overlayFrame is { } old && old.Region == region && ReferenceEquals(old.Pixels, pixels))) return;
             if (_sourceWork is null) _sourceWasBusy = IsBusy;
+            // ReSharper disable once MethodHasAsyncOverload
+            _pixelPreviewWork?.Cancel();
             using var work = CancellationTokenSource.CreateLinkedTokenSource(_cancel.Token, token);
             _sourceWork = work;
             IsBusy = true;
@@ -28,18 +30,10 @@ namespace RitsukageGif.Desktop
             try
             {
                 var frames = pixels is null ? _frames.ToArray() : _frames.Append((region, pixels)).ToArray();
-                var annotations = _annotations.Concat(_retained).Concat(_undo.Concat(_redo).SelectMany(state => state))
-                    .Distinct().Where(annotation => annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur
-                        or ScreenshotTool.SmartErase or
-                        ScreenshotTool.Magnifier or ScreenshotTool.Eraser).ToArray();
                 long bytes = 0;
-                foreach (var annotation in annotations)
+                foreach (var (annotation, preceding) in SourcePreviewLayers())
                 {
-                    var tiles = await CreateMosaicAsync(IsPixelTool(annotation.Tool)
-                            ? PixelEffectBounds(annotation)
-                            : annotation.Bounds,
-                        annotation.Tool == ScreenshotTool.Mosaic ? annotation.MosaicSize : 1, work.Token, frames,
-                        annotation.Tool == ScreenshotTool.Blur ? annotation.Properties.BlurRadius : 0);
+                    var tiles = await CreateSourcePreviewAsync(annotation, preceding, frames, work.Token);
                     replacements.Add((annotation, tiles));
                     bytes += tiles.Sum(tile => (long)tile.Image.PixelSize.Width * tile.Image.PixelSize.Height * 4);
                     if (bytes > 128L * 1024 * 1024)
@@ -75,15 +69,19 @@ namespace RitsukageGif.Desktop
         }
 
         public async Task ReplaceFramesAsync(IReadOnlyList<(PixelRect Region, byte[] Pixels)> frames,
-            CancellationToken token)
+            CancellationToken token, Action? commit = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            token.ThrowIfCancellationRequested();
             if (IsBusy || IsDrawing) throw new InvalidOperationException("Annotation interaction is active.");
             var snapshot = frames.ToArray();
             foreach (var frame in snapshot)
                 if (frame.Region.IsEmpty || (long)frame.Region.Width * frame.Region.Height * 4 != frame.Pixels.Length)
                     throw new ArgumentException(UiText.Get("InvalidFrameBuffer"), nameof(frames));
             using var work = CancellationTokenSource.CreateLinkedTokenSource(_cancel.Token, token);
+            _sourceWasBusy = IsBusy;
+            // ReSharper disable once MethodHasAsyncOverload
+            _pixelPreviewWork?.Cancel();
             _sourceWork = work;
             IsBusy = true;
             Changed?.Invoke();
@@ -93,15 +91,9 @@ namespace RitsukageGif.Desktop
             {
                 var sampling = _overlayFrame is { } overlay ? [.. snapshot, overlay] : snapshot;
                 long bytes = 0;
-                foreach (var annotation in _retained.Where(annotation => annotation.Tool is ScreenshotTool.Mosaic
-                             or ScreenshotTool.Blur or ScreenshotTool.SmartErase or
-                             ScreenshotTool.Magnifier or ScreenshotTool.Eraser))
+                foreach (var (annotation, preceding) in SourcePreviewLayers())
                 {
-                    var tiles = await CreateMosaicAsync(IsPixelTool(annotation.Tool)
-                            ? PixelEffectBounds(annotation)
-                            : annotation.Bounds,
-                        annotation.Tool == ScreenshotTool.Mosaic ? annotation.MosaicSize : 1, work.Token, sampling,
-                        annotation.Tool == ScreenshotTool.Blur ? annotation.Properties.BlurRadius : 0);
+                    var tiles = await CreateSourcePreviewAsync(annotation, preceding, sampling, work.Token);
                     replacements.Add((annotation, tiles));
                     bytes += tiles.Sum(tile => (long)tile.Image.PixelSize.Width * tile.Image.PixelSize.Height * 4);
                     if (bytes > 128L * 1024 * 1024)
@@ -110,6 +102,7 @@ namespace RitsukageGif.Desktop
 
                 work.Token.ThrowIfCancellationRequested();
                 ObjectDisposedException.ThrowIf(_disposed, this);
+                commit?.Invoke();
                 _frames.Clear();
                 _frames.AddRange(snapshot);
                 foreach (var (annotation, tiles) in replacements)
@@ -126,9 +119,12 @@ namespace RitsukageGif.Desktop
                 foreach (var (_, tiles) in replacements)
                 foreach (var tile in tiles)
                     tile.Image.Dispose();
-                if (ReferenceEquals(_sourceWork, work)) _sourceWork = null;
-                IsBusy = false;
-                if (!_disposed) Changed?.Invoke();
+                if (ReferenceEquals(_sourceWork, work))
+                {
+                    _sourceWork = null;
+                    IsBusy = _sourceWasBusy;
+                    if (!_disposed) Changed?.Invoke();
+                }
             }
         }
     }

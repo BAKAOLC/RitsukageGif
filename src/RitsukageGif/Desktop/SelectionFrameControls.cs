@@ -28,12 +28,12 @@ namespace RitsukageGif.Desktop
         internal SelectionFrameControls(SelectionCoordinator coordinator)
         {
             _coordinator = coordinator;
-            _round = Toggle("SelectionFrameRounded", "M5,20 L5,10 Q5,5 10,5 L20,5 M5,14 L5,20 11,20",
+            _round = Toggle("SelectionFrameRounded", ToolbarIcon.GetDefinition("SelectionFrameRounded"),
                 coordinator.SetFrameRound);
-            _ratio = Toggle("SelectionFrameRatio", "M4,10 L4,4 10,4 M4,4 L10,10 M14,20 L20,20 20,14 M20,20 L14,14",
+            _ratio = Toggle("SelectionFrameRatio", ToolbarIcon.GetDefinition("SelectionFrameRatio"),
                 coordinator.LockGeometryRatio);
             _decoration = Toggle("SelectionFrameDecoration",
-                "M12,3 A9,9 0 1 0 12,21 Z M12,3 L12,21 M12,7 L18,7 M12,11 L20,11 M12,15 L19,15",
+                ToolbarIcon.GetDefinition("SelectionFrameDecoration"),
                 coordinator.SetFrameDecoration);
             InitializeCodeToggle();
             _refresh = new()
@@ -43,7 +43,7 @@ namespace RitsukageGif.Desktop
                 BorderThickness = new(0),
             };
             _refresh.Content = Icon(_refresh,
-                "M20,10 A8,8 0 0 0 5,6 M4,2 L4,7 9,7 M4,14 A8,8 0 0 0 19,18 M20,22 L20,17 15,17");
+                ToolbarIcon.GetDefinition("SelectionFrameRefresh"));
             _refresh.Bind(ToolTip.TipProperty, LiveText.Resource("SelectionFrameRefresh"));
             _refresh.Bind(AutomationProperties.NameProperty, LiveText.Resource("SelectionFrameRefresh"));
             _refresh.AddHandler(PointerPressedEvent, (_, args) =>
@@ -102,6 +102,7 @@ namespace RitsukageGif.Desktop
             _updating = true;
             try
             {
+                _round.IsVisible = _ratio.IsVisible = _coordinator.RectangularSelection;
                 _round.IsChecked = _coordinator.FrameRoundEnabled;
                 _ratio.IsChecked = _coordinator.GeometryRatioLocked;
                 _decoration.IsChecked = _coordinator.FrameDecorationEnabled;
@@ -141,7 +142,7 @@ namespace RitsukageGif.Desktop
             if (visible) LayoutChanged?.Invoke();
         }
 
-        private ToggleButton Toggle(string label, string path, Action<bool> changed)
+        private ToggleButton Toggle(string label, IconDefinition path, Action<bool> changed)
         {
             var button = new ToggleButton
             {
@@ -160,7 +161,7 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private static Control Icon(Button button, string path)
+        private static Control Icon(Button button, IconDefinition path)
         {
             var icon = ToolbarIcon.Create(button, path);
             icon.Width = icon.Height = 18;

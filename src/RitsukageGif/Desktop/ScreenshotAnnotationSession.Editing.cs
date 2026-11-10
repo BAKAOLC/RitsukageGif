@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Avalonia;
 using Avalonia.Media;
 
@@ -35,6 +36,12 @@ namespace RitsukageGif.Desktop
 
         public bool HasSelectedAnnotation => _selected is not null;
 
+        internal void ClearSelectedAnnotation()
+        {
+            _selected = null;
+            Changed?.Invoke();
+        }
+
         public bool HitTestAnnotation(PixelPoint point, bool currentToolOnly = false)
         {
             return FindAnnotation(point, currentToolOnly) is not null;
@@ -48,7 +55,8 @@ namespace RitsukageGif.Desktop
             return _annotations.LastOrDefault(annotation =>
                 CanEditAnnotation(annotation, ReferenceEquals(annotation, _selected)) &&
                 (!currentToolOnly || Tool == ScreenshotTool.Select ||
-                 ScreenshotToolCatalog.Get(annotation.Tool).ObjectKind == ScreenshotToolCatalog.Get(Tool).ObjectKind) &&
+                 ScreenshotToolCatalog.Get(AnnotationTool(annotation)).ObjectKind ==
+                 ScreenshotToolCatalog.Get(Tool).ObjectKind) &&
                 (annotation.Tool != ScreenshotTool.Eraser ||
                  _behavior.EraserSecondaryEditingEnabled) &&
                 HitTest(annotation, location));
@@ -97,6 +105,7 @@ namespace RitsukageGif.Desktop
                 case ScreenshotTool.Arrow:
                 case ScreenshotTool.Brush:
                     break;
+                case ScreenshotTool.AutoMosaic:
                 default:
                     throw new ArgumentOutOfRangeException(nameof(annotation));
             }
@@ -360,7 +369,8 @@ namespace RitsukageGif.Desktop
                 SaveHistory();
                 _retained.Add(replacement);
                 _annotations[index] = replacement;
-                _selected = _behavior.SecondaryEditing == AnnotationSecondaryEditingMode.CompletelyDisabled
+                _selected = replacement is { Tool: ScreenshotTool.Watermark, WatermarkImage: null } ||
+                            _behavior.SecondaryEditing == AnnotationSecondaryEditingMode.CompletelyDisabled
                     ? null
                     : replacement;
                 Error = null;
@@ -385,7 +395,8 @@ namespace RitsukageGif.Desktop
             string? text = null, Color? color = null, double? fontSize = null, double? thickness = null,
             int? mosaicSize = null, ScreenshotAnnotationProperties? properties = null,
             ScreenshotAnnotationImage? watermarkImage = null,
-            bool replaceImage = false, ScreenshotTool? tool = null)
+            bool replaceImage = false, ScreenshotTool? tool = null,
+            ImmutableArray<Rect>? autoMosaicRegions = null)
         {
             var copy = new ScreenshotAnnotation
             {
@@ -393,6 +404,10 @@ namespace RitsukageGif.Desktop
                 Text = text ?? source.Text, FontSize = fontSize ?? source.FontSize,
                 MosaicSize = mosaicSize ?? source.MosaicSize, Properties = properties ?? source.Properties,
                 MagnifierOffset = source.MagnifierOffset,
+                AutoMosaicId = source.AutoMosaicId,
+                AutoMosaicRegions = autoMosaicRegions ?? source.AutoMosaicRegions,
+                AutoMosaicCandidates = source.AutoMosaicCandidates,
+                AutoMosaicCandidateBounds = source.AutoMosaicCandidateBounds,
                 WatermarkImage = (replaceImage ? watermarkImage : source.WatermarkImage)?.Retain(),
                 WatermarkTimestamp = source.WatermarkTimestamp,
             };
@@ -435,6 +450,7 @@ namespace RitsukageGif.Desktop
         {
             if (IsEditingText) return;
             RenderPrivacyCandidates(context, scale);
+            if (IsPrivacyDetectionActive) return;
             if (_selected is null || IsBusy || !AnnotationsVisible) return;
             var pen = SelectionPen(scale);
             var radius = 3 * scale;

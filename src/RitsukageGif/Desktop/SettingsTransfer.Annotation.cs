@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
@@ -28,6 +28,13 @@ namespace RitsukageGif.Desktop
                     case "PolylineJoin": ValidateEnum<PenLineJoin>(property.Value, path); break;
                     case "PolylineCap": ValidateEnum<PenLineCap>(property.Value, path); break;
                     case "TextWrapMode": ValidateEnum<AnnotationTextWrapMode>(property.Value, path); break;
+                    case "NumberTextSize":
+                    case "NumberArrowSize": ValidateEnum<AnnotationSizeLevel>(property.Value, path); break;
+                    case "NumberForegroundColor":
+                        if (property.Value.ValueKind != JsonValueKind.Null &&
+                            (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetUInt32(out _)))
+                            throw Invalid(path);
+                        break;
                     case "Toolbar": ValidateToolbarPreferences(property.Value, path); break;
                     case "PinnedLastTool":
                         if (property.Value.ValueKind != JsonValueKind.String ||
@@ -79,7 +86,7 @@ namespace RitsukageGif.Desktop
                     case "FontSize":
                     case "MosaicSize":
                         ValidateNumber(property.Value, path + "." + property.Name,
-                            property.Name == "MosaicSize" ? 2 : 1, property.Name == "MosaicSize" ? 256 : 1024,
+                            property.Name == "MosaicSize" ? 2 : 1, property.Name == "MosaicSize" ? 28 : 1024,
                             property.Name == "MosaicSize");
                         break;
                 }
@@ -104,7 +111,7 @@ namespace RitsukageGif.Desktop
                     case "WrapWidth": ValidateNumber(property.Value, name, 0, 8192); break;
                     case "Opacity": ValidateNumber(property.Value, name, .01, 1); break;
                     case "Number": ValidateNumber(property.Value, name, 0, 999999, true); break;
-                    case "BlurRadius": ValidateNumber(property.Value, name, 1, 256, true); break;
+                    case "BlurRadius": ValidateNumber(property.Value, name, 3, 50, true); break;
                     case "Anchor": ValidateNumber(property.Value, name, 0, 8, true); break;
                     case "ImageWidth": ValidateNumber(property.Value, name, 1, 8192); break;
                     case "TextBackground":

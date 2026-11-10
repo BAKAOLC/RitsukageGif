@@ -24,8 +24,8 @@ namespace RitsukageGif.Desktop
             ArgumentOutOfRangeException.ThrowIfNegative(maximumBytes);
             lock (_gate)
             {
-                regionCapacity = Math.Min(regionCapacity, 1000);
-                imageCapacity = Math.Min(imageCapacity, 1000);
+                regionCapacity = Math.Min(regionCapacity, 99999);
+                imageCapacity = Math.Min(imageCapacity, 99999);
                 maximumBytes = Math.Min(maximumBytes, 512L * 1024 * 1024);
                 if (_regionCapacity == regionCapacity && _imageCapacity == imageCapacity &&
                     _maximumBytes == maximumBytes) return;

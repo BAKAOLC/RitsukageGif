@@ -41,6 +41,18 @@ namespace RitsukageGif.Desktop
 
             var menu = new MenuFlyout();
             menu.Items.Add(formatMenu);
+            menu.Items.Add(FormulaCheck("RecognitionRemoveSpaces", _dialogOptions.Formula.RemoveSpaces,
+                value => ChangeFormulaOptions(_dialogOptions.Formula with { RemoveSpaces = value }, true)));
+            var close = new MenuItem();
+            close.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("RecognitionAutoClose"));
+            close.Items.Add(FormulaCheck("FormulaCopyCurrentFormat", _dialogOptions.Formula.CloseAfterCopyCurrentFormat,
+                value => ChangeFormulaOptions(_dialogOptions.Formula with { CloseAfterCopyCurrentFormat = value })));
+            close.Items.Add(FormulaCheck("RecognitionCopySelectedText",
+                _dialogOptions.Formula.CloseAfterCopySelectedText,
+                value => ChangeFormulaOptions(_dialogOptions.Formula with { CloseAfterCopySelectedText = value })));
+            menu.Items.Add(close);
+            menu.Items.Add(FormulaCheck("FormulaSingleWindowMode", _dialogOptions.Formula.SingleWindowMode,
+                value => ChangeFormulaOptions(_dialogOptions.Formula with { SingleWindowMode = value })));
             _formulaSettings.Flyout = menu;
             return _formulaSettings;
         }
@@ -60,7 +72,11 @@ namespace RitsukageGif.Desktop
             var index = _formulaList.SelectedIndex - 1;
             return index >= 0 && index < _formulas.Count
                 ? [_latex.Text ?? ""]
-                : [.. _formulas.Select(formula => FormulaLatexFormatter.Format(formula.Latex, _latexFormat))];
+                :
+                [
+                    .. _formulas.Select(formula =>
+                        FormulaLatexFormatter.Format(FormulaSource(formula.Latex), _latexFormat)),
+                ];
         }
     }
 }

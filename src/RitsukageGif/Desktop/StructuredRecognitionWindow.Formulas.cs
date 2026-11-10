@@ -115,7 +115,7 @@ namespace RitsukageGif.Desktop
                 var text = FormulaLatexFormatter.Unwrap(_latex.Text ?? "");
                 var changed = _formulas[index].Latex != text;
                 _formulas[index] = _formulas[index] with { Latex = text };
-                _formulaRows[index].SetLatex(text);
+                _formulaRows[index].SetLatex(FormulaSource(text));
                 if (changed)
                 {
                     _renderTimer.Stop();
@@ -195,7 +195,7 @@ namespace RitsukageGif.Desktop
                     for (var index = 0; index < _formulas.Count; index++)
                     {
                         var itemIndex = index;
-                        var row = new FormulaResultListItem(_formulas[index].Latex, index + 1,
+                        var row = new FormulaResultListItem(FormulaSource(_formulas[index].Latex), index + 1,
                             () => RemoveFormula(itemIndex), _lifetime.Token);
                         _formulaRows.Add(row);
                         _formulaList.Items.Add(row);
@@ -235,8 +235,8 @@ namespace RitsukageGif.Desktop
             {
                 _latex.IsReadOnly = index < 0;
                 _latex.Text = index >= 0 && index < _formulas.Count
-                    ? FormulaLatexFormatter.Format(_formulas[index].Latex, _latexFormat)
-                    : FormulaLatexFormatter.FormatMany([.. _formulas.Select(formula => formula.Latex)],
+                    ? FormulaLatexFormatter.Format(FormulaSource(_formulas[index].Latex), _latexFormat)
+                    : FormulaLatexFormatter.FormatMany([.. _formulas.Select(formula => FormulaSource(formula.Latex))],
                         _latexFormat);
                 _latex.CaretIndex = 0;
                 _latex.SelectionStart = _latex.SelectionEnd = 0;
@@ -251,8 +251,8 @@ namespace RitsukageGif.Desktop
         {
             var index = _formulaList.SelectedIndex - 1;
             return index >= 0 && index < _formulas.Count
-                ? [_formulas[index].Latex]
-                : [.. _formulas.Select(formula => formula.Latex)];
+                ? [FormulaSource(_formulas[index].Latex)]
+                : [.. _formulas.Select(formula => FormulaSource(formula.Latex))];
         }
 
         private void RemoveFormula(int index)

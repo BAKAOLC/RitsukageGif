@@ -151,7 +151,7 @@ namespace RitsukageGif.Desktop
             }
 
             Background = visible ? Brushes.Transparent : Brushes.Black;
-            _canvas.InvalidateVisual();
+            InvalidateCanvas();
             if (!visible) _hdrBackground?.Hide();
         }
 

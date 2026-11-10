@@ -24,7 +24,7 @@ namespace RitsukageGif.Desktop
                     StartSound = defaults.StartSound, StopSound = defaults.StopSound,
                     ScreenshotClipboard = value.ScreenshotClipboard with
                     {
-                        Mode = defaults.ScreenshotClipboard.Mode, FileFormat = defaults.ScreenshotClipboard.FileFormat,
+                        FileFormat = defaults.ScreenshotClipboard.FileFormat,
                         OutputSize = defaults.ScreenshotClipboard.OutputSize,
                     },
                 },
@@ -36,6 +36,19 @@ namespace RitsukageGif.Desktop
                 "ScreenshotHeading" => value with
                 {
                     CapturePreferences = defaults.CapturePreferences, ScrollCapture = defaults.ScrollCapture,
+                    ScreenshotRecording = value.ScreenshotRecording with
+                    {
+                        ToolbarCaptureMode = defaults.ScreenshotRecording.ToolbarCaptureMode,
+                        AutoExitAfterEncoding = defaults.ScreenshotRecording.AutoExitAfterEncoding,
+                        InputEffects = value.ScreenshotRecording.InputEffects with
+                        {
+                            SmoothTrack = defaults.ScreenshotRecording.InputEffects.SmoothTrack,
+                            KeyboardMaxHistory = defaults.ScreenshotRecording.InputEffects.KeyboardMaxHistory,
+                            KeyboardKeepSeconds = defaults.ScreenshotRecording.InputEffects.KeyboardKeepSeconds,
+                            KeyboardMaxCharacters = defaults.ScreenshotRecording.InputEffects.KeyboardMaxCharacters,
+                            SimplifyMouseAnimation = defaults.ScreenshotRecording.InputEffects.SimplifyMouseAnimation,
+                        },
+                    },
                     ScreenshotClipboard = value.ScreenshotClipboard with
                     {
                         HdpiTargetPercent = defaults.ScreenshotClipboard.HdpiTargetPercent,
@@ -104,12 +117,15 @@ namespace RitsukageGif.Desktop
                 DisableWheelToolAdjustment = defaults.DisableWheelToolAdjustment,
                 ControlPointVisibility = defaults.ControlPointVisibility, RenumberOnDelete = defaults.RenumberOnDelete,
                 NumberStartsAtZero = defaults.NumberStartsAtZero, GlobalNumberCounter = defaults.GlobalNumberCounter,
+                NumberForegroundColor = defaults.NumberForegroundColor, NumberTextSize = defaults.NumberTextSize,
+                NumberArrowSize = defaults.NumberArrowSize,
                 SmoothBrush = defaults.SmoothBrush, PencilShiftMode = defaults.PencilShiftMode,
                 PolylineJoin = defaults.PolylineJoin, PolylineCap = defaults.PolylineCap,
                 ArrowDoubleClickCommentEnabled = defaults.ArrowDoubleClickCommentEnabled,
                 ArrowCurveControlPoints = defaults.ArrowCurveControlPoints, TextWrapMode = defaults.TextWrapMode,
                 EraserSecondaryEditingEnabled = defaults.EraserSecondaryEditingEnabled,
                 AutoSelectPrivacyMosaic = defaults.AutoSelectPrivacyMosaic,
+                AutoAddWatermark = defaults.AutoAddWatermark,
                 Toolbar = value.Toolbar with { Columns = defaults.Toolbar.Columns },
             };
         }

@@ -1,35 +1,22 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
-using Avalonia.Controls.Shapes;
 using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
-using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
     internal static class DropDownChevron
     {
-        public static Geometry Data { get; } = Geometry.Parse(FluentToolbarIcon.Geometry("ToolbarChevron")!);
+        public static Geometry Data { get; } = IconCatalog.GetGeometry("ToolbarChevron");
 
-
-        public static IControlTemplate Template { get; } = new FuncControlTemplate<PathIcon>((_, _) => new Viewbox
+        public static IControlTemplate Template { get; } = new FuncControlTemplate<PathIcon>((_, _) => new SvgIcon(
+            ToolbarIcon.GetDefinition("ToolbarChevron"))
         {
             Width = 16, Height = 16,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
-            Child = new Canvas
-            {
-                Width = 24, Height = 24,
-                Children =
-                {
-                    new Path
-                    {
-                        Data = Data, Width = 24, Height = 24,
-                        [!Shape.FillProperty] = new DynamicResourceExtension("DropDownChevronBrush"),
-                    },
-                },
-            },
+            [!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("DropDownChevronBrush"),
         });
 
         internal static PathIcon Create(Button owner)

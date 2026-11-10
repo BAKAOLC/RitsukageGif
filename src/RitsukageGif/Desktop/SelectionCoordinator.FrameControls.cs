@@ -4,15 +4,15 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
-        private uint _frameBorderColor = 0xFF000000;
-        private int _frameBorderStrength = 2;
+        private uint _frameBorderColor = 0xFFFFFFFF;
+        private int _frameBorderStrength = 8;
         private TaskCompletionSource<bool>? _frameRefreshRelease;
-        private uint _frameShadowColor = 0x80000000;
-        private int _frameShadowStrength = 12;
+        private uint _frameShadowColor = 0xFFA0A0A4;
+        private int _frameShadowStrength = 8;
 
         internal bool FrameRoundEnabled { get; private set; }
 
-        internal double FrameCornerRadius { get; private set; } = 12;
+        internal double FrameCornerRadius { get; private set; }
 
         internal bool FrameRoundInitialEnabled
         {
@@ -21,7 +21,7 @@ namespace RitsukageGif.Desktop
 
         internal double FrameRoundInitialRadius
         {
-            set => FrameCornerRadius = double.IsFinite(value) ? Math.Clamp(value, 0, 60) : 12;
+            set => FrameCornerRadius = double.IsFinite(value) ? Math.Clamp(value, 0, 60) : 0;
         }
 
         internal bool FrameDecorationEnabled { get; private set; }
@@ -36,18 +36,33 @@ namespace RitsukageGif.Desktop
             ? _frameShadowColor
             : _frameBorderColor;
 
-        internal bool KeepDecoration { get; set; }
+        internal bool KeepDecoration
+        {
+            get;
+            set
+            {
+                if (field == value) return;
+                field = value;
+                FramePreferencesChanged?.Invoke();
+            }
+        }
 
         internal bool KeepDecorationInitial
         {
             set => KeepDecoration = value;
         }
 
-        internal CaptureDecoration RememberedDecoration => Decoration with { CornerRadius = 0 };
+        internal CaptureFrameDecorationPreferences FrameDecorationPreferences => new()
+        {
+            Kind = FrameDecorationKind, ShadowStrength = _frameShadowStrength, ShadowColor = _frameShadowColor,
+            BorderStrength = _frameBorderStrength, BorderColor = _frameBorderColor,
+        };
+
         internal bool CanRefreshFrame => ScreenshotMode && !ScreenshotPreview;
+        internal bool RectangularSelection => ShapeMode == SelectionShapeMode.Rectangle && _selectionShape is null;
         private bool FrameRefreshHeld => _frameRefreshRelease is not null;
 
-        internal Func<Action, Action, Action<Exception>, CancellationToken, Task<IDisposable>>?
+        internal Func<Action, Action, Action<Exception>, CancellationToken, Task<IAsyncDisposable>>?
             FrameRefreshObserverFactory
         {
             get;
@@ -60,14 +75,15 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        internal bool CanShowFrameControls => ScreenshotMode && Snapshot.Phase == SelectionPhase.Selected &&
+        internal bool CanShowFrameControls => ScreenshotMode && CapturePreferences.ShowSecondaryButtons &&
+                                              Snapshot.Phase == SelectionPhase.Selected &&
                                               Annotations is { IsBusy: false, IsDrawing: false, IsEditingText: false };
 
         internal CaptureDecoration Decoration
         {
             get
             {
-                var radius = FrameRoundEnabled ? FrameCornerRadius : 0;
+                var radius = FrameRoundEnabled && RectangularSelection ? FrameCornerRadius : 0;
                 var kind = FrameDecorationEnabled ? FrameDecorationKind : CaptureDecorationKind.None;
                 var strength = FrameDecorationEnabled ? FrameDecorationStrength : 0;
                 var color = FrameDecorationColor;
@@ -79,29 +95,41 @@ namespace RitsukageGif.Desktop
             }
         } = CaptureDecoration.None;
 
-        internal CaptureDecoration InitialDecoration
+        internal CaptureFrameDecorationPreferences InitialDecoration
         {
-            set => RestoreFrameDecoration(value);
+            set => RestoreFrameDecorationPreferences(value);
         }
 
-        private void RestoreFrameDecoration(CaptureDecoration? decoration)
+        internal event Action? FramePreferencesChanged;
+
+        private void RestoreFrameDecorationPreferences(CaptureFrameDecorationPreferences decoration)
         {
-            var value = decoration ?? CaptureDecoration.None;
-            FrameRoundEnabled = double.IsFinite(value.CornerRadius) && value.CornerRadius > 0;
-            if (FrameRoundEnabled) FrameCornerRadius = Math.Clamp(value.CornerRadius, 0, 60);
-            FrameDecorationEnabled = value.Kind is CaptureDecorationKind.Shadow or CaptureDecorationKind.Border;
+            FrameDecorationEnabled = KeepDecoration;
+            FrameDecorationKind = decoration.Kind;
+            _frameShadowStrength = decoration.ShadowStrength;
+            _frameShadowColor = decoration.ShadowColor;
+            _frameBorderStrength = decoration.BorderStrength;
+            _frameBorderColor = decoration.BorderColor;
+            Refresh();
+        }
+
+        private void RestoreFrameDecoration(CaptureDecoration decoration)
+        {
+            FrameRoundEnabled = decoration.CornerRadius > 0;
+            if (FrameRoundEnabled) FrameCornerRadius = Math.Clamp(decoration.CornerRadius, 0, 60);
+            FrameDecorationEnabled = decoration.Kind is CaptureDecorationKind.Shadow or CaptureDecorationKind.Border;
             if (FrameDecorationEnabled)
             {
-                FrameDecorationKind = value.Kind;
-                if (value.Kind == CaptureDecorationKind.Shadow)
+                FrameDecorationKind = decoration.Kind;
+                if (decoration.Kind == CaptureDecorationKind.Shadow)
                 {
-                    _frameShadowStrength = Math.Clamp(value.Strength, 1, 50);
-                    _frameShadowColor = value.Color;
+                    _frameShadowStrength = Math.Clamp(decoration.Strength, 1, 50);
+                    _frameShadowColor = decoration.Color;
                 }
                 else
                 {
-                    _frameBorderStrength = Math.Clamp(value.Strength, 1, 50);
-                    _frameBorderColor = value.Color;
+                    _frameBorderStrength = Math.Clamp(decoration.Strength, 1, 50);
+                    _frameBorderColor = decoration.Color;
                 }
             }
 
@@ -112,14 +140,16 @@ namespace RitsukageGif.Desktop
         {
             FrameRoundEnabled = enabled;
             Refresh();
+            FramePreferencesChanged?.Invoke();
         }
 
         internal void SetFrameRadius(double radius)
         {
             if (!double.IsFinite(radius)) return;
             FrameCornerRadius = Math.Clamp(Math.Round(radius), 0, 60);
-            FrameRoundEnabled = FrameCornerRadius > 0;
+            if (FrameCornerRadius > 0) FrameRoundEnabled = true;
             Refresh();
+            FramePreferencesChanged?.Invoke();
         }
 
         internal void SetFrameDecoration(bool enabled)
@@ -134,6 +164,7 @@ namespace RitsukageGif.Desktop
             FrameDecorationKind = kind;
             FrameDecorationEnabled = true;
             Refresh();
+            FramePreferencesChanged?.Invoke();
         }
 
         internal void SetFrameDecorationStrength(int strength)
@@ -143,6 +174,7 @@ namespace RitsukageGif.Desktop
             else _frameBorderStrength = strength;
             FrameDecorationEnabled = true;
             Refresh();
+            FramePreferencesChanged?.Invoke();
         }
 
         internal uint GetFrameDecorationColor(CaptureDecorationKind kind)
@@ -157,6 +189,7 @@ namespace RitsukageGif.Desktop
             else _frameBorderColor = color;
             FrameDecorationEnabled = true;
             Refresh();
+            FramePreferencesChanged?.Invoke();
         }
 
         internal void StartFrameRefresh()
@@ -166,7 +199,7 @@ namespace RitsukageGif.Desktop
             _historyWork = _screenshotTask = RefreshFrozenFramesAsync(ResolveFrameRefreshObserver());
         }
 
-        private Func<Action, Action, Action<Exception>, CancellationToken, Task<IDisposable>>?
+        private Func<Action, Action, Action<Exception>, CancellationToken, Task<IAsyncDisposable>>?
             ResolveFrameRefreshObserver()
         {
             if (FrameRefreshObserverFactory is { } observer) return observer;

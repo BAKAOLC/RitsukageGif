@@ -8,9 +8,19 @@ namespace RitsukageGif.Desktop
         private readonly PinnedWindowShake _shake = new();
         private bool _visibleInGroup = true;
 
-        internal PinnedWindowPresentation(Window owner, Grid content, Func<PinnedImagePreferences> preferences)
+        internal PinnedWindowPresentation(Window owner, Grid content, Func<PinnedImagePreferences> preferences,
+            Func<Func<Task>, Task> runOperation, TextBlock status)
         {
             _owner = owner;
+            InitializeShade(content, preferences);
+            _runOperation = runOperation;
+            _status = status;
+            _messageTimer.Tick += (_, _) =>
+            {
+                _messageTimer.Stop();
+                if (_status.Text == _message) _status.IsVisible = false;
+            };
+            owner.Closed += (_, _) => _messageTimer.Stop();
             Title = new(owner, content, preferences);
             content.Children.Add(Title);
             Attention = new(owner, content, () => preferences().TranslucentOnAttention);
@@ -22,6 +32,7 @@ namespace RitsukageGif.Desktop
             };
         }
 
+        internal long RegistrationOrder { get; set; }
         internal PinnedWindowTitle Title { get; }
         internal PinnedWindowAttention Attention { get; }
         private bool GroupHidden { get; set; }
@@ -35,6 +46,13 @@ namespace RitsukageGif.Desktop
         {
             switch (action)
             {
+                case "window-shade": SetWindowShadow(!WindowShadow); break;
+                case "configuration":
+                    _ = ConfigurationRequested?.Invoke();
+                    break;
+                case "paste":
+                    _ = RunOperationAsync(() => PasteRequested?.Invoke() ?? Task.CompletedTask);
+                    break;
                 case "set-title": Title.BeginEdit(); break;
                 case "hide-others": HideOthersRequested?.Invoke(); break;
                 case "switch-next": SwitchNextRequested?.Invoke(); break;
@@ -71,14 +89,20 @@ namespace RitsukageGif.Desktop
 
         internal void Restore(PinnedWindowState state)
         {
+            SetWindowShape(state.WindowShape);
+            ReinitializeShadeAfterDataLoad(state.WindowShadow);
             Title.SetTitle(state.CustomTitle);
+            SourceMime = state.SourceMime;
             GroupHidden = state.GroupHidden;
             _visibleInGroup = state.VisibleInGroup;
         }
 
         internal void Capture(PinnedWindowState state)
         {
+            state.WindowShadow = WindowShadow;
+            state.WindowShape = WindowShape;
             state.CustomTitle = Title.Value;
+            state.SourceMime = SourceMime;
             state.GroupHidden = GroupHidden;
             state.VisibleInGroup = VisibleInGroup;
         }

@@ -13,11 +13,14 @@ namespace RitsukageGif.Desktop
             ArgumentNullException.ThrowIfNull(options.Image);
             var (plan, toneMap) = await Dispatcher.UIThread.InvokeAsync(() =>
                 (PrepareStaticCapture(options, token), options.ToneMap ?? Settings.CaptureToneMap));
-            await PrepareStaticSourceAsync(plan, toneMap != HdrToneMapMode.HighlightCompression, token)
-                .ConfigureAwait(false);
+            using var plannedSource = plan.SourceReference;
+            using var source =
+                await PrepareStaticSourceAsync(plan, toneMap != HdrToneMapMode.HighlightCompression, token)
+                    .ConfigureAwait(false);
             return await Task.Run(async () =>
             {
-                var frames = CaptureStaticFrames(plan, false, toneMap, token);
+                // ReSharper disable once AccessToDisposedClosure
+                var frames = CaptureStaticFrames(plan, false, toneMap, source?.Session, token);
                 var pixels = CapturedFramePixels.ToStraightBgra(frames.Sdr, token);
                 return await new StaticImageService().SavePixelsAsync(pixels, frames.Sdr.Width, frames.Sdr.Height,
                     output, options.Image, token).ConfigureAwait(false);
@@ -53,37 +56,72 @@ namespace RitsukageGif.Desktop
                 runtime = frozen;
             }
 
-            var region = Region ?? default;
-            if (preset?.Layout is { } layout)
+            bool? windowSource = null;
+            NativeCaptureSessionReference? source = null;
+            if (DesktopCapture.UsesSourceSelection)
             {
-                region = new(0, 0, layout.Width, layout.Height);
-            }
-            else if (preset is not null)
-            {
-                var target = preset.Absolute ? null : WindowLocator.Find(preset, WindowLocator.List());
-                if (!preset.Absolute && target is null)
-                    throw new InvalidOperationException(UiText.Get("WindowNotFound"));
-                region = preset.Resolve(target?.Bounds ?? default, target?.Client ?? default,
-                    runtime?.Snapshot.Variables);
+                var kind = preset?.Source;
+                if (preset?.Layout is { } sourceLayout)
+                {
+                    kind = null;
+                    foreach (var layer in sourceLayout.Layers)
+                    {
+                        if (layer.Media is not null) continue;
+                        if (kind is not null && kind != layer.Source)
+                            throw new NotSupportedException(UiText.Get("PortalCaptureSourceMismatch"));
+                        kind = layer.Source;
+                    }
+                }
+
+                if (preset?.Layout is null || kind is not null)
+                {
+                    source = NativeCaptureSession.RetainStaticSource(kind, out var window);
+                    windowSource = window;
+                }
             }
 
-            var recording = new RecordingOptions(region, Divisor: options.ScalePercent.HasValue
-                    ? 1
-                    : effective.Scale ?? Settings.Divisor,
-                Cursor: options.IncludeCursor ?? effective.Cursor ?? Settings.Cursor, Transparent: true);
-            recording = recording with
+            try
             {
-                PixelDensity = (preset is null || ReferenceEquals(preset, _manualPreset)) && preset?.Layout is null
-                    ? NativeDisplayCatalog.Density(region)
-                    : 1,
-            };
-            recording.Validate();
-            var scale = options.ScalePercent ?? 100;
-            if (recording.Width * (scale / 100d) * recording.Height * (scale / 100d) > 64 * 1024 * 1024)
-                throw new ArgumentException(UiText.Get("RecordingTooLarge"));
-            var monitors = Screens.All.Select(screen => new PixelRect(screen.Bounds.X, screen.Bounds.Y,
-                screen.Bounds.Width, screen.Bounds.Height)).ToArray();
-            return new(recording, preset, runtime, monitors, scale);
+                var region = Region ?? default;
+                if (preset?.Layout is { } layout)
+                {
+                    region = new(0, 0, layout.Width, layout.Height);
+                }
+                else if (preset is not null)
+                {
+                    var target = preset.Absolute
+                        ? null
+                        : WindowLocator.Find(preset,
+                            source?.Session.GetAuthorizedWindows() ?? WindowLocator.List());
+                    if (!preset.Absolute && target is null)
+                        throw new InvalidOperationException(UiText.Get("WindowNotFound"));
+                    region = preset.Resolve(target?.Bounds ?? default, target?.Client ?? default,
+                        runtime?.Snapshot.Variables);
+                }
+
+                var recording = new RecordingOptions(region, Divisor: options.ScalePercent.HasValue
+                        ? 1
+                        : effective.Scale ?? Settings.Divisor,
+                    Cursor: options.IncludeCursor ?? effective.Cursor ?? Settings.Cursor, Transparent: true);
+                recording = recording with
+                {
+                    PixelDensity = (preset is null || ReferenceEquals(preset, _manualPreset)) && preset?.Layout is null
+                        ? NativeDisplayCatalog.Density(region)
+                        : 1,
+                };
+                recording.Validate();
+                var scale = options.ScalePercent ?? 100;
+                if (recording.Width * (scale / 100d) * recording.Height * (scale / 100d) > 64 * 1024 * 1024)
+                    throw new ArgumentException(UiText.Get("RecordingTooLarge"));
+                var monitors = Screens.All.Select(screen => new PixelRect(screen.Bounds.X, screen.Bounds.Y,
+                    screen.Bounds.Width, screen.Bounds.Height)).ToArray();
+                return new(recording, preset, runtime, monitors, scale, windowSource, source);
+            }
+            catch
+            {
+                source?.Dispose();
+                throw;
+            }
         }
     }
 }

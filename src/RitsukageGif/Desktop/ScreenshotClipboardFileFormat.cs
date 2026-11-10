@@ -2,10 +2,12 @@ namespace RitsukageGif.Desktop
 {
     public enum ScreenshotClipboardFileFormat
     {
-        Png,
-        Jpeg,
-        Bmp,
-        Webp,
-        Avif,
+        Disabled = -1,
+        Png = 0,
+        Jpeg = 1,
+        Webp = 2,
+        Bmp = 3,
+        Auto = 4,
+        Avif = 7,
     }
 }

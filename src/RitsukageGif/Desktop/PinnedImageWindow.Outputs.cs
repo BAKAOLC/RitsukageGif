@@ -30,11 +30,12 @@ namespace RitsukageGif.Desktop
             var profile = SavePreferencesProvider().Normalize().Quick;
             var dimensions = PngImageCodec.ReadDimensions(output.Png);
             var size = profile.OutputSize.Resolve(dimensions.Width, dimensions.Height);
-            var name = Path.ChangeExtension(profile.CreateFileName(new ScreenshotNameContext(DateTime.Now,
-                Width: size.Width, Height: size.Height)), profile.DialogExtension(output.ColorMode));
-            var directory = profile.ResolveDirectory(OutputDirectoryProvider() ??
-                                                     Environment.GetFolderPath(Environment.SpecialFolder.MyPictures));
-            var saved = await ScreenshotImageStorage.SaveAsync(output, Path.Combine(directory, name), profile, token);
+            var context = new ScreenshotNameContext(DateTime.Now, Width: size.Width, Height: size.Height);
+            var path = Path.ChangeExtension(profile.CreatePath(OutputDirectoryProvider() ??
+                                                               Environment.GetFolderPath(Environment.SpecialFolder
+                                                                   .MyPictures), context),
+                profile.DialogExtension(output.ColorMode));
+            var saved = await ScreenshotImageStorage.SaveAsync(output, path, profile, token);
             SavedPathChanged?.Invoke(saved.Paths[0]);
             await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Save, output);
             await CompleteSelectionSaveAsync(saved.Paths, profile, output);
@@ -45,9 +46,12 @@ namespace RitsukageGif.Desktop
             PinLogger.ZLogDebug($"Pinned image clipboard operation started.");
             var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
             var preferences = ClipboardPreferencesProvider().Normalize();
-            if (forceFile) preferences = preferences with { Mode = ScreenshotClipboardMode.File };
+            if (preferences.FileFormat == ScreenshotClipboardFileFormat.Auto ||
+                (forceFile && preferences.FileFormat == ScreenshotClipboardFileFormat.Disabled))
+                preferences = preferences with { FileFormat = ScreenshotClipboardFileFormat.Png };
             var quality = SavePreferencesProvider().Normalize().Quality;
-            await ClipboardImage.CopyAsync(clipboard, output, preferences, StorageProvider, quality, _lifetime.Token);
+            await ClipboardImage.CopyAsync(clipboard, output, preferences, StorageProvider, quality,
+                token: _lifetime.Token);
             PinLogger.ZLogInformation($"Pinned image clipboard operation completed.");
         }
 

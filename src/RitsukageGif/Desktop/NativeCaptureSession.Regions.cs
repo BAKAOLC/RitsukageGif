@@ -7,13 +7,15 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class NativeCaptureSession
     {
-        private readonly Dictionary<long, (PixelRect? Region, double? Density)> _demands = [];
+        private readonly Dictionary<long, (PixelRect? Region, double? Density, int Fps, bool RetainHdr)> _demands = [];
         private readonly SemaphoreSlim _configurationGate = new(1, 1);
         private TaskCompletionSource _nextFrame = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private long _nextDemand, _configurationId;
         private bool _suspended;
         private PixelRect? _configuredRegion;
         private int _configuredWidth, _configuredHeight;
+        private int _configuredFps;
+        private bool _configuredHdr;
 
         internal long RegisterDemand()
         {
@@ -21,7 +23,7 @@ namespace RitsukageGif.Desktop
             {
                 ObjectDisposedException.ThrowIf(_disposed, this);
                 var id = ++_nextDemand;
-                _demands.Add(id, (null, null));
+                _demands.Add(id, (null, null, _fps, _retainHdr));
                 return id;
             }
         }
@@ -38,7 +40,8 @@ namespace RitsukageGif.Desktop
             if (idle) _ = SuspendIdleAsync();
         }
 
-        internal void ConfigureDemand(long id, PixelRect? region, double? density, CancellationToken token)
+        internal void ConfigureDemand(long id, PixelRect? region, double? density, CancellationToken token,
+            int? fps = null, bool retainHdr = false)
         {
             AwaitFirstFrame(token);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _stop.Token);
@@ -52,7 +55,8 @@ namespace RitsukageGif.Desktop
                         .GetResult();
                 PixelRect requested;
                 NativeCaptureGeometry source;
-                int width, height;
+                int width, height, rate;
+                bool hdr;
                 bool configure, resume;
                 long expected;
                 ulong before;
@@ -60,7 +64,9 @@ namespace RitsukageGif.Desktop
                 {
                     ObjectDisposedException.ThrowIf(_disposed, this);
                     ObjectDisposedException.ThrowIf(!_demands.ContainsKey(id), typeof(NativeCaptureDemand));
-                    _demands[id] = (region, density);
+                    _demands[id] = (region, density, Math.Clamp(fps ?? _fps, 1, 120), retainHdr);
+                    rate = _demands.Values.Max(value => value.Fps);
+                    hdr = _demands.Values.Any(value => value.RetainHdr);
                     if (_sourceReason is not null) throw new IOException(_sourceReason);
                     source = _sourceGeometry ?? throw new CaptureSourceLostException();
                     var full = source.Bounds;
@@ -76,7 +82,8 @@ namespace RitsukageGif.Desktop
                     var outputDensity = areas.Max(value => value.Density);
                     width = Math.Max(1, checked((int)Math.Ceiling(requested.Width * outputDensity)));
                     height = Math.Max(1, checked((int)Math.Ceiling(requested.Height * outputDensity)));
-                    configure = !((_configuredRegion == requested && _configuredWidth == width &&
+                    configure = (OperatingSystem.IsLinux() && (_configuredFps != rate || _configuredHdr != hdr)) ||
+                                !((_configuredRegion == requested && _configuredWidth == width &&
                                    _configuredHeight == height) ||
                                   (_geometry?.Bounds == requested && _geometry.PixelWidth == width &&
                                    _geometry.PixelHeight == height));
@@ -88,7 +95,9 @@ namespace RitsukageGif.Desktop
 
                 if (configure)
                 {
-                    var reply = SendCommandAsync("configure", source, default, requested, width, height, linked.Token)
+                    var reply = SendCommandAsync("configure", source, default, requested, width, height,
+                            OperatingSystem.IsLinux() ? rate : null,
+                            OperatingSystem.IsLinux() ? hdr : null, linked.Token)
                         .GetAwaiter().GetResult();
                     if (reply.Result != "configured")
                         throw new CaptureSourceLostException(
@@ -120,6 +129,8 @@ namespace RitsukageGif.Desktop
                             _configuredRegion = requested;
                             _configuredWidth = width;
                             _configuredHeight = height;
+                            _configuredFps = rate;
+                            _configuredHdr = hdr;
                             return;
                         }
 
@@ -182,7 +193,7 @@ namespace RitsukageGif.Desktop
         {
             lock (SharedLock)
             {
-                if (_shared is not { _window: true, IsAvailable: true } session) return [];
+                if (_shared is not { IsWindowSource: true, IsAvailable: true } session) return [];
                 lock (session._gate)
                 {
                     var source = session._sourceGeometry;
@@ -205,27 +216,6 @@ namespace RitsukageGif.Desktop
             return source is { StableIdentity: true, SourceId: { } id }
                 ? id
                 : source.Generation.ToString(CultureInfo.InvariantCulture) + "/" + source.StreamId;
-        }
-
-        internal static NativeCaptureSession CurrentAuthorizedWindow(NativeCaptureAuthorization? expected = null)
-        {
-            var session = CurrentShared();
-            if (!session._window) throw new NotSupportedException(UiText.Get("PortalWindowMatchingUnavailable"));
-            if (expected is null) return session;
-            lock (session._gate)
-            {
-                var source = session._sourceGeometry;
-                if (source is null || session._authorizationId != expected.AuthorizationId ||
-                    source.Generation != expected.Generation || SourceIdentity(source) != expected.SourceIdentity)
-                    throw new CaptureSourceLostException();
-            }
-
-            return session;
-        }
-
-        internal static NativeCaptureSession CurrentShared()
-        {
-            lock (SharedLock) return _shared ?? throw new CaptureSourceLostException();
         }
     }
 }

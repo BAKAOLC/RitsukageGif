@@ -6,15 +6,22 @@ namespace RitsukageGif.Desktop
     internal sealed partial class PinnedImageWindow : IPinnedWindow
     {
         Window IPinnedWindow.Window => this;
+        bool IPinnedWindow.IsMouseThrough => IsMouseThrough;
+        bool IPinnedWindow.CanSetMouseThrough => PinnedWindowPlatform.CanSetMouseThrough(this);
         bool IPinnedWindow.CanArrangeSelection => CanArrangeSelection;
         bool IPinnedWindow.CanSaveSelection => CanSaveSelection;
         PixelRect IPinnedWindow.SelectionLayoutBounds => SelectionLayoutBounds;
         CancellationToken IPinnedWindow.OutputLifetime => OutputLifetime;
 
-        Task<ScreenshotResult> IPinnedWindow.CapturePreferredOutputAsync(OutputColorMode mode,
-            CancellationToken token)
+        void IPinnedWindow.SetMouseThrough(bool value)
         {
-            return CapturePreferredOutputAsync(mode, token);
+            SetMouseThrough(value);
+        }
+
+
+        Task<ScreenshotResult> IPinnedWindow.CaptureSceneOutputAsync(OutputColorMode mode, CancellationToken token)
+        {
+            return CaptureSceneOutputAsync(mode, token);
         }
 
         Task IPinnedWindow.CompleteSelectionSaveAsync(IReadOnlyList<string> paths, ScreenshotSaveProfile profile,

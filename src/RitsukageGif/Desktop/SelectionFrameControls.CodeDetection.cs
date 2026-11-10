@@ -12,7 +12,7 @@ namespace RitsukageGif.Desktop
 
         private void InitializeCodeToggle()
         {
-            _codeToggle = Toggle("CaptureCodeToggle", ToolbarIcon.Geometry("RecognizeBarcode"),
+            _codeToggle = Toggle("CaptureCodeToggle", ToolbarIcon.GetDefinition("SelectionFrameCodeDetection"),
                 _coordinator.SetCodeDetectionEnabled);
             var tip = new StackPanel { Spacing = 6 };
             tip.Children.Add(new TextBlock

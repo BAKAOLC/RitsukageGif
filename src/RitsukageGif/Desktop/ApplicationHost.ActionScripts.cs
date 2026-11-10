@@ -7,22 +7,45 @@ namespace RitsukageGif.Desktop
     {
         private readonly CancellationTokenSource _actionScriptCancellation = new();
         private readonly HashSet<Task> _actionScriptTasks = [];
+        private readonly AsyncLocal<ActionScriptCallPath?> _actionScriptCallPath = new();
 
         private async Task<ScriptDiagnostic?> RunActionScriptAsync(GlobalActionBinding action,
             PresetDebugger debugger, CancellationToken token)
+        {
+            var previous = _actionScriptCallPath.Value;
+            if (previous?.Contains(action.Id) == true)
+                throw new InvalidOperationException("The configured action call chain contains a cycle.");
+            _actionScriptCallPath.Value = new(action.Id, previous);
+            try
+            {
+                return await RunAutomationScriptAsync(action, debugger, token: token);
+            }
+            finally
+            {
+                _actionScriptCallPath.Value = previous;
+            }
+        }
+
+        private async Task<ScriptDiagnostic?> RunAutomationScriptAsync(GlobalActionBinding action,
+            PresetDebugger debugger, string? sourceFile = null,
+            IReadOnlyDictionary<string, object?>? parameters = null, Action<object?>? result = null,
+            CancellationToken token = default)
         {
             if (IsClosing) throw new OperationCanceledException(_actionScriptCancellation.Token);
             using var lifetime =
                 CancellationTokenSource.CreateLinkedTokenSource(token, _actionScriptCancellation.Token);
             var scriptToken = lifetime.Token;
-            var runner = new ActionScriptRunner(
-                (preset, sessionDebugger, bindings) => CreateActionScriptSession(preset, sessionDebugger, bindings,
-                    scriptToken), ExecuteScriptActionAsync);
-            var task = runner.RunAsync(action, debugger, scriptToken);
+            var callPath = _actionScriptCallPath.Value;
+            var runner = new ActionScriptRunner((preset, sessionDebugger) =>
+                CreateActionScriptSession(preset, sessionDebugger, callPath, scriptToken));
+            var task = runner.RunAsync(action, debugger, sourceFile, parameters,
+                _presets.ActivePreset ?? _manualPreset, scriptToken);
             _actionScriptTasks.Add(task);
             try
             {
-                return await task;
+                var diagnostic = await task;
+                result?.Invoke(runner.LastResult);
+                return diagnostic;
             }
             finally
             {
@@ -31,25 +54,32 @@ namespace RitsukageGif.Desktop
         }
 
         private PresetScriptSession CreateActionScriptSession(WindowPreset preset, PresetDebugger debugger,
-            Action<ScriptBindingRegistry> configureBindings, CancellationToken token)
+            ActionScriptCallPath? callPath, CancellationToken token)
         {
             var clock = Stopwatch.StartNew();
+            var resources = new ScriptResourceScope();
             var text = new OcrRecognitionService();
             var barcode = new BarcodeRecognitionService();
             return new(preset,
                 async () => await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     var target = _presets.Target;
-                    var window = target is null
-                        ? null
-                        : new PresetWindowState(target.Handle, target.Title, target.Bounds);
+                    var window = target is not null
+                        ? new(target.Handle, target.Title, target.Bounds)
+                        : Region is { IsEmpty: false } region
+                            ? new PresetWindowState(0, string.Empty, region)
+                            : null;
                     return new PresetContext(window, IsRecording, IsBusy, clock.Elapsed.TotalSeconds,
                         _recordClock.Elapsed.TotalSeconds, preset.Constants,
                         Outputs: [.. LastOutputs], Streams: Volatile.Read(ref _streams));
                 }),
                 async command =>
                     await Dispatcher.UIThread.InvokeAsync(() => ApplyActionScriptCommandAsync(command, token)),
-                debugger, configureBindings,
+                debugger,
+                bindings =>
+                {
+                    ConfigureAutomationBindings(bindings, preset.SourceFile, resources, debugger, callPath);
+                },
                 mediaService: new MediaProcessingService(), imageService: new ImageCompositionService(),
                 inputReader: _inputs, staticCaptureService: this, videoService: this,
                 textRecognitionService: text, barcodeRecognitionService: barcode,
@@ -61,7 +91,8 @@ namespace RitsukageGif.Desktop
                 formulaOutputService: StructuredRecognitionProcess.Shared,
                 tableOutputService: new TableOutputService(), formulaDocumentService: new FormulaDocxService(),
                 tableDataService: new TableDataService(), tableEditService: TableEditorService.Shared,
-                manageRecordingLifecycle: false);
+                manageRecordingLifecycle: false, sceneHostProvider: () => _presets.ActiveScript,
+                resourceScope: resources);
         }
 
         private async Task ApplyActionScriptCommandAsync(PresetAction action, CancellationToken token)
@@ -76,14 +107,29 @@ namespace RitsukageGif.Desktop
             if (action.Kind == "stop") outcome.EnsureCompleted();
         }
 
-        private async Task ExecuteScriptActionAsync(GlobalActionBinding action, CancellationToken token)
+        private async Task<ScreenshotInvocation?> ExecuteScriptActionAsync(GlobalActionBinding action,
+            ActionScriptCallPath? callPath, CommandOperation? commandOwner, CancellationToken token)
         {
-            await Dispatcher.UIThread.InvokeAsync(async () =>
+            return await Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                token.ThrowIfCancellationRequested();
-                if (!CanExecuteAction(action)) throw new InvalidOperationException(UiText.Get("CommandNotReady"));
-                await ExecuteActionCoreAsync(action);
-                token.ThrowIfCancellationRequested();
+                var previous = _actionScriptCallPath.Value;
+                var previousCommand = _scriptCommand.Value;
+                _actionScriptCallPath.Value = callPath;
+                _scriptCommand.Value = commandOwner;
+                try
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (!CanExecuteAction(action)) throw new InvalidOperationException(UiText.Get("CommandNotReady"));
+                    var result = await ExecuteActionCoreAsync(action, token, true,
+                        true);
+                    token.ThrowIfCancellationRequested();
+                    return result;
+                }
+                finally
+                {
+                    _actionScriptCallPath.Value = previous;
+                    _scriptCommand.Value = previousCommand;
+                }
             });
         }
 

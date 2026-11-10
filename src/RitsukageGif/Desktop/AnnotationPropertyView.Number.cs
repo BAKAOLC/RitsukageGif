@@ -12,17 +12,30 @@ namespace RitsukageGif.Desktop
             panel.Children.Add(NumberStyleChooser());
             panel.Children.Add(NextNumber());
             panel.Children.Add(NumberFormatChooser());
-            panel.Children.Add(NumberInput("AnnotationNumberSize", 1.7, 1740.8,
-                () => _session.FontSize * 1.7, value => _session.UpdateSelectedStyleAsync(fontSize: value / 1.7)));
-            panel.Children.Add(NumberLeaderChooser());
-            panel.Children.Add(NumberCaptionProperties());
+            panel.Children.Add(HoverSizeInput("AnnotationNumberSize", 1, _session.MaximumBrushThickness,
+                () => _session.Thickness, value => _session.UpdateSelectedStyleAsync(thickness: value)));
             panel.Children.Add(Palette());
+            var caption = NumberCaptionProperties();
+            var leader = NumberLeaderChooser();
+            caption.IsVisible = leader.IsVisible = false;
+            panel.Children.Add(caption);
+            panel.Children.Add(leader);
+            var advanced = Button("AnnotationNumberAdvanced");
+            var chevron = DropDownChevron.Create(advanced);
+            advanced.Content = chevron;
+            advanced.Click += (_, _) =>
+            {
+                if (_disposed) return;
+                caption.IsVisible = leader.IsVisible = !caption.IsVisible;
+                chevron.RenderTransform = new RotateTransform(caption.IsVisible ? 180 : 0);
+            };
+            panel.Children.Add(advanced);
             return panel;
         }
 
-        private ComboBox NumberFormatChooser()
+        private AnnotationChoiceComboBox NumberFormatChooser()
         {
-            var combo = new ComboBox
+            var combo = new AnnotationChoiceComboBox
             {
                 Width = 94, Height = 28, MinHeight = 0, Margin = new(2), Padding = new(6, 0),
                 VerticalContentAlignment = VerticalAlignment.Center,
@@ -64,21 +77,12 @@ namespace RitsukageGif.Desktop
                             : Brushes.Transparent;
                         var preview = (AnnotationNumberStylePreview)choice.Content!;
                         preview.Ink = _session.Color;
-                        preview.InvalidateVisual();
+                        preview.TextColor = _session.NumberForeground(_session.Color);
                     });
                     styles.Children.Add(choice);
                 }
 
                 content.Children.Add(styles);
-                content.Children.Add(Toggle("AnnotationNumberAutomaticOutline", "A", p => p.NumberAutomaticOutline,
-                    (p, value) => p with { NumberAutomaticOutline = value }));
-                var picker = ColorPicker("AnnotationNumberOutlineColor", () => _session.Properties.NumberOutlineColor,
-                    color => _session.UpdateSelectedPropertiesAsync(_session.Properties with
-                    {
-                        NumberOutlineColor = color,
-                    }));
-                _refresh.Add(() => picker.IsEnabled = !_session.Properties.NumberAutomaticOutline);
-                content.Children.Add(Labeled("AnnotationNumberOutlineColor", picker));
                 return content;
             });
             button.Width = 46;
@@ -92,7 +96,7 @@ namespace RitsukageGif.Desktop
             {
                 current.Style = _session.Properties.NumberStyle;
                 current.Ink = _session.Color;
-                current.InvalidateVisual();
+                current.TextColor = _session.NumberForeground(_session.Color);
             });
             return button;
         }
@@ -147,30 +151,39 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private Button NumberCaptionProperties()
+        private StackPanel NumberCaptionProperties()
         {
-            return Popup("AnnotationNumberCaption", "AnimationText", () =>
+            var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3 };
+            content.Children.Add(Font());
+            content.Children.Add(Toggle("AnnotationNumberCaptionOutline", "A", p => p.NumberCaptionOutline,
+                (p, value) => p with { NumberCaptionOutline = value }));
+            content.Children.Add(Toggle("AnnotationNumberCaptionGuide", "—", p => p.NumberCaptionGuide,
+                (p, value) => p with { NumberCaptionGuide = value }));
+            double[] scales = [.2, .4, .6, .8, 1];
+            var scale = new AnnotationChoiceComboBox
             {
-                var content = new StackPanel { Spacing = 4 };
-                var edit = Button("AnnotationNumberCaption", icon: "AnimationText");
-                edit.Click += (_, _) => ShowTextEditor(edit);
-                _refresh.Add(() => edit.IsEnabled = _session.SelectedTool == ScreenshotTool.Number);
-                content.Children.Add(edit);
-                content.Children.Add(Font());
-                var styles = new StackPanel { Orientation = Orientation.Horizontal };
-                styles.Children.Add(Toggle("AnimationBold", "B", p => p.Bold, (p, value) => p with { Bold = value }));
-                styles.Children.Add(Toggle("AnimationItalic", "I", p => p.Italic,
-                    (p, value) => p with { Italic = value }));
-                content.Children.Add(styles);
-                content.Children.Add(Labeled("AnnotationNumberCaptionScale",
-                    PropertyNumber("AnnotationNumberCaptionScale", 25, 400, p => p.NumberCaptionScale * 100,
-                        (p, value) => p with { NumberCaptionScale = value / 100 }, true)));
-                content.Children.Add(Toggle("AnnotationNumberCaptionGuide", "—", p => p.NumberCaptionGuide,
-                    (p, value) => p with { NumberCaptionGuide = value }));
-                content.Children.Add(Toggle("AnnotationNumberCaptionOutline", "A", p => p.NumberCaptionOutline,
-                    (p, value) => p with { NumberCaptionOutline = value }));
-                return content;
-            });
+                Width = 100, Height = 28, MinHeight = 0, Margin = new(2), Padding = new(6, 0),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                ItemsSource = new[]
+                {
+                    UiText.Get("AnnotationSizeSmallest"), UiText.Get("AnnotationSizeSmall"),
+                    UiText.Get("AnnotationSizeMedium"), UiText.Get("AnnotationSizeLarge"),
+                    UiText.Get("AnnotationSizeLargest"),
+                },
+            };
+            ToolTip.SetTip(scale, UiText.Get("AnimationFontSize"));
+            scale.SelectionChanged += async (_, _) =>
+            {
+                if (!_disposed && !_refreshing && scale.SelectedIndex >= 0)
+                    await _session.UpdateSelectedPropertiesAsync(_session.Properties with
+                    {
+                        NumberCaptionScale = scales[scale.SelectedIndex],
+                    });
+            };
+            _refresh.Add(() => scale.SelectedIndex = Array.FindIndex(scales,
+                value => Math.Abs(value - _session.Properties.NumberCaptionScale) < .001));
+            content.Children.Add(scale);
+            return content;
         }
     }
 }

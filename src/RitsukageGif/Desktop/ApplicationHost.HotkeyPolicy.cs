@@ -171,6 +171,8 @@ namespace RitsukageGif.Desktop
             bool resumeShortcut = false)
         {
             if (IsClosing || IsConfiguring || GlobalInputCapture.Active) return "HotkeyCapturingInput";
+            if (action is not null && GlobalActionUnavailableReasonKey(action.Kind) is { } unavailable)
+                return unavailable;
             if (_globalShortcutsSuspended && !resumeShortcut) return "HotkeyManuallySuspended";
             var needsProgram = Settings.HotkeyPolicy.IgnoredPrograms.Count != 0 ||
                                action?.IgnoredPrograms.Count > 0;

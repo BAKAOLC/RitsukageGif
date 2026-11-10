@@ -56,7 +56,7 @@ if ($IsMacOS) {
     $nativeOutput = & pkg-config --cflags --libs gio-2.0 gio-unix-2.0 json-glib-1.0 libpipewire-0.3
     if ($LASTEXITCODE -ne 0) { throw 'Portal capture build dependencies are missing.' }
     $nativeFlags = @(($nativeOutput -join ' ') -split '\s+' | Where-Object { $_ })
-    $captureSources = @('portal-capture.c', 'portal-frame.c', 'portal-video.c', 'portal-scroll-input.c') | ForEach-Object { Join-Path $root "native/linux/$_" }
+    $captureSources = @('portal-capture.c', 'portal-frame.c', 'portal-video.c', 'portal-scroll-input.c', 'portal-producer.c') | ForEach-Object { Join-Path $root "native/linux/$_" }
     & cc -std=c11 -D_GNU_SOURCE -O2 -Wall -Wextra -Werror @captureSources -o (Join-Path $publish 'RitsukageGif.Capture') @nativeFlags -lm
     if ($LASTEXITCODE -ne 0) { throw 'Portal capture helper build failed.' }
     $accessibilityOutput = & pkg-config --cflags --libs atspi-2 gobject-2.0 x11
@@ -81,6 +81,8 @@ if ($IsMacOS) {
     $printNativeOutput = & pkg-config --cflags --libs gio-2.0 gio-unix-2.0
     if ($LASTEXITCODE -ne 0) { throw 'Portal print build dependencies are missing.' }
     $printNativeFlags = @(($printNativeOutput -join ' ') -split '\s+' | Where-Object { $_ })
+    & cc -std=c11 -O2 -Wall -Wextra -Werror (Join-Path $root 'native/linux/capture-exclusion-kwin.c') -o (Join-Path $publish 'RitsukageGif.CaptureExclusion') @printNativeFlags
+    if ($LASTEXITCODE -ne 0) { throw 'Capture exclusion helper build failed.' }
     & cc -std=c11 -O2 -Wall -Wextra -Werror (Join-Path $root 'native/linux/portal-print.c') -o (Join-Path $publish 'RitsukageGif.Print') @printNativeFlags -lm
     if ($LASTEXITCODE -ne 0) { throw 'Portal print helper build failed.' }
     $trayFlagsOutput = & pkg-config --cflags --libs gio-unix-2.0

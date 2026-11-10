@@ -6,8 +6,10 @@ namespace RitsukageGif.Desktop
         private int _controlRevision;
 
         private WindowTarget? CurrentControlTarget => WindowSource
-            ? _selectedTarget ?? _hoveredTarget
-            : _targets.FirstOrDefault(candidate => candidate.Bounds.Contains(_pointer));
+            ? ObserveDetectionTarget((_selectedTarget ?? _hoveredTarget) is { } target
+                ? WindowLocator.RefreshCandidate(target)
+                : null)
+            : CandidateAtPoint(_pointer);
 
         private async Task<IReadOnlyList<WindowControlTarget>> FindControlHierarchyAsync(WindowTarget target,
             PixelPoint point, CancellationToken token)

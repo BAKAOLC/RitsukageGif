@@ -1,7 +1,4 @@
-using System.Diagnostics;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
-using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 
@@ -10,7 +7,7 @@ namespace RitsukageGif.Desktop
     internal sealed partial class PinnedDocumentWindow
     {
         private Bitmap? _documentBitmap;
-        private ListBox? _fileList;
+        private ItemsControl? _fileList;
         private Task<byte[]?>? _formulaPngTask;
         private bool _restoredLayout;
 
@@ -27,6 +24,7 @@ namespace RitsukageGif.Desktop
                 case PinnedHtmlDocument html when !IgnoreFormat:
                     var rich = PinnedHtmlView.Create(html, _htmlResources ??= PinnedHtmlView.CreateResources());
                     rich.LinkRequested += OpenHtmlLink;
+                    rich.SceneContentChanged += (_, _) => DocumentAnnotationLayoutChanged(true);
                     _textView = rich;
                     _surface.Child = rich;
                     break;
@@ -42,47 +40,11 @@ namespace RitsukageGif.Desktop
                     };
                     _formulaPngTask = RenderFormulaAsync(formula, formulaImage);
                     break;
-                case PinnedFilesDocument files:
-                    var list = new ListBox
-                    {
-                        ItemsSource = files.Paths, MaxHeight = 480, BorderThickness = new(0),
-                        Background = Brushes.Transparent,
-                        ItemTemplate = new FuncDataTemplate<string>((path, container) =>
-                        {
-                            var file = new Button
-                            {
-                                Tag = path,
-                                Content = new TextBlock
-                                {
-                                    Text = Path.GetFileName(Path.TrimEndingDirectorySeparator(path)),
-                                    TextTrimming = TextTrimming.CharacterEllipsis,
-                                },
-                                HorizontalAlignment = HorizontalAlignment.Stretch,
-                                HorizontalContentAlignment = HorizontalAlignment.Left,
-                                Padding = new(6, 4), Background = Brushes.Transparent,
-                            };
-                            ToolTip.SetTip(file, path);
-                            file.DoubleTapped += (sender, args) =>
-                            {
-                                args.Handled = true;
-                                _ = RunAsync(() =>
-                                {
-                                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-                                    return Task.CompletedTask;
-                                });
-                            };
-                            var menu = new ContextMenu();
-                            menu.Items.Add(Command("PinnedFileCopy", () => CopyFilesAsync([path])));
-                            menu.Items.Add(Command("PinnedFileCopyPath", () => CopyTextAsync(path)));
-                            file.ContextMenu = menu;
-                            return file;
-                        }),
-                    };
-
-                    _fileList = list;
-                    list.AddHandler(ScrollViewer.ScrollChangedEvent,
-                        (_, _) => StateChanged?.Invoke(this, EventArgs.Empty));
-                    _surface.Child = list;
+                case PinnedFilesDocument:
+                    _surface.Padding = new(0);
+                    _surface.Background = Brushes.White;
+                    _fileList = CreateFileGrid(true);
+                    _surface.Child = _fileList;
                     break;
                 case PinnedColorDocument color:
                     _textView = new PinnedTextView(color.Value) { FontSize = 16 };
@@ -102,17 +64,23 @@ namespace RitsukageGif.Desktop
                     break;
             }
 
+            DocumentAnnotationLayoutChanged(true);
+            if (_isThumbnail) ApplyDocumentThumbnailGeometry();
             if (_textView is not null)
             {
-                _textView.SetSelectable(Selectable);
-                _textView.ScrollOffsetChanged += (_, _) => StateChanged?.Invoke(this, EventArgs.Empty);
+                _textView.SetSelectable(Selectable && (!_isThumbnail || PreferencesProvider().ThumbnailSelectableText));
+                _textView.ScrollOffsetChanged += (_, _) =>
+                {
+                    DocumentAnnotationLayoutChanged(false);
+                    StateChanged?.Invoke(this, EventArgs.Empty);
+                };
             }
         }
 
         private void SetSelectable(bool value)
         {
             Selectable = value;
-            _textView?.SetSelectable(value);
+            _textView?.SetSelectable(value && (!_isThumbnail || PreferencesProvider().ThumbnailSelectableText));
 
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -135,11 +103,14 @@ namespace RitsukageGif.Desktop
 
                 using (var stream = new MemoryStream(encoded)) _documentBitmap = new(stream);
                 image.Source = _documentBitmap;
-                if (!_restoredLayout)
+                if (!_restoredLayout && !_isThumbnail)
                 {
                     FitInitialContent();
                     RestoreToScreen();
                 }
+
+                ApplyDocumentThumbnailRequest();
+                if (_isThumbnail) ApplyDocumentThumbnailGeometry();
 
                 return encoded;
             }
@@ -193,7 +164,7 @@ namespace RitsukageGif.Desktop
             finally
             {
                 _busy = false;
-                if (_closed) _lifetime.Dispose();
+                TryReleaseDocumentSources();
             }
         }
     }

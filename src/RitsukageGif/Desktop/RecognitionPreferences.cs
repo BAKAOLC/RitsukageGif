@@ -8,8 +8,10 @@ namespace RitsukageGif.Desktop
         public FormulaLatexFormat LatexFormat { get; set; } = FormulaLatexFormat.DisplayDollar;
         public bool ShowOriginalImage { get; set; } = true;
         public bool ShowDialogOnRecognition { get; set; } = true;
+        public bool ShowDialogOnCopySelected { get; set; } = true;
         public bool ShowDialogOnCopyAll { get; set; } = true;
         public string LanguageTag { get; set; } = "";
+        public RecognitionDialogPreferences Dialog { get; set; } = new();
 
         public RecognitionPreferences Normalize()
         {
@@ -25,6 +27,8 @@ namespace RitsukageGif.Desktop
                 CopyFormat = Enum.IsDefined(CopyFormat) ? CopyFormat : FormulaCopyFormat.Latex,
                 LatexFormat = Enum.IsDefined(LatexFormat) ? LatexFormat : FormulaLatexFormat.DisplayDollar,
                 LanguageTag = language,
+                // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+                Dialog = (Dialog ?? new()).Normalize(),
             };
         }
     }

@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
         SimulateWheelUp,
         SimulateWheelDown,
         ToggleControls,
+        TogglePolylineArrows,
         NextShapeMode,
         PreviousShapeMode,
         ToggleSource,

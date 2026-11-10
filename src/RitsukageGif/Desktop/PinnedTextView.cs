@@ -9,7 +9,7 @@ using AvaloniaEdit;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class PinnedTextView : TextEditor, IPinnedDocumentTextView
+    internal sealed partial class PinnedTextView : TextEditor, IPinnedDocumentTextView
     {
         private readonly int[] _breaks;
         private readonly string _original;

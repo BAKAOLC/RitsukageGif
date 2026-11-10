@@ -1,12 +1,11 @@
 using Avalonia.Controls;
-using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class RecognitionWindow : Window
+    internal sealed partial class RecognitionWindow : Window
     {
         private readonly BarcodeRecognitionService _barcode = new();
         private readonly Button _cancel = new();
@@ -16,7 +15,11 @@ namespace RitsukageGif.Desktop
 
         private readonly Button _copy = new();
         private readonly ReadOnlyMemory<byte> _image;
-        private readonly ComboBox _language = new() { MinWidth = 220 };
+        private readonly Button _install = new();
+
+        private readonly ComboBox _language = new()
+            { MinWidth = 120, HorizontalAlignment = HorizontalAlignment.Stretch };
+
         private readonly CancellationTokenSource _lifetime = new();
         private readonly RecognitionMode _mode;
         private readonly OcrRecognitionService _ocr = new();
@@ -40,11 +43,21 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _work;
 
         private RecognitionWindow(ReadOnlyMemory<byte> image, RecognitionMode mode, RecognitionPreferences preferences,
-            string? initialText, TranslationPreferences? translationPreferences)
+            string? initialText, OcrRecognitionResult? initialResult, TranslationPreferences? translationPreferences,
+            Action? copyDirectlyNextTime,
+            Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged,
+            Action<bool>? originalImageVisibilityChanged, ISpeechPlaybackService? speech)
         {
             _image = image;
             _mode = mode;
             _preferences = preferences.Normalize();
+            _dialogOptions = _preferences.Dialog;
+            _copyDirectlyNextTime = copyDirectlyNextTime;
+            _dialogPreferencesChanged = dialogPreferencesChanged;
+            _originalImageVisibilityChanged = originalImageVisibilityChanged;
+            _speechService = speech;
+            _recognizedResult = initialResult;
+            _recognizedPlainText = initialResult?.Text ?? initialText ?? "";
             Width = 680;
             Height = 500;
             MinWidth = 420;
@@ -54,7 +67,13 @@ namespace RitsukageGif.Desktop
             Bind(TitleProperty, LiveText.Resource(mode == RecognitionMode.Text ? "RecognizeText" : "RecognizeBarcode"));
             _run.Bind(ContentProperty, LiveText.Resource("RecognitionRetry"));
             _cancel.Bind(ContentProperty, LiveText.Resource("Cancel"));
-            _copy.Bind(ContentProperty, LiveText.Resource("ScreenshotCopy"));
+            _install.Bind(ContentProperty, LiveText.Resource("RecognitionInstallComponents"));
+            _install.IsVisible = mode == RecognitionMode.Text && !image.IsEmpty;
+            _install.Click += (_, _) =>
+            {
+                if (!_busy) _operation = InstallAsync();
+            };
+            if (mode != RecognitionMode.Text) _copy.Bind(ContentProperty, LiveText.Resource("ScreenshotCopy"));
             _translate.Bind(ContentProperty, LiveText.Resource("TranslationRun"));
             _translate.IsVisible = translationPreferences is not null;
             _translate.Click += async (_, _) =>
@@ -78,87 +97,124 @@ namespace RitsukageGif.Desktop
             close.Click += (_, _) => Close();
             _run.Click += (_, _) => StartRecognition();
             _cancel.Click += (_, _) => _work?.Cancel();
-            _copy.Click += async (_, _) =>
+            _copy.Click += (_, _) =>
             {
-                try
-                {
-                    var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-                    await clipboard.SetTextAsync(_text.Text ?? "");
-                    await clipboard.FlushAsync();
-                }
-                catch (Exception error)
-                {
-                    _status.Text = error.Message;
-                }
+                if (_copyTask.IsCompleted) _copyTask = CopyButtonAsync();
             };
             _text.TextChanged += (_, _) =>
             {
                 _copy.IsEnabled = !string.IsNullOrEmpty(_text.Text);
                 _translate.IsEnabled = !_busy && !string.IsNullOrWhiteSpace(_text.Text);
+                RefreshTextWordRanges();
+                TextSelectionChanged();
             };
             _codes.SelectionChanged += (_, _) =>
             {
                 if (_codes.SelectedItem is ComboBoxItem { Tag: BarcodeRecognitionResult result })
                     _text.Text = result.Text;
             };
-            var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
-            label.Bind(TextBlock.TextProperty, LiveText.Resource("RecognitionLanguage"));
-            var languages = new StackPanel
+            if (mode == RecognitionMode.Text)
             {
-                Orientation = Orientation.Horizontal, Spacing = 8, IsVisible = mode == RecognitionMode.Text,
-                Children = { label, _language },
-            };
-            var header = new StackPanel { Spacing = 8, Children = { languages, _codes, _status } };
-            var footer = new StackPanel
+                Content = BuildTextContent();
+            }
+            else
             {
-                Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-                Spacing = 8, Children = { _run, _cancel, _translate, _copy, close },
+                var header = new StackPanel { Spacing = 8, Children = { _codes, _status } };
+                var footer = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
+                    Spacing = 8, Children = { _run, _cancel, _translate, _copy, close },
+                };
+                var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), RowSpacing = 12, Margin = new(16) };
+                layout.Children.Add(header);
+                Grid.SetRow(_text, 1);
+                layout.Children.Add(_text);
+                Grid.SetRow(footer, 2);
+                layout.Children.Add(footer);
+                Content = layout;
+            }
+
+            if (initialText is null && initialResult is null)
+            {
+                Opened += (_, _) => StartRecognition();
+            }
+            else
+            {
+                if (mode == RecognitionMode.Text) ApplyTextFormatting();
+                else _text.Text = initialText;
+                if (mode == RecognitionMode.Text && !image.IsEmpty)
+                    Opened += (_, _) => _operation = InitializeLanguagesAsync();
+            }
+
+            Closed += (_, _) =>
+            {
+                if (_mode == RecognitionMode.Text && _copyDirectly.IsChecked == true) _copyDirectlyNextTime?.Invoke();
+                _lifetime.Cancel();
             };
-            var layout = new Grid { RowDefinitions = new("Auto,*,Auto"), RowSpacing = 12, Margin = new(16) };
-            layout.Children.Add(header);
-            Grid.SetRow(_text, 1);
-            layout.Children.Add(_text);
-            Grid.SetRow(footer, 2);
-            layout.Children.Add(footer);
-            Content = layout;
-            if (initialText is null) Opened += (_, _) => StartRecognition();
-            else _text.Text = initialText;
-            Closed += (_, _) => _lifetime.Cancel();
             SetBusy(false);
         }
 
-        internal static async Task ShowAsync(Window owner, ReadOnlyMemory<byte> image, RecognitionMode mode,
+        internal static async Task ShowAsync(Window? owner, ReadOnlyMemory<byte> image, RecognitionMode mode,
             Func<CancellationToken, Task>? recognized = null,
             RecognitionPreferences? preferences = null, string? initialText = null,
             TranslationPreferences? translationPreferences = null,
-            Action<Window, IReadOnlyList<string>>? pinFormula = null,
             Action<FormulaCopyFormat>? copyFormatChanged = null, Action<bool>? originalImageVisibilityChanged = null,
-            Action<FormulaLatexFormat>? latexFormatChanged = null, CancellationToken token = default)
+            Action<FormulaLatexFormat>? latexFormatChanged = null,
+            Action? copyDirectlyNextTime = null,
+            Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged = null,
+            ISpeechPlaybackService? speech = null, OcrRecognitionResult? initialResult = null,
+            Func<int>? imageSaveQuality = null, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
             if (mode is RecognitionMode.Table or RecognitionMode.Formula)
             {
                 var normalized = (preferences ?? new()).Normalize();
                 await StructuredRecognitionWindow.ShowAsync(owner, image, mode == RecognitionMode.Formula,
-                    recognized, token, pinFormula, normalized.CopyFormat, copyFormatChanged,
+                    recognized, token, normalized.CopyFormat, copyFormatChanged,
                     normalized.ShowOriginalImage, originalImageVisibilityChanged, normalized.LatexFormat,
-                    latexFormatChanged);
+                    latexFormatChanged, imageSaveQuality, normalized.Dialog, dialogPreferencesChanged);
                 return;
             }
 
-            var window = new RecognitionWindow(image, mode, preferences ?? new(), initialText, translationPreferences)
+            var window = new RecognitionWindow(image, mode, preferences ?? new(), initialText, initialResult,
+                    translationPreferences,
+                    copyDirectlyNextTime, dialogPreferencesChanged, originalImageVisibilityChanged, speech)
                 { _recognized = recognized };
-            await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));
+            await using var registration = token.Register(static state =>
+                Dispatcher.UIThread.Post(((RecognitionWindow)state!).CancelAndClose), window);
             try
             {
-                await window.ShowDialog(owner);
+                if (owner is { IsVisible: true })
+                {
+                    await window.ShowDialog(owner);
+                }
+                else
+                {
+                    var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    window.Closed += (_, _) => completion.TrySetResult();
+                    window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    window.Show();
+                    await completion.Task;
+                }
             }
             finally
             {
                 await window._lifetime.CancelAsync();
                 await window._operation;
+                await window._copyTask;
+                await window._closingCopyTask;
+                await window._originalTask;
+                if (window._speechControls is { } controls) await controls.DisposeAsync();
+                window._originalBitmap?.Dispose();
                 window._lifetime.Dispose();
             }
+        }
+
+        private void CancelAndClose()
+        {
+            if (!IsVisible) return;
+            _lifetime.Cancel();
+            Close();
         }
 
         private void StartRecognition()
@@ -180,34 +236,14 @@ namespace RitsukageGif.Desktop
             {
                 if (_mode == RecognitionMode.Text)
                 {
-                    if (!_languagesLoaded)
-                    {
-                        var capabilities = await _ocr.GetCapabilitiesAsync(work.Token);
-                        work.Token.ThrowIfCancellationRequested();
-                        if (!capabilities.Available)
-                        {
-                            _status.Text = UiText.Get("RecognitionUnavailable");
-                            ToolTip.SetTip(_status, capabilities.FailureReason);
-                            return;
-                        }
-
-                        _language.Items.Clear();
-                        var automatic = new ComboBoxItem();
-                        automatic.Bind(ContentProperty, LiveText.Resource("RecognitionAutomatic"));
-                        _language.Items.Add(automatic);
-                        foreach (var language in capabilities.Languages)
-                            _language.Items.Add(new ComboBoxItem
-                                { Content = language.DisplayName, Tag = language.Tag });
-                        var preferred = RecognitionOutput.Language(_preferences, capabilities.Languages);
-                        _language.SelectedItem = _language.Items.OfType<ComboBoxItem>()
-                            .FirstOrDefault(item => Equals(item.Tag, preferred)) ?? automatic;
-                        _languagesLoaded = true;
-                    }
+                    if (!await LoadLanguagesAsync(work.Token)) return;
 
                     var languageTag = (_language.SelectedItem as ComboBoxItem)?.Tag as string;
                     var result = await _ocr.RecognizeImageAsync(_image, languageTag, work.Token);
                     work.Token.ThrowIfCancellationRequested();
-                    _text.Text = RecognitionTextFormatter.Format(result, _preferences);
+                    _recognizedResult = result;
+                    _recognizedPlainText = result.Text;
+                    ApplyTextFormatting();
                 }
                 else
                 {
@@ -248,15 +284,103 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private async Task InitializeLanguagesAsync()
+        {
+            using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            _work = work;
+            UpdateTextState();
+            try
+            {
+                await LoadLanguagesAsync(work.Token);
+            }
+            catch (OperationCanceledException) when (work.IsCancellationRequested)
+            {
+                if (!_lifetime.IsCancellationRequested) _status.Text = UiText.Get("RecognitionCancelled");
+            }
+            catch (Exception error)
+            {
+                if (!_lifetime.IsCancellationRequested) _status.Text = error.Message;
+            }
+            finally
+            {
+                _work = null;
+                UpdateTextState();
+            }
+        }
+
+        private async Task<bool> LoadLanguagesAsync(CancellationToken token)
+        {
+            if (_languagesLoaded) return true;
+            var offline = await StructuredRecognitionProcess.Shared.GetTextCapabilitiesAsync(token);
+            token.ThrowIfCancellationRequested();
+            _install.IsVisible = !offline.Available;
+            var capabilities = await _ocr.GetCapabilitiesAsync(token);
+            token.ThrowIfCancellationRequested();
+            if (!capabilities.Available)
+            {
+                _status.Text = UiText.Get("RecognitionUnavailable");
+                ToolTip.SetTip(_status, capabilities.FailureReason);
+                return false;
+            }
+
+            ToolTip.SetTip(_status, null);
+            _language.Items.Clear();
+            var automatic = new ComboBoxItem();
+            automatic.Bind(ContentProperty, LiveText.Resource("RecognitionAutomatic"));
+            _language.Items.Add(automatic);
+            foreach (var language in capabilities.Languages)
+                _language.Items.Add(new ComboBoxItem { Content = language.DisplayName, Tag = language.Tag });
+            var preferred = RecognitionOutput.Language(_preferences, capabilities.Languages);
+            _language.SelectedItem = _language.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(item => Equals(item.Tag, preferred)) ?? automatic;
+            _languagesLoaded = true;
+            return true;
+        }
+
         private void SetBusy(bool busy)
         {
             _busy = busy;
-            _run.IsEnabled = !busy;
+            _run.IsEnabled = !busy && !_image.IsEmpty;
+            _install.IsEnabled = !busy;
             _cancel.IsEnabled = busy;
             _language.IsEnabled = !busy && _languagesLoaded;
             _text.IsEnabled = !busy;
             _copy.IsEnabled = !string.IsNullOrEmpty(_text.Text);
             _translate.IsEnabled = !busy && !string.IsNullOrWhiteSpace(_text.Text);
+            if (_mode == RecognitionMode.Text) UpdateTextState();
+        }
+
+        private async Task InstallAsync()
+        {
+            using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            _work = work;
+            SetBusy(true);
+            var installed = false;
+            try
+            {
+                await RecognitionComponentInstaller.InstallAsync(StructuredRecognitionKind.Text,
+                    new Progress<string>(text =>
+                    {
+                        if (!_lifetime.IsCancellationRequested) _status.Text = text;
+                    }), work.Token);
+                _languagesLoaded = false;
+                installed = true;
+            }
+            catch (OperationCanceledException) when (work.IsCancellationRequested)
+            {
+                if (!_lifetime.IsCancellationRequested) _status.Text = UiText.Get("RecognitionCancelled");
+            }
+            catch (Exception error)
+            {
+                if (!_lifetime.IsCancellationRequested) _status.Text = error.Message;
+            }
+            finally
+            {
+                _work = null;
+                SetBusy(false);
+            }
+
+            if (installed && !_lifetime.IsCancellationRequested) await RecognizeAsync();
         }
     }
 }

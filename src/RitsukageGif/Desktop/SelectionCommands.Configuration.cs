@@ -26,6 +26,7 @@ namespace RitsukageGif.Desktop
                             or SelectionCommand.ToggleCoordinateMode
                             or SelectionCommand.ClearAnnotations
                             or SelectionCommand.RenumberAnnotations or SelectionCommand.FinishPolyline
+                            or SelectionCommand.TogglePolylineArrows
                             ? "BuiltinShortcutScreenshotContext"
                             : "BuiltinShortcutSelectionContext",
                         Array.AsReadOnly<string>([
@@ -41,7 +42,7 @@ namespace RitsukageGif.Desktop
 
         internal static IReadOnlyList<SelectionCommandDefinition> SnapshotBindings()
         {
-            return Array.AsReadOnly(_definitions);
+            return _definitions;
         }
 
         internal static IReadOnlyList<string> Validate(Dictionary<string, string[]>? overrides, bool mixing = false)
@@ -54,7 +55,7 @@ namespace RitsukageGif.Desktop
             var errors = BuildBindings(overrides, out var definitions, mixing);
             if (errors.Count == 0)
             {
-                _definitions = definitions;
+                _definitions = Array.AsReadOnly(definitions);
                 BuiltinShortcuts.ConfigureExternal(overrides, mixing);
                 BuiltinKeys.Configure(mixing);
                 BindingsChanged?.Invoke();
@@ -69,6 +70,12 @@ namespace RitsukageGif.Desktop
             return BuildBindings(overrides, out _, mixing);
         }
 
+        internal static void CollectAnnotationOverrides(Dictionary<string, string[]>? settings, bool mixing,
+            List<BuiltinShortcutDefaultOverride> overrides)
+        {
+            BuildBindings(settings, out _, mixing, overrides);
+        }
+
         private static string ShortcutLabel(SelectionShortcutDefinition definition)
         {
             return definition.DirectionKey == Key.None
@@ -79,11 +86,12 @@ namespace RitsukageGif.Desktop
         }
 
         private static List<SelectionShortcutIssue> BuildBindings(Dictionary<string, string[]>? overrides,
-            out SelectionCommandDefinition[] definitions, bool mixing)
+            out SelectionCommandDefinition[] definitions, bool mixing,
+            List<BuiltinShortcutDefaultOverride>? annotationOverrides = null)
         {
             var errors = new List<SelectionShortcutIssue>(BuiltinShortcuts.ValidateExternal(overrides, mixing));
             var result = new List<SelectionCommandDefinition>();
-            var gestures = new Dictionary<(Key, KeyModifiers), string>();
+            var gestures = new Dictionary<(Key, KeyModifiers), (string Id, SelectionCommand Command)>();
             foreach (var item in Catalog)
             {
                 var defaults = DefaultDefinitions.Where(definition => definition.Id == item.Id).ToArray();
@@ -116,21 +124,31 @@ namespace RitsukageGif.Desktop
                     var key = BuiltinKeys.Normalize(gesture.Key, mixing);
                     if (gestures.TryGetValue((key, gesture.KeyModifiers), out var existing))
                     {
-                        if (existing != item.Id)
-                            errors.Add(new(item.Id, existing, UiText.Get("SelectionShortcutConflict") + ": " + value +
-                                                              " — " +
-                                                              ShortcutLabel(Catalog.First(definition =>
-                                                                  definition.Id == existing)) + ", " +
-                                                              ShortcutLabel(item)));
-                        continue;
+                        if (existing.Id == item.Id) continue;
+                        var disjoint = (existing.Command, defaults[0].Command) is
+                            (SelectionCommand.ToggleControls, SelectionCommand.TogglePolylineArrows) or
+                            (SelectionCommand.TogglePolylineArrows, SelectionCommand.ToggleControls);
+                        if (!disjoint)
+                        {
+                            errors.Add(new(item.Id, existing.Id,
+                                UiText.Get("SelectionShortcutConflict") + ": " + value + " — " +
+                                ShortcutLabel(Catalog.First(definition => definition.Id == existing.Id)) + ", " +
+                                ShortcutLabel(item)));
+                            continue;
+                        }
+                    }
+                    else
+                    {
+                        gestures.Add((key, gesture.KeyModifiers), (item.Id, defaults[0].Command));
                     }
 
-                    gestures.Add((key, gesture.KeyModifiers), item.Id);
                     result.Add(defaults[0] with { Key = gesture.Key, Modifiers = gesture.KeyModifiers });
                 }
             }
 
             definitions = [.. result];
+            errors.AddRange(
+                BuiltinShortcuts.ValidateAnnotationBindings(definitions, overrides, mixing, annotationOverrides));
             return errors;
         }
     }

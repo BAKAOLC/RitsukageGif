@@ -21,8 +21,11 @@ namespace RitsukageGif.Desktop
             Presentation.Title.Refresh();
             Presentation.Attention.Refresh();
             RefreshWindowShadow();
+            PinnedBitmapSampling.Apply(_image, CurrentPreferences.SmoothScaling);
+            if (_hdrPreview is { } hdrPreview) hdrPreview.SmoothScaling = CurrentPreferences.SmoothScaling;
             EnsureTransformCommands();
-            if (!CanSelectImageText) ResetTextRecognition();
+            if (!CanSelectImageText) ClearTextSelection();
+            if (!CurrentPreferences.ShowTextPopupMenu) _textSelectionMenu?.IsOpen = false;
             ShowInTaskbar = !_canRestoreHidden() || (!Topmost && CurrentPreferences.ShowTaskbarWhenNotTopmost);
             if (IsLocked && CurrentPreferences.ShowLockIndicator)
             {
@@ -37,7 +40,7 @@ namespace RitsukageGif.Desktop
                         {
                             Width = 14, Height = 14, Stroke = AppTheme.Ink, StrokeThickness = 1.6,
                             Stretch = Stretch.Uniform,
-                            Data = Geometry.Parse("M5,10 H19 V22 H5 Z M8,10 V6 A4,4 0 0 1 16,6 V10"),
+                            Data = IconCatalog.GetGeometry("PinnedImageLockIndicator"),
                         },
                     };
                     _content.Children.Add(_lockIndicator);
@@ -57,9 +60,11 @@ namespace RitsukageGif.Desktop
         {
             return anchor switch
             {
-                PinnedZoomAnchor.TopLeft => new(0, 0),
+                PinnedZoomAnchor.TopLeft => new(PinnedWindowPresentation.ShadeInset,
+                    PinnedWindowPresentation.ShadeInset),
                 PinnedZoomAnchor.Pointer => point,
-                PinnedZoomAnchor.Center => _viewport.Bounds.Center,
+                PinnedZoomAnchor.Center => new(_viewport.Bounds.Center.X + PinnedWindowPresentation.ShadeInset,
+                    _viewport.Bounds.Center.Y + PinnedWindowPresentation.ShadeInset),
                 _ => throw new ArgumentOutOfRangeException(nameof(anchor)),
             };
         }

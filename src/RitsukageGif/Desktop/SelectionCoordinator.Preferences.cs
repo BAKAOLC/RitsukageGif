@@ -20,6 +20,30 @@ namespace RitsukageGif.Desktop
         internal CaptureDetectionMode DetectionMode { get; private set; } = CaptureDetectionMode.Windows;
         internal bool AuxiliaryVisible { get; private set; }
 
+        internal double InformationDensity
+        {
+            get
+            {
+                var region = Snapshot.Region;
+                var center = new PixelPoint(region.X + region.Width / 2, region.Y + region.Height / 2);
+                foreach (var screen in _screens.All)
+                    if (new PixelRect(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height)
+                        .Contains(center))
+                        return screen.Scaling;
+                return 1;
+            }
+        }
+
+        internal void SetInformationDisplay(SelectionSizeUnit unit, SelectionInfoItems items)
+        {
+            if (CapturePreferences.InformationUnit == unit && CapturePreferences.InformationItems == items) return;
+            CapturePreferences = CapturePreferences with { InformationUnit = unit, InformationItems = items };
+            SelectionLogger.ZLogDebug(
+                $"Selection information display changed. SelectionId={_selectionId} Unit={unit.ToString()} Items={items.ToString()}");
+            PreferencesChanged?.Invoke();
+            Refresh();
+        }
+
         private void PrepareOutsideExpansion()
         {
             _expandFrom = default;

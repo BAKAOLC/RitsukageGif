@@ -72,7 +72,7 @@ namespace RitsukageGif.Desktop
             close.Content = new Viewbox
             {
                 Width = 10, Height = 10,
-                Child = ToolbarIcon.Create(close, ToolbarIcon.TryGeometry("Cancel")!),
+                Child = ToolbarIcon.Create(close, ToolbarIcon.FindDefinition("Cancel")!),
             };
             close.HorizontalAlignment = HorizontalAlignment.Right;
             close.VerticalAlignment = VerticalAlignment.Top;

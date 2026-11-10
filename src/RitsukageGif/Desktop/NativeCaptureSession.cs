@@ -12,7 +12,6 @@ namespace RitsukageGif.Desktop
         private static readonly Lock SharedLock = new();
         private static NativeCaptureSession? _shared;
         private static long _sharedVersion;
-        private readonly bool _cursor, _window, _retainHdr;
         private readonly string _authorizationId = Guid.NewGuid().ToString("N");
         private readonly TaskCompletionSource _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly int _fps;
@@ -37,12 +36,25 @@ namespace RitsukageGif.Desktop
         private readonly long _generation = Interlocked.Increment(ref _generations);
         private static long _generations;
 
+        public static PixelRect? SourceBounds
+        {
+            get
+            {
+                lock (SharedLock)
+                {
+                    if (_shared is not { } session) return null;
+                    lock (session._gate)
+                        return session._frames is null ? null : session._sourceGeometry?.Bounds;
+                }
+            }
+        }
+
         private NativeCaptureSession(string mode, bool cursor, int fps, PixelRect? monitor = null, nint window = 0,
-            bool retainHdr = false, bool pointerInput = false)
+            bool retainHdr = false, bool pointerInput = false, string? includedWindowTitle = null)
         {
             _cursor = cursor;
             _retainHdr = retainHdr;
-            _window = mode == "window";
+            IsWindowSource = mode == "window";
             _fps = Math.Clamp(fps, 1, 120);
             var executable = Path.Combine(AppContext.BaseDirectory, "RitsukageGif.Capture");
             if (!File.Exists(executable))
@@ -66,6 +78,11 @@ namespace RitsukageGif.Desktop
 
             if (monitor is { } bounds && OperatingSystem.IsMacOS())
                 Add("--id", NativeDisplayCatalog.Resolve(bounds).DisplayId);
+            if (mode == "screen" && includedWindowTitle is not null && OperatingSystem.IsMacOS())
+            {
+                start.ArgumentList.Add("--include-window-title");
+                start.ArgumentList.Add(includedWindowTitle);
+            }
 
             if (window != 0)
             {
@@ -87,24 +104,11 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public static PixelRect? SourceBounds
-        {
-            get
-            {
-                lock (SharedLock)
-                {
-                    if (_shared is not { } session) return null;
-                    lock (session._gate)
-                        return session._frames is null ? null : session._sourceGeometry?.Bounds;
-                }
-            }
-        }
-
         public static bool SourceIsWindow
         {
             get
             {
-                lock (SharedLock) return _shared?._window ?? false;
+                lock (SharedLock) return _shared?.IsWindowSource ?? false;
             }
         }
 
@@ -115,12 +119,21 @@ namespace RitsukageGif.Desktop
                 lock (_gate) return !_disposed && _failure is null && !_process.HasExited;
             }
         }
+        private readonly bool _cursor, _retainHdr;
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _ownerReleased, 1) != 0) return;
+            ReleaseReference();
+        }
+
+        internal event Action? FrameAvailable;
+
+        internal void ReleaseReference()
+        {
             lock (_gate)
             {
-                if (_disposed) return;
+                if (--_references != 0) return;
                 _disposed = true;
             }
 
@@ -149,9 +162,10 @@ namespace RitsukageGif.Desktop
             _ = FinishAsync();
         }
 
-        public static NativeCaptureSession CreateScreen(PixelRect monitor, bool cursor, int fps, bool retainHdr = false)
+        public static NativeCaptureSession CreateScreen(PixelRect monitor, bool cursor, int fps, bool retainHdr = false,
+            string? includedWindowTitle = null)
         {
-            return new("screen", cursor, fps, monitor, retainHdr: retainHdr);
+            return new("screen", cursor, fps, monitor, retainHdr: retainHdr, includedWindowTitle: includedWindowTitle);
         }
 
         public static NativeCaptureSession CreateWindow(nint window, bool cursor, int fps = 60, bool retainHdr = false)
@@ -164,11 +178,7 @@ namespace RitsukageGif.Desktop
             lock (SharedLock)
             {
                 if (_shared is not { } session) return null;
-                lock (session._gate)
-                    return session._pointer is { } pointer
-                        ? new(pointer,
-                            session._cursorPixels is { } pixels ? (byte[])pixels.Clone() : null)
-                        : null;
+                return session.ReadCursor();
             }
         }
 
@@ -274,6 +284,7 @@ namespace RitsukageGif.Desktop
                         {
                             var metadata = packet.Metadata;
                             if (metadata.Capabilities is { } capabilities) _capabilities = capabilities;
+                            ObserveExclusionProof();
                             // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
                             switch (packet.Kind)
                             {
@@ -364,6 +375,8 @@ namespace RitsukageGif.Desktop
                             old?.Dispose();
                             _first.TrySetResult();
                         }
+
+                        FrameAvailable?.Invoke();
                     }
                     finally
                     {
@@ -399,6 +412,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 _first.TrySetException(failure);
+                _exclusionProofReady.TrySetResult(default);
             }
         }
 

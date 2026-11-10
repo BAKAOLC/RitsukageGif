@@ -25,6 +25,9 @@ namespace RitsukageGif.Desktop
                               (source.Hdr?.Pixels.Length ?? 0);
             var geometry = CaptureDecorationProcessor.ValidateBudget(dimensions.Width, dimensions.Height,
                 source.Decoration, sourceBytes, bytes * 4 + (includeHdr ? 8 : 0));
+            var windowRadius = source.Decoration.CornerRadius > 0
+                ? (source.Decoration.CornerRadius + geometry.ContentOffset.X) / source.CaptureScaling
+                : 0;
             var offset = new PixelPoint(checked(source.ContentOffset.X + geometry.ContentOffset.X),
                 checked(source.ContentOffset.Y + geometry.ContentOffset.Y));
             var origin = source.OutputOrigin is { } position
@@ -43,6 +46,7 @@ namespace RitsukageGif.Desktop
                 return source with
                 {
                     Png = png, Hdr = hdr, Decoration = CaptureDecoration.None,
+                    WindowShape = windowRadius > 0 ? new CaptureWindowShape(windowRadius, windowRadius) : null,
                     ContentOffset = offset, OutputOrigin = origin,
                 };
             }, token);

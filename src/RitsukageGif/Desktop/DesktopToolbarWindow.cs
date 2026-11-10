@@ -175,7 +175,7 @@ namespace RitsukageGif.Desktop
         {
             var button = new Button { Width = 30, Height = 30, Padding = new(6) };
             button.Content =
-                ToolbarIcon.Create(button, ToolbarIcon.TryGeometry(iconKey) ?? ToolbarIcon.Geometry(iconKey));
+                ToolbarIcon.Create(button, ToolbarIcon.FindDefinition(iconKey) ?? ToolbarIcon.GetDefinition(iconKey));
             ToolTip.SetTip(button, UiText.Get(name));
             return button;
         }

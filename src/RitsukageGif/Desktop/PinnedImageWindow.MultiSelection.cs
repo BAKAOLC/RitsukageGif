@@ -11,10 +11,10 @@ namespace RitsukageGif.Desktop
     {
         public Func<PinnedImageWindow, int>? SelectionCountProvider { get; set; }
         public Func<PinnedImageWindow, PinnedImageArrangement, bool>? CanArrangeSelectionProvider { get; set; }
-        public Action<PinnedImageWindow, PinnedImageArrangement>? ArrangeSelectionRequested { get; set; }
+        public Func<PinnedImageWindow, PinnedImageArrangement, Task>? ArrangeSelectionRequested { get; set; }
         public Func<PinnedImageWindow, Task>? SaveSelectionRequested { get; set; }
         public Func<PinnedImageWindow, bool>? CanSaveSelectionProvider { get; set; }
-        private bool CanArrangeSelection => !_closed && !IsInteractionLocked && _annotation is null;
+        private bool CanArrangeSelection => !_closed;
 
         private PixelRect SelectionLayoutBounds
         {
@@ -40,11 +40,8 @@ namespace RitsukageGif.Desktop
             var items = new List<(MenuItem Item, PinnedImageArrangement Arrangement)>();
             foreach (var (arrangement, action, textKey) in PinnedImageArrangementCommands.Catalog)
             {
-                var item = Command(textKey, () =>
-                {
-                    ArrangeSelectionRequested?.Invoke(this, arrangement);
-                    return Task.CompletedTask;
-                });
+                var item = Command(textKey,
+                    () => ArrangeSelectionRequested?.Invoke(this, arrangement) ?? Task.CompletedTask);
                 item.Tag = action;
                 item.Icon = PinnedSelectionIcon(item);
                 items.Add((item, arrangement));
@@ -94,7 +91,7 @@ namespace RitsukageGif.Desktop
         {
             return new()
             {
-                Data = Geometry.Parse("M3,3 V21 M7,6 H19 V9 H7 Z M7,14 H15 V17 H7 Z"),
+                Data = IconCatalog.GetGeometry("PinnedSelectionAlignMenu"),
                 [!Shape.StrokeProperty] = item[!ForegroundProperty],
                 StrokeThickness = 1.5, Width = 16, Height = 16,
                 Stretch = Stretch.Uniform,
@@ -111,11 +108,7 @@ namespace RitsukageGif.Desktop
 
             if (PinnedImageArrangementCommands.TryResolve(action, out var arrangement))
             {
-                _ = RunAsync(() =>
-                {
-                    ArrangeSelectionRequested?.Invoke(this, arrangement);
-                    return Task.CompletedTask;
-                });
+                _ = RunAsync(() => ArrangeSelectionRequested?.Invoke(this, arrangement) ?? Task.CompletedTask);
                 return true;
             }
 

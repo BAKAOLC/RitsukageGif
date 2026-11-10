@@ -61,7 +61,8 @@ namespace RitsukageGif.Desktop
         async Task<FormulaRecognitionResult> IFormulaRecognitionService.RecognizeAsync(ReadOnlyMemory<byte> encoded,
             CancellationToken token)
         {
-            return (await RequestAsync(encoded, true, StructuredRecognitionRenderFormat.None, 28, 0xff000000, token)
+            return (await RequestAsync(encoded, StructuredRecognitionKind.Formula,
+                           StructuredRecognitionRenderFormat.None, 28, 0xff000000, token)
                        .ConfigureAwait(false)).Formula
                    ?? throw new InvalidDataException("The recognition worker returned no formula.");
         }
@@ -76,7 +77,8 @@ namespace RitsukageGif.Desktop
         async Task<TableRecognitionResult> ITableRecognitionService.RecognizeAsync(ReadOnlyMemory<byte> encoded,
             CancellationToken token)
         {
-            return (await RequestAsync(encoded, false, StructuredRecognitionRenderFormat.None, 28, 0xff000000, token)
+            return (await RequestAsync(encoded, StructuredRecognitionKind.Table, StructuredRecognitionRenderFormat.None,
+                           28, 0xff000000, token)
                        .ConfigureAwait(false)).Table
                    ?? throw new InvalidDataException("The recognition worker returned no table.");
         }
@@ -91,7 +93,8 @@ namespace RitsukageGif.Desktop
         internal async Task<FormulaRenderResult> RenderPngAsync(string latex, float fontSize = 28,
             uint textColor = 0xff000000, CancellationToken token = default)
         {
-            return (await RequestAsync(Encoding.UTF8.GetBytes(latex), false, StructuredRecognitionRenderFormat.Png,
+            return (await RequestAsync(Encoding.UTF8.GetBytes(latex), StructuredRecognitionKind.Formula,
+                       StructuredRecognitionRenderFormat.Png,
                        fontSize, textColor, token).ConfigureAwait(false)).Rendered
                    ?? throw new InvalidDataException("The rendering worker returned no result.");
         }
@@ -108,7 +111,8 @@ namespace RitsukageGif.Desktop
                 FormulaTextFormat.Typst => StructuredRecognitionRenderFormat.Typst,
                 _ => throw new ArgumentOutOfRangeException(nameof(format)),
             };
-            return (await RequestAsync(Encoding.UTF8.GetBytes(latex), false, target, 28, 0xff000000, token)
+            return (await RequestAsync(Encoding.UTF8.GetBytes(latex), StructuredRecognitionKind.Formula, target, 28,
+                           0xff000000, token)
                        .ConfigureAwait(false)).Rendered
                    ?? throw new InvalidDataException("The conversion worker returned no result.");
         }
@@ -146,14 +150,31 @@ namespace RitsukageGif.Desktop
             var snapshot = sources.ToArray();
             var encoded =
                 JsonSerializer.SerializeToUtf8Bytes(snapshot, StructuredRecognitionJsonContext.Default.StringArray);
-            return (await RequestAsync(encoded, false, format, fontSize, color, token, true).ConfigureAwait(false))
+            return (await RequestAsync(encoded, StructuredRecognitionKind.Formula, format, fontSize, color, token, true)
+                       .ConfigureAwait(false))
                    .Rendered
                    ?? throw new InvalidDataException("The formula worker returned no output.");
         }
 
-        private async Task<StructuredRecognitionReply> RequestAsync(ReadOnlyMemory<byte> encoded, bool formula,
+        internal async Task<OcrCapabilities> GetTextCapabilitiesAsync(CancellationToken token)
+        {
+            await using var service = new OnnxTextRecognitionService(_paths);
+            return await service.GetCapabilitiesAsync(token).ConfigureAwait(false);
+        }
+
+        internal async Task<OcrRecognitionResult> RecognizeTextAsync(ReadOnlyMemory<byte> pixels,
+            int width, int height, string? languageTag, CancellationToken token)
+        {
+            return (await RequestAsync(pixels, StructuredRecognitionKind.Text, StructuredRecognitionRenderFormat.None,
+                           28, 0xff000000, token, width: width, height: height, languageTag: languageTag)
+                       .ConfigureAwait(false)).Text
+                   ?? throw new InvalidDataException("The recognition worker returned no text.");
+        }
+
+        private async Task<StructuredRecognitionReply> RequestAsync(ReadOnlyMemory<byte> encoded,
+            StructuredRecognitionKind kind,
             StructuredRecognitionRenderFormat renderFormat, float fontSize, uint textColor, CancellationToken token,
-            bool sourcesArray = false)
+            bool sourcesArray = false, int width = 0, int height = 0, string? languageTag = null)
         {
             if (encoded.Length is <= 0 or > 64 * 1024 * 1024)
                 throw new ArgumentOutOfRangeException(nameof(encoded));
@@ -169,7 +190,7 @@ namespace RitsukageGif.Desktop
                     await stream.WriteAsync(encoded, token).ConfigureAwait(false);
                 EnsureWorker();
                 var request = JsonSerializer.Serialize(
-                    new(formula, input, renderFormat, fontSize, textColor, sourcesArray),
+                    new(kind, input, renderFormat, fontSize, textColor, sourcesArray, width, height, languageTag),
                     StructuredRecognitionJsonContext.Default.StructuredRecognitionRequest);
                 await _process!.StandardInput.WriteLineAsync(request.AsMemory(), token).ConfigureAwait(false);
                 await _process.StandardInput.FlushAsync(token).ConfigureAwait(false);
@@ -276,6 +297,7 @@ namespace RitsukageGif.Desktop
             var paths = StructuredRecognitionModelPaths.InDirectory(directory);
             await using var tables = new OnnxTableRecognitionService(paths);
             await using var formulas = new OnnxFormulaRecognitionService(paths);
+            await using var text = new OnnxTextRecognitionService(paths);
             using var input = new StreamReader(Console.OpenStandardInput());
             await using var output = new StreamWriter(Console.OpenStandardOutput());
             output.AutoFlush = true;
@@ -287,6 +309,9 @@ namespace RitsukageGif.Desktop
                     var request = JsonSerializer.Deserialize(line,
                                       StructuredRecognitionJsonContext.Default.StructuredRecognitionRequest)
                                   ?? throw new InvalidDataException("Empty recognition request.");
+                    var started = Stopwatch.GetTimestamp();
+                    Logger.ZLogDebug(
+                        $"Recognition request started. Kind={request.Kind.ToString()} Width={request.PixelWidth} Height={request.PixelHeight}");
                     if (request.RenderFormat != StructuredRecognitionRenderFormat.None)
                     {
                         reply = await RenderFormulaAsync(request).ConfigureAwait(false);
@@ -294,10 +319,21 @@ namespace RitsukageGif.Desktop
                     else
                     {
                         var image = await File.ReadAllBytesAsync(request.ImagePath).ConfigureAwait(false);
-                        reply = request.Formula
-                            ? new(Formula: await formulas.RecognizeAsync(image).ConfigureAwait(false))
-                            : new(await tables.RecognizeAsync(image).ConfigureAwait(false));
+                        reply = request.Kind switch
+                        {
+                            StructuredRecognitionKind.Formula => new(
+                                Formula: await formulas.RecognizeAsync(image).ConfigureAwait(false)),
+                            StructuredRecognitionKind.Table => new(await tables.RecognizeAsync(image)
+                                .ConfigureAwait(false)),
+                            StructuredRecognitionKind.Text => new(Text: await text.RecognizeBgraAsync(image,
+                                request.PixelWidth, request.PixelHeight, checked(request.PixelWidth * 4),
+                                request.LanguageTag).ConfigureAwait(false)),
+                            _ => throw new InvalidDataException("The recognition operation is not supported."),
+                        };
                     }
+
+                    Logger.ZLogDebug(
+                        $"Recognition request completed. Kind={request.Kind.ToString()} ElapsedMilliseconds={Stopwatch.GetElapsedTime(started).TotalMilliseconds} TextLines={reply.Text?.Lines.Count ?? 0}");
                 }
                 catch (Exception error)
                 {

@@ -4,9 +4,16 @@ namespace RitsukageGif.Desktop
 {
     internal static partial class CapturePointerMovement
     {
+        internal static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ||
+                                            (OperatingSystem.IsLinux() &&
+                                             !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY")) &&
+                                             string.IsNullOrEmpty(
+                                                 Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")));
+
         internal static bool Move(PixelPoint point)
         {
             if (OperatingSystem.IsWindows()) return SetCursorPos(point.X, point.Y) != 0;
+            if (OperatingSystem.IsMacOS()) return MoveMac(point.X, point.Y);
             if (!OperatingSystem.IsLinux() ||
                 !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")))
                 return false;

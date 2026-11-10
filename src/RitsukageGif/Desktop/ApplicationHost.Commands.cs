@@ -1,4 +1,5 @@
 using System.Globalization;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -11,7 +12,7 @@ namespace RitsukageGif.Desktop
             IsConfiguring ? "configuring" :
             _presets.Name is not null && Region is null ? "waiting" : "idle";
 
-        internal async Task<CommandReply> ExecuteCommandAsync(string[] args)
+        internal async Task<CommandReply> ExecuteCommandAsync(string[] args, CancellationToken token = default)
         {
             var command = args.Length > 0 ? args[0] : "show";
             if (command != "status")
@@ -23,6 +24,37 @@ namespace RitsukageGif.Desktop
                     return new(false, CurrentState, UiText.Get("CommandNotReady"));
                 switch (args)
                 {
+                    case ["task", "execute", .. var taskArguments]:
+                        if (!IsTaskHost)
+                            return new(false, CurrentState, "This command requires an isolated task host.");
+                        CompleteTaskStartupGuard();
+                        var taskReply = await ExecuteCommandAsync(taskArguments, token);
+                        TaskExitCode = taskReply.Success ? 0 :
+                            taskReply.State == "cancelled" || token.IsCancellationRequested ? 130 : 1;
+                        return taskReply with
+                        {
+                            SessionId = Program.TaskOptions?.SessionId,
+                            ReplyWritten = Program.TaskOptions?.KeepAlive == true
+                                ? taskReply.ReplyWritten
+                                : () => Dispatcher.UIThread.Post(() => _ = ShutdownAsync()),
+                            ReplyFailed = Program.TaskOptions?.KeepAlive == true
+                                ? taskReply.ReplyFailed
+                                : () => Dispatcher.UIThread.Post(() => _ = ShutdownAsync()),
+                        };
+                    case ["settings", "open"]: await OpenSettingsAsync(); break;
+                    case ["logs", "path"]: return new(true, CurrentState, Output: DiagnosticsActions.LogDirectory);
+                    case ["logs", "open"]: DiagnosticsActions.OpenLogs(); break;
+                    case ["settings", .. var settingsArguments]:
+                        return await ExecuteSettingsCommandAsync(settingsArguments, token);
+                    case ["script", .. var scriptArguments]:
+                        return await ExecuteScriptCommandAsync(scriptArguments, token);
+                    case ["actions", .. var actionArguments]:
+                        return await ExecuteActionsCommandAsync(actionArguments, token);
+                    case ["exit"]:
+                        return new(true, CurrentState)
+                        {
+                            ReplyWritten = () => Dispatcher.UIThread.Post(() => _ = ShutdownAsync()),
+                        };
                     case ["debug", "run", var debugFile, var debugName, var stopOnEntry]:
                         if (IsBusy || IsSelecting || IsConfiguring)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
@@ -55,11 +87,11 @@ namespace RitsukageGif.Desktop
                         break;
                     case ["pin-files", _, ..]:
                         if (IsSelecting) return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        if (!await _pinnedImages.PinFilesAsync(args[1..]))
+                        if (!await _pinnedImages.PinFilesAsync(args[1..], token))
                             return new(false, CurrentState, UiText.Get("DesktopToolbarDropUnsupported"));
                         break;
                     case ["pin-files-list", var shellList]:
-                        return await ExecuteCommandAsync(Program.ReadShellFileList(shellList));
+                        return await ExecuteCommandAsync(Program.ReadShellFileList(shellList), token);
                     case ["pins", "hide"]:
                         if (IsSelecting) return new(false, CurrentState, UiText.Get("CommandNotReady"));
                         _pinnedImages.HideAll();
@@ -67,31 +99,30 @@ namespace RitsukageGif.Desktop
                     case ["status"]: break;
                     case ["input", .. var inputArguments]:
                         return await ExecuteInputCommandAsync(inputArguments);
-                    case ["editor"]: await OpenEditorAsync(null); break;
-                    case ["editor", var editorFile]: await OpenEditorAsync(editorFile); break;
-                    case ["animation-editor"]: await ShowAnimationEditorAsync(); break;
-                    case ["animation-editor", var animationFile]: await ShowAnimationEditorAsync(animationFile); break;
+                    case ["editor"]: await OpenEditorAsync(null, token); break;
+                    case ["editor", var editorFile]: await OpenEditorAsync(editorFile, token); break;
+                    case ["animation-editor"]: await ShowAnimationEditorAsync(token: token); break;
+                    case ["animation-editor", var animationFile]:
+                        await ShowAnimationEditorAsync(animationFile, token); break;
                     case ["video-recorder"]: await OpenVideoRecorderAsync(); break;
                     case ["action", var actionId]:
-                        var action = Settings.GlobalActions.SingleOrDefault(item => item.Id == actionId);
-                        if (action is null || !CanExecuteAction(action))
-                            return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        _ = ExecuteActionAsync(action);
-                        break;
+                        return await ExecuteActionsCommandAsync(["run", "id", actionId], token);
                     case ["screenshot"]:
                         if (!CanTakeScreenshot)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        _ = ScreenshotAsync();
-                        break;
+                        var screenshot = await ExecuteScreenshotActionAsync(
+                            new() { Kind = GlobalActionKind.Screenshot },
+                            propagateErrors: true, token: token);
+                        return ScreenshotReply(screenshot);
                     case ["screenshot", ("screen" or "window") and var screenshotSource]:
                         if (!CanTakeScreenshot)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        _ = ScreenshotAsync(screenshotSource == "window"
-                            ? CaptureSourceKind.Window
-                            : CaptureSourceKind.Screen);
-                        break;
+                        var sourceScreenshot = await ExecuteScreenshotActionAsync(
+                            new() { Kind = GlobalActionKind.Screenshot, Parameter = screenshotSource },
+                            propagateErrors: true, token: token);
+                        return ScreenshotReply(sourceScreenshot);
                     case ["stop"]:
-                        if (IsRecording) await ToggleRecordingAsync();
+                        await StopActiveRecordingAsync();
                         break;
                     case ["cancel"] when IsTakingScreenshot:
                         CancelScreenshot();
@@ -101,14 +132,14 @@ namespace RitsukageGif.Desktop
                         if (_abort is { } abort) await abort.CancelAsync();
                         break;
                     case ["start"]:
-                        if (IsBusy || IsSelecting || IsConfiguring || Region is null)
+                        if (!CanToggleRecording || IsRecording)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        _ = ToggleRecordingAsync();
+                        await RunRecordingCommandAsync(token);
                         break;
                     case ["select"]:
                         if (!CanEditRecordingSettings || IsSelecting || IsConfiguring)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        _ = SelectAsync();
+                        await SelectAsync(token);
                         break;
                     case ["select", var x, var y, var width, var height]:
                         if (!CanEditRecordingSettings || IsSelecting || IsConfiguring)
@@ -125,7 +156,7 @@ namespace RitsukageGif.Desktop
                         Settings.CaptureSource = CaptureSourceKind.Screen;
                         break;
                     case ["select-window", var process]:
-                        return await ExecuteCommandAsync(["select-window", process, "*"]);
+                        return await ExecuteCommandAsync(["select-window", process, "*"], token);
                     case ["select-window", var process, var title]:
                         if (!CanEditRecordingSettings || IsSelecting || IsConfiguring)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
@@ -139,6 +170,7 @@ namespace RitsukageGif.Desktop
                     case ["preset", "run", var file, .. var arguments]:
                         if (IsBusy || IsSelecting || IsConfiguring)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
+                        if (IsTaskHost) return await RunTaskPresetCommandAsync(file, arguments, token);
                         RunPresetWithParameters(file, arguments);
                         break;
                     case ["preset", "params", var session, .. var assignments]:
@@ -155,7 +187,7 @@ namespace RitsukageGif.Desktop
                         return new(true, CurrentState,
                             string.Join('\n', PresetCatalog.Load(Settings.PresetFiles).Select(p => p.Name)));
                     case ["windows"]:
-                        var windows = await Task.Run(WindowLocator.List);
+                        var windows = await Task.Run(WindowLocator.List, token);
                         return new(true, CurrentState,
                             string.Join('\n',
                                 windows.Take(100).Select(w =>
@@ -173,6 +205,11 @@ namespace RitsukageGif.Desktop
                     Debug: _presets.Debugger?.Snapshot, CapturedFps: LatestProgress?.CapturedFps ?? 0,
                     ElapsedSeconds: LatestProgress?.ElapsedSeconds ?? 0, ParameterSession: _presets.ParameterSession,
                     Streams: Volatile.Read(ref _streams));
+            }
+            catch (OperationCanceledException error) when (token.IsCancellationRequested ||
+                                                           error.CancellationToken.IsCancellationRequested)
+            {
+                return new(false, "cancelled", "Operation cancelled.");
             }
             catch (Exception ex)
             {

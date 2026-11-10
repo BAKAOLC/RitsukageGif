@@ -27,7 +27,7 @@ namespace RitsukageGif.Desktop
             var path = Path.GetFullPath(executable);
             return "[Desktop Entry]\nType=Application\nName=RitsukageGif\nExec=" +
                    DesktopEntryEncoding.ExecCommand(path) +
-                   " --serve\nTerminal=false\nHidden=false\n";
+                   " --startup\nTerminal=false\nHidden=false\n";
         }
 
         public override bool IsEnabled(string executable)
@@ -36,8 +36,10 @@ namespace RitsukageGif.Desktop
             var fields = DesktopEntryEncoding.Fields(entry);
             return !string.Equals(fields.GetValueOrDefault("Hidden"), "true", StringComparison.OrdinalIgnoreCase) &&
                    string.Equals(fields.GetValueOrDefault("Type"), "Application", StringComparison.Ordinal) &&
-                   string.Equals(fields.GetValueOrDefault("Exec"), DesktopEntryEncoding.ExecCommand(executable) +
-                                                                   " --serve", StringComparison.Ordinal);
+                   (string.Equals(fields.GetValueOrDefault("Exec"), DesktopEntryEncoding.ExecCommand(executable) +
+                                                                    " --startup", StringComparison.Ordinal) ||
+                    string.Equals(fields.GetValueOrDefault("Exec"), DesktopEntryEncoding.ExecCommand(executable) +
+                                                                    " --serve", StringComparison.Ordinal));
         }
 
         private string? InheritedEntry()

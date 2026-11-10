@@ -13,10 +13,13 @@ namespace RitsukageGif.Desktop
         IVideoRecordingService? videoService = null,
         ITextRecognitionService? textRecognitionService = null,
         IBarcodeRecognitionService? barcodeRecognitionService = null,
-        IPrivacyDetectionService? privacyDetectionService = null) : IDisposable
+        IPrivacyDetectionService? privacyDetectionService = null,
+        Action<ScriptBindingRegistry, string?, ScriptResourceScope, PresetDebugger?>? configureBindings = null)
+        : IDisposable
     {
         private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(50) };
         private PresetControllerRun? _active;
+        private PresetScriptSession? _activeScript;
         public WindowTarget? Target => _active?.Target;
         public WindowPreset? ActivePreset => _active?.Preset;
         public string? Name => ActivePreset?.Name;
@@ -28,10 +31,14 @@ namespace RitsukageGif.Desktop
 
         public PresetRuntime? Runtime => _active is { } owner ? owner.Script?.Runtime ?? owner.Machine.Runtime : null;
         public PresetDebugger? Debugger => _active?.Debugger;
+        internal PresetScriptSession? ActiveScript => Volatile.Read(ref _activeScript);
+
+        internal Task ScriptCompletion => _active?.Completion.Task ?? Task.CompletedTask;
         public string? ParameterSession => _active?.ParameterSession;
 
         public void Dispose()
         {
+            Volatile.Write(ref _activeScript, null);
             var owner = _active;
             _active = null;
             _timer.Stop();
@@ -50,6 +57,11 @@ namespace RitsukageGif.Desktop
             {
                 owner.Retire();
             }
+        }
+
+        internal PresetControllerRun CaptureRun()
+        {
+            return _active ?? throw new InvalidOperationException(UiText.Get("CommandNotReady"));
         }
 
         public void NotifyRecordingChanged()
@@ -169,6 +181,7 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
+                owner.Completion.TrySetResult();
                 owner.Release();
             }
         }
@@ -212,24 +225,29 @@ namespace RitsukageGif.Desktop
                 {
                     if (owner.ScriptTask is null)
                     {
+                        var resources = new ScriptResourceScope();
                         var session = new PresetScriptSession(preset,
                             async () => await Dispatcher.UIThread.InvokeAsync(() => Observe(owner)),
                             async action => await Dispatcher.UIThread.InvokeAsync(() => ExecuteAsync(owner, action)),
-                            owner.Debugger, isCurrent: () => IsCurrent(owner),
-                            mediaService: new MediaProcessingService(), parameters: owner.Parameters,
-                            imageService: new ImageCompositionService(), inputReader: inputs,
-                            staticCaptureService: staticCaptureService, videoService: videoService,
-                            textRecognitionService: textRecognitionService,
-                            barcodeRecognitionService: barcodeRecognitionService,
-                            privacyService: privacyDetectionService, documentService: new PdfDocumentService(),
-                            tableService: StructuredRecognitionProcess.Shared,
-                            formulaService: StructuredRecognitionProcess.Shared,
-                            formulaOutputService: StructuredRecognitionProcess.Shared,
-                            tableOutputService: new TableOutputService(),
-                            formulaDocumentService: new FormulaDocxService(),
-                            tableDataService: new TableDataService(),
-                            tableEditService: TableEditorService.Shared);
+                            owner.Debugger,
+                            bindings => configureBindings?.Invoke(bindings, preset.SourceFile, resources,
+                                owner.Debugger),
+                            () => IsCurrent(owner),
+                            new MediaProcessingService(), owner.Parameters,
+                            new ImageCompositionService(), inputs,
+                            staticCaptureService, videoService,
+                            textRecognitionService,
+                            barcodeRecognitionService,
+                            privacyDetectionService, new PdfDocumentService(),
+                            StructuredRecognitionProcess.Shared,
+                            StructuredRecognitionProcess.Shared,
+                            StructuredRecognitionProcess.Shared,
+                            new TableOutputService(),
+                            new FormulaDocxService(),
+                            new TableDataService(),
+                            TableEditorService.Shared, resourceScope: resources);
                         owner.Script = session;
+                        Volatile.Write(ref _activeScript, session);
                         owner.Acquire();
                         owner.ScriptTask = RunScriptAsync(owner, session);
                     }
@@ -249,7 +267,11 @@ namespace RitsukageGif.Desktop
                     action => ExecuteAsync(owner, action), owner.Token);
                 EnsureCurrent(owner);
                 if (machine.LastError is { } message) error(message);
-                if (IsCurrent(owner) && machine.Finished) _timer.Stop();
+                if (IsCurrent(owner) && machine.Finished)
+                {
+                    _timer.Stop();
+                    owner.Completion.TrySetResult();
+                }
             }
             catch (OperationCanceledException) when (!IsCurrent(owner))
             {
@@ -275,6 +297,7 @@ namespace RitsukageGif.Desktop
             finally
             {
                 owner.Polling = false;
+                if (owner.Failure is not null) owner.Completion.TrySetResult();
                 owner.Release();
             }
         }

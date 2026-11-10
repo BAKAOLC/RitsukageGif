@@ -6,8 +6,31 @@ namespace RitsukageGif.Desktop
     {
         internal static uint ClipboardSequence => OperatingSystem.IsWindows() ? GetClipboardSequenceNumber() : 0;
 
-        internal static async Task<ScreenshotPasteTarget?> CaptureTargetAsync(CancellationToken token)
+        internal static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ||
+                                            (OperatingSystem.IsLinux() &&
+                                             string.IsNullOrEmpty(
+                                                 Environment.GetEnvironmentVariable("WAYLAND_DISPLAY")) &&
+                                             !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY")));
+
+        internal static async Task<IScreenshotPasteTarget?> CaptureTargetAsync(CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+            if (OperatingSystem.IsMacOS())
+            {
+                var macTarget = await Task.Run(MacScreenshotPasteTarget.Capture, token);
+                if (!token.IsCancellationRequested) return macTarget;
+                macTarget?.Dispose();
+                token.ThrowIfCancellationRequested();
+            }
+
+            if (OperatingSystem.IsLinux() && IsSupported)
+            {
+                var x11Target = await X11ScreenshotPasteTarget.CaptureAsync(token);
+                if (!token.IsCancellationRequested) return x11Target;
+                x11Target?.Dispose();
+                token.ThrowIfCancellationRequested();
+            }
+
             if (!OperatingSystem.IsWindows()) return null;
             var window = GetForegroundWindow();
             var thread = GetWindowThreadProcessId(window, out var process);

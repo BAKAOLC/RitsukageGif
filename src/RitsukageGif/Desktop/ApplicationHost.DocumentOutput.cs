@@ -8,27 +8,36 @@ namespace RitsukageGif.Desktop
             CancellationToken token)
         {
             var profile = Settings.ScreenshotSave.ManualProfile();
-            var name = Path.ChangeExtension(profile.CreateFileName(ScreenshotName(result)), ".pdf");
+            var context = ScreenshotName(result);
+            var name = Path.ChangeExtension(profile.CreateFileName(context), ".pdf");
             var path = await DocumentExportWindow.ShowAsync(owner, result.Png, name, token,
-                profile.ResolveDirectory(Settings.OutputDirectory));
+                profile.ResolveDirectory(Settings.OutputDirectory, context));
             if (path is null) return false;
             LastScreenshotOutput = new(OutputColorMode.Sdr, [path]);
+            _screenshotInvocation.Value?.AddPaths([path]);
             SetStatus(UiText.Format("AnimationExported", path));
             try
             {
+                var completionToken = _screenshotInvocation.Value?.PropagateErrors == true
+                    ? token
+                    : CancellationToken.None;
                 await ScreenshotSaveCompletion.RunAsync([path], profile, _services.Context.Clipboard,
                     _services.Context.StorageProvider,
                     () => CopyScreenshotAsync(result with { ColorMode = OutputColorMode.Sdr, Hdr = null },
-                        CancellationToken.None),
-                    ShowOutputNotification, CancellationToken.None);
+                        completionToken),
+                    ShowOutputNotification, completionToken);
             }
             catch (Exception error)
             {
                 SetStatus(error.Message);
+                if (_screenshotInvocation.Value?.PropagateErrors == true) throw;
             }
             finally
             {
-                QueueCleanup([path], profile.AfterSave == ScreenshotAfterSaveAction.CopyFile ? [path] : null);
+                QueueCleanup([path], profile.AfterSave is ScreenshotAfterSaveAction.CopyFile or
+                    ScreenshotAfterSaveAction.CopyFileAndPath
+                    ? [path]
+                    : null);
             }
 
             return true;

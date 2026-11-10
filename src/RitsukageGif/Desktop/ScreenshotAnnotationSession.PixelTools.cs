@@ -10,7 +10,36 @@ namespace RitsukageGif.Desktop
         {
             if (tool is not (ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase))
                 throw new ArgumentOutOfRangeException(nameof(tool));
-            if (_disposed || !CanAnnotate || IsBusy || IsDrawing) return;
+            if (_disposed || !CanAnnotate || IsBusy || IsDrawing || !CanUseDrawingTool(tool)) return;
+            if ((_selected is { } current && current.AutoMosaicId != Guid.Empty) || Tool == ScreenshotTool.AutoMosaic)
+            {
+                if (tool == ScreenshotTool.SmartErase) return;
+                Properties = Properties with
+                {
+                    MosaicMode = tool == ScreenshotTool.Blur
+                        ? AnnotationMosaicMode.Blur
+                        : AnnotationMosaicMode.Mosaic,
+                };
+                if (_selected is { AutoMosaicId: var id } existing && id != Guid.Empty)
+                {
+                    var copy = CloneAnnotation(existing, tool: tool, properties: Properties);
+                    await ReplaceAnnotationAsync(_annotations.IndexOf(existing), copy);
+                }
+
+                StoreToolStyle(ScreenshotTool.AutoMosaic);
+                Changed?.Invoke();
+                return;
+            }
+
+            Properties = Properties with
+            {
+                MosaicMode = tool switch
+                {
+                    ScreenshotTool.Blur => AnnotationMosaicMode.Blur,
+                    ScreenshotTool.SmartErase => AnnotationMosaicMode.SmartErase,
+                    _ => AnnotationMosaicMode.Mosaic,
+                },
+            };
             if (_selected is not
                 { Tool: ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase } annotation)
             {
@@ -19,7 +48,7 @@ namespace RitsukageGif.Desktop
             }
 
             if (annotation.Tool == tool) return;
-            var replacement = CloneAnnotation(annotation, tool: tool);
+            var replacement = CloneAnnotation(annotation, tool: tool, properties: Properties);
             await ReplaceAnnotationAsync(_annotations.IndexOf(annotation), replacement);
             if (_disposed || !ReferenceEquals(_selected, replacement)) return;
             if (_tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase) _tool = tool;
@@ -36,11 +65,19 @@ namespace RitsukageGif.Desktop
 
         private static bool IsPixelBrush(ScreenshotAnnotation annotation)
         {
-            return IsPixelTool(annotation.Tool) && annotation.Properties.PixelPath == AnnotationPixelPath.Brush;
+            return annotation.AutoMosaicId == Guid.Empty && IsPixelTool(annotation.Tool) &&
+                   annotation.Properties.PixelPath == AnnotationPixelPath.Brush;
         }
 
         private static Rect PixelEffectBounds(ScreenshotAnnotation annotation)
         {
+            if (annotation.AutoMosaicId != Guid.Empty)
+            {
+                var regions = AutoMosaicRectangles(annotation);
+                return regions.Aggregate(default(Rect),
+                    (bounds, region) => bounds.Width <= 0 || bounds.Height <= 0 ? region : bounds.Union(region));
+            }
+
             if (!IsPixelBrush(annotation)) return annotation.Bounds;
             var left = annotation.Points.Min(point => point.X);
             var top = annotation.Points.Min(point => point.Y);
@@ -55,7 +92,25 @@ namespace RitsukageGif.Desktop
                 cached.Thickness.Equals(annotation.Thickness) &&
                 CollectionsMarshal.AsSpan(annotation.Points).SequenceEqual(cached.Points)) return cached.Path;
             Geometry geometry;
-            if (IsPixelBrush(annotation))
+            if (annotation.AutoMosaicId != Guid.Empty)
+            {
+                var path = new StreamGeometry();
+                using (var context = path.Open())
+                {
+                    context.SetFillRule(FillRule.NonZero);
+                    foreach (var region in AutoMosaicRectangles(annotation))
+                    {
+                        context.BeginFigure(region.TopLeft);
+                        context.LineTo(region.TopRight);
+                        context.LineTo(region.BottomRight);
+                        context.LineTo(region.BottomLeft);
+                        context.EndFigure(true);
+                    }
+                }
+
+                geometry = path;
+            }
+            else if (IsPixelBrush(annotation))
             {
                 if (annotation.Points.Count == 1)
                 {
@@ -110,6 +165,7 @@ namespace RitsukageGif.Desktop
         private static ushort[] CreatePixelCoverage(ScreenshotAnnotation annotation, PixelRect region,
             CancellationToken token)
         {
+            if (annotation.AutoMosaicId != Guid.Empty) return CreateAutoMosaicCoverage(annotation, region, token);
             if (IsPixelBrush(annotation)) return CreateBrushCoverage(annotation, region, token);
             var coverage = new ushort[checked(region.Width * region.Height)];
             var bounds = annotation.Bounds;

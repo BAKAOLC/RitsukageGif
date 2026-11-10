@@ -10,7 +10,7 @@ namespace RitsukageGif.Core
         public Task ExportAsync(string path, OutputFormat format, GifQuality quality = GifQuality.Balanced,
             CancellationToken token = default)
         {
-            return ExportAsync(path, new()
+            return ExportAsync(path, new MediaProcessOptions
             {
                 Format = format switch
                 {
@@ -20,10 +20,11 @@ namespace RitsukageGif.Core
                 Dither = quality != GifQuality.Fast,
                 Quality = quality == GifQuality.Fast ? 75 : 95,
                 Overwrite = true,
-            }, token);
+            }, token: token);
         }
 
-        public async Task ExportAsync(string path, MediaProcessOptions options, CancellationToken token = default)
+        public async Task ExportAsync(string path, MediaProcessOptions options, IProgress<double>? progress = null,
+            CancellationToken token = default)
         {
             ThrowIfDisposed();
             ArgumentNullException.ThrowIfNull(options);
@@ -39,7 +40,8 @@ namespace RitsukageGif.Core
             var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
-                await Task.Run(() => WriteFrames(temporary, format, options, token), token).ConfigureAwait(false);
+                await Task.Run(() => WriteFrames(temporary, format, options, token, progress), token)
+                    .ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
                 File.Move(temporary, destination, options.Overwrite);
                 Logger.ZLogInformation($"Animation document export completed: format={format}, frames={Frames.Count}");
@@ -86,7 +88,8 @@ namespace RitsukageGif.Core
             }
         }
 
-        private void WriteFrames(string path, string format, MediaProcessOptions options, CancellationToken token)
+        private void WriteFrames(string path, string format, MediaProcessOptions options, CancellationToken token,
+            IProgress<double>? progress)
         {
             if (format == "webp" && (Width > 16383 || Height > 16383))
                 throw new ArgumentException(UiText.Get("RecordingTooLarge"));
@@ -96,11 +99,12 @@ namespace RitsukageGif.Core
             using var png = format == "apng" ? new StreamingPngWriter(stream, Width, Height, token, Iterations) : null;
             var bounds = new PixelRect(0, 0, Width, Height);
             long elapsedMs = 0, writtenCentiseconds = 0;
+            var completed = 0;
             foreach (var frame in Frames)
             {
                 token.ThrowIfCancellationRequested();
                 using var image = new MagickImage(frame.Path);
-                image.Progress += (_, progress) => progress.Cancel = token.IsCancellationRequested;
+                image.Progress += (_, imageProgress) => imageProgress.Cancel = token.IsCancellationRequested;
                 if (gif is not null)
                 {
                     image.Quantize(new QuantizeSettings
@@ -127,6 +131,8 @@ namespace RitsukageGif.Core
                     image.Settings.SetDefine(MagickFormat.WebP, "method", 3);
                     webp!.Add(image.ToByteArray(MagickFormat.WebP), bounds, frame.DelayMs);
                 }
+
+                progress?.Report(++completed / (double)Frames.Count);
             }
 
             webp?.Complete();

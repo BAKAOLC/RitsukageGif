@@ -150,6 +150,7 @@ namespace RitsukageGif.Desktop
             _layout?.Dispose();
             FormattedWidth = width;
             _layout = new(Document, width, Foreground ?? Brushes.Black, NaturalSize, DrawImage, _lifetime.Token);
+            SceneContentChanged?.Invoke(this, EventArgs.Empty);
             if (_restorePosition is not { } position) return;
             var top = Math.Max(0, _layout.CaretBounds(position).Top + _restoreDistance);
             _restorePosition = null;
@@ -240,6 +241,7 @@ namespace RitsukageGif.Desktop
                     }
 
                     _surface.InvalidateVisual();
+                    SceneContentChanged?.Invoke(this, EventArgs.Empty);
                 });
             }
             catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)

@@ -21,8 +21,18 @@ struct CaptureHelper {
             case "windows":
                 try WindowCatalog.write()
                 return
+            case "active-window":
+                let activeWindow = WindowCatalog.activeWindow()
+                guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+                    throw CaptureFailure.permissionDenied
+                }
+                try writeJSON(["handle": activeWindow])
+                return
             case "displays":
                 try writeJSON(CaptureGeometry.displays())
+                return
+            case "recording-cursor":
+                try recordingCursor()
                 return
             case "cursor":
                 let cursor = CursorSnapshot.capture(bitmapId: 1)
@@ -86,7 +96,12 @@ struct CaptureHelper {
                 throw CaptureFailure.sourceLost
             }
             let excluded = content.applications.filter { $0.processID == getppid() || $0.processID == getpid() }
-            filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+            let included = content.windows.filter {
+                options.includedWindowTitle != nil && $0.title == options.includedWindowTitle &&
+                    $0.owningApplication?.processID == getppid()
+            }
+            if options.includedWindowTitle != nil && included.isEmpty { throw CaptureFailure.sourceLost }
+            filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: included)
             bounds = CGDisplayBounds(display.displayID)
             displayId = display.displayID
             sourceId = "display:\(displayId)"

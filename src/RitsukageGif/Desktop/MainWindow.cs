@@ -193,9 +193,9 @@ namespace RitsukageGif.Desktop
             RefreshOutputs();
             RefreshStreamStatus();
             RefreshActionPresentation();
-            _record.Classes.Set("recording", _host.IsRecording);
+            _record.Classes.Set("recording", _host.IsQuickRecording);
             _record.IsEnabled = _host.CanToggleRecording;
-            _cancel.IsVisible = _host is { IsBusy: true, IsRecording: false };
+            _cancel.IsVisible = _host is { IsQuickRecordingOperation: true, IsQuickRecording: false };
             foreach (var control in _commonControls)
                 control.IsEnabled = _host is
                     { CanEditRecordingSettings: true, IsSelecting: false, IsConfiguring: false };

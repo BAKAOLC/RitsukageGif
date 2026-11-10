@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Media.Imaging;
 
 namespace RitsukageGif.Desktop
 {
@@ -12,6 +13,7 @@ namespace RitsukageGif.Desktop
         private NativeMenuItem? _trayPinImages;
         private NativeMenuItem? _trayRestorePins;
         private NativeMenuItem? _trayUnlockPins;
+        private readonly List<Bitmap> _trayGroupIcons = [];
 
         private void InitializePinMenus(NativeMenu menu)
         {
@@ -21,10 +23,8 @@ namespace RitsukageGif.Desktop
             _trayUnlockPins = new();
             _trayRestorePins.Click += async (_, _) => await RestorePinnedSessionAsync();
             _trayUnlockPins.Click += (_, _) => _pinnedImages.RestoreInteraction();
-            menu.Items.Add(_trayPinGroups);
             menu.Items.Add(_trayPinImages);
-            menu.Items.Add(_trayRestorePins);
-            menu.Items.Add(_trayUnlockPins);
+            menu.Items.Add(_trayPinGroups);
             RebuildPinGroupMenus();
         }
 
@@ -32,25 +32,7 @@ namespace RitsukageGif.Desktop
         {
             if (_trayPinGroups is null) return;
             var menu = new NativeMenu();
-            foreach (var group in _pinnedImages.Groups)
-            {
-                var commands = new NativeMenu();
-                var show = new NativeMenuItem(UiText.Get("PinnedImageShowGroup"));
-                var hide = new NativeMenuItem(UiText.Get("PinnedImageHideGroup"));
-                var close = new NativeMenuItem(UiText.Get("PinnedImageCloseGroup"));
-                show.Click += (_, _) => _pinnedImages.ShowGroup(group.Id);
-                hide.Click += (_, _) => _pinnedImages.HideGroup(group.Id);
-                close.Click += (_, _) => _pinnedImages.CloseGroup(group.Id);
-                commands.Items.Add(show);
-                commands.Items.Add(hide);
-                commands.Items.Add(close);
-                menu.Items.Add(
-                    new NativeMenuItem(group.Name.Length == 0 ? UiText.Get("PinnedImageUngrouped") : group.Name)
-                        { Menu = commands });
-            }
-
-            menu.Items.Add(new NativeMenuItemSeparator());
-            var create = new NativeMenuItem(UiText.Get("PinnedGroupCreateTitle"));
+            var create = new NativeMenuItem(UiText.Get("TrayNativeCreateGroup"));
             create.Click += async (_, _) =>
             {
                 try
@@ -62,40 +44,51 @@ namespace RitsukageGif.Desktop
                     SetStatus(error.Message);
                 }
             };
-            var manage = new NativeMenuItem(UiText.Get("PinnedGroupsManageTitle"));
+            var manage = new NativeMenuItem(UiText.Get("TrayNativeManageGroups"));
             manage.Click += (_, _) => _pinnedImages.OpenGroupManager();
             menu.Items.Add(create);
             menu.Items.Add(manage);
-            _trayPinGroups.Menu = menu;
-            var images = new NativeMenu();
-            foreach (var window in _pinnedImages.Images)
+            menu.Items.Add(new NativeMenuItemSeparator());
+            var icons = new List<Bitmap>();
+            foreach (var group in _pinnedImages.Groups)
             {
-                var item = new NativeMenuItem(window.Presentation.Title.Value.Length != 0
-                    ? window.Presentation.Title.Value
-                    : window.Title ?? UiText.Get("ScreenshotPin"))
+                var count = _pinnedImages.GetGroupPinCounts(group.Id);
+                var name = group.Name.Length == 0 ? UiText.Get("PinnedImageUngrouped") : group.Name;
+                var active = group.Id == _pinnedImages.Preferences.ActiveGroup;
+                var item = new NativeMenuItem($"{name}\t  {count.Visible,2}/{count.Total,-2}")
                 {
-                    ToggleType = MenuItemToggleType.CheckBox,
-                    IsChecked = window.IsVisible,
+                    ToggleType = group.Color is null && active ? MenuItemToggleType.CheckBox : MenuItemToggleType.None,
+                    IsChecked = group.Color is null && active,
                 };
-                item.Click += (_, _) => _pinnedImages.ShowImage(window);
-                images.Items.Add(item);
+                if (group.Color is not null)
+                {
+                    var icon = PinnedNativeGroupIcon.Create(group, active);
+                    icons.Add(icon);
+                    item.Icon = icon;
+                }
+
+                item.Click += (_, _) => _pinnedImages.SwitchToGroup(group.Id);
+                menu.Items.Add(item);
             }
 
-            _trayPinImages?.Menu = images;
+            _trayPinGroups.Menu = menu;
+            DisposeTrayGroupIcons();
+            _trayGroupIcons.AddRange(icons);
+            _trayPinImages!.Menu = CreatePinOperationsMenu();
             RefreshPinMenus();
         }
 
         private void RefreshPinMenus()
         {
             if (_trayPinGroups is null || _trayRestorePins is null || _trayUnlockPins is null) return;
-            _trayPinGroups.Header = UiText.Get("PinnedImageGroup");
+            _trayPinGroups.Header = UiText.Get("TrayNativePinGroups");
             _trayPinGroups.IsVisible = _trayPinGroups.Menu?.Items.Count > 0;
             _trayPinGroups.IsEnabled = !IsClosing && !IsSelecting;
             if (_trayPinImages is not null)
             {
-                _trayPinImages.Header = UiText.Format("TrayPinnedImagesCount", _pinnedImages.Images.Count);
-                _trayPinImages.IsVisible = _pinnedImages.HasImages;
-                _trayPinImages.IsEnabled = !IsClosing && !IsSelecting;
+                _trayPinImages.Header = UiText.Format("TrayNativePinCount", _pinnedImages.OpenWindowCount);
+                _trayPinImages.IsVisible = true;
+                _trayPinImages.IsEnabled = !IsClosing && !IsSelecting && _pinnedImages.OpenWindowCount != 0;
             }
 
             _trayRestorePins.Header = UiText.Get("PinnedImageRestoreSession");

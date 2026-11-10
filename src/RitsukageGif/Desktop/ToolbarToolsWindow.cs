@@ -19,13 +19,15 @@ namespace RitsukageGif.Desktop
             { Orientation = Orientation.Horizontal, ItemWidth = 40, ItemHeight = 36 };
 
         private readonly Border _poolArea;
+        private readonly bool _recording;
         private readonly List<List<ToolbarDragHandle>> _toolCells = [];
         private ToolbarPreferences _draft;
         private int? _draggedColumn;
         private ScreenshotTool? _draggedTool;
 
-        public ToolbarToolsWindow(ToolbarPreferences preferences)
+        public ToolbarToolsWindow(ToolbarPreferences preferences, bool recording = false)
         {
+            _recording = recording;
             _draft = preferences.Normalize();
             Title = UiText.Get("ToolbarToolsTitle");
             Width = 624;

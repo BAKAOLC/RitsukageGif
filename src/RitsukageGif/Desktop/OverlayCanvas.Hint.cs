@@ -54,6 +54,8 @@ namespace RitsukageGif.Desktop
         public Rect ModePickerReservedBounds { get; set; }
         internal Rect InformationReservedBounds { get; set; }
         internal bool InteractiveInformationVisible { get; set; }
+        internal bool PointerOverCaptureControls { get; set; }
+        internal bool CodePopupVisible { get; set; }
         private bool Measuring => AuxiliaryVisible && CapturePreferences.GuideMeasurements && !Selected.IsEmpty;
 
         private void DrawHint(DrawingContext context, Point mouse, bool layoutOnly = false)
@@ -68,15 +70,17 @@ namespace RitsukageGif.Desktop
 
             var local = Selected.ToLocal(_monitor, Scale);
             var selected = Selected.IsEmpty ? default : new Rect(local.X, local.Y, local.Width, local.Height);
+            var magnifier = GetMagnifierFrame(mouse);
             var actions = default(Rect);
             if (CapturePreferences.ShowShortcutHints && HintMode != SelectionHintMode.Hidden && _actionChips.Count > 0)
             {
                 var candidate = GetActionsFrame(Bounds.Size, _actionsSize, mouse, selected, ReservedBounds,
-                    SecondaryReservedBounds, FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds);
-                candidate = AvoidCodePanels(candidate, mouse, selected);
+                    SecondaryReservedBounds, FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds,
+                    magnifier);
+                candidate = AvoidCodePanels(candidate, mouse, selected, magnifier);
                 if (CodePanelsClear(candidate) && PanelClear(candidate, mouse, selected, ReservedBounds,
                         SecondaryReservedBounds,
-                        FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds))
+                        FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds, magnifier))
                 {
                     actions = candidate;
                     _hintActionsBounds = actions;
@@ -84,7 +88,6 @@ namespace RitsukageGif.Desktop
                 }
             }
 
-            var status = default(Rect);
             var errorText = string.IsNullOrEmpty(OperationError)
                 ? null
                 : HintText(OperationError, textWidth, Brushes.White, 12, 36);
@@ -105,19 +108,19 @@ namespace RitsukageGif.Desktop
                 var statusSize = new Size(Math.Ceiling(contentWidth) + 20,
                     targetHeight + geometryHeight + errorHeight + 12);
                 var candidate = GetStatusFrame(Bounds.Size, statusSize, selected, mouse, actions, ReservedBounds,
-                    SecondaryReservedBounds, FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds);
-                candidate = AvoidCodePanels(candidate, mouse, selected, actions);
+                    SecondaryReservedBounds, FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds,
+                    magnifier);
+                candidate = AvoidCodePanels(candidate, mouse, selected, actions, magnifier);
                 if (CodePanelsClear(candidate) && PanelClear(candidate, mouse, selected, actions, ReservedBounds,
                         SecondaryReservedBounds,
-                        FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds))
+                        FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds, magnifier))
                 {
-                    status = candidate;
-                    _hintStatusBounds = status;
+                    _hintStatusBounds = candidate;
                     if (!layoutOnly)
                     {
-                        context.DrawRectangle(HintBackground, HintBorder, status, 5, 5);
-                        using var statusClip = context.PushClip(status.Deflate(6));
-                        var origin = status.TopLeft + new Vector(10, 6);
+                        context.DrawRectangle(HintBackground, HintBorder, candidate, 5, 5);
+                        using var statusClip = context.PushClip(candidate.Deflate(6));
+                        var origin = candidate.TopLeft + new Vector(10, 6);
                         if (showTarget)
                         {
                             if (!Measuring)
@@ -141,23 +144,31 @@ namespace RitsukageGif.Desktop
                 }
             }
 
-            if ((!CapturePreferences.ShowMagnifier && !(AuxiliaryVisible && CapturePreferences.GuideMagnifier)) ||
-                HintMode == SelectionHintMode.Hidden || IsDrawing || IsEditing) return;
+            if (magnifier is { Width: <= 0 } or { Height: <= 0 }) return;
+            _hintMagnifierBounds = magnifier;
+            if (layoutOnly) return;
+            context.DrawRectangle(HintBackground, HintBorder, magnifier, 6, 6);
+            DrawMagnifier(context, new(magnifier.X, magnifier.Y, MagnifierWidth, MagnifierHeight));
+            DrawMagnifierDetails(context, magnifier);
+        }
+
+        private Rect GetMagnifierFrame(Point mouse)
+        {
+            var defaultVisible = CapturePreferences.ShowMagnifier &&
+                                 (Snapshot?.Phase == SelectionPhase.Dragging ||
+                                  Selected.Contains(Mouse));
+            if (!(AuxiliaryVisible ? CapturePreferences.GuideMagnifier : defaultVisible) ||
+                HintMode == SelectionHintMode.Hidden || IsDrawing || IsEditing || PointerOverCaptureControls ||
+                CodePopupVisible)
+                return default;
             var lensSize = new Size(MagnifierWidth, MagnifierHeight + 30 +
                                                     (CapturePreferences.MagnifierCoordinates ? 22 : 0) +
-                                                    (CapturePreferences.MagnifierShortcuts ? 24 : 0));
-            if (maximumHeight < lensSize.Height || Bounds.Width < lensSize.Width + HintMargin * 2) return;
-            var frame = GetHintFrame(Bounds.Size, lensSize, mouse, selected, status, actions, ReservedBounds,
-                SecondaryReservedBounds, FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds);
-            frame = AvoidCodePanels(frame, mouse, selected, status, actions);
-            if (!CodePanelsClear(frame) || !PanelClear(frame, mouse, selected, status, actions, ReservedBounds,
-                    SecondaryReservedBounds,
-                    FrameReservedBounds, ModePickerReservedBounds, InformationReservedBounds)) return;
-            _hintMagnifierBounds = frame;
-            if (layoutOnly) return;
-            context.DrawRectangle(HintBackground, HintBorder, frame, 6, 6);
-            DrawMagnifier(context, new(frame.X, frame.Y, MagnifierWidth, MagnifierHeight));
-            DrawMagnifierDetails(context, frame);
+                                                    (CapturePreferences.MagnifierShortcuts
+                                                        ? UpdateMagnifierShortcuts() * 20 + 4
+                                                        : 0));
+            return Bounds.Height - HintMargin * 2 < lensSize.Height || Bounds.Width < lensSize.Width + HintMargin * 2
+                ? default
+                : SelectionMagnifierPlacement.Place(Bounds.Size, lensSize, mouse);
         }
 
         private void DrawActionChips(DrawingContext context, Rect frame)
@@ -285,7 +296,7 @@ namespace RitsukageGif.Desktop
             var actionsKey = (Snapshot?.Phase ?? phase, Snapshot?.Region.IsEmpty ?? Selected.IsEmpty,
                 Snapshot?.CanConfirm ?? !Selected.IsEmpty, ShowControls, ShowSource, ShowCursor,
                 full, IsScreenshot, IsDrawing, IsEditing, HintMode, Mode, actionsWidth, actionsHeight, uiCulture,
-                culture, ShortcutBindings);
+                culture, ShortcutBindings ?? SelectionCommands.SnapshotBindings());
             if (_actionChips.Count == 0 || _actionsKey != actionsKey)
             {
                 _actionsKey = actionsKey;

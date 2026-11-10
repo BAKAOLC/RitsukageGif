@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
     {
         private static readonly ILogger ProcessLogger = LogHub.GetLogger("Desktop.Process");
         internal static bool StartHidden { get; private set; }
+        internal static TaskHostOptions? TaskOptions { get; private set; }
 
         [LibraryImport("kernel32.dll")]
         private static partial int AttachConsole(uint processId);
@@ -54,6 +55,9 @@ namespace RitsukageGif.Desktop
                 case ["--diagnostic-monitor", var process, var session] when int.TryParse(process, out var processId):
                     return CrashSessionMonitor.Run(processId, session);
                 case ["--diagnostic-monitor", ..]: return 2;
+                case ["--export-script-metadata", var metadataOutput]:
+                    return ExportScriptMetadata(metadataOutput);
+                case ["--export-script-metadata", ..]: return 2;
                 case ["--version"]:
                     if (OperatingSystem.IsWindows() && AttachConsole(uint.MaxValue) != 0)
                         Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
@@ -65,8 +69,10 @@ namespace RitsukageGif.Desktop
             try
             {
                 var role = args is ["--language-server"] ? "language-server" :
-                    args.Length > 0 && args[0] != "--serve" ? "command" : "desktop";
+                    args is ["--task-host", ..] ? "task" :
+                    args.Length == 0 || args is ["--serve"] or ["--silent"] or ["--startup"] ? "desktop" : "command";
                 DiagnosticLog.Initialize(role);
+                BackgroundStandardStreams.DetachIfBackground(args);
                 ProcessLogger.ZLogInformation(
                     $"Process startup. Role={role} ArgumentCount={args.Length} FileLogging={LogHub.IsInitialized}");
                 var exitCode = Run(args);
@@ -108,72 +114,50 @@ namespace RitsukageGif.Desktop
         {
             var settings = AppSettings.Load();
             UiText.SetLanguage(settings.Language);
-            if (args is ["--language-server"])
+            switch (args)
             {
-                new ScriptLanguageServer(async command =>
-                {
-                    if (!Mutex.TryOpenExisting(CommandPipe.MutexName, out var running))
-                        Process.Start(new ProcessStartInfo(Environment.ProcessPath!, "--serve")
-                                { UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden })
-                            ?.Dispose();
-                    running?.Dispose();
-                    var reply = await CommandPipe.SendAsync(command, CancellationToken.None);
-                    return JsonNode.Parse(JsonSerializer.Serialize(reply,
-                        CommandJson.Default.CommandReply));
-                }).RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput()).GetAwaiter().GetResult();
-                return 0;
-            }
+                case ["--language-server"]:
+                    new ScriptLanguageServer(async command =>
+                        {
+                            if (!Mutex.TryOpenExisting(CommandPipe.MutexName, out var running))
+                            {
+                                var start = CreateSelfStartInfo();
+                                start.ArgumentList.Add("--serve");
+                                BackgroundStandardStreams.StartBackground(start)?.Dispose();
+                            }
 
-            if (args.Length > 0 && args[0] != "--serve")
-            {
-                if (OperatingSystem.IsWindows() && AttachConsole(uint.MaxValue) != 0)
-                    Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
-                string? ownedShellList = null;
-                try
+                            running?.Dispose();
+                            var reply = await CommandPipe.SendAsync(command, CancellationToken.None);
+                            return JsonNode.Parse(JsonSerializer.Serialize(reply,
+                                CommandJson.Default.CommandReply));
+                        }, AutomationScriptLibrary.CreateBindings())
+                        .RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput()).GetAwaiter().GetResult();
+                    return 0;
+                case ["--task-host", var sessionId, ..]:
                 {
-                    if (args is ["preset", "run", _, ..])
-                        args[2] = Path.GetFullPath(args[2]);
-                    if (args is ["editor" or "animation-editor", var editorFile])
-                        args[1] = Path.GetFullPath(editorFile);
-                    if (args is ["pin-files", _, ..])
-                    {
-                        for (var index = 1; index < args.Length; index++)
-                            args[index] = Path.GetFullPath(args[index]);
-                        args = PreparePinFilesCommand(args);
-                    }
+                    _ = CommandPipe.SessionName(sessionId);
+                    var keepAlive = false;
+                    int? parentProcess = null;
+                    for (var index = 2; index < args.Length; index++)
+                        switch (args[index])
+                        {
+                            case "--keep-alive": keepAlive = true; break;
+                            case "--parent" when index + 1 < args.Length &&
+                                                 int.TryParse(args[index + 1], out var parentId):
+                                parentProcess = parentId;
+                                index++;
+                                break;
+                            default: throw new ArgumentException("Invalid task host option.");
+                        }
 
-                    if (args is ["pin-files-list", var shellList])
-                        args[1] = ownedShellList = ValidateShellFileListPath(shellList);
-                    CommandReply reply;
-                    if (args is ["--help"] or ["help"])
-                    {
-                        reply = new(true, "help", UiText.Get("CommandHelp"));
-                    }
-                    else
-                    {
-                        if (!Mutex.TryOpenExisting(CommandPipe.MutexName, out var running))
-                            Process.Start(new ProcessStartInfo(Environment.ProcessPath!, "--serve")
-                                {
-                                    UseShellExecute = true, WindowStyle = ProcessWindowStyle.Hidden,
-                                })
-                                ?.Dispose();
-                        running?.Dispose();
-                        reply = CommandPipe.SendAsync(args, CancellationToken.None).GetAwaiter().GetResult();
-                    }
-
-                    Console.WriteLine(JsonSerializer.Serialize(reply, CommandJson.Default.CommandReply));
-                    return reply.Success ? 0 : 1;
+                    TaskOptions = new(sessionId, keepAlive, parentProcess);
+                    StartHidden = true;
+                    return RunApplicationLifetime([], null);
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(JsonSerializer.Serialize(new(false, "error", ex.Message),
-                        CommandJson.Default.CommandReply));
-                    return 1;
-                }
-                finally
-                {
-                    if (ownedShellList is not null) File.Delete(ownedShellList);
-                }
+                case not ([] or ["--serve"] or ["--silent"] or ["--startup"]):
+                    if (OperatingSystem.IsWindows() && AttachConsole(uint.MaxValue) != 0)
+                        Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+                    return RunClient(args);
             }
 
             if (Mutex.TryOpenExisting(CommandPipe.MutexName, out var runningInstance))
@@ -189,7 +173,13 @@ namespace RitsukageGif.Desktop
             using var instance = new Mutex(true, CommandPipe.MutexName, out var created);
             if (!created) return ActivateRunningInstance(args);
 
-            StartHidden = args is ["--serve"];
+            StartHidden = args is ["--serve"] or ["--silent"] ||
+                          (args is ["--startup"] && settings.System.StartupHidden);
+            return RunApplicationLifetime(args, instance);
+        }
+
+        private static int RunApplicationLifetime(string[] args, object? lifetimeOwner)
+        {
             var recovery = CrashRecoverySession.Begin(DiagnosticsActions.LogDirectory);
             if (recovery.SessionPath is { } sessionPath)
                 try
@@ -210,8 +200,10 @@ namespace RitsukageGif.Desktop
             var lifetimeExitCode = AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace()
                 .StartWithClassicDesktopLifetime(args);
             ProcessLogger.ZLogInformation($"Desktop lifetime returned. ExitCode={lifetimeExitCode}");
-            recovery.Complete(lifetimeExitCode);
-            GC.KeepAlive(instance);
+            recovery.Complete(Application.Current is App { CompletedExpectedTaskShutdown: true }
+                ? 0
+                : lifetimeExitCode);
+            GC.KeepAlive(lifetimeOwner);
             return lifetimeExitCode;
         }
 
@@ -229,7 +221,8 @@ namespace RitsukageGif.Desktop
 
         private static int ActivateRunningInstance(string[] args)
         {
-            if (args is ["--serve"]) return 0;
+            if (args is ["--serve"] or ["--silent"] ||
+                (args is ["--startup"] && AppSettings.Load().System.StartupHidden)) return 0;
             try
             {
                 var reply = CommandPipe.SendAsync(["show"], CancellationToken.None).GetAwaiter().GetResult();

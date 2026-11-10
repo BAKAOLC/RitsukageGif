@@ -1,3 +1,4 @@
+using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
@@ -12,7 +13,6 @@ namespace RitsukageGif.Desktop
     {
         private readonly Func<IDisposable>? _dialogScopeProvider;
         private readonly List<Flyout> _flyouts = [];
-        private readonly Func<Task> _loadWatermark;
         private readonly List<Action> _refresh = [];
         private readonly ScreenshotAnnotationSession _session;
         private readonly ScreenshotTool _tool;
@@ -20,11 +20,10 @@ namespace RitsukageGif.Desktop
         private bool _refreshing;
 
         public AnnotationPropertyView(ScreenshotAnnotationSession session, ScreenshotToolDefinition definition,
-            Func<Task> loadWatermark, Func<IDisposable>? dialogScopeProvider = null)
+            Func<IDisposable>? dialogScopeProvider = null)
         {
             _session = session;
             _tool = definition.Tool;
-            _loadWatermark = loadWatermark;
             _dialogScopeProvider = dialogScopeProvider;
             Orientation = Orientation.Horizontal;
             MaxWidth = 640;
@@ -42,6 +41,8 @@ namespace RitsukageGif.Desktop
         {
             if (_disposed) return;
             _disposed = true;
+            _watermarkDialog?.Close(false);
+            _numberDialog?.Close(null);
             foreach (var flyout in _flyouts.ToArray())
             {
                 flyout.Hide();
@@ -49,6 +50,8 @@ namespace RitsukageGif.Desktop
             }
 
             _flyouts.Clear();
+            foreach (var panel in _hoverPanels) panel.Dispose();
+            _hoverPanels.Clear();
             _refresh.Clear();
             Children.Clear();
         }
@@ -56,6 +59,7 @@ namespace RitsukageGif.Desktop
         public void HideFlyouts()
         {
             foreach (var flyout in _flyouts) flyout.Hide();
+            foreach (var panel in _hoverPanels) panel.Hide();
         }
 
         public void Refresh()
@@ -79,7 +83,7 @@ namespace RitsukageGif.Desktop
                 Width = 26, Height = 28, MinWidth = 0, MinHeight = 0, Padding = new(3), Margin = new(1, 2),
                 Focusable = false, VerticalAlignment = VerticalAlignment.Center, Foreground = AppTheme.Ink,
             };
-            button.Content = ToolbarIcon.TryGeometry(icon ?? key) is { } geometry
+            button.Content = ToolbarIcon.FindDefinition(icon ?? key) is { } geometry
                 ? ToolbarIcon.Create(button, geometry)
                 : new TextBlock
                 {
@@ -102,6 +106,7 @@ namespace RitsukageGif.Desktop
 
         private static void MinimalChrome(Button button)
         {
+            button.Classes.Add("tool");
             button.Background = Brushes.Transparent;
             button.BorderBrush = Brushes.Transparent;
             button.BorderThickness = new(1);
@@ -126,10 +131,20 @@ namespace RitsukageGif.Desktop
             });
             button.PointerEntered += (_, _) => RefreshMinimalChrome(button);
             button.PointerExited += (_, _) => RefreshMinimalChrome(button);
+            button.PropertyChanged += (_, args) =>
+            {
+                if (args.Property == IsEffectivelyEnabledProperty) RefreshMinimalChrome(button);
+            };
         }
 
         private static void RefreshMinimalChrome(Button button)
         {
+            if (!button.IsEffectivelyEnabled)
+            {
+                button.ClearValue(OpacityProperty);
+                return;
+            }
+
             if (button.Classes.Contains("palette-color"))
                 button.BorderBrush = button.Classes.Contains("selected-color") ? AppTheme.Accent
                     : button.IsPointerOver ? AppTheme.Outline
@@ -160,12 +175,12 @@ namespace RitsukageGif.Desktop
         }
 
         private CompactNumberInput NumberInput(string key, double minimum, double maximum, Func<double> read,
-            Func<double, Task> write, double width = 64, bool integral = false)
+            Func<double, Task> write, double width = 64, bool integral = false, decimal? increment = null)
         {
             var input = new CompactNumberInput
             {
                 Minimum = (decimal)minimum, Maximum = (decimal)maximum, DecimalPlaces = integral ? 0 : 1,
-                Increment = integral ? 1 : .5m, Width = width, Height = 28, Margin = new(2),
+                Increment = increment ?? (integral ? 1 : .5m), Width = width, Height = 28, Margin = new(2),
                 VerticalAlignment = VerticalAlignment.Center,
             };
             ToolTip.SetTip(input, UiText.Get(key));
@@ -201,62 +216,44 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private static StackPanel Labeled(string key, Control control)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            row.Children.Add(new TextBlock
-            {
-                Text = UiText.Get(key), VerticalAlignment = VerticalAlignment.Center, MinWidth = 100,
-            });
-            row.Children.Add(control);
-            return row;
-        }
-
         public Control WidthInput()
         {
-            return NumberInput("AnnotationThickness", 1,
-                _tool == ScreenshotTool.Brush ? _session.MaximumBrushThickness : 1024,
+            var input = HoverSizeInput("AnnotationThickness", 1, _session.MaximumBrushThickness,
                 () => _session.Thickness, value => _session.UpdateSelectedStyleAsync(thickness: value));
+            if (ScreenshotToolCatalog.Get(_tool).ObjectKind == "Geometry")
+                _refresh.Add(() => input.IsEnabled = !_session.Properties.Filled);
+            return input;
         }
 
         public Control FontSizeInput()
         {
-            return NumberInput("AnimationFontSize", 1, 1024, () => _session.FontSize,
-                value => _session.UpdateSelectedStyleAsync(fontSize: value), 72);
-        }
-
-        public Control OpacityInput()
-        {
-            return PropertyNumber("AnnotationOpacity", 1, 100, p => p.Opacity * 100,
-                (p, value) => p with { Opacity = value / 100 }, true);
+            var input = new AnnotationEditableCombo(
+            [
+                "5", "6", "7", "8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "26", "28", "36", "48", "56",
+                "72",
+            ]);
+            ToolTip.SetTip(input, UiText.Get("AnimationFontSize"));
+            input.TextChanged += async (_, _) =>
+            {
+                if (_disposed || _refreshing || !double.TryParse(input.Text,
+                        NumberStyles.Float, CultureInfo.CurrentCulture,
+                        out var value) || !double.IsFinite(value) || value is < 1 or > 1024 ||
+                    value.Equals(_session.FontSize)) return;
+                await _session.UpdateSelectedStyleAsync(fontSize: value);
+            };
+            _refresh.Add(() =>
+            {
+                var text = _session.FontSize.ToString(CultureInfo.CurrentCulture);
+                if (!input.IsKeyboardFocusWithin && input.Text != text) input.Text = text;
+            });
+            input.LostFocus += (_, _) => Refresh();
+            return input;
         }
 
         public Control Filled()
         {
-            return Toggle("AnnotationFilled", "■", p => p.Filled, (p, value) => p with { Filled = value },
-                "AnimationRectangle");
-        }
-
-        private CompactNumberInput NextNumber()
-        {
-            return NumberInput("AnnotationNextNumber", 0, 999999, () => _session.NextNumber,
-                value =>
-                {
-                    _session.SetNextNumber((int)value);
-                    return Task.CompletedTask;
-                }, integral: true);
-        }
-
-        private CompactNumberInput Mosaic()
-        {
-            return NumberInput("AnnotationMosaicSize", 2, 256, () => _session.MosaicSize,
-                value => _session.UpdateSelectedStyleAsync(mosaicSize: (int)value), integral: true);
-        }
-
-        private CompactNumberInput Blur()
-        {
-            return PropertyNumber("AnnotationBlurRadius", 1, 256, p => p.BlurRadius,
-                (p, value) => p with { BlurRadius = (int)value }, true);
+            return PropertyCheck("AnnotationFilled", properties => properties.Filled,
+                (properties, value) => properties with { Filled = value });
         }
     }
 }

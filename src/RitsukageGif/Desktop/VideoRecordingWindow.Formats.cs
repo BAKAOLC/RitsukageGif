@@ -5,17 +5,6 @@ namespace RitsukageGif.Desktop
         private bool IsAnimationOutput => _format.SelectedIndex is >= 0 and < 3;
         private VideoContainer SelectedVideoContainer => (VideoContainer)(_format.SelectedIndex - 3);
 
-        internal void SelectAnimationOutput()
-        {
-            if (_operation is { IsCompleted: false }) return;
-            _format.SelectedIndex = (int)_host.Settings.Format;
-            _fps.Value = _host.Settings.Fps;
-            _scale.Value = _host.Settings.Divisor;
-            _quality.SelectedIndex = 2 - (int)_host.Settings.Quality;
-            _directory.Text = _host.Settings.OutputDirectory;
-            Refresh();
-        }
-
         internal void SelectVideoOutput()
         {
             if (_operation is { IsCompleted: false }) return;

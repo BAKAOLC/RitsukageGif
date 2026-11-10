@@ -10,8 +10,9 @@ namespace RitsukageGif.Desktop
             CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
-            var window = new StructuredRecognitionWindow(default, false, null, null, FormulaCopyFormat.Latex,
-                null, false, null, FormulaLatexFormat.DisplayDollar, null, initialTable: table);
+            var window = new StructuredRecognitionWindow(default, false, null, FormulaCopyFormat.Latex,
+                null, false, null, FormulaLatexFormat.DisplayDollar, null, initialTable: table,
+                dialogPreferences: new() { Table = table.OutputStyle ?? TableOutputStyle.Default });
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.Closed += (_, _) => closed.TrySetResult();
             window.Closing += (_, e) =>
@@ -35,7 +36,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 token.ThrowIfCancellationRequested();
-                return window._table.Document?.Table;
+                return window._table.Document is { } document ? window.WithTableOutputStyle(document.Table) : null;
             }
             finally
             {

@@ -26,23 +26,6 @@ namespace RitsukageGif.Desktop
             return Task.CompletedTask;
         }
 
-        private Task OpenCaptureRecorderAsync()
-        {
-            if (IsClosing) return Task.CompletedTask;
-            if (_videoRecorder is null)
-            {
-                _videoRecorder = new(this, true);
-                _videoRecorder.Closed += (_, _) => _videoRecorder = null;
-            }
-            else
-            {
-                _videoRecorder.SelectAnimationOutput();
-            }
-
-            WindowActivation.Show(_videoRecorder);
-            return Task.CompletedTask;
-        }
-
         private void CloseVideoRecorderForShutdown()
         {
             _videoRecorder?.CloseForShutdown();
@@ -53,7 +36,7 @@ namespace RitsukageGif.Desktop
             bool retainOutput = false)
         {
             Dispatcher.UIThread.VerifyAccess();
-            if (IsClosing || IsBusy || IsSelecting || IsConfiguring || Region is null)
+            if (IsClosing || IsBusy || IsSelecting || IsConfiguring || _screenshotRecordingPreparing || Region is null)
                 throw new InvalidOperationException(UiText.Get("CommandNotReady"));
             var preset = _presets.ActivePreset ?? _manualPreset;
             if (preset?.Layout is { } layout)
@@ -86,6 +69,7 @@ namespace RitsukageGif.Desktop
             _stop = new();
             _abort = new();
             IsBusy = IsRecording = true;
+            BeginRecordingControl();
             _recordClock.Restart();
             Notify();
             _operation = RecordVideoAsync(options, path, preset, systemAudio, systemDevice, microphone,
@@ -96,8 +80,21 @@ namespace RitsukageGif.Desktop
         internal async Task StopOwnedVideoAsync(Task<RecordingOutcome>? operation, bool cancel)
         {
             if (operation is null || operation.IsCompleted || !ReferenceEquals(operation, _operation)) return;
-            if (cancel) CancelRecording();
-            else if (IsRecording) await ToggleRecordingAsync();
+            if (cancel)
+            {
+                CancelRecording();
+            }
+            else if (_screenshotRecordingActive)
+            {
+                IsRecording = false;
+                if (_stop is { } stop) await stop.CancelAsync();
+                Notify();
+            }
+            else if (IsRecording)
+            {
+                await ToggleRecordingAsync();
+            }
+
             await operation;
         }
 
@@ -148,7 +145,7 @@ namespace RitsukageGif.Desktop
                 bool published;
                 using (var progress = new RecordingProgressPresenter(value => UpdateRecordingProgress(value, false)))
                     published = await Task.Run(() => new VideoRecordingSession(CreateSource, CreateAudio)
-                        .RunAsync(options, path, progress, stop, cancel), cancel);
+                        .RunAsync(options, path, progress, stop, cancel, _recordingControl), cancel);
                 if (!published) throw new OperationCanceledException(stop);
                 LastPath = path;
                 LastOutputs = [.. options.GetOutputPaths(path)];
@@ -214,6 +211,7 @@ namespace RitsukageGif.Desktop
                 _presets.CompleteVideoRecording(preset);
                 _recordSettings = null;
                 _manualCaptureCompleted = false;
+                CompleteRecordingControl();
                 _recordClock.Stop();
                 IsRecording = IsBusy = false;
                 _stop?.Dispose();

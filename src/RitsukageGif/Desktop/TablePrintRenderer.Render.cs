@@ -30,14 +30,17 @@ namespace RitsukageGif.Desktop
                     var pageStart = page.StartBand * document.Pitch;
                     var pageEnd = page.EndBand * document.Pitch;
                     var pageHeight = pageEnd - pageStart;
-                    for (var column = firstColumn; column <= lastColumn; column++)
+                    for (var column = firstColumn;
+                         document.OutputStyle.Borders == TableBorderStyle.All && column <= lastColumn;
+                         column++)
                     {
                         var x = document.Columns[column] - panelX;
                         context.DrawLine(border, new(x, 0), new(x, pageHeight));
                     }
 
                     foreach (var band in document.RowBands)
-                        if (band >= page.StartBand && band <= page.EndBand)
+                        if (document.OutputStyle.Borders == TableBorderStyle.All && band >= page.StartBand &&
+                            band <= page.EndBand)
                         {
                             var y = band * document.Pitch - pageStart;
                             context.DrawLine(border, new(0, y), new(panelWidth, y));
@@ -57,19 +60,29 @@ namespace RitsukageGif.Desktop
                         var y = Math.Max(firstBand * document.Pitch, pageStart) - pageStart;
                         var bottom = Math.Min(lastBand * document.Pitch, pageEnd) - pageStart;
                         var rect = new Rect(x, y, right - x, bottom - y);
-                        context.DrawRectangle(background, border, rect);
+                        context.DrawRectangle(background,
+                            document.OutputStyle.Borders == TableBorderStyle.All ? border : null, rect);
                         if (panel != page.Panel) continue;
                         for (var lineIndex = 0; lineIndex < lines.Count; lineIndex++)
                         {
                             var band = firstBand + lineIndex;
                             if (band < page.StartBand || band >= page.EndBand) continue;
                             if ((lineIndex & 127) == 0) token.ThrowIfCancellationRequested();
-                            lines[lineIndex].Draw(context,
-                                new(cellX - panelX + 4, band * document.Pitch - pageStart + 3));
+                            var line = lines[lineIndex];
+                            var offset = document.OutputStyle.Alignment switch
+                            {
+                                TableContentAlignment.Center => Math.Max(4,
+                                    (rect.Width - line.WidthIncludingTrailingWhitespace) / 2),
+                                TableContentAlignment.Right => Math.Max(4,
+                                    rect.Width - line.WidthIncludingTrailingWhitespace - 4),
+                                _ => 4,
+                            };
+                            line.Draw(context, new(cellX - panelX + offset, band * document.Pitch - pageStart + 3));
                         }
                     }
 
-                    context.DrawRectangle(null, border, new(0, 0, panelWidth, pageHeight));
+                    if (document.OutputStyle.Borders != TableBorderStyle.None)
+                        context.DrawRectangle(null, border, new(0, 0, panelWidth, pageHeight));
                 }
 
                 token.ThrowIfCancellationRequested();

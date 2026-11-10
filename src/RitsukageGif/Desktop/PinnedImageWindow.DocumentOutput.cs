@@ -24,11 +24,12 @@ namespace RitsukageGif.Desktop
             var output = await CapturePreferredOutputAsync(OutputColorMode.Sdr, token);
             var profile = SavePreferencesProvider().Normalize().ManualProfile();
             var dimensions = PngImageCodec.ReadDimensions(output.Png);
-            var name = Path.ChangeExtension(profile.CreateFileName(new ScreenshotNameContext(DateTime.Now,
-                Width: dimensions.Width, Height: dimensions.Height)), ".pdf");
+            var context = new ScreenshotNameContext(DateTime.Now,
+                Width: dimensions.Width, Height: dimensions.Height);
+            var name = Path.ChangeExtension(profile.CreateFileName(context), ".pdf");
             var path = await DocumentExportWindow.ShowAsync(this, output.Png, name, token,
                 profile.ResolveDirectory(OutputDirectoryProvider() ??
-                                         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures)));
+                                         Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), context));
             if (path is null) return;
             try
             {
@@ -37,7 +38,10 @@ namespace RitsukageGif.Desktop
             finally
             {
                 DocumentOutputSaved?.Invoke([path],
-                    profile.AfterSave == ScreenshotAfterSaveAction.CopyFile ? [path] : null);
+                    profile.AfterSave is ScreenshotAfterSaveAction.CopyFile or
+                        ScreenshotAfterSaveAction.CopyFileAndPath
+                        ? [path]
+                        : null);
             }
         }
 

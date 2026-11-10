@@ -145,7 +145,8 @@ namespace RitsukageGif.Desktop
                         VerticalAlignment = VerticalAlignment.Center,
                     });
                     ToolTip.SetTip(row, program);
-                    var remove = BindingButton("SelectionShortcutRemove", "M6,6 L18,18 M18,6 L6,18");
+                    var remove = BindingButton("SelectionShortcutRemove",
+                        ToolbarIcon.GetDefinition("SelectionShortcutRemove"));
                     remove.Foreground = AppTheme.Error;
                     Grid.SetColumn(remove, 1);
                     row.Children.Add(remove);

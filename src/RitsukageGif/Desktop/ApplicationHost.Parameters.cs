@@ -2,7 +2,7 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class ApplicationHost
     {
-        private void RunPresetWithParameters(string file, string[] arguments)
+        private void RunPresetWithParameters(string file, string[] arguments, PresetDebugger? debugger = null)
         {
             string? name = null;
             var position = 0;
@@ -17,8 +17,8 @@ namespace RitsukageGif.Desktop
 
             var parameters = ScriptParameters.Parse(assignments);
             var presets = PresetCatalog.Load([file]);
-            ActivatePreset(name is null ? presets.Single() : presets.Single(p => p.Name == name),
-                parameters: parameters);
+            ActivatePreset(name is null ? presets.Single() : presets.Single(p => p.Name == name), debugger,
+                parameters);
         }
     }
 }

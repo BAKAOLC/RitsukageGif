@@ -46,8 +46,8 @@ namespace RitsukageGif.Desktop
             _columns.Children.Add(_newColumn);
             _pool.Children.Clear();
             var included = _draft.Columns.SelectMany(column => column).ToHashSet();
-            foreach (var definition in ScreenshotToolCatalog.All)
-                if (definition.Tool != ScreenshotTool.Select && !included.Contains(definition.Tool))
+            foreach (var definition in ScreenshotToolCatalog.Registered)
+                if (!included.Contains(definition.Tool))
                 {
                     var cell = ToolCell(definition.Tool);
                     cell.Width = 36;
@@ -58,10 +58,12 @@ namespace RitsukageGif.Desktop
         private ToolbarDragHandle ToolCell(ScreenshotTool tool)
         {
             var definition = ScreenshotToolCatalog.Get(tool);
+            var icon = ToolbarDragHandle.Icon(definition.IconKey);
+            if (_recording && !definition.SupportsRecording) icon.Opacity = .45;
             var cell = new ToolbarDragHandle(this, point => BeginTool(tool, point), PreviewDrop, Drop, CancelDrag)
             {
                 Width = 48, Height = 32, CornerRadius = new(3),
-                Child = ToolbarDragHandle.Icon(definition.IconKey), Tag = tool,
+                Child = icon, Tag = tool,
             };
             ToolTip.SetTip(cell, UiText.Get(definition.NameKey));
             return cell;

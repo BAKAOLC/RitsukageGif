@@ -5,7 +5,8 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class PinnedImageWindow
     {
-        private static byte[] TransformPng(byte[] png, PinnedImageTransform transform, CancellationToken token)
+        private static byte[] TransformPngCore(byte[] png, PinnedImageTransform transform, PinnedViewTransform? view,
+            CancellationToken token, RgbColorMatrix? colorMatrix = null)
         {
             var raster = PngImageCodec.Decode(png, token);
             var width = raster.Width;
@@ -17,7 +18,12 @@ namespace RitsukageGif.Desktop
             var channels = typeCode switch { 0 or 3 => 1, 2 => 3, 4 => 2, 6 => 4, _ => 0 };
             var bits = channels * depth;
             var pixelBytes = Math.Max(1, bits / 8);
-            var effect = transform is PinnedImageTransform.Grayscale or PinnedImageTransform.Invert;
+            var effect = colorMatrix is not null ||
+                         (view is null && transform is PinnedImageTransform.Grayscale or PinnedImageTransform.Invert);
+            var matrix = colorMatrix ?? (transform == PinnedImageTransform.Grayscale
+                ? RgbColorMatrix.Grayscale
+                : RgbColorMatrix.Invert);
+            var orientation = view ?? (effect ? default : default(PinnedViewTransform).Apply(transform));
             if (effect && chunks.Any(chunk => chunk.Type == "iCCP" ||
                                               IsTransformRawProfileChunk(chunk.Type, chunk.Data, "icc") ||
                                               IsTransformRawProfileChunk(chunk.Type, chunk.Data, "icm")))
@@ -34,6 +40,43 @@ namespace RitsukageGif.Desktop
                     IsTransformRawProfileChunk(chunk.Type, chunk.Data, "icc") ||
                     IsTransformRawProfileChunk(chunk.Type, chunk.Data, "icm"));
                 chunks.Add(("sRGB", new byte[] { 0 }));
+            }
+
+            if (effect && typeCode == 0 && chunks.FirstOrDefault(chunk => chunk.Type == "tRNS").Data is
+                    { Length: > 0 } grayTransparency)
+            {
+                if (grayTransparency.Length != 2) throw new InvalidDataException();
+                var transparent = BinaryPrimitives.ReadUInt16BigEndian(grayTransparency.Span);
+                var oldMaximum = (1 << depth) - 1;
+                var newDepth = depth == 16 ? (byte)16 : (byte)8;
+                var componentBytes = newDepth / 8;
+                var expanded = new byte[checked(width * height * componentBytes * 2)];
+                for (var index = 0; index < width * height; index++)
+                {
+                    if ((index & 4095) == 0) token.ThrowIfCancellationRequested();
+                    var value = depth == 16
+                        ? BinaryPrimitives.ReadUInt16BigEndian(pixels.AsSpan(index * 2))
+                        : pixels[index];
+                    var destination = expanded.AsSpan(index * componentBytes * 2, componentBytes * 2);
+                    if (componentBytes == 1)
+                    {
+                        destination[0] = (byte)(value * 255 / oldMaximum);
+                        destination[1] = value == transparent ? (byte)0 : (byte)255;
+                    }
+                    else
+                    {
+                        BinaryPrimitives.WriteUInt16BigEndian(destination, value);
+                        BinaryPrimitives.WriteUInt16BigEndian(destination[2..],
+                            value == transparent ? (ushort)0 : ushort.MaxValue);
+                    }
+                }
+
+                pixels = expanded;
+                depth = newDepth;
+                channels = 2;
+                pixelBytes = componentBytes * 2;
+                typeCode = 4;
+                chunks.RemoveAll(chunk => chunk.Type == "tRNS");
             }
 
             if (effect && typeCode == 2 && chunks.FirstOrDefault(chunk => chunk.Type == "tRNS").Data is
@@ -79,8 +122,8 @@ namespace RitsukageGif.Desktop
                 chunks.RemoveAll(chunk => chunk.Type == "tRNS");
             }
 
-            var targetWidth = transform == PinnedImageTransform.RotateClockwise ? height : width;
-            var targetHeight = transform == PinnedImageTransform.RotateClockwise ? width : height;
+            var targetWidth = orientation.SwapsAxes ? height : width;
+            var targetHeight = orientation.SwapsAxes ? width : height;
             var outputPixels = effect ? pixels : new byte[pixels.Length];
             for (var y = 0; y < height; y++)
             {
@@ -91,11 +134,11 @@ namespace RitsukageGif.Desktop
                     var source = pixels.AsSpan((y * width + x) * pixelBytes, pixelBytes);
                     if (effect)
                     {
-                        if (typeCode != 3) TransformPngSample(source, channels, depth, transform);
+                        if (typeCode != 3) TransformPngSample(source, channels, depth, matrix);
                     }
                     else
                     {
-                        var point = TransformPoint(x, y, width, height, transform);
+                        var point = orientation.PixelPosition(x, y, width, height);
                         source.CopyTo(outputPixels.AsSpan((point.Y * targetWidth + point.X) * pixelBytes, pixelBytes));
                     }
                 }
@@ -109,7 +152,7 @@ namespace RitsukageGif.Desktop
                 var data = sourceData;
                 switch (chunkType)
                 {
-                    case "pHYs" when transform == PinnedImageTransform.RotateClockwise && data.Length == 9:
+                    case "pHYs" when orientation.SwapsAxes && data.Length == 9:
                         var resolution = data.ToArray();
                         sourceData.Span[..4].CopyTo(resolution.AsSpan(4));
                         sourceData.Span.Slice(4, 4).CopyTo(resolution);
@@ -119,16 +162,8 @@ namespace RitsukageGif.Desktop
                         var palette = data.ToArray();
                         if (palette.Length == 0 || palette.Length % 3 != 0) throw new InvalidDataException();
                         for (var index = 0; index < palette.Length; index += 3)
-                            TransformPngSample(palette.AsSpan(index, 3), 3, 8, transform);
+                            TransformPngSample(palette.AsSpan(index, 3), 3, 8, matrix);
                         data = palette;
-                        break;
-                    case "tRNS" when effect && typeCode == 0 && transform == PinnedImageTransform.Invert:
-                        if (data.Length != 2) throw new InvalidDataException();
-                        var transparencySample = data.ToArray();
-                        var value = BinaryPrimitives.ReadUInt16BigEndian(transparencySample);
-                        BinaryPrimitives.WriteUInt16BigEndian(transparencySample,
-                            checked((ushort)((1 << depth) - 1 - value)));
-                        data = transparencySample;
                         break;
                 }
 
@@ -139,23 +174,17 @@ namespace RitsukageGif.Desktop
         }
 
         private static void TransformPngSample(Span<byte> sample, int channels, int depth,
-            PinnedImageTransform transform)
+            RgbColorMatrix matrix)
         {
             var maximum = (1 << depth) - 1;
             var size = depth == 16 ? 2 : 1;
             var red = size == 1 ? (int)sample[0] : BinaryPrimitives.ReadUInt16BigEndian(sample);
             var green = channels < 3 ? red : size == 1 ? sample[1] : BinaryPrimitives.ReadUInt16BigEndian(sample[2..]);
             var blue = channels < 3 ? red : size == 1 ? sample[2] : BinaryPrimitives.ReadUInt16BigEndian(sample[4..]);
-            if (transform == PinnedImageTransform.Grayscale)
-            {
-                red = green = blue = (int)Math.Round((77d * red + 150d * green + 29d * blue) / 256);
-            }
-            else
-            {
-                red = maximum - red;
-                green = maximum - green;
-                blue = maximum - blue;
-            }
+            var transformed = matrix.Transform(new(red, green, blue), maximum / 255f);
+            red = (int)Math.Clamp(MathF.Round(transformed.X), 0, maximum);
+            green = (int)Math.Clamp(MathF.Round(transformed.Y), 0, maximum);
+            blue = (int)Math.Clamp(MathF.Round(transformed.Z), 0, maximum);
 
             if (size == 1)
             {

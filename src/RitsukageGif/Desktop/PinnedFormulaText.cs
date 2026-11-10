@@ -12,7 +12,7 @@ namespace RitsukageGif.Desktop
             {
                 if (text.Length > 0) text.AppendLine();
                 text.AppendLine("\\[");
-                text.AppendLine(source);
+                text.AppendLine(FormulaLatexFormatter.Unwrap(source));
                 text.AppendLine("\\]");
             }
 

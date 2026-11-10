@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace RitsukageGif.Desktop
 {
     internal sealed record CommandReply(
@@ -19,5 +22,16 @@ namespace RitsukageGif.Desktop
         string? ParameterSession = null,
         IReadOnlyList<PresetRecordingStreamStatus>? Streams = null,
         IReadOnlyList<InputChannelInfo>? Inputs = null,
-        double? InputClock = null);
+        double? InputClock = null,
+        JsonElement? SettingsValue = null,
+        IReadOnlyList<CommandActionInfo>? Actions = null,
+        IReadOnlyList<CommandOperationInfo>? Operations = null,
+        string? OperationId = null,
+        string? SessionId = null,
+        JsonElement? Value = null)
+    {
+        [JsonIgnore] internal Action? ReplyWritten { get; init; }
+
+        [JsonIgnore] internal Action? ReplyFailed { get; init; }
+    }
 }

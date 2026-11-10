@@ -35,6 +35,12 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        internal NativeCaptureSessionReference RetainSource()
+        {
+            lock (_gate)
+                return (_session ?? throw new CaptureSourceLostException()).Retain();
+        }
+
         public void Commit(CancellationToken token = default)
         {
             NativeCaptureSession? previous;

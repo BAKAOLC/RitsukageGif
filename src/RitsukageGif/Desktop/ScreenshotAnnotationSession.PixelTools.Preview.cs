@@ -1,4 +1,4 @@
-﻿using Avalonia;
+using Avalonia;
 using Avalonia.Media.Imaging;
 using ImageMagick;
 
@@ -40,19 +40,21 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task<IReadOnlyList<(Bitmap Image, Rect Bounds)>> CreatePixelPreviewAsync(
-            ScreenshotAnnotation annotation, ScreenshotAnnotation[] preceding, CancellationToken token)
+            ScreenshotAnnotation annotation, ScreenshotAnnotation[] preceding, CancellationToken token,
+            (PixelRect Region, byte[] Pixels)[]? sourceFrames = null)
         {
             var region = PixelArea(annotation, AnnotationBounds);
+            if (region.IsEmpty) return [];
             var sampling = PixelSamplingArea(annotation, region, AnnotationBounds);
             sampling = ExpandPixelPreviewRegion(sampling, preceding);
-            var frames = PixelPreviewFrames();
+            var frames = sourceFrames ?? PixelPreviewFrames();
             var pixels = await Task.Run(() => ReadPixelPreviewSource(sampling, frames, token), token);
             var composed = await ComposeImageAsync(sampling, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 return new(pixels, new PixelReadSettings((uint)sampling.Width, (uint)sampling.Height,
                     StorageType.Char, PixelMapping.BGRA));
-            }, token, true, preceding);
+            }, token, true, preceding, frames);
             if (annotation.Tool == ScreenshotTool.SmartErase)
             {
                 using var source = new MagickImage(composed,

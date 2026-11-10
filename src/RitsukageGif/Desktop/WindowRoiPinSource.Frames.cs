@@ -4,7 +4,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class WindowRoiPinSource
     {
-        internal static WindowRoiPinFrame CreateFrame(CapturedFrameSet frames, PixelRect bounds,
+        private static WindowRoiPinFrame CreateFrame(CapturedFrameSet frames, PixelRect bounds,
             WindowRoiPinDescriptor descriptor, CancellationToken token,
             HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression,
             PixelRect? coordinateBounds = null, double outputDensity = 1, double? nativePixelDensity = null)

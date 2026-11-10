@@ -1,4 +1,4 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 
@@ -8,48 +8,49 @@ namespace RitsukageGif.Desktop
     {
         public Control GeometryShape()
         {
-            return Toggle("AnimationEllipse", "", p => p.GeometryShape == AnnotationGeometryShape.Ellipse,
-                (p, value) => p with
-                {
-                    GeometryShape = value ? AnnotationGeometryShape.Ellipse : AnnotationGeometryShape.Rectangle,
-                }, "AnimationEllipse");
+            var choices = new StackPanel { Orientation = Orientation.Horizontal };
+            choices.Children.Add(Toggle("AnimationRectangle", "",
+                properties => properties.GeometryShape == AnnotationGeometryShape.Rectangle,
+                (properties, _) => properties with { GeometryShape = AnnotationGeometryShape.Rectangle },
+                "AnimationRectangle"));
+            choices.Children.Add(Toggle("AnimationEllipse", "",
+                properties => properties.GeometryShape == AnnotationGeometryShape.Ellipse,
+                (properties, _) => properties with { GeometryShape = AnnotationGeometryShape.Ellipse },
+                "AnimationEllipse"));
+            return choices;
         }
 
         public Control CornerRadius()
         {
-            return Popup("AnnotationCornerRadius", "AnimationRectangle", () =>
-                Labeled("AnnotationCornerRadius", PropertyNumber("AnnotationCornerRadius", 0, 1024,
-                    p => p.CornerRadius, (p, value) => p with { CornerRadius = value })));
-        }
-
-        public Control Curved()
-        {
-            var button = Toggle("AnnotationCurved", "", p => p.Curved,
-                (p, value) => p with { Curved = value });
-            var preview = new AnnotationCurvePreview();
-            button.Content = preview;
+            var input = HoverSizeInput("AnnotationCornerRadius", 0, 90, () => _session.Properties.CornerRadius,
+                value => _session.UpdateSelectedPropertiesAsync(_session.Properties with { CornerRadius = value }));
             _refresh.Add(() =>
+                input.IsEnabled = _session.Properties.GeometryShape == AnnotationGeometryShape.Rectangle);
+            return input;
+        }
+
+        private StackPanel Curved()
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            foreach (var curved in new[] { false, true })
             {
-                preview.Curved = _session.Properties.Curved;
-                preview.Stroke = button.Foreground ?? AppTheme.Ink;
-                preview.InvalidateVisual();
-            });
-            return button;
+                var button = Toggle(curved ? "AnnotationCurved" : "ScreenshotAnnotationBrokenLine", "",
+                    properties => properties.Curved == curved,
+                    (properties, _) => properties with { Curved = curved });
+                var preview = new AnnotationCurvePreview { Curved = curved };
+                button.Content = preview;
+                _refresh.Add(() =>
+                {
+                    preview.Stroke = button.Foreground ?? AppTheme.Ink;
+                    preview.InvalidateVisual();
+                });
+                row.Children.Add(button);
+            }
+
+            return row;
         }
 
-        public Control SpotlightShape()
-        {
-            return Toggle("AnnotationSpotlightEllipse", "○", p => p.SpotlightEllipse,
-                (p, value) => p with { SpotlightEllipse = value }, "AnimationEllipse");
-        }
-
-        public Control SpotlightStroke()
-        {
-            return Toggle("AnnotationSpotlightStroke", "□", p => p.SpotlightStroke,
-                (p, value) => p with { SpotlightStroke = value }, "AnimationRectangle");
-        }
-
-        public Control Endpoint(bool start)
+        private Button Endpoint(bool start)
         {
             var key = start ? "AnnotationStartEndpoint" : "AnnotationEndEndpoint";
             var button = Popup(key, "ToolbarChevron", () =>

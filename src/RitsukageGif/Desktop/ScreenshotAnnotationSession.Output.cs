@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -198,7 +198,8 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task<byte[]> ComposeImageAsync(PixelRect region, Func<CancellationToken, MagickImage> load,
-            CancellationToken token, bool rawOutput = false, ScreenshotAnnotation[]? snapshot = null)
+            CancellationToken token, bool rawOutput = false, ScreenshotAnnotation[]? snapshot = null,
+            (PixelRect Region, byte[] Pixels)[]? sourceFrames = null)
         {
             token.ThrowIfCancellationRequested();
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -260,7 +261,7 @@ namespace RitsukageGif.Desktop
                                     await EraseImageLayerAsync(source, region, annotation, token);
                                     break;
                                 case ScreenshotTool.Magnifier:
-                                    await CopyMagnifierLayerAsync(source, region, annotation, token);
+                                    await CopyMagnifierLayerAsync(source, region, annotation, token, sourceFrames);
                                     await CompositeAnnotationLayerAsync(source, region, [annotation], token, false);
                                     break;
                                 case ScreenshotTool.Blur:
@@ -312,6 +313,7 @@ namespace RitsukageGif.Desktop
 
         private Rect RenderBounds(ScreenshotAnnotation annotation)
         {
+            if (annotation.FixedStroke is { } stroke) return stroke.Path.Bounds.Inflate(annotation.Thickness);
             // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
             switch (annotation.Tool)
             {
@@ -332,9 +334,9 @@ namespace RitsukageGif.Desktop
                     return new(AnnotationBounds.X, AnnotationBounds.Y, AnnotationBounds.Width, AnnotationBounds.Height);
                 case ScreenshotTool.Text:
                     var text = FormatLabel(annotation, Brushes.Black);
-                    var padding = annotation.Properties.TextPadding * 2;
-                    var size = new Size(text.Width + padding, text.Height + padding);
-                    return new Rect(annotation.Points[0], size).Inflate(annotation.Properties.TextOutlineWidth);
+                    var size = new Size(text.Width, text.Height);
+                    return new Rect(annotation.Points[0], size).Inflate(Math.Max(TextPadding(annotation.Properties),
+                        annotation.Properties.TextOutlineEnabled ? annotation.Properties.TextOutlineWidth : 0));
                 case ScreenshotTool.Number:
                     return NumberRenderBounds(annotation);
             }

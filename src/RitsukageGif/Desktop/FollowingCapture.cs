@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace RitsukageGif.Desktop
 {
@@ -7,25 +7,27 @@ namespace RitsukageGif.Desktop
         private readonly DesktopCapture _capture;
         private readonly int _frameLength;
         private readonly Func<PixelRect?> _region;
-        private PixelRect _current;
         private bool _disposed;
         private CapturedFrameSet? _lastColorLayout;
 
         public FollowingCapture(RecordingOptions options, Func<DisplayTopology> displayProvider,
-            Func<PixelRect?> region)
-            : this(options, new DesktopCapture(options, displayProvider), region)
+            Func<PixelRect?> region, NativeCaptureSession? nativeSource = null, string? includedWindowTitle = null)
+            : this(options,
+                new(options, displayProvider, nativeSource: nativeSource, includedWindowTitle: includedWindowTitle),
+                region)
         {
         }
 
         private FollowingCapture(RecordingOptions options, DesktopCapture capture, Func<PixelRect?> region)
         {
             _region = region;
-            _current = options.Region;
+            CurrentRegion = options.Region;
             _capture = capture;
             _frameLength = checked(options.Width * options.Height * 4);
         }
 
         internal Action? SourceLost { get; init; }
+        internal PixelRect CurrentRegion { get; private set; }
 
         public CapturedFrameSet CaptureFrames(CancellationToken token = default)
         {
@@ -40,10 +42,10 @@ namespace RitsukageGif.Desktop
                 return BlankColorFrame();
             }
 
-            if (region != _current)
+            if (region != CurrentRegion)
             {
                 _capture.Move(region);
-                _current = region;
+                CurrentRegion = region;
             }
 
             try
@@ -82,10 +84,10 @@ namespace RitsukageGif.Desktop
                 return new byte[_frameLength];
             }
 
-            if (region != _current)
+            if (region != CurrentRegion)
             {
                 _capture.Move(region);
-                _current = region;
+                CurrentRegion = region;
             }
 
             try

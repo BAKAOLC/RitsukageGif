@@ -36,6 +36,8 @@ namespace RitsukageGif.Desktop
                 new(GlobalActionKind.ScreenshotAndCopyText, "RecognizeText", ActionScreenshotOutput.CopyText),
                 new(GlobalActionKind.ScreenshotAndCopyCodeText, "RecognizeBarcode",
                     ActionScreenshotOutput.CopyCodeText),
+                new(GlobalActionKind.ScreenshotAndRecord, "ScreenshotRecord", ActionScreenshotOutput.Copy,
+                    StartWithRecording: true),
                 new(GlobalActionKind.ScreenshotAndScroll, "ScreenshotScroll", ActionScreenshotOutput.Copy,
                     StartWithScrolling: true),
                 new(GlobalActionKind.ClosePinnedImages, "Cancel"),
@@ -52,6 +54,10 @@ namespace RitsukageGif.Desktop
                     ActionScreenshotOutput.RecognizeFormula),
                 new(GlobalActionKind.OpenAnimationEditor, "AnimationPreview", FileParameter: true),
                 new(GlobalActionKind.RunScript, "GlobalActionsHeading"),
+                new(GlobalActionKind.TogglePinnedMouseThrough, "ScreenshotPin"),
+                new(GlobalActionKind.PinFile, "ScreenshotPin", FileParameter: true),
+                new(GlobalActionKind.PinSelectedFiles, "ScreenshotPin"),
+                new(GlobalActionKind.ToggleWindowTopmostAtPointer, "GeneralHeading"),
             ]);
 
         internal static GlobalActionDefinition Definition(GlobalActionKind kind)

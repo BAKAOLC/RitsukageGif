@@ -13,6 +13,7 @@ namespace RitsukageGif.Desktop
 
         private bool CanEditAnnotation(ScreenshotAnnotation annotation, bool focused = false)
         {
+            if (annotation is { Tool: ScreenshotTool.Watermark, WatermarkImage: null }) return false;
             if (_behavior.SecondaryEditing == AnnotationSecondaryEditingMode.TextOnly)
                 return annotation.Tool == ScreenshotTool.Text;
             if (AllowUnrestrictedSelection && Tool == ScreenshotTool.Select)

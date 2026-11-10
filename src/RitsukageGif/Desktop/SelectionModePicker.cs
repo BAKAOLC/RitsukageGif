@@ -34,12 +34,14 @@ namespace RitsukageGif.Desktop
             _coordinator = coordinator;
             _buttons =
             [
-                Create(SelectionShapeMode.Rectangle, "SelectionModeRectangle", "M4,4 L20,4 20,20 4,20 Z"),
+                Create(SelectionShapeMode.Rectangle, "SelectionModeRectangle",
+                    ToolbarIcon.GetDefinition("SelectionModeRectangle")),
                 Create(SelectionShapeMode.Free, "SelectionModeFree",
-                    "M5,6 C2,10 6,11 4,16 C3,21 13,19 16,20 C22,21 22,14 18,11 C14,9 15,3 10,4 C8,5 6,4 5,6 Z"),
-                Create(SelectionShapeMode.Polygon, "SelectionModePolygon", "M4,4 L19,6 21,18 10,21 3,13 Z"),
+                    ToolbarIcon.GetDefinition("SelectionModeFree")),
+                Create(SelectionShapeMode.Polygon, "SelectionModePolygon",
+                    ToolbarIcon.GetDefinition("SelectionModePolygon")),
                 Create(SelectionShapeMode.MultiWindow, "SelectionModeMultiWindow",
-                    "M3,3 L15,3 15,15 3,15 Z M9,9 L21,9 21,21 9,21 M3,7 L15,7 M15,13 L21,13"),
+                    ToolbarIcon.GetDefinition("SelectionModeMultiWindow")),
             ];
             foreach (var button in _buttons) _row.Children.Add(button);
             Children.Add(_row);
@@ -114,7 +116,7 @@ namespace RitsukageGif.Desktop
             _countdownTick = DispatcherTimer.RunOnce(UpdateCountdown, TimeSpan.FromMilliseconds(33));
         }
 
-        private Button Create(SelectionShapeMode mode, string label, string path)
+        private Button Create(SelectionShapeMode mode, string label, IconDefinition path)
         {
             var button = new Button
             {

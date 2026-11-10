@@ -27,24 +27,5 @@ namespace RitsukageGif.Desktop
                    NativeAuthorization == other.NativeAuthorization &&
                    RelativeRegion == other.RelativeRegion && Cursor == other.Cursor;
         }
-
-        internal WindowRoiPinDescriptor Transform(PinnedImageTransform transform)
-        {
-            return transform switch
-            {
-                PinnedImageTransform.RotateClockwise => this with
-                {
-                    QuarterTurns = (QuarterTurns + 1) % 4,
-                    FlipHorizontal = FlipVertical,
-                    FlipVertical = FlipHorizontal,
-                },
-                PinnedImageTransform.Rotate180 => this with { QuarterTurns = (QuarterTurns + 2) % 4 },
-                PinnedImageTransform.FlipHorizontal => this with { FlipHorizontal = !FlipHorizontal },
-                PinnedImageTransform.FlipVertical => this with { FlipVertical = !FlipVertical },
-                PinnedImageTransform.Grayscale or PinnedImageTransform.Invert =>
-                    throw new InvalidOperationException("Convert the live pin before applying pixel effects."),
-                _ => throw new ArgumentOutOfRangeException(nameof(transform)),
-            };
-        }
     }
 }

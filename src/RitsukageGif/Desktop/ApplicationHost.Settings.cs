@@ -28,6 +28,7 @@ namespace RitsukageGif.Desktop
                     GlobalMouseRegistration = GetGlobalMouseRegistration,
                     RunActionScript = RunActionScriptAsync,
                     CurrentSettingsSnapshot = () => Settings.Snapshot(),
+                    AutomationBaselineChanged = settings => baseline = settings.Snapshot(),
                     StartupStatus = _startServices && StartupRegistrationFactory.Supported
                         ? () => StartupRegistrationFactory.Create()
                             .GetStatus(Environment.ProcessPath ?? throw new InvalidOperationException())

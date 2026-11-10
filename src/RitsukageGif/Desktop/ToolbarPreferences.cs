@@ -1,12 +1,29 @@
+using System.Text.Json.Serialization;
+
 namespace RitsukageGif.Desktop
 {
     public sealed record ToolbarPreferences
     {
+        public const int CurrentSchemaRevision = 1;
+
+        public ToolbarPreferences() : this(CurrentSchemaRevision)
+        {
+        }
+
+        [JsonConstructor]
+        // ReSharper disable once ConvertToPrimaryConstructor
+        public ToolbarPreferences(int schemaRevision = 0)
+        {
+            SchemaRevision = schemaRevision;
+        }
+
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
         public List<List<ScreenshotTool>> Columns { get; set; } = CreateDefaultColumns();
 
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
         public List<ToolbarActionPreference> Actions { get; set; } = CreateDefaultActions();
+
+        public int SchemaRevision { get; set; }
 
         public ToolbarPreferences Merge(ToolbarPreferences changes, bool? tools)
         {
@@ -20,7 +37,8 @@ namespace RitsukageGif.Desktop
 
         public ToolbarPreferences Normalize()
         {
-            var toolCount = Enum.GetValues<ScreenshotTool>().Length;
+            if (SchemaRevision != CurrentSchemaRevision) return new();
+            var toolCount = ScreenshotToolCatalog.Registered.Count;
             var tools = new HashSet<ScreenshotTool>();
             var columns = new List<List<ScreenshotTool>>();
             // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
@@ -29,7 +47,7 @@ namespace RitsukageGif.Desktop
                 // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
                 if (column is null) continue;
                 columns.Add([
-                    .. column.Where(tool => Enum.IsDefined(tool) && tool != ScreenshotTool.Select && tools.Add(tool))
+                    .. column.Where(tool => ScreenshotToolCatalog.IsRegistered(tool) && tools.Add(tool))
                         .Take(toolCount),
                 ]);
             }
@@ -39,7 +57,9 @@ namespace RitsukageGif.Desktop
             // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator, NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
             foreach (var action in Actions ?? [])
                 // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
-                if (action is not null && Enum.IsDefined(action.Id) && Enum.IsDefined(action.Visibility) &&
+                if (action is not null &&
+                    ToolbarActionCatalog.Configurable.Any(definition => definition.Id == action.Id) &&
+                    Enum.IsDefined(action.Visibility) &&
                     identifiers.Add(action.Id))
                     actions.Add(action with { });
             // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
@@ -51,23 +71,14 @@ namespace RitsukageGif.Desktop
 
         private static List<List<ScreenshotTool>> CreateDefaultColumns()
         {
-            return
-            [
-                [ScreenshotTool.Rectangle, ScreenshotTool.Ellipse, ScreenshotTool.Spotlight],
-                [ScreenshotTool.Brush, ScreenshotTool.Highlight],
-                [ScreenshotTool.Arrow, ScreenshotTool.Line, ScreenshotTool.Polyline, ScreenshotTool.Magnifier],
-                [ScreenshotTool.Text, ScreenshotTool.Watermark],
-                [ScreenshotTool.Number],
-                [ScreenshotTool.Mosaic, ScreenshotTool.Blur, ScreenshotTool.SmartErase],
-                [ScreenshotTool.Eraser, ScreenshotTool.StrokeEraser],
-            ];
+            return [.. ScreenshotToolCatalog.DefaultGroups.Select(group => group.ToList())];
         }
 
         private static List<ToolbarActionPreference> CreateDefaultActions()
         {
             return
             [
-                .. ToolbarActionCatalog.All.Select(definition => new ToolbarActionPreference
+                .. ToolbarActionCatalog.Configurable.Select(definition => new ToolbarActionPreference
                 {
                     Id = definition.Id, Visibility = definition.DefaultVisibility,
                 }),

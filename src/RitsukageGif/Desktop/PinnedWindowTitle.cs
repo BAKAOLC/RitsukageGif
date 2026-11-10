@@ -37,7 +37,12 @@ namespace RitsukageGif.Desktop
             _editor.LostFocus += (_, _) => Commit();
             _editor.KeyDown += (_, args) =>
             {
-                if (args.Key != Key.Enter || !_editing) return;
+                if (args.Key != Key.Enter || !_editing)
+                {
+                    args.Handled = true;
+                    return;
+                }
+
                 Commit();
                 _owner.Activate();
                 _owner.Focus();

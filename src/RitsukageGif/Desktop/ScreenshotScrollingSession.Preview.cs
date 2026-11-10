@@ -20,6 +20,7 @@ namespace RitsukageGif.Desktop
                 _previewMaximumWidth = maxWidth;
                 _previewMaximumHeight = maxHeight;
                 _previewDirty = true;
+                WakeCapture();
             }
         }
     }

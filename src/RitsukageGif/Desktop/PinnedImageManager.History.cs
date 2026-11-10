@@ -154,10 +154,22 @@ namespace RitsukageGif.Desktop
             AttachWindow(window);
             try
             {
-                window.Show();
-                entry.State.Visible = true;
-                window.RestoreState(entry.State);
-                window.RevealImage();
+                if (AllPinsHidden)
+                {
+                    entry.State.Visible = true;
+                    entry.State.VisibleInGroup = true;
+                    MaskRestoredWindow(window, entry.State);
+                    window.RestoreHiddenState(entry.State);
+                    _pendingRestore.Add(window, entry.State);
+                    window.InitializeTextRecognition();
+                }
+                else
+                {
+                    window.Show();
+                    entry.State.Visible = true;
+                    window.RestoreState(entry.State);
+                    window.RevealImage();
+                }
             }
             catch (Exception error)
             {

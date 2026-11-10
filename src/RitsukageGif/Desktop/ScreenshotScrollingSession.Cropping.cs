@@ -80,9 +80,17 @@ namespace RitsukageGif.Desktop
                 if (!changed) return false;
                 _captureEpoch++;
                 Interlocked.Increment(ref _generation);
-                AutomaticEnabled = false;
+                var wasPaused = Paused;
                 Paused = true;
-                PublishCurrentImage();
+                try
+                {
+                    PublishCurrentImage();
+                }
+                finally
+                {
+                    Paused = wasPaused;
+                }
+
                 Logger.ZLogInformation(
                     $"Scroll capture viewport crop applied. SessionId={_logSessionId} Leading={leading} StartOffset={_stitching.StartOffset} CurrentOffset={_stitching.CurrentOffset} Width={_stitching.Width} Height={_stitching.Height} Generation={_generation}");
                 return true;

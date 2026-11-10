@@ -62,7 +62,7 @@ namespace RitsukageGif.Desktop
                 {
                     SetOutputActionsEnabled(_lastCaptureStatus is not null);
                     RefreshShortcutNativeState();
-                    SetPauseContent("ScrollCaptureResume", false);
+                    SetStartStopContent();
                     RefreshStatus();
                     Activate();
                 }

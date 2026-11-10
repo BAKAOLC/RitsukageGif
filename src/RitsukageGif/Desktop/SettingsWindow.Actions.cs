@@ -96,8 +96,9 @@ namespace RitsukageGif.Desktop
                         Content = UiText.Get("GlobalActionShowInTray"), IsChecked = action.ShowInTray,
                         VerticalAlignment = VerticalAlignment.Center,
                     };
-                    var edit = BindingButton("GlobalActionEdit", "M4,16 L16,4 20,8 8,20 3,21 Z M14,6 L18,10");
-                    var remove = BindingButton("SelectionShortcutRemove", "M6,6 L18,18 M18,6 L6,18");
+                    var edit = BindingButton("GlobalActionEdit", ToolbarIcon.GetDefinition("GlobalActionEdit"));
+                    var remove = BindingButton("SelectionShortcutRemove",
+                        ToolbarIcon.GetDefinition("SelectionShortcutRemove"));
                     remove.Foreground = AppTheme.Error;
                     Control[] controls = [shortcut, tray, edit, remove];
                     for (var index = 0; index < controls.Length; index++)
@@ -214,7 +215,7 @@ namespace RitsukageGif.Desktop
                 HorizontalAlignment = HorizontalAlignment.Center,
             };
             grid.Children.Add(status);
-            var clear = BindingButton("Clear", "M6,6 L18,18 M18,6 L6,18");
+            var clear = BindingButton("Clear", ToolbarIcon.GetDefinition("Clear"));
             clear.Width = clear.Height = 22;
             clear.Padding = new(4);
             clear.Foreground = AppTheme.Error;

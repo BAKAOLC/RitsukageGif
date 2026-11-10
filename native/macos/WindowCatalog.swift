@@ -1,7 +1,19 @@
 import Foundation
 import CoreGraphics
+import AppKit
 
 enum WindowCatalog {
+    @MainActor
+    static func activeWindow() -> CGWindowID {
+        guard let application = NSWorkspace.shared.frontmostApplication,
+              let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return kCGNullWindowID }
+        return windows.first { item in
+            (item[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == application.processIdentifier &&
+                (item[kCGWindowLayer as String] as? NSNumber)?.intValue == 0
+        }.flatMap { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value } ?? kCGNullWindowID
+    }
+
     static func writeState(of id: CGWindowID) throws {
         let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, id) as? [[String: Any]]
         let item = windows?.first { ($0[kCGWindowNumber as String] as? NSNumber)?.uint32Value == id }

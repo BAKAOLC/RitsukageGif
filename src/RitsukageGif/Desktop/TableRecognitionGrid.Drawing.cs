@@ -57,7 +57,8 @@ namespace RitsukageGif.Desktop
 
                         var text = CellText(cell.Text, textBounds);
                         context.DrawText(text,
-                            new(textBounds.X + 5, bounds.Y + Math.Max(4, (bounds.Height - text.Height) / 2)));
+                            new(textBounds.X + TextOffset(textBounds.Width, text.WidthIncludingTrailingWhitespace),
+                                bounds.Y + Math.Max(4, (bounds.Height - text.Height) / 2)));
                     }
 
                     if (IsKeyboardFocusWithin && _hasCurrent && cell.Row == _current.Row &&

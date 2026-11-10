@@ -37,7 +37,11 @@ namespace RitsukageGif.Desktop
             });
             Children.Add(NameInput);
             _color.Styles.Add(new AnnotationColorPickerStyles());
-            var swatch = new Border { Background = new SolidColorBrush(_color.Color), Margin = new(1) };
+            var swatch = new Border
+            {
+                Background = new SolidColorBrush(_color.Color), Margin = new(1),
+                BorderBrush = AppTheme.Muted, BorderThickness = new(1),
+            };
             _color.Content = swatch;
             _color.ColorChanged += (_, _) =>
             {

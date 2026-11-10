@@ -16,7 +16,15 @@ namespace RitsukageGif.Desktop
                 _requestedMenuOrigin = args.TryGetPosition(_owner, out _)
                     ? PinnedInputContext.Current & PinnedInputOrigin.Keyboard
                     : PinnedInputContext.Current | PinnedInputOrigin.Keyboard;
+                if (SelectionMenuProvider() is not { } selected) return;
+                selected.Open(_owner);
+                args.Handled = true;
             }, RoutingStrategies.Tunnel);
+            ConnectMenuOrigin(menu);
+        }
+
+        internal void ConnectMenuOrigin(ContextMenu menu)
+        {
             menu.Opened += (_, _) =>
             {
                 _menuOrigin = (_requestedMenuOrigin ?? PinnedInputContext.Current) & PinnedInputOrigin.Keyboard;
@@ -28,11 +36,12 @@ namespace RitsukageGif.Desktop
         internal void OpenMenu(ContextMenu menu, Control placement)
         {
             _requestedMenuOrigin = PinnedInputContext.Current & PinnedInputOrigin.Keyboard;
-            menu.Open(placement);
+            (SelectionMenuProvider() ?? menu).Open(placement);
         }
 
         internal async Task RunMenuAsync(Func<Task> operation)
         {
+            _messageTimer.Stop();
             using var input = PinnedInputContext.Use(_menuOrigin);
             await operation();
         }

@@ -33,7 +33,7 @@ namespace RitsukageGif.Desktop
                                ?? throw new InvalidDataException("Capture history manifest is empty.");
                 if (manifest.Regions is null || manifest.Images is null)
                     throw new InvalidDataException("Capture history manifest collections are missing.");
-                if (manifest.Version != 1 || manifest.Regions.Count > 1000 || manifest.Images.Count > 1000)
+                if (manifest.Version != 1 || manifest.Regions.Count > 99999 || manifest.Images.Count > 99999)
                     throw new InvalidDataException("Capture history manifest has unsupported data.");
                 var ids = new HashSet<Guid>();
                 // ReSharper disable once ConditionalAccessQualifierIsNonNullableAccordingToAPIContract

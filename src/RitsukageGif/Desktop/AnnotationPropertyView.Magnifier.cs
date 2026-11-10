@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 
@@ -8,49 +9,51 @@ namespace RitsukageGif.Desktop
         public Control MagnifierProperties()
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 3 };
-            row.Children.Add(Toggle("AnnotationMagnifierEllipse", "", p => p.MagnifierEllipse,
-                (p, value) => p with { MagnifierEllipse = value }, "AnimationEllipse"));
-            var corners = CornerRadius();
-            row.Children.Add(corners);
-            _refresh.Add(() => corners.IsVisible = !_session.Properties.MagnifierEllipse);
-            row.Children.Add(PropertyNumber("AnnotationMagnification", 1, 8, p => p.Magnification,
-                (p, value) => p with { Magnification = value }));
+            row.Children.Add(MagnifierShape());
             row.Children.Add(WidthInput());
-            row.Children.Add(Popup("AnnotationMagnifierOptions", "GeneralHeading", () =>
+            var links = new ComboBox
             {
-                var options = new StackPanel { Spacing = 4, MaxWidth = 250 };
-                var links = new ComboBox
+                ItemsSource = new[]
                 {
-                    ItemsSource = Enum.GetValues<AnnotationMagnifierLink>()
-                        .Select(value => UiText.Get("AnnotationMagnifierLink" + value)).ToArray(),
-                    MinHeight = 26, MinWidth = 140,
-                };
-                links.SelectionChanged += async (_, _) =>
+                    UiText.Get("ScreenshotMagnifierLinkLine"), UiText.Get("AnnotationMagnifierLinkDotLine"),
+                    UiText.Get("ScreenshotMagnifierLinkShape"), UiText.Get("ScreenshotMagnifierLinkHide"),
+                },
+                Height = 28, MinHeight = 0, Width = 65, Padding = new(4, 0), Margin = new(2),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            ToolTip.SetTip(links, UiText.Get("AnnotationMagnifierLink"));
+            AutomationProperties.SetName(links, UiText.Get("AnnotationMagnifierLink"));
+            links.SelectionChanged += async (_, _) =>
+            {
+                if (_disposed || _refreshing || links.SelectedIndex < 0) return;
+                await _session.UpdateSelectedPropertiesAsync(_session.Properties with
                 {
-                    if (_disposed || _refreshing || links.SelectedIndex < 0) return;
-                    await _session.UpdateSelectedPropertiesAsync(_session.Properties with
-                    {
-                        MagnifierLink = (AnnotationMagnifierLink)links.SelectedIndex,
-                    });
-                };
-                _refresh.Add(() => links.SelectedIndex = (int)_session.Properties.MagnifierLink);
-                options.Children.Add(Labeled("AnnotationMagnifierLink", links));
-                options.Children.Add(MagnifierCheck("AnnotationMagnifierAntialias", p => p.MagnifierAntialias,
-                    (p, value) => p with { MagnifierAntialias = value }));
-                options.Children.Add(MagnifierCheck("AnnotationMagnifierAnnotations", p => p.MagnifierShowAnnotations,
-                    (p, value) => p with { MagnifierShowAnnotations = value }));
-                options.Children.Add(MagnifierCheck("AnnotationMagnifierShadow", p => p.MagnifierShadow,
-                    (p, value) => p with { MagnifierShadow = value }));
-                return options;
-            }));
+                    MagnifierLink = (AnnotationMagnifierLink)links.SelectedIndex,
+                });
+            };
+            _refresh.Add(() => links.SelectedIndex = (int)_session.Properties.MagnifierLink);
+            row.Children.Add(links);
+            row.Children.Add(PropertyNumber("AnnotationMagnification", 1, 8, properties => properties.Magnification,
+                (properties, value) => properties with { Magnification = value }));
+            row.Children.Add(PropertyCheck("ScreenshotMagnifierEraseMark",
+                properties => !properties.MagnifierShowAnnotations,
+                (properties, value) => properties with { MagnifierShowAnnotations = !value }));
+            row.Children.Add(PropertyCheck("AnnotationMagnifierAntialias", properties => properties.MagnifierAntialias,
+                (properties, value) => properties with { MagnifierAntialias = value }));
+            row.Children.Add(PropertyCheck("AnnotationMagnifierShadow", properties => properties.MagnifierShadow,
+                (properties, value) => properties with { MagnifierShadow = value }));
             row.Children.Add(Palette());
             return row;
         }
 
-        private CheckBox MagnifierCheck(string key, Func<ScreenshotAnnotationProperties, bool> read,
+        private CheckBox PropertyCheck(string key, Func<ScreenshotAnnotationProperties, bool> read,
             Func<ScreenshotAnnotationProperties, bool, ScreenshotAnnotationProperties> write)
         {
-            var control = new CheckBox { Content = UiText.Get(key), MinHeight = 26, Margin = new(0) };
+            var control = new CheckBox
+            {
+                Content = UiText.Get(key), MinHeight = 28, Margin = new(2, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+            };
             control.IsCheckedChanged += async (_, _) =>
             {
                 if (_disposed || _refreshing) return;

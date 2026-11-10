@@ -1,10 +1,20 @@
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
+        bool IPinnedWindow.IsLocked => _locked;
+
+        void IPinnedWindow.SetLocked(bool value)
+        {
+            if (_locked == value) return;
+            _locked = value;
+            RefreshPreferencePresentation();
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         private MenuItem Command(string key, Func<Task> execute, string? action = null)
         {
             var item = new MenuItem { Tag = action };
@@ -17,11 +27,11 @@ namespace RitsukageGif.Desktop
         {
             var menu = new ContextMenu();
             Presentation.ConnectMenu(menu);
-            menu.Items.Add(Command("ScreenshotCopy", CopyAsync, "copy"));
-            menu.Items.Add(Command("PinnedDocumentCopyImage", CopyRenderedImageAsync));
-            menu.Items.Add(Command("PinnedImageCopyFile", CopyAsFileAsync, "copy-file"));
-            menu.Items.Add(Command("ScreenshotSave", SaveDocumentAsync, "save"));
-            menu.Items.Add(Command("PinnedDocumentSaveImage", SaveRenderedImageAsync));
+            ConfigureFileMenu(menu);
+            menu.Items.Add(Command("PinnedDocumentCopyImage", CopyRenderedImageAsync, "copy-image"));
+            if (Document is not PinnedFilesDocument)
+                menu.Items.Add(Command("PinnedImageCopyFile", CopyAsFileAsync, "copy-file"));
+            menu.Items.Add(Command("PinnedDocumentSaveImage", SaveRenderedImageAsync, "save"));
             if (Document is PinnedTextDocument or PinnedHtmlDocument)
             {
                 menu.Items.Add(new Separator());
@@ -62,7 +72,29 @@ namespace RitsukageGif.Desktop
             }
 
             menu.Items.Add(new Separator());
-            var locked = Command("PinnedImageLock", () =>
+            var thumbnail = Command("PinnedMenuThumbnail", () =>
+            {
+                ToggleDocumentThumbnail();
+                return Task.CompletedTask;
+            }, "thumbnail");
+            thumbnail.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(thumbnail);
+            menu.Items.Add(Command("PinnedImageSelectThumbnailRegion", () =>
+            {
+                SelectDocumentThumbnailRegion();
+                return Task.CompletedTask;
+            }, "select-roi"));
+            var mark = Command("PinnedMenuMark", () => SetMarkEditingAsync(!IsMarkEditing), "annotate");
+            mark.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(mark);
+            var hideMark = Command("PinnedMenuHideMark", () =>
+            {
+                SetMarkHidden(!IsMarkHidden);
+                return Task.CompletedTask;
+            }, "hide-mark");
+            hideMark.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(hideMark);
+            var locked = Command("PinnedMenuLock", () =>
             {
                 _locked = !_locked;
                 RefreshPreferencePresentation();
@@ -78,7 +110,8 @@ namespace RitsukageGif.Desktop
             }, "through");
             through.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(through);
-            var topmost = Command("PinnedImageTopmost", () =>
+            menu.Items.Add(Presentation.CreateWindowShadeMenu(menu));
+            var topmost = Command("PinnedMenuTopmost", () =>
             {
                 Topmost = !Topmost;
                 RefreshPreferencePresentation();
@@ -92,18 +125,20 @@ namespace RitsukageGif.Desktop
                 return Task.CompletedTask;
             }, "select"));
             var group = new MenuItem();
-            group.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("PinnedImageGroup"));
+            group.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("PinnedMoveToGroup"));
             menu.Items.Add(group);
             menu.Items.Add(Command("PinnedTitleEdit", () =>
             {
                 Presentation.Title.BeginEdit();
                 return Task.CompletedTask;
             }, "set-title"));
-            menu.Items.Add(Command("PinnedHideOthers", () =>
+            var hideOthers = Command("PinnedMenuHideOthers", () =>
             {
                 Presentation.HideOthersRequested?.Invoke();
                 return Task.CompletedTask;
-            }, "hide-others"));
+            }, "hide-others");
+            hideOthers.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(hideOthers);
             menu.Items.Add(Command("PinnedSwitchNext", () =>
             {
                 Presentation.SwitchNextRequested?.Invoke();
@@ -113,11 +148,9 @@ namespace RitsukageGif.Desktop
             arrange.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("PinnedSelectionAlign"));
             foreach (var definition in PinnedImageArrangementCommands.Catalog)
             {
-                var item = Command(definition.TextKey, () =>
-                {
-                    ArrangeSelectionRequested?.Invoke(this, definition.Arrangement);
-                    return Task.CompletedTask;
-                }, definition.Action);
+                var item = Command(definition.TextKey,
+                    () => ArrangeSelectionRequested?.Invoke(this, definition.Arrangement) ?? Task.CompletedTask,
+                    definition.Action);
                 arrange.Items.Add(item);
                 menu.Opened += (_, _) =>
                     item.IsEnabled = CanArrangeSelectionProvider?.Invoke(this, definition.Arrangement) == true;
@@ -145,42 +178,47 @@ namespace RitsukageGif.Desktop
             }, "destroy"));
             menu.Opened += (_, _) =>
             {
+                thumbnail.IsChecked = _isThumbnail;
+                thumbnail.IsEnabled = !IsInteractionLocked && !IsMarkEditing;
+                mark.IsChecked = IsMarkEditing;
+                mark.IsEnabled = !_closed && !_mouseThrough;
+                hideMark.IsChecked = IsMarkHidden;
+                hideMark.IsEnabled = !IsMarkEditing;
                 locked.IsChecked = _locked;
                 through.IsChecked = _mouseThrough;
                 through.IsEnabled = PinnedWindowPlatform.CanSetMouseThrough(this) &&
                                     (_mouseThrough || _canRestoreHidden());
                 topmost.IsChecked = Topmost;
+                hideOthers.IsChecked = Presentation.HideOthersCheckedProvider();
                 group.Items.Clear();
                 foreach (var definition in GroupsProvider())
                 {
                     var item = new MenuItem
                     {
-                        Header = definition.Name.Length == 0 ? UiText.Get("PinnedImageUngrouped") : definition.Name,
-                        ToggleType = MenuItemToggleType.Radio, IsChecked = Group == definition.Id,
+                        Header = Presentation.CreateGroupMenuHeader(definition),
+                        ToggleType = definition.Color is null && Group == definition.Id
+                            ? MenuItemToggleType.CheckBox
+                            : MenuItemToggleType.None,
+                        IsChecked = definition.Color is null && Group == definition.Id,
+                        IsEnabled = Group != definition.Id,
                     };
+                    if (definition.Color is not null)
+                        item.Icon = PinnedGroupIcon.Create(item, definition, Group == definition.Id);
                     item.Click += (_, _) => GroupChangeRequested?.Invoke(this, definition.Id);
                     group.Items.Add(item);
                 }
 
                 group.Items.Add(new Separator());
-                var newGroup = Command("PinnedImageNewGroup", EditGroupAsync, "new-group");
+                var newGroup = Command("PinnedMoveToNewGroup", EditGroupAsync, "new-group");
                 SetMenuShortcut(newGroup, "new-group");
                 group.Items.Add(newGroup);
-                group.Items.Add(Command("PinnedImageHideGroup", () =>
-                {
-                    GroupVisibilityRequested?.Invoke(Group, false);
-                    return Task.CompletedTask;
-                }));
-                group.Items.Add(Command("PinnedImageShowGroup", () =>
-                {
-                    GroupVisibilityRequested?.Invoke(Group, true);
-                    return Task.CompletedTask;
-                }));
 
                 foreach (var item in menu.Items.OfType<MenuItem>())
                     if (item.Tag is string action)
                         SetMenuShortcut(item, action);
             };
+            Presentation.AddSourceMimeCommands(menu, PreferencesProvider);
+            Presentation.AddConfigurationCommand(menu);
             return menu;
         }
 

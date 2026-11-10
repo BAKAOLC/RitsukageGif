@@ -9,6 +9,9 @@ namespace RitsukageGif.Desktop
         public required Color Color { get; init; }
         public required double FontSize { get; init; }
         public required double Thickness { get; init; }
+        public uint? ForegroundColor { get; init; }
+        public required AnnotationSizeLevel TextSize { get; init; }
+        public required AnnotationSizeLevel ArrowSize { get; init; }
         public required string Caption { get; init; }
         public required Point Center { get; init; }
         public required Point Target { get; init; }
@@ -27,7 +30,8 @@ namespace RitsukageGif.Desktop
         public Point LeaderEnd { get; init; }
         public Geometry? Callout { get; init; }
         public FormattedText? CaptionText { get; init; }
-        public FormattedText? CaptionOutline { get; init; }
+        public Geometry? CaptionOutline { get; init; }
+        public IPen? CaptionOutlinePen { get; init; }
         public Point CaptionOrigin { get; init; }
     }
 }

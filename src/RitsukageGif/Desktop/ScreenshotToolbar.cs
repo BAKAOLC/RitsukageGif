@@ -10,7 +10,6 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotToolbar : Border, IDisposable
     {
         private static readonly IBrush ToolbarSurface = AppTheme.Surface;
-        private static readonly IBrush ActiveTool = AppTheme.Accent;
 
         private static readonly AttachedProperty<IDisposable?> TooltipBindingProperty =
             AvaloniaProperty.RegisterAttached<ScreenshotToolbar, Button, IDisposable?>("TooltipBinding");
@@ -40,7 +39,6 @@ namespace RitsukageGif.Desktop
         private readonly Button? _scroll;
         private readonly ScreenshotAnnotationSession _session;
         private readonly Func<IReadOnlyList<SelectionCommandDefinition>> _shortcutBindingsProvider;
-        private readonly Dictionary<ScreenshotTool, Button> _tools = [];
         private readonly Button _undo;
         private bool _disposed;
         private bool? _lastHdrAvailable;
@@ -73,8 +71,8 @@ namespace RitsukageGif.Desktop
             Padding = new(0);
             Child = new ThemeVariantScope { Child = _body };
             _commandRow = new() { Orientation = Orientation.Horizontal };
-            InitializeAdditionalTools();
-            _selectToolButton = _tools[ScreenshotTool.Select];
+            _annotationTools = new(session, () => _ = EditToolbarAsync(true));
+            _toolStrip.Children.Add(_annotationTools);
             _undo = RegisterAction(ToolbarActionId.Undo, session.Undo);
             _redo = RegisterAction(ToolbarActionId.Redo, session.Redo);
             _delete = RegisterAction(ToolbarActionId.DeleteAnnotation, session.DeleteSelectedAnnotation);
@@ -103,7 +101,7 @@ namespace RitsukageGif.Desktop
             _extraCommands.Add(SelectionCommand.RenumberAnnotations,
                 RegisterAction(ToolbarActionId.RenumberAnnotations, () => session.RenumberAnnotations()));
             _recognitionButtons.Add(RegisterAction(ToolbarActionId.RecognizeText,
-                () => session.RequestRecognition(RecognitionMode.Text)));
+                () => execute?.Invoke(SelectionCommand.RecognizeTextAndCopy)));
             _recognitionButtons.Add(RegisterAction(ToolbarActionId.RecognizeBarcode,
                 () => session.RequestRecognition(RecognitionMode.Barcode)));
             _extraCommands.Add(SelectionCommand.CopyCodeText,
@@ -134,13 +132,12 @@ namespace RitsukageGif.Desktop
             _commandRow.Children.Add(_toolStrip);
             _commandRow.Children.Add(Group(_functionStrip));
             _commandRow.Children.Add(_more);
-            _propertyPresenter = new(session, LoadWatermarkImageAsync, dialogScopeProvider);
+            _propertyPresenter = new(session, dialogScopeProvider);
             _contextFrame = Frame(_propertyPresenter, 3);
             _contextFrame.IsVisible = false;
             _body.Children.Add(Frame(_commandRow, 3));
             _body.Children.Add(_contextFrame);
             _body.Children.Add(_error);
-            InitializePrivacyCommands();
             _session.Changed += SessionChanged;
             _session.ArrowCommentRequested += ArrowCommentRequested;
             UiText.LanguageChanged += RefreshHints;
@@ -174,6 +171,7 @@ namespace RitsukageGif.Desktop
             _printCapabilityLifetime.Cancel();
             _printCapabilityLifetime.Dispose();
             _propertyPresenter.Dispose();
+            _annotationTools.Dispose();
             HideToolGroups();
             _outputProperties.Hide();
             _moreCommands.Hide();
@@ -202,7 +200,7 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        private static Button SmallButton(string key, Action action, string? geometry = null)
+        internal static Button SmallButton(string key, Action action, IconDefinition? geometry = null)
         {
             var extent = AppTheme.CurrentAppearance.ToolbarIconSize switch
             {
@@ -218,10 +216,8 @@ namespace RitsukageGif.Desktop
                 Focusable = false,
             };
             button.Classes.Add("tool");
-            var path = FluentToolbarIcon.Geometry(key) ?? geometry ?? ToolbarIcon.Geometry(key);
-            var icon = key == "ScreenshotMore"
-                ? ToolbarIcon.CreateInViewport(button, path)
-                : ToolbarIcon.Create(button, path);
+            var definition = ToolbarIcon.FindDefinition(key) ?? geometry ?? ToolbarIcon.GetDefinition(key);
+            var icon = ToolbarIcon.Create(button, definition);
             icon.Width = icon.Height = extent - 12;
             button.Content = icon;
             button.SetValue(TooltipBindingProperty, button.Bind(ToolTip.TipProperty, LiveText.Resource(key)));
@@ -230,7 +226,7 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private Button MenuButton(string key, Action action, string? geometry = null, bool close = true)
+        private Button MenuButton(string key, Action action, IconDefinition? geometry = null, bool close = true)
         {
             var button = SmallButton(key, () =>
             {
@@ -253,38 +249,14 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private void SelectTool(ScreenshotTool tool)
-        {
-            _session.CancelPrivacyDetection();
-            _moreCommands.Hide();
-            HideToolGroups();
-            if (_session.Tool != tool) _session.Tool = tool;
-            else if (tool == ScreenshotTool.Select) _session.ClearAnnotationSelection();
-
-            _propertyPresenter.Refresh(tool);
-            _contextFrame.IsVisible = _propertyPresenter.HasContext && !_session.IsPrivacyDetectionActive;
-        }
-
-        private void UpdateGroup(Button button, ScreenshotTool tool, bool active)
-        {
-            var key = (string)_tools[tool].Tag!;
-            if (!Equals(button.Tag, key))
-            {
-                button.Tag = key;
-                SetToolButtonContent(button, key, tool);
-                button.Bind(AutomationProperties.NameProperty, LiveText.Resource(key));
-                SetShortcutTip(button, SelectionCommand.SelectTool, tool);
-            }
-
-            button.IsEnabled = !_session.IsBusy && (tool == ScreenshotTool.Select || _session.CanAnnotate);
-            button.Background = active ? ActiveTool : Brushes.Transparent;
-            button.Foreground = active ? Brushes.White : AppTheme.Ink;
-            button.Classes.Set("active-tool", active);
-            button.Classes.Set("primary", active);
-        }
-
         private void SetShortcutTip(Button button, SelectionCommand command, ScreenshotTool? tool = null,
             string? detailKey = null)
+        {
+            SetShortcutTip(button, command, _shortcutBindings, tool, detailKey);
+        }
+
+        internal static void SetShortcutTip(Button button, SelectionCommand command,
+            IReadOnlyList<SelectionCommandDefinition> bindings, ScreenshotTool? tool = null, string? detailKey = null)
         {
             var content = new StackPanel { Spacing = 6 };
             content.Children.Add(new TextBlock
@@ -300,8 +272,8 @@ namespace RitsukageGif.Desktop
                 });
             var keys = new WrapPanel
                 { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center };
-            foreach (var gesture in _shortcutBindings.Where(binding => binding.Command == command &&
-                                                                       (tool is null || binding.Tool == tool))
+            foreach (var gesture in bindings.Where(binding => binding.Command == command &&
+                                                              (tool is null || binding.Tool == tool))
                          .Select(binding => binding.Gesture).Where(gesture => !string.IsNullOrWhiteSpace(gesture))
                          .Distinct())
                 keys.Children.Add(new Border
@@ -343,24 +315,11 @@ namespace RitsukageGif.Desktop
 
             _shortcutBindings = _shortcutBindingsProvider();
             RefreshShortcutHints();
-            foreach (var (tool, button) in _tools)
-            {
-                if (button.Content is not Grid menu) continue;
-                var gesture = _shortcutBindings.FirstOrDefault(binding =>
-                    binding.Command == SelectionCommand.SelectTool && binding.Tool == tool)?.Gesture;
-                foreach (var child in menu.Children)
-                    if (child is TextBlock text && Grid.GetColumn(text) == 2)
-                        text.Text = gesture is null ? null : KeyGestureDisplay.Format(gesture);
-            }
         }
 
         private void RefreshShortcutHints()
         {
-            foreach (var pair in _tools)
-                SetShortcutTip(pair.Value, SelectionCommand.SelectTool, pair.Key);
-            foreach (var (button, tool) in _groupTools) SetShortcutTip(button, SelectionCommand.SelectTool, tool);
-            if (_selectToolButton is not null)
-                SetShortcutTip(_selectToolButton, SelectionCommand.SelectTool, ScreenshotTool.Select);
+            _annotationTools.RefreshShortcuts(_shortcutBindings);
             foreach (var pair in _extraCommands) SetShortcutTip(pair.Value, pair.Key);
             SetShortcutTip(_copy, SelectionCommand.Copy);
             SetShortcutTip(_save, SelectionCommand.Save);
@@ -371,7 +330,7 @@ namespace RitsukageGif.Desktop
             if (_record is not null) SetShortcutTip(_record, SelectionCommand.Record);
             SetShortcutTip(_undo, SelectionCommand.Undo);
             SetShortcutTip(_redo, SelectionCommand.Redo);
-            SetShortcutTip(_recognitionButtons[0], SelectionCommand.RecognizeText);
+            SetShortcutTip(_recognitionButtons[0], SelectionCommand.RecognizeTextAndCopy);
             SetShortcutTip(_recognitionButtons[1], SelectionCommand.RecognizeQr);
             SetShortcutTip(_recognitionButtons[2], SelectionCommand.Translate);
             SetShortcutTip(_recognitionButtons[3], SelectionCommand.RecognizeTable);
@@ -381,7 +340,6 @@ namespace RitsukageGif.Desktop
         private void SessionChanged()
         {
             RefreshToolbarPreferences();
-            RefreshPrivacyCommands();
             var drawing = _session is
             {
                 IsDrawing: true, IsDrawingPolyline: false, IsBusy: false,
@@ -403,6 +361,8 @@ namespace RitsukageGif.Desktop
             _copy.IsEnabled = _save.IsEnabled = _quickSave.IsEnabled = _more.IsEnabled = !_session.IsBusy;
             if (_actionButtons.TryGetValue(ToolbarActionId.ExportPdf, out var documentAction))
                 documentAction.IsEnabled = !_session.IsBusy;
+            if (_actionButtons.TryGetValue(ToolbarActionId.Edit, out var editAction))
+                editAction.IsEnabled = !_session.IsBusy;
             if (_actionButtons.TryGetValue(ToolbarActionId.Print, out var printAction))
                 printAction.IsEnabled = !_session.IsBusy && ScreenshotPrintService.IsAvailable;
             _outputButton.IsEnabled = !_session.IsBusy;
@@ -414,8 +374,7 @@ namespace RitsukageGif.Desktop
             if (_scroll is not null)
             {
                 _scroll.IsEnabled = _session.CanStartScrolling;
-                var tip = _session.OutputColorMode != OutputColorMode.Sdr ? "ScreenshotScrollRequiresSdr" :
-                    _session.HasAnnotations ? "ScreenshotScrollUndoAnnotations" : "ScreenshotScroll";
+                var tip = _session.HasAnnotations ? "ScreenshotScrollUndoAnnotations" : "ScreenshotScroll";
                 if (_scrollTip != tip)
                 {
                     _scrollTip = tip;
@@ -448,20 +407,12 @@ namespace RitsukageGif.Desktop
                 button.IsEnabled = _session is { IsBusy: false, HasAnnotations: true };
             var tool = _session.SelectedTool ?? _session.Tool;
             _propertyPresenter.Refresh(tool);
-            _propertyPresenter.IsEnabled = !_session.IsBusy;
-            _contextFrame.IsVisible = _propertyPresenter.HasContext && !_session.IsPrivacyDetectionActive;
-            RefreshToolGroups(_session.Tool);
+            _propertyPresenter.IsEnabled = _session is { IsBusy: false, PrivacyDetectionPending: false };
+            _contextFrame.IsVisible = _propertyPresenter.HasContext;
+            _annotationTools.Refresh();
 
             _error.Text = _session.Error;
             _error.IsVisible = !string.IsNullOrEmpty(_session.Error);
-            foreach (var pair in _tools)
-            {
-                pair.Value.IsEnabled = !_session.IsBusy && (pair.Key == ScreenshotTool.Select || _session.CanAnnotate);
-                pair.Value.Background = Brushes.Transparent;
-                pair.Value.Classes.Remove("active-tool");
-                ((RadioButton)pair.Value).IsChecked = pair.Key == _session.Tool;
-            }
-
             if (_ownsToolbar && !_placedRegion.IsEmpty) Refresh(_placedRegion, _placementMouse, true);
         }
 

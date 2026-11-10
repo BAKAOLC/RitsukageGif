@@ -22,7 +22,7 @@ namespace RitsukageGif.Desktop
                 "pin" => GlobalActionKind.PinClipboard,
                 "ocr" => GlobalActionKind.ScreenshotAndCopyText,
                 "scroll" => GlobalActionKind.ScreenshotAndScroll,
-                "record" => GlobalActionKind.OpenVideoRecorder,
+                "record" => GlobalActionKind.ScreenshotAndRecord,
                 "translate" => GlobalActionKind.ScreenshotAndTranslate,
                 "table" => GlobalActionKind.ScreenshotAndRecognizeTable,
                 "formula" => GlobalActionKind.ScreenshotAndRecognizeFormula,

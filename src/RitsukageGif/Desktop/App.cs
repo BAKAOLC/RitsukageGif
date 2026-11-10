@@ -13,6 +13,7 @@ namespace RitsukageGif.Desktop
         private static readonly ILogger AppLogger = LogHub.GetLogger("Desktop.Application");
         private FatalErrorWindow? _fatalError;
         private ApplicationHost? _host;
+        internal bool CompletedExpectedTaskShutdown => _host?.CompletedExpectedTaskShutdown == true;
 
         public override void Initialize()
         {
@@ -33,18 +34,19 @@ namespace RitsukageGif.Desktop
         {
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                DesktopTrayPlatform.Install();
+                if (Program.TaskOptions is null) DesktopTrayPlatform.Install();
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-                _host = new(desktop);
-                CrashRecoverySession.Current?.MarkOperation("Desktop idle");
-                Dispatcher.UIThread.Post(ShowPreviousFailure, DispatcherPriority.Background);
+                _host = Program.TaskOptions is { } task ? new(desktop, task) : new(desktop);
+                CrashRecoverySession.Current?.MarkOperation(_host.IsTaskHost ? "Task host ready" : "Desktop idle");
+                if (!_host.IsTaskHost)
+                    Dispatcher.UIThread.Post(ShowPreviousFailure, DispatcherPriority.Background);
                 desktop.ShutdownRequested += async (_, e) =>
                 {
                     if (_host.IsClosing) return;
                     e.Cancel = true;
                     await _host.ShutdownAsync();
                 };
-                if (!Program.StartHidden) _host.ShowMainWindow();
+                if (!_host.IsTaskHost && !Program.StartHidden) _host.ShowMainWindow();
             }
 
             base.OnFrameworkInitializationCompleted();
@@ -56,6 +58,12 @@ namespace RitsukageGif.Desktop
             AppLogger.ZLogCritical(args.Exception, $"Unhandled UI exception.");
             if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop) return;
             args.Handled = true;
+            if (_host is { IsTaskHost: true })
+            {
+                _ = ShutdownFailedTaskAsync(desktop);
+                return;
+            }
+
             if (_fatalError is not null) return;
             _fatalError = new(args.Exception);
             foreach (var window in desktop.Windows.ToArray())
@@ -108,6 +116,26 @@ namespace RitsukageGif.Desktop
             var window = new CrashRecoveryWindow(reports);
             window.Show();
             window.Activate();
+        }
+
+        private async Task ShutdownFailedTaskAsync(IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            try
+            {
+                if (_host is not null)
+                {
+                    _host.SuspendAfterFailure();
+                    await _host.ShutdownAsync();
+                }
+            }
+            catch (Exception error)
+            {
+                AppLogger.ZLogError(error, $"Task host shutdown after UI failure failed.");
+            }
+            finally
+            {
+                desktop.Shutdown(1);
+            }
         }
     }
 }

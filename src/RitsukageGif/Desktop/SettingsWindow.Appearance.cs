@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SettingsWindow
     {
-        private static StackPanel BuildAppearancePage(AppSettings draft)
+        private StackPanel BuildAppearancePage(AppSettings draft)
         {
             var page = Page();
             var general = new StackPanel();
@@ -21,7 +21,8 @@ namespace RitsukageGif.Desktop
                 Name = "AppearanceFont", Text = draft.Appearance.FontFamily,
                 ItemsSource = FontManager.Current.SystemFonts.Select(item => item.Name)
                     .Order(StringComparer.CurrentCultureIgnoreCase).ToArray(),
-                IsTextCompletionEnabled = true, PlaceholderText = UiText.Get("FollowSystem"),
+                IsTextCompletionEnabled = true,
+                [!AutoCompleteBox.PlaceholderTextProperty] = LiveText.Resource("FollowSystem"),
             };
             font.TextChanged += (_, _) =>
             {
@@ -153,14 +154,31 @@ namespace RitsukageGif.Desktop
                     Name = key, ItemsSource = labels.Select(UiText.Get).ToArray(),
                     SelectedIndex = Array.IndexOf(options, value),
                 };
+                var refreshingLabels = false;
                 box.SelectionChanged += (_, _) =>
                 {
-                    if (box.SelectedIndex < 0) return;
+                    if (refreshingLabels || box.SelectedIndex < 0) return;
                     change(options[box.SelectedIndex]);
                     if (key == "AppearanceThemeMode") PreviewAppearance(draft.Appearance);
                 };
+                SubscribeContentLanguage(RefreshLabels);
                 target.Children.Add(Labeled(key, box));
                 return box;
+
+                void RefreshLabels()
+                {
+                    var selected = box.SelectedIndex;
+                    refreshingLabels = true;
+                    try
+                    {
+                        box.ItemsSource = labels.Select(UiText.Get).ToArray();
+                        box.SelectedIndex = selected;
+                    }
+                    finally
+                    {
+                        refreshingLabels = false;
+                    }
+                }
             }
         }
 
@@ -176,7 +194,11 @@ namespace RitsukageGif.Desktop
                 HexInputAlphaPosition = AlphaComponentPosition.Leading,
             };
             picker.Styles.Add(new AnnotationColorPickerStyles());
-            var swatch = new Border { Background = new SolidColorBrush(picker.Color), Margin = new(1) };
+            var swatch = new Border
+            {
+                Background = new SolidColorBrush(picker.Color), Margin = new(1),
+                BorderBrush = AppTheme.Muted, BorderThickness = new(1),
+            };
             picker.Content = swatch;
             picker.ColorChanged += (_, _) => swatch.Background = new SolidColorBrush(picker.Color);
             return picker;

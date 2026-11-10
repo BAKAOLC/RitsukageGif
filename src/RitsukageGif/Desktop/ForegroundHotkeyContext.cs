@@ -15,20 +15,7 @@ namespace RitsukageGif.Desktop
             if (!OperatingSystem.IsWindows()) return PortableForegroundPolicy.Read();
             var window = GetForegroundWindow();
             if (window == 0) return new(null, false);
-            string? path = null;
-            if (program)
-                if (GetWindowThreadProcessId(window, out var processId) != 0)
-                {
-                    using var process = OpenProcess(0x1000, 0, processId);
-                    if (!process.IsInvalid)
-                    {
-                        Span<char> buffer = stackalloc char[32768];
-                        var length = (uint)buffer.Length;
-                        fixed (char* data = buffer)
-                            if (QueryFullProcessImageName(process, 0, data, ref length) != 0)
-                                path = new(data, 0, (int)length);
-                    }
-                }
+            var path = program ? ReadProgram(window) : null;
 
             var isFullscreen = false;
             if (fullscreen && window != GetShellWindow() && window != GetDesktopWindow())

@@ -27,6 +27,7 @@ namespace RitsukageGif.Desktop
         private int _paused = 1;
         private int _position;
         private bool _previewDirty;
+        private TaskCompletionSource? _stateChanged;
 
         private ScrollCaptureSession _stitching;
 
@@ -67,6 +68,7 @@ namespace RitsukageGif.Desktop
                         _captureEpoch++;
                         Logger.ZLogDebug(
                             $"Scroll capture pause changed. SessionId={_logSessionId} Paused={value} Generation={_generation}");
+                        WakeCapture();
                     }
 
                     Volatile.Write(ref _paused, value ? 1 : 0);
@@ -113,6 +115,7 @@ namespace RitsukageGif.Desktop
                 _previewDirty = false;
                 _captureEpoch++;
                 Interlocked.Increment(ref _generation);
+                WakeCapture();
                 Logger.ZLogInformation(
                     $"Scroll capture axis reset. SessionId={_logSessionId} Axis={_axis.ToString()} Width={region.Width} Height={region.Height} Generation={_generation}");
                 AutomaticEnabled = false;
@@ -158,6 +161,12 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private void WakeCapture()
+        {
+            _stateChanged?.TrySetResult();
+            _stateChanged = null;
+        }
+
         public async Task RunAsync(CancellationToken token)
         {
             var provider = CaptureFrame;
@@ -177,11 +186,17 @@ namespace RitsukageGif.Desktop
                     try
                     {
                         PixelRect? pendingRegion = null;
+                        Task? stateChanged = null;
                         lock (_sync)
                         {
                             generation = _generation;
                             if (Paused && _previewDirty && _lastResult is { } last) Publish(last, false);
-                            if (!Paused && Volatile.Read(ref _obstructed) == 0)
+                            if (Paused)
+                            {
+                                _stateChanged ??= new(TaskCreationOptions.RunContinuationsAsynchronously);
+                                stateChanged = _stateChanged.Task;
+                            }
+                            else if (Volatile.Read(ref _obstructed) == 0)
                             {
                                 var position = Volatile.Read(ref _position);
                                 captureEpoch = _captureEpoch;
@@ -192,6 +207,12 @@ namespace RitsukageGif.Desktop
                         }
 
                         if (pendingRegion is null) capture?.Suspend();
+                        if (stateChanged is not null)
+                        {
+                            await stateChanged.WaitAsync(token).ConfigureAwait(false);
+                            continue;
+                        }
+
                         if (pendingRegion is { } region)
                         {
                             CapturedFrameSet? frames = null;

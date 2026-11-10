@@ -101,6 +101,11 @@ namespace RitsukageGif.Desktop
                     // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
                     switch (action.Kind)
                     {
+                        case GlobalActionKind.PinFile:
+                            if (string.IsNullOrWhiteSpace(action.Parameter))
+                                errors.Add(label + ": " + UiText.Get("GlobalActionFileRequired"));
+                            else _ = Path.GetFullPath(action.Parameter);
+                            break;
                         case GlobalActionKind.RunScript:
                             _ = ActionScriptCompilation.Compile(action.Script);
                             break;

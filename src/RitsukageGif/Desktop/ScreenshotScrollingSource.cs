@@ -4,6 +4,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly DesktopCapture? _desktop;
         private readonly WindowTarget? _target;
+        private readonly NativeCaptureSession? _nativeSource;
         private readonly HdrToneMapMode _toneMap;
         private readonly double _density;
         private bool _colorUnavailable;
@@ -11,13 +12,17 @@ namespace RitsukageGif.Desktop
         private WindowContentCapture? _window;
 
         public ScreenshotScrollingSource(PixelRect region, PixelRect[] monitors, WindowTarget? target,
-            HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression, double pixelDensity = 1)
+            HdrToneMapMode toneMap = HdrToneMapMode.HighlightCompression, double pixelDensity = 1,
+            NativeCaptureSession? nativeSource = null)
         {
             _toneMap = toneMap;
             _density = pixelDensity;
             _target = target;
+            _nativeSource = nativeSource;
             _current = region;
-            if (target is null) _desktop = new(new(region, Divisor: 1) { PixelDensity = _density }, monitors);
+            if (target is null)
+                _desktop = new(new(region, Divisor: 1) { PixelDensity = _density }, monitors,
+                    nativeSource: nativeSource);
         }
 
         public void Dispose()
@@ -56,10 +61,11 @@ namespace RitsukageGif.Desktop
                 return _desktop.Capture(token);
             }
 
-            var target = WindowLocator.Refresh(_target!) ?? throw new CaptureSourceLostException();
+            var target = RefreshTarget(_target!) ?? throw new CaptureSourceLostException();
             var bounds = OperatingSystem.IsLinux() ? target.Client : target.Bounds;
             if (region.Intersect(target.Client) != region) throw new CaptureSourceLostException();
-            _window ??= new(target.Handle, false, 10);
+            _window ??= new(target.Handle, false, 10, authorization: target.NativeAuthorization,
+                nativeSource: _nativeSource);
             _window.ConfigureRegion(region, Math.Max(1, (int)Math.Ceiling(region.Width * _density)),
                 Math.Max(1, (int)Math.Ceiling(region.Height * _density)));
             byte[]? pixels = null;
@@ -73,11 +79,12 @@ namespace RitsukageGif.Desktop
                     token.ThrowIfCancellationRequested();
                     _colorUnavailable = true;
                     _window.Dispose();
-                    _window = new(target.Handle, false, 10);
+                    _window = new(target.Handle, false, 10, authorization: target.NativeAuthorization,
+                        nativeSource: _nativeSource);
                 }
 
             pixels ??= _window.Capture(token) ?? throw new CaptureSourceLostException();
-            var refreshed = WindowLocator.Refresh(target) ?? throw new CaptureSourceLostException();
+            var refreshed = RefreshTarget(target) ?? throw new CaptureSourceLostException();
             if (target.Client != refreshed.Client ||
                 bounds != (OperatingSystem.IsLinux() ? refreshed.Client : refreshed.Bounds))
                 throw new CaptureSourceLostException();
@@ -90,6 +97,14 @@ namespace RitsukageGif.Desktop
             return CapturedFramePixels.ToStraightBgra(frames.Hdr is { } hdr
                 ? HdrToneMapping.Map(hdr, _toneMap, token)
                 : frames.Sdr, token);
+        }
+
+        private WindowTarget? RefreshTarget(WindowTarget target)
+        {
+            return _nativeSource is null
+                ? WindowLocator.Refresh(target)
+                : _nativeSource.GetAuthorizedWindows().FirstOrDefault(window => window.Handle == target.Handle &&
+                    window.NativeSourceIdentity == target.NativeSourceIdentity);
         }
 
         private static byte[] Crop(byte[] pixels, int width, int height, PixelRect bounds, PixelRect region,

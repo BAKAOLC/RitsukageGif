@@ -4,30 +4,32 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class AnimationEditorWindow
     {
-        private Task _activeOperation = Task.CompletedTask;
+        internal Task ActiveOperation { get; private set; } = Task.CompletedTask;
 
-        private async Task RunAsync(Func<CancellationToken, Task> action, [CallerMemberName] string operation = "")
+        private async Task RunAsync(Func<CancellationToken, Task> action, [CallerMemberName] string operation = "",
+            CancellationToken callerToken = default)
         {
             if (_languageClosed || _operation is not null) return;
             CrashRecoverySession.Current?.MarkOperation($"Animation editor: {operation}");
             var started = Stopwatch.GetTimestamp();
             Logger.ZLogInformation($"Animation editor operation started. Operation={operation}");
             _playback.Stop();
-            using var cancellation = new CancellationTokenSource();
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(callerToken, _lifetime.Token);
             _operation = cancellation;
             _editing.IsEnabled = false;
             _cancel.IsVisible = true;
             SetStatus("AnimationWorking");
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            _activeOperation = completion.Task;
+            ActiveOperation = completion.Task;
             try
             {
-                await _frameLoad;
+                await _frameLoad.WaitAsync(cancellation.Token);
                 cancellation.Token.ThrowIfCancellationRequested();
                 await action(cancellation.Token);
                 var elapsed = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
@@ -158,10 +160,14 @@ namespace RitsukageGif.Desktop
                 { Patterns = ["*.gif", "*.webp", "*.apng", "*.png", "*.jpg", "*.jpeg", "*.bmp"] };
         }
 
-        internal async Task OpenPathAsync(string path)
+        internal async Task OpenPathAsync(string path, CancellationToken token = default)
         {
-            if (_operation is not null) return;
-            if (await ConfirmDiscardAsync()) await LoadAsync(path);
+            token.ThrowIfCancellationRequested();
+            if (_languageClosed || _operation is not null) return;
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
+            token = lifetime.Token;
+            if (await ConfirmDiscardAsync(token)) await LoadAsync(path, token);
+            token.ThrowIfCancellationRequested();
         }
 
         private async Task OpenAsync()
@@ -174,7 +180,7 @@ namespace RitsukageGif.Desktop
             if (files.Count > 0 && files[0].TryGetLocalPath() is { } path) await LoadAsync(path);
         }
 
-        private Task LoadAsync(string path)
+        private Task LoadAsync(string path, CancellationToken callerToken = default)
         {
             return RunAsync(async token =>
             {
@@ -182,6 +188,7 @@ namespace RitsukageGif.Desktop
                 try
                 {
                     await _canvas.LoadFrameAsync(loaded.Frames[0].Path, token);
+                    token.ThrowIfCancellationRequested();
                 }
                 catch
                 {
@@ -196,7 +203,7 @@ namespace RitsukageGif.Desktop
                 _path = path;
                 _dirty = false;
                 Refresh();
-            });
+            }, callerToken: callerToken);
         }
 
         private async Task NewAsync()
@@ -278,7 +285,7 @@ namespace RitsukageGif.Desktop
                 await RunAsync(async token =>
                 {
                     if (format == "png") await Task.Run(() => _document.ExportFrame(selectedFrame, path, token), token);
-                    else await Task.Run(() => _document.ExportAsync(path, options, token), token);
+                    else await _document.ExportAsync(path, options, token: token);
                     if (format != "png" || _document.Frames.Count == 1)
                     {
                         _dirty = false;
@@ -287,15 +294,16 @@ namespace RitsukageGif.Desktop
 
                     Refresh();
                     SetStatus("AnimationExported", path);
-                });
+                }, callerToken: lifetime);
             }
             catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
             {
             }
         }
 
-        private async Task<bool> ConfirmDiscardAsync()
+        private async Task<bool> ConfirmDiscardAsync(CancellationToken token = default)
         {
+            token.ThrowIfCancellationRequested();
             if (!_dirty && !_canvas.HasChanges) return true;
             var dialog = new Window
             {
@@ -320,7 +328,10 @@ namespace RitsukageGif.Desktop
             buttons.Children.Add(cancel);
             panel.Children.Add(buttons);
             dialog.Content = panel;
-            return await dialog.ShowDialog<bool>(this);
+            await using var cancellation = token.Register(() => Dispatcher.UIThread.Post(() => dialog.Close(false)));
+            var discardChanges = await dialog.ShowDialog<bool>(this);
+            token.ThrowIfCancellationRequested();
+            return discardChanges;
         }
 
         internal async Task<bool> RequestCloseAsync()
@@ -333,7 +344,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 if (_operation is { } operation) await operation.CancelAsync();
-                await _activeOperation;
+                await ActiveOperation;
                 await _frameLoad;
                 if (!await ConfirmDiscardAsync())
                 {

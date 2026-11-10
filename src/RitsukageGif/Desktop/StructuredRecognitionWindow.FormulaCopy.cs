@@ -43,20 +43,26 @@ namespace RitsukageGif.Desktop
         private async Task CopyFormulaAsync()
         {
             var token = _lifetime.Token;
+            var format = _copyFormat;
+            var selected = _latex.SelectedText.Length > 0;
+            var closeAfterCopy = selected
+                ? _dialogOptions.Formula.CloseAfterCopySelectedText
+                : _dialogOptions.Formula.CloseAfterCopyCurrentFormat;
             var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-            if (_latex.SelectedText.Length > 0)
+            if (selected)
             {
                 await clipboard.SetTextAsync(_latex.SelectedText);
                 await clipboard.FlushAsync();
+                CompleteFormulaCopy(closeAfterCopy);
                 return;
             }
 
             var sources = FormulaSourcesForOutput();
             // ReSharper disable once ConvertIfStatementToSwitchStatement
-            if (_copyFormat is FormulaCopyFormat.Latex or FormulaCopyFormat.Text)
+            if (format is FormulaCopyFormat.Latex or FormulaCopyFormat.Text)
             {
                 var text = string.Join("\n", FormulaDisplaySourcesForOutput());
-                if (_copyFormat == FormulaCopyFormat.Latex)
+                if (format == FormulaCopyFormat.Latex)
                 {
                     await clipboard.SetTextAsync(text);
                 }
@@ -68,10 +74,11 @@ namespace RitsukageGif.Desktop
                 }
 
                 await clipboard.FlushAsync();
+                CompleteFormulaCopy(closeAfterCopy);
                 return;
             }
 
-            if (_copyFormat == FormulaCopyFormat.Image)
+            if (format == FormulaCopyFormat.Image)
             {
                 var image = await StructuredRecognitionProcess.Shared.RenderManyPngAsync(sources, token: token);
                 token.ThrowIfCancellationRequested();
@@ -82,14 +89,13 @@ namespace RitsukageGif.Desktop
                 }
 
                 await ClipboardImage.CopyAsync(clipboard, image.Png!, token);
+                CompleteFormulaCopy(closeAfterCopy);
                 return;
             }
 
-            var target = _copyFormat switch
+            // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
+            var target = format switch
             {
-                FormulaCopyFormat.Latex => FormulaTextFormat.Latex, FormulaCopyFormat.Text => FormulaTextFormat.Text,
-                FormulaCopyFormat.Image => throw new InvalidOperationException(
-                    "Image copies are handled before text conversion."),
                 FormulaCopyFormat.MathMl => FormulaTextFormat.MathMl,
                 FormulaCopyFormat.AsciiMath => FormulaTextFormat.AsciiMath,
                 FormulaCopyFormat.Typst => FormulaTextFormat.Typst,
@@ -103,7 +109,7 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            if (_copyFormat == FormulaCopyFormat.MathMl)
+            if (format == FormulaCopyFormat.MathMl)
             {
                 var data = new DataTransfer();
                 var item = DataTransferItem.CreateText(converted.Text!);
@@ -118,6 +124,7 @@ namespace RitsukageGif.Desktop
             }
 
             await clipboard.FlushAsync();
+            CompleteFormulaCopy(closeAfterCopy);
         }
     }
 }

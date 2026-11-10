@@ -61,7 +61,7 @@ namespace RitsukageGif.Desktop
             Move(point);
         }
 
-        public Task AdjustToolWheelAsync(int delta)
+        private Task AdjustToolWheelAsync(int delta)
         {
             if (_behavior.DisableWheelToolAdjustment || delta == 0 || IsBusy || IsDrawing) return Task.CompletedTask;
             if (_hoverPoint is { } pointer && FindAnnotation(pointer) is { Tool: ScreenshotTool.Magnifier } hovered)
@@ -78,25 +78,50 @@ namespace RitsukageGif.Desktop
                 });
             }
 
-            var tool = _selected?.Tool ?? Tool;
+            var automatic = (_selected is { AutoMosaicId: var id } && id != Guid.Empty) ||
+                            Tool == ScreenshotTool.AutoMosaic;
+            var tool = automatic
+                ? Properties.MosaicMode == AnnotationMosaicMode.Blur ? ScreenshotTool.Blur : ScreenshotTool.Mosaic
+                : _selected?.Tool ?? Tool;
             var step = Math.Sign(delta);
             return tool switch
             {
                 ScreenshotTool.Select => Task.CompletedTask,
-                ScreenshotTool.Text or ScreenshotTool.Number or ScreenshotTool.Watermark =>
+                ScreenshotTool.Text =>
                     UpdateSelectedStyleAsync(fontSize: Math.Clamp(FontSize + step * 2, 1, 1024)),
-                ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase or ScreenshotTool.Eraser
-                    when Properties.PixelPath == AnnotationPixelPath.Brush =>
+                ScreenshotTool.Watermark =>
+                    UpdateSelectedStyleAsync(fontSize: Math.Clamp(FontSize + step * 2, 8, 80)),
+                ScreenshotTool.Number =>
                     UpdateSelectedStyleAsync(thickness: Math.Clamp(Thickness + step, 1, MaximumBrushThickness)),
-                ScreenshotTool.Mosaic => UpdateSelectedStyleAsync(mosaicSize: Math.Clamp(MosaicSize + step, 2, 256)),
+                ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase or ScreenshotTool.Eraser
+                    when !automatic && Properties.PixelPath == AnnotationPixelPath.Brush =>
+                    UpdateSelectedStyleAsync(thickness: Math.Clamp(Thickness + step, 1, MaximumBrushThickness)),
+                ScreenshotTool.Mosaic => UpdateSelectedStyleAsync(mosaicSize: Math.Clamp(MosaicSize + step, 2, 28)),
                 ScreenshotTool.Blur => UpdateSelectedPropertiesAsync(Properties with
                 {
-                    BlurRadius = Math.Clamp(Properties.BlurRadius + step, 1, 256),
+                    BlurRadius = Math.Clamp(Properties.BlurRadius + step, 3, 50),
                 }),
                 ScreenshotTool.SmartErase => Task.CompletedTask,
                 _ => UpdateSelectedStyleAsync(thickness: Math.Clamp(Thickness + step, 1,
                     tool == ScreenshotTool.Brush ? MaximumBrushThickness : 1024)),
             };
+        }
+
+        public Task AdjustToolWheelWithModifiersAsync(int delta, KeyModifiers modifiers)
+        {
+            if (_behavior.DisableWheelToolAdjustment || delta == 0 || IsBusy || IsDrawing)
+                return Task.CompletedTask;
+            var command = Application.Current?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ??
+                          (OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control);
+            if (_selected?.Tool == ScreenshotTool.Number && modifiers.HasFlag(command))
+            {
+                var alpha = Math.Clamp(Math.Round(Color.A * 100d / 255, MidpointRounding.AwayFromZero) +
+                                       Math.Sign(delta) * 5, 10, 100);
+                return UpdateSelectedStyleAsync(Color.FromArgb(
+                    (byte)Math.Round(alpha * 255 / 100, MidpointRounding.AwayFromZero), Color.R, Color.G, Color.B));
+            }
+
+            return AdjustToolWheelAsync(delta);
         }
 
         public void NotifyHover(PixelPoint? point)

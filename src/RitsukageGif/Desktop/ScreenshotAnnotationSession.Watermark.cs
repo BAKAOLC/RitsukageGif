@@ -13,8 +13,40 @@ namespace RitsukageGif.Desktop
         internal Task AutomaticWatermarkTask { get; private set; } = Task.CompletedTask;
         internal bool IsEditingWatermark => IsEditingText && _textEditWatermarkText;
 
+        private ScreenshotAnnotation? ActiveStyleAnnotation => _selected ?? (Tool == ScreenshotTool.Watermark
+            ? _annotations.FirstOrDefault(annotation => annotation is
+                { Tool: ScreenshotTool.Watermark, WatermarkImage: null })
+            : null);
+
         private bool WatermarkResourceReady => Properties.WatermarkImagePath is not { Length: > 0 } path ||
                                                (_watermarkSource is not null && _watermarkSourcePath == path);
+
+        internal void SetWatermarkTimeFormat(string format)
+        {
+            Properties = Properties with { WatermarkTimeFormat = format };
+            if (_textEditPreviousStyle is { } previous)
+                _textEditPreviousStyle = previous with
+                {
+                    Properties = previous.Properties with { WatermarkTimeFormat = format },
+                };
+            StoreToolStyle(ScreenshotTool.Watermark);
+        }
+
+        private void EnsureManualWatermark()
+        {
+            if (Tool != ScreenshotTool.Watermark || Selection.IsEmpty || string.IsNullOrEmpty(Text) ||
+                _watermarkSource is not null ||
+                _annotations.Any(annotation => annotation.Tool == ScreenshotTool.Watermark)) return;
+            var annotation = new ScreenshotAnnotation
+            {
+                Tool = ScreenshotTool.Watermark, Text = Text, Color = Color, Thickness = Thickness,
+                FontSize = FontSize, MosaicSize = MosaicSize, Properties = Properties.Normalize(),
+                WatermarkTimestamp = DateTimeOffset.Now,
+            };
+            annotation.Points.Add(new(AnnotationBounds.X, AnnotationBounds.Y));
+            Commit(annotation);
+            _selected = null;
+        }
 
         private void RestoreWatermarkStyle(ScreenshotTool tool)
         {
@@ -163,16 +195,23 @@ namespace RitsukageGif.Desktop
 
         private void ValidateWatermarkImage(byte[] image)
         {
-            if (image.Length > 16 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(image));
-            var info = new MagickImageInfo(image);
-            if (info.Width == 0 || info.Height == 0 || (long)info.Width * info.Height > 16L * 1024 * 1024)
-                throw new ArgumentOutOfRangeException(nameof(image));
             var retainedBytes = _retained.Select(mark => mark.WatermarkImage)
                 .Where(value => value is not null).Distinct()
                 .Sum(value => (long)value!.Bitmap.PixelSize.Width * value.Bitmap.PixelSize.Height * 4 +
                               (value.Encoded?.Length ?? 0));
-            if (retainedBytes + (long)info.Width * info.Height * 4 + image.Length > 128L * 1024 * 1024)
+            ValidateWatermarkImage(image, retainedBytes);
+        }
+
+        private static long ValidateWatermarkImage(byte[] image, long retainedBytes)
+        {
+            if (image.Length > 16 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(image));
+            var info = new MagickImageInfo(image);
+            if (info.Width == 0 || info.Height == 0 || (long)info.Width * info.Height > 16L * 1024 * 1024)
+                throw new ArgumentOutOfRangeException(nameof(image));
+            var storage = (long)info.Width * info.Height * 4 + image.Length;
+            if (retainedBytes + storage > 128L * 1024 * 1024)
                 throw new InvalidOperationException(UiText.Get("RecordingTooLarge"));
+            return storage;
         }
     }
 }

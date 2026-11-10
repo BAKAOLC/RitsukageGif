@@ -27,8 +27,8 @@ namespace RitsukageGif.Desktop
 
         private readonly ScrollViewer _viewport = new()
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Hidden,
         };
 
         private ScreenshotTiledImage _bitmap;
@@ -36,13 +36,13 @@ namespace RitsukageGif.Desktop
         private bool _busy;
         private bool _closed;
         private bool _initialized;
+        private bool _hasRestoredState;
         private byte[] _pixels;
         private byte[] _png;
 
         private Screens? _screens;
 
         private Bitmap _thumbnail;
-        private double _zoom = 1;
 
         private PinnedImageWindow(byte[] png, byte[] pixels, ScreenshotTiledImage bitmap, Bitmap thumbnail,
             Func<bool> canRestoreHidden, PinnedImagePreferences preferences)
@@ -61,53 +61,80 @@ namespace RitsukageGif.Desktop
             Opacity = preferences.Opacity;
             ShowInTaskbar = !_canRestoreHidden();
             WindowStartupLocation = WindowStartupLocation.Manual;
-            Background = AppTheme.Workspace;
+            Background = Brushes.Transparent;
             var image = _image;
             image.Source = _bitmap;
-            _viewport.Content = image;
+            PinnedBitmapSampling.Apply(image, preferences.SmoothScaling);
+            _sceneLayer = new() { Children = { _transparentBackground, image } };
+            _sceneTransform = new() { Child = _sceneLayer };
+            _viewLayer = new() { Children = { _sceneTransform } };
+            _viewport.Content = _viewLayer;
             _viewport.ScrollChanged += (_, _) =>
             {
                 UpdateVisibleRegion();
-                _textSelectionSurface?.InvalidateVisual();
+                QueueHdrViewportRefresh();
+                RefreshOcrLayerVisibility();
                 StateChanged?.Invoke(this, EventArgs.Empty);
             };
             var content = _content = new() { Children = { _viewport, _status } };
-            Presentation = new(this, content, () => CurrentPreferences);
+            Presentation = new(this, content, () => CurrentPreferences, RunAsync, _status);
             Presentation.Title.Changed += () => StateChanged?.Invoke(this, EventArgs.Empty);
             Presentation.MoveGroupRequested = () => RunAsync(EditGroupAsync);
-            Content = content;
+            Content = Presentation.Frame;
+            Presentation.WindowShadowChanged += () => StateChanged?.Invoke(this, EventArgs.Empty);
             var menu = new ContextMenu();
             Presentation.ConnectMenu(menu);
-            menu.Items.Add(Command("ScreenshotCopy", CopyAsync));
+            menu.Items.Add(Command("PinnedCopyImage", CopyAsync));
+            var copyOriginal = Command("PinnedCopyOriginalImage", CopyOriginalImageAsync);
+            menu.Items.Add(copyOriginal);
             menu.Items.Add(Command("PinnedImageCopyFile", CopyFileAsync));
-            menu.Items.Add(Command("ScreenshotSave", SaveAsync));
-            var annotate = Command("PinnedImageAnnotate", BeginAnnotationAsync);
+            menu.Items.Add(Command("PinnedSaveImage", SaveAsync));
+            var saveOriginal = Command("PinnedOriginalImageSaveAs", SaveOriginalImageAsync);
+            menu.Items.Add(saveOriginal);
+            menu.Opened += (_, _) =>
+            {
+                copyOriginal.IsVisible = CanCaptureOriginalImage;
+                saveOriginal.IsVisible = CanCaptureOriginalImage;
+            };
+            var annotate = Command("PinnedMenuMark", ToggleAnnotationToolbarAsync);
+            annotate.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(annotate);
+            var hideMark = Command("PinnedMenuHideMark", () =>
+            {
+                SetMarkHidden(!IsMarkHidden);
+                return Task.CompletedTask;
+            });
+            hideMark.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(hideMark);
             menu.Items.Add(Command("PinnedImageAnnotationToolbar", ToggleAnnotationToolbarAsync));
             menu.Opened += (_, _) =>
-                annotate.IsEnabled = !_busy &&
-                                     _annotation is null;
+            {
+                annotate.IsEnabled = !_busy && !IsMouseThrough;
+                annotate.IsChecked = IsMarkEditing;
+                hideMark.IsChecked = IsMarkHidden;
+                hideMark.IsEnabled = !IsMarkEditing;
+            };
             menu.Items.Add(new Separator());
             var actualSize = Command("PinnedImageActualSize", () =>
             {
-                ResizeAt(new(0, 0), 1);
+                ResizeAt(new(PinnedWindowPresentation.ShadeInset, PinnedWindowPresentation.ShadeInset), 1);
                 return Task.CompletedTask;
             });
             menu.Items.Add(actualSize);
-            menu.Items.Add(Command("PinnedImageCopyText", CopyRecognizedTextAsync));
-            var thumbnailMode = Command("PinnedImageThumbnail", () =>
+            var thumbnailMode = Command("PinnedMenuThumbnail", () =>
             {
                 ToggleThumbnail();
                 return Task.CompletedTask;
             });
             thumbnailMode.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(thumbnailMode);
-            menu.Items.Add(Command("PinnedImageSelectThumbnailRegion", () =>
+            var selectThumbnailRegion = Command("PinnedImageSelectThumbnailRegion", () =>
             {
-                if (!IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null)
+                if (!LiveCaptureActive && !IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null)
                     _regionSelectionMode = true;
                 return Task.CompletedTask;
-            }));
+            });
+            menu.Items.Add(selectThumbnailRegion);
             var selected = Command("PinnedImageMultiSelect", () =>
             {
                 SelectionRequested?.Invoke(this);
@@ -119,6 +146,8 @@ namespace RitsukageGif.Desktop
             {
                 selected.IsChecked = IsSelected;
                 thumbnailMode.IsChecked = _isThumbnail;
+                thumbnailMode.IsVisible = !LiveCaptureActive;
+                selectThumbnailRegion.IsVisible = !LiveCaptureActive;
                 thumbnailMode.IsEnabled = !IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null;
             };
             menu.Opened += (_, _) =>
@@ -157,6 +186,10 @@ namespace RitsukageGif.Desktop
                             : null;
             };
             AddAnimationCommands(menu);
+            Presentation.AddSourceMimeCommands(menu, () => CurrentPreferences);
+            Presentation.AddConfigurationCommand(menu);
+            AlignSourceMenu(menu);
+            AddImageSourcePrelude(menu);
             content.ContextMenu = menu;
             ConfigureMouseInput(image, content, menu);
             ConfigureQuickThumbnailPointer();
@@ -169,8 +202,8 @@ namespace RitsukageGif.Desktop
                 _screens = Screens;
                 _screens.Changed += ScreensChanged;
                 var screen = Screens.ScreenFromPoint(Position) ?? Screens.Primary;
-                if (screen is not null && preferences.AutoFit && _capturePlacement is null)
-                    _zoom = Math.Min(1,
+                if (screen is not null && preferences.AutoFit && !_hasRestoredState && _capturePlacement is null)
+                    CurrentPinZoom = Math.Min(1,
                         Math.Min(screen.WorkingArea.Width * 0.8 / _bitmap.Size.Width,
                             _bitmap.Size.Height > _bitmap.Size.Width * 4
                                 ? 1
@@ -180,6 +213,7 @@ namespace RitsukageGif.Desktop
             };
             ScalingChanged += (_, _) => UpdateSize();
             Closed += (_, _) => ReleaseResources();
+            InitializeInputRegions();
             UpdateSize();
         }
 
@@ -257,17 +291,33 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        protected override void OnClosing(WindowClosingEventArgs e)
+        {
+            base.OnClosing(e);
+            if (e.Cancel) return;
+            _annotation?.CommitTextEdit();
+            _closedState = CaptureState();
+        }
+
         private void ReleaseResources()
         {
             if (_closed) return;
+            _annotation?.CommitTextEdit();
+            _closedState ??= CaptureState();
             _animationActiveAtClose = AnimationActive;
             _closed = true;
+            _inputRegions?.Dispose();
+            _inputRegions = null;
             CancelThumbnailLayout();
             DisposeLiveCapture();
             DisposeAnimation();
             if (_screens is not null) _screens.Changed -= ScreensChanged;
+            _inlineTranslation?.Dispose();
             _lifetime.Cancel();
             ResetTextRecognition();
+            ClearTextMarkup();
+            _textSelectionMenu?.Dispose();
+            _textSelectionMenu = null;
             _hdrPreviewWork?.Cancel();
             EndAnnotation();
             _mouseClicks.Dispose();
@@ -298,47 +348,55 @@ namespace RitsukageGif.Desktop
         private void UpdateSize()
         {
             if (_closed) return;
-            _textSelectionSurface?.InvalidateVisual();
+            RefreshOcrLayerVisibility();
             var display = DisplayRegion;
-            _image.Width = Math.Max(1, display.Width * _zoom / RenderScaling);
-            _image.Height = Math.Max(1, display.Height * _zoom / RenderScaling);
-            if (_hdrLayer is not null)
+            _image.Width = Math.Max(1, display.Width * CurrentPinZoom / RenderScaling);
+            _image.Height = Math.Max(1, display.Height * CurrentPinZoom / RenderScaling);
+            _sceneLayer.Width = _image.Width;
+            _sceneLayer.Height = _image.Height;
+            var sourceSize = new Size(_image.Width, _image.Height);
+            _sceneTransform.LayoutTransform = new MatrixTransform(_viewTransform.MatrixFor(sourceSize));
+            var viewSize = _viewTransform.ViewSize(sourceSize);
+            _viewLayer.Width = viewSize.Width;
+            _viewLayer.Height = viewSize.Height;
+            if (_annotationScene is not null)
             {
-                _hdrLayer.Width = _image.Width;
-                _hdrLayer.Height = _image.Height;
-            }
-
-            if (_annotation is not null)
-            {
-                _annotationSurface?.Scale = RenderScaling / _zoom;
-                if (_viewport.Content is Grid layer)
-                {
-                    layer.Width = _image.Width;
-                    layer.Height = _image.Height;
-                }
-
-                UpdateVisibleRegion();
-                return;
+                _annotationSurface?.Scale = RenderScaling / CurrentPinZoom;
+                _annotationSurface?.SourceOrigin = new(display.X, display.Y);
             }
 
             var screen = Screens.ScreenFromPoint(Position) ?? Screens.Primary;
             var maximum = PinnedViewportGeometry.MaximumViewport(CurrentPreferences.MaximumWindowSize,
                 RenderScaling,
                 new(screen?.WorkingArea.Width ?? 1280, screen?.WorkingArea.Height ?? 720));
-            Width = Math.Min(_image.Width, maximum.Width);
-            Height = Math.Min(_image.Height + (_hdrSource is null ? 0 : 20), maximum.Height);
+            Width = Math.Min(viewSize.Width, maximum.Width) + PinnedWindowPresentation.ShadeInset * 2;
+            Height = Math.Min(viewSize.Height + (_hdrSource is null ? 0 : 20), maximum.Height) +
+                     PinnedWindowPresentation.ShadeInset * 2;
+            RefreshTransparentBackground();
+            RefreshWindowShadow();
             UpdateVisibleRegion();
+            QueueHdrViewportRefresh();
         }
 
         private void UpdateVisibleRegion()
         {
             if (_closed) return;
-            var scale = _zoom / RenderScaling;
+            var scale = CurrentPinZoom / RenderScaling;
             var size = _bitmap.Size;
             var display = DisplayRegion;
-            if (_annotation is not null && _annotationPreviewImage is { } preview)
+            if (_annotationScene is not null && _annotationPreviewImage is { } preview)
             {
-                _image.Source = preview;
+                if (_isThumbnail)
+                {
+                    _croppedImage ??= new(preview, display);
+                    _croppedImage.Source = preview;
+                    _croppedImage.Region = display;
+                    _image.Source = _croppedImage;
+                }
+                else
+                {
+                    _image.Source = preview;
+                }
             }
             else if (LiveCaptureActive)
             {
@@ -352,43 +410,52 @@ namespace RitsukageGif.Desktop
             else if (_isThumbnail)
             {
                 _croppedImage ??= new(_bitmap, display);
+                _croppedImage.Source = _bitmap;
                 _croppedImage.Region = display;
                 _image.Source = _croppedImage;
             }
             else
             {
-                _image.Source = size.Width * _zoom <= _thumbnail.PixelSize.Width + 1 &&
-                                size.Height * _zoom <= _thumbnail.PixelSize.Height + 1
+                _image.Source = size.Width * CurrentPinZoom <= _thumbnail.PixelSize.Width + 1 &&
+                                size.Height * CurrentPinZoom <= _thumbnail.PixelSize.Height + 1
                     ? _thumbnail
                     : _bitmap;
             }
 
-            _bitmap.VisibleRegion = new(display.X + _viewport.Offset.X / scale, display.Y + _viewport.Offset.Y / scale,
-                Math.Max(1, _viewport.Viewport.Width) / scale, Math.Max(1, _viewport.Viewport.Height) / scale);
+            var visible = _viewTransform.SourceBounds(new(_viewport.Offset.X / scale, _viewport.Offset.Y / scale,
+                    Math.Max(1, _viewport.Viewport.Width) / scale, Math.Max(1, _viewport.Viewport.Height) / scale),
+                new(display.Width, display.Height));
+            _bitmap.VisibleRegion = visible.Translate(new(display.X, display.Y));
             if (_annotationPreviewImage is { } image) image.VisibleRegion = _bitmap.VisibleRegion;
             _image.InvalidateVisual();
-            _textSelectionSurface?.InvalidateVisual();
+            InvalidateInputUi();
+            RefreshOcrLayerVisibility();
         }
 
         private void ResizeAt(Point anchor, double zoom)
         {
             if (IsOperationLocked(PinnedLockRestrictions.Move) || _annotation is not null) return;
+            if (!double.IsFinite(zoom)) return;
             var next = Math.Clamp(zoom,
                 Math.Min(1,
                     Math.Min(24d / Math.Min(_bitmap.Size.Width, _bitmap.Size.Height),
                         2048d / Math.Max(_bitmap.Size.Width, _bitmap.Size.Height))),
-                8);
-            var ratio = next / _zoom;
+                _isThumbnail ? double.MaxValue : 8);
+            var ratio = next / CurrentPinZoom;
             var location = Position;
             var offset = _viewport.Offset;
-            var oldWidth = Width;
-            var oldHeight = Height;
-            _zoom = next;
+            const double inset = PinnedWindowPresentation.ShadeInset;
+            anchor = new(anchor.X - inset, anchor.Y - inset);
+            var oldWidth = Width - inset * 2;
+            var oldHeight = Height - inset * 2;
+            CurrentPinZoom = next;
             UpdateSize();
-            _viewport.Offset = new(Math.Max(0, (offset.X + anchor.X) * ratio - anchor.X * Width / oldWidth),
-                Math.Max(0, (offset.Y + anchor.Y) * ratio - anchor.Y * Height / oldHeight));
-            Position = new(location.X + (int)Math.Round(anchor.X * RenderScaling * (1 - Width / oldWidth)),
-                location.Y + (int)Math.Round(anchor.Y * RenderScaling * (1 - Height / oldHeight)));
+            _viewport.Offset = new(
+                Math.Max(0, (offset.X + anchor.X) * ratio - anchor.X * (Width - inset * 2) / oldWidth),
+                Math.Max(0, (offset.Y + anchor.Y) * ratio - anchor.Y * (Height - inset * 2) / oldHeight));
+            Position = new(
+                location.X + (int)Math.Round(anchor.X * RenderScaling * (1 - (Width - inset * 2) / oldWidth)),
+                location.Y + (int)Math.Round(anchor.Y * RenderScaling * (1 - (Height - inset * 2) / oldHeight)));
         }
 
         private MenuItem Command(string key, Func<Task> action)
@@ -398,38 +465,23 @@ namespace RitsukageGif.Desktop
                 [!HeaderedSelectingItemsControl.HeaderProperty] = LiveText.Resource(key),
                 Tag = key switch
                 {
-                    "ScreenshotCopy" => "copy", "ScreenshotSave" => "save", "Close" => "close",
-                    "PinnedImageHide" => "hide", "PinnedImageAnnotate" => "annotate",
-                    "PinnedTitleEdit" => "set-title", "PinnedHideOthers" => "hide-others",
+                    "PinnedCopyImage" => "copy", "PinnedSaveImage" => "save", "Close" => "close",
+                    "PinnedCopyOriginalImage" => "copy-original", "PinnedOriginalImageSaveAs" => "save-original",
+                    "PinnedMenuThumbnail" => "thumbnail", "PinnedImageDestroy" => "destroy",
+                    "PinnedImageHide" => "hide", "PinnedImageAnnotate" or "PinnedMenuMark" => "annotate",
+                    "PinnedMenuHideMark" => "hide-mark",
+                    "PinnedTitleEdit" => "set-title", "PinnedMenuHideOthers" => "hide-others",
                     "PinnedSwitchNext" => "switch-next", _ => null,
                 },
             };
-            var geometry = key switch
-            {
-                "ScreenshotCopy" or "ScreenshotSave" => ToolbarIcon.Geometry(key),
-                "PinnedImageCopyFile" => ToolbarIcon.Geometry("EditorNew"),
-                "PinnedImageAnnotate" => ToolbarIcon.Geometry("AnimationBrush"),
-                "PinnedImageActualSize" => ToolbarIcon.Geometry("AnimationActualSize"),
-                "PinnedImageThumbnail" => "M3,4 H21 V20 H3 Z M3,14 L8,9 13,15 17,11 21,16",
-                "PinnedImageSelectThumbnailRegion" => "M3,9 V3 H9 M15,3 H21 V9 M21,15 V21 H15 M9,21 H3 V15",
-                "PinnedImageMultiSelect" => "M3,3 H11 V11 H3 Z M13,13 H21 V21 H13 Z M5,7 L7,9 10,5",
-                "PinnedImageDestroy" => "M4,6 H20 M9,3 H15 M6,6 L7,21 H17 L18,6 M10,10 V17 M14,10 V17",
-                "PinnedImageCopyText" => "M3,5 H16 M9,5 V19 M5,19 H13 M18,11 H22 V22 H12 V20",
-                "PinnedImageHide" => "M3,12 H21", "Close" => "M4,4 L20,20 M20,4 L4,20",
-                "RecognizeText" => "M3,5 H21 M12,5 V21 M8,21 H16",
-                "RecognizeBarcode" => "M3,3 H9 V9 H3 Z M15,3 H21 V9 H15 Z M3,15 H9 V21 H3 Z M15,15 H21 V21 H15 Z",
-                _ => null,
-            };
-            if (geometry is not null)
-                item.Icon = ToolbarIcon.Create(item, geometry);
             item.Click += async (_, _) => await Presentation.RunMenuAsync(() => RunAsync(action));
             return item;
         }
 
         private void OnKeyDown(object? sender, KeyEventArgs args)
         {
-            if (args.Source is TextBox || IsAnnotationTextInputKey(args.Key)) return;
-            if (_selectedTextStart >= 0 && args is { Key: Key.Escape, KeyModifiers: KeyModifiers.None })
+            if (args.Handled || BuiltinShortcutTextInput.OwnsKey(args) || IsAnnotationTextInputKey(args)) return;
+            if (HasTextSelection && args is { Key: Key.Escape, KeyModifiers: KeyModifiers.None })
             {
                 ClearTextSelection();
                 args.Handled = true;
@@ -451,11 +503,21 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            var action = BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args);
+            var bindings = BuiltinShortcuts.Snapshot();
+            var action = BuiltinShortcuts.Resolve(bindings, CurrentPinShortcutContext, args) ??
+                         BuiltinShortcuts.Resolve(bindings, BuiltinShortcutContexts.Pinned, args);
             if (action is null) return;
             using var input = PinnedInputContext.Use(PinnedInputContext.Current | PinnedInputOrigin.Keyboard);
             args.Handled = true;
-            if (ExecuteMultiSelectionShortcut(action) || Presentation.Execute(action)) return;
+            if (TryExecutePinSubtypeShortcut(action) || ExecuteMultiSelectionShortcut(action) ||
+                Presentation.Execute(action)) return;
+            if (ParseTransformAction(action) is { } transform)
+            {
+                if (CanTransformImage(transform))
+                    _ = RunAsync(() => ApplyImageTransformAsync(transform, _lifetime.Token));
+                return;
+            }
+
             switch (action)
             {
                 case "menu": Presentation.OpenMenu(_content.ContextMenu!, _content); break;
@@ -463,16 +525,49 @@ namespace RitsukageGif.Desktop
                 case "wheel-down": _simulatedWheel.Raise(-1); break;
                 case "hide": HideImage(); break;
                 case "close": RequestClose(); break;
-                case "copy": _ = RunAsync(_selectedTextStart >= 0 ? CopySelectedTextAsync : CopyAsync); break;
+                case "copy-plain-text":
+                    _ = RunAsync(() => Presentation.CopySourceMimeAsync(PinnedSourceMimeFormat.PlainText));
+                    break;
+                case "copy-html":
+                    _ = RunAsync(() => Presentation.CopySourceMimeAsync(PinnedSourceMimeFormat.Html));
+                    break;
+                case "copy": _ = RunAsync(HasTextSelection ? CopySelectedTextAsync : CopyAsync); break;
                 case "save": _ = RunAsync(SaveAsync); break;
                 case "print" when ScreenshotPrintService.IsSupported: _ = RunAsync(PrintDocumentAsync); break;
                 case "annotate": _ = RunAsync(BeginAnnotationAsync); break;
+                case "hide-mark": SetMarkHidden(!IsMarkHidden); break;
                 case "annotate-toolbar": _ = RunAsync(ToggleAnnotationToolbarAsync); break;
-                case "copy-all-text": _ = RunAsync(CopyRecognizedTextAsync); break;
+                case "brightness-increase":
+                    _ = RunAsync(() =>
+                        ApplyImageProcessingAsync(_colorMatrixState.AdjustBrightness(.1f), _lifetime.Token));
+                    break;
+                case "brightness-decrease":
+                    _ = RunAsync(() =>
+                        ApplyImageProcessingAsync(_colorMatrixState.AdjustBrightness(-.1f), _lifetime.Token));
+                    break;
+                case "opacity-increase": AdjustOpacity(.1); break;
+                case "opacity-decrease": AdjustOpacity(-.1); break;
+                case "reset-processing": _ = RunAsync(ResetImageProcessingAsync); break;
+                case "select-all-ocr" when CanSelectImageText:
+                    if (ActiveTextSelection.SelectAll())
+                    {
+                        ShowTextSelection();
+                        ShowTextSelectionMenu();
+                    }
+
+                    break;
+                case "ocr-text-selectable": _ = RunAsync(ToggleOcrTextSelectableAsync); break;
+                case "recognize-barcode": _ = RunAsync(() => RecognizeAsync(RecognitionMode.Barcode)); break;
+                case "recognize-table": _ = RunAsync(() => RecognizeAsync(RecognitionMode.Table)); break;
+                case "recognize-formula": _ = RunAsync(() => RecognizeAsync(RecognitionMode.Formula)); break;
+                case "translate-inline" when HasInlineTranslationBackend || _inlineTranslation?.Cached is not null:
+                    _ = RunAsync(ToggleInlineTranslationAsync);
+                    break;
+                case "copy-all-text": _ = RunAsync(CopyCurrentRecognizedTextAsync); break;
                 case "copy-file": _ = RunAsync(CopyFileAsync); break;
                 case "destroy": RequestClose(true); break;
                 case "thumbnail": ToggleThumbnail(); break;
-                case "select-roi" when !IsOperationLocked(PinnedLockRestrictions.Move):
+                case "select-roi" when !LiveCaptureActive && !IsOperationLocked(PinnedLockRestrictions.Move):
                     ClearTextSelection();
                     _regionSelectionMode = true;
                     break;

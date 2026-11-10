@@ -1,5 +1,3 @@
-using Avalonia;
-using Avalonia.Input;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -11,16 +9,12 @@ namespace RitsukageGif.Desktop
 
         private void InitializeTrayInput()
         {
-            _trayClicks = new(gesture => Dispatcher.UIThread.Post(() =>
-                    _ = RunTrayActionAsync(() => ExecuteTrayGestureAsync(gesture))),
-                (action, delay) => DispatcherTimer.RunOnce(action, delay), () => OperatingSystem.IsWindows()
-                    ? WindowsTrayInput.DoubleClickTime
-                    : Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
-                      TimeSpan.FromMilliseconds(500));
+            _trayClicks = new(ResolveTrayGesture,
+                action => Dispatcher.UIThread.Post(() => _ = RunTrayActionAsync(() => ExecuteTrayActionAsync(action))),
+                (action, delay) => DispatcherTimer.RunOnce(action, delay));
             if (OperatingSystem.IsWindows())
             {
-                _trayInput = WindowsTrayInput.Attach(message => _trayClicks.Process(message,
-                    Settings.System.TrayDoubleClick != SystemTrayAction.None));
+                _trayInput = WindowsTrayInput.Attach(message => _trayClicks.Process(message));
                 PortableTrayState.WindowsExtendedInput = _trayInput is not null;
                 PortableTrayState.Notify();
             }
@@ -28,14 +22,12 @@ namespace RitsukageGif.Desktop
             PortableTrayState.Gesture += PortableTrayGesture;
             PortableTrayState.Changed += PortableTrayAvailabilityChanged;
             if (_trayInput is null && PortableTrayState.Current is null && _tray is { } tray)
-                tray.Clicked += (_, _) => Dispatcher.UIThread.Post(() =>
-                    _ = RunTrayActionAsync(() => ExecuteTrayGestureAsync(TrayMouseGesture.SingleClick)));
+                tray.Clicked += (_, _) => _trayClicks.ProcessGesture(TrayMouseGesture.SingleClick, false);
         }
 
         private void PortableTrayGesture(TrayMouseGesture gesture)
         {
-            _trayClicks?.ProcessGesture(gesture, PortableTrayState.Supports(TrayMouseGesture.DoubleClick) &&
-                                                 Settings.System.TrayDoubleClick != SystemTrayAction.None);
+            _trayClicks?.ProcessGesture(gesture, PortableTrayState.Supports(TrayMouseGesture.DoubleClick));
         }
 
         private void PortableTrayAvailabilityChanged()
@@ -46,22 +38,30 @@ namespace RitsukageGif.Desktop
                 !_desktop.Windows.Any(window => window.IsVisible)) ShowMainWindow();
         }
 
-        private Task ExecuteTrayGestureAsync(TrayMouseGesture gesture)
+        private SystemTrayAction ResolveTrayGesture(TrayMouseGesture gesture)
         {
-            if (IsClosing || IsSelecting) return Task.CompletedTask;
-            var action = gesture switch
+            return gesture switch
             {
                 TrayMouseGesture.SingleClick => Settings.System.TraySingleClick,
                 TrayMouseGesture.DoubleClick => Settings.System.TrayDoubleClick,
                 _ => Settings.System.TrayMiddleClick,
             };
+        }
+
+        private Task ExecuteTrayActionAsync(SystemTrayAction action)
+        {
+            if (IsClosing || IsSelecting) return Task.CompletedTask;
             switch (action)
             {
                 case SystemTrayAction.None: return Task.CompletedTask;
-                case SystemTrayAction.ShowMainWindow: ShowMainWindow(); break;
                 case SystemTrayAction.Screenshot: return ScreenshotAsync();
-                case SystemTrayAction.PinClipboard: return PinClipboardOrFileAsync();
-                case SystemTrayAction.ToggleRecording: return ToggleRecordingAsync();
+                case SystemTrayAction.ScreenshotAndPin:
+                    return ScreenshotAsync(Settings.CaptureSource, confirmAction: ScreenshotOutputAction.Pin,
+                        autoConfirm: true);
+                case SystemTrayAction.ToggleGlobalShortcuts:
+                    if (!IsConfiguring) ToggleGlobalShortcuts();
+                    break;
+                case SystemTrayAction.TogglePinnedImages: return ToggleAllPinnedVisibilityAsync();
                 case SystemTrayAction.OpenSettings: return OpenTraySettingsAsync();
                 default: return Task.CompletedTask;
             }

@@ -8,31 +8,39 @@ namespace RitsukageGif.Desktop
         private long _nextRetry;
         private RecordingOptions _options;
         private PortableDesktopCapture? _portable;
+        private readonly NativeCaptureSessionReference? _portalSource;
         private DisplayTopology _topology;
         private WindowsDesktopCapture? _windows;
+        private readonly string? _includedWindowTitle;
 
         public DesktopCapture(RecordingOptions options, IEnumerable<PixelRect>? monitors = null,
-            int? outputWidth = null, int? outputHeight = null)
-            : this(options, new DisplayTopology(monitors ?? [options.Region]), outputWidth, outputHeight)
+            int? outputWidth = null, int? outputHeight = null, NativeCaptureSession? nativeSource = null,
+            string? includedWindowTitle = null)
+            : this(options, new DisplayTopology(monitors ?? [options.Region]), outputWidth, outputHeight, nativeSource,
+                includedWindowTitle)
         {
         }
 
         public DesktopCapture(RecordingOptions options, Func<DisplayTopology> displayProvider,
-            int? outputWidth = null, int? outputHeight = null)
-            : this(options, displayProvider(), outputWidth, outputHeight)
+            int? outputWidth = null, int? outputHeight = null, NativeCaptureSession? nativeSource = null,
+            string? includedWindowTitle = null)
+            : this(options, displayProvider(), outputWidth, outputHeight, nativeSource, includedWindowTitle)
         {
             _displayProvider = displayProvider;
         }
 
-        private DesktopCapture(RecordingOptions options, DisplayTopology topology, int? outputWidth, int? outputHeight)
+        private DesktopCapture(RecordingOptions options, DisplayTopology topology, int? outputWidth, int? outputHeight,
+            NativeCaptureSession? nativeSource, string? includedWindowTitle)
         {
             options.Validate();
             _options = options;
+            _includedWindowTitle = includedWindowTitle;
             _width = outputWidth ?? options.Width;
             _height = outputHeight ?? options.Height;
             if (_width <= 0 || _height <= 0 || (long)_width * _height * 4 > 512L * 1024 * 1024)
                 throw new ArgumentException(UiText.Get("SelectionTooLarge"));
             _topology = topology;
+            _portalSource = UsesSourceSelection ? nativeSource?.Retain() ?? NativeCaptureSession.RetainShared() : null;
         }
 
         public static bool UsesSourceSelection => OperatingSystem.IsLinux() &&
@@ -56,7 +64,8 @@ namespace RitsukageGif.Desktop
 
                 if (!UsesSourceSelection && !portableTopology.Covers(_options.Region))
                     throw new CaptureSourceLostException();
-                _portable ??= new(_options, [.. portableTopology.Monitors], _width, _height);
+                _portable ??= new(_options, [.. portableTopology.Monitors], _width, _height, _portalSource?.Session,
+                    _includedWindowTitle);
                 return _portable.CaptureFrames(token);
             }
 
@@ -107,7 +116,8 @@ namespace RitsukageGif.Desktop
                     if (OperatingSystem.IsWindows())
                         _windows = new(_options, topology.Monitors, _width, _height);
                     else
-                        _portable = new(_options, [.. topology.Monitors], _width, _height);
+                        _portable = new(_options, [.. topology.Monitors], _width, _height, _portalSource?.Session,
+                            _includedWindowTitle);
                 }
 
                 token.ThrowIfCancellationRequested();
@@ -129,6 +139,7 @@ namespace RitsukageGif.Desktop
             if (_disposed) return;
             _disposed = true;
             ReleaseSource();
+            _portalSource?.Dispose();
         }
 
         internal void Suspend()

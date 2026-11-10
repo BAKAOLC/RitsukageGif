@@ -45,6 +45,10 @@ namespace RitsukageGif.Desktop
             Resources["ButtonDefaultHeight"] = 28d;
             Resources["ButtonDefaultFontSize"] = 13d;
             Resources["ButtonDefaultPadding"] = new Thickness(8, 4);
+            Resources["ToggleSwitchContainerCheckedDefaultBackground"] = Accent;
+            Resources["ToggleSwitchContainerCheckedPointeroverBackground"] = Accent;
+            Resources["ToggleSwitchContainerCheckedPressedBackground"] = Accent;
+            Resources["ToggleSwitchContainerCheckedDisabledBackground"] = AccentSoft;
             Resources["NumericUpDownDefaultHeight"] = 28d;
             Resources["TextBoxDefaultHeight"] = 28d;
             Resources["ComboBoxDefaultHeight"] = 28d;
@@ -153,6 +157,10 @@ namespace RitsukageGif.Desktop
                     },
                 });
 
+            Add(new Style(s => s.OfType<Button>().Class("tool").Class(":disabled"))
+                { Setters = { new Setter(Visual.OpacityProperty, 0.35) } });
+            Add(new Style(s => s.Is<Button>().Class("number-stepper").Class(":disabled"))
+                { Setters = { new Setter(Visual.OpacityProperty, 0.35) } });
             Add(new Style(s => s.OfType<Button>().Class("navigation"))
             {
                 Setters =

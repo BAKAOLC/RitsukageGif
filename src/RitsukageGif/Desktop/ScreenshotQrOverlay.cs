@@ -34,6 +34,7 @@ namespace RitsukageGif.Desktop
             SizeChanged += (_, _) => Rebuild();
         }
 
+        internal bool HasVisiblePopup => _panels.Count > 0;
         internal IReadOnlyList<Rect> OccupiedBounds => _occupiedBounds;
         internal event Action? LayoutChanged;
 
@@ -221,7 +222,7 @@ namespace RitsukageGif.Desktop
         {
             var button = new Button
                 { Width = 28, Height = 28, MinWidth = 0, MinHeight = 0, Padding = new(2), Focusable = false };
-            button.Content = ToolbarIcon.Create(button, ToolbarIcon.TryGeometry(key)!);
+            button.Content = ToolbarIcon.Create(button, ToolbarIcon.FindDefinition(key)!);
             button.SetValue(AutomationProperties.NameProperty, UiText.Get(label ?? key));
             ToolTip.SetTip(button, UiText.Get(label ?? key));
             button.Click += (_, _) => action();

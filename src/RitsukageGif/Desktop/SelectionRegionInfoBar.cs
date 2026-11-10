@@ -8,7 +8,7 @@ using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class SelectionRegionInfoBar : Border, IDisposable
+    internal sealed partial class SelectionRegionInfoBar : Border, IDisposable
     {
         private readonly Button _add;
 
@@ -20,6 +20,7 @@ namespace RitsukageGif.Desktop
         private readonly SelectionGeometryPanel _geometry;
         private readonly Flyout _manual;
         private readonly Button _remove;
+        private readonly HoverPropertyPanel _displayOptions;
 
         private readonly TextBlock _semantic = new()
         {
@@ -31,7 +32,8 @@ namespace RitsukageGif.Desktop
         private IDisposable? _dialogScope;
 
         private (SelectionSnapshot Snapshot, bool Measuring, bool ShowInformation, SelectionHintMode Hints, string
-            Culture, string Unit)? _textKey;
+            Culture, string Unit, SelectionSizeUnit DisplayUnit, SelectionInfoItems DisplayItems,
+            double Density)? _textKey;
 
         internal SelectionRegionInfoBar(SelectionCoordinator coordinator)
         {
@@ -52,10 +54,12 @@ namespace RitsukageGif.Desktop
             };
             _coordinates.Bind(ToolTip.TipProperty, LiveText.Resource("SelectionGeometry"));
             _coordinates.Bind(AutomationProperties.NameProperty, LiveText.Resource("SelectionGeometry"));
+            _displayOptions = new(_coordinates, CreateDisplayOptions, RefreshDisplayOptions);
             _geometry = new(coordinator) { Width = 280 };
             _manual = new() { Content = _geometry, Placement = PlacementMode.BottomEdgeAlignedLeft };
             _coordinates.Click += (_, _) =>
             {
+                _displayOptions.Hide();
                 if (_dialogScope is not null)
                 {
                     _manual.Hide();
@@ -64,6 +68,7 @@ namespace RitsukageGif.Desktop
 
                 _geometry.Update(coordinator.Snapshot);
                 _dialogScope = coordinator.BeginSelectionDialog();
+                _displayOptions.IsEnabled = false;
                 try
                 {
                     _manual.ShowAt(_coordinates);
@@ -75,8 +80,8 @@ namespace RitsukageGif.Desktop
                 }
             };
             _manual.Closed += (_, _) => CloseManual();
-            _add = CreateAction("SelectionAddArea", "M4,4 L20,4 20,20 4,20 Z M7,12 L17,12 M12,7 L12,17", false);
-            _remove = CreateAction("SelectionRemoveArea", "M4,4 L20,4 20,20 4,20 Z M7,12 L17,12", true);
+            _add = CreateAction("SelectionAddArea", ToolbarIcon.GetDefinition("SelectionAddArea"), false);
+            _remove = CreateAction("SelectionRemoveArea", ToolbarIcon.GetDefinition("SelectionRemoveArea"), true);
             var row = new StackPanel
             {
                 Orientation = Orientation.Horizontal, Spacing = 4,
@@ -90,6 +95,7 @@ namespace RitsukageGif.Desktop
 
         public void Dispose()
         {
+            _displayOptions.Dispose();
             _manual.Hide();
             CloseManual();
         }
@@ -98,6 +104,7 @@ namespace RitsukageGif.Desktop
         {
             _dialogScope?.Dispose();
             _dialogScope = null;
+            _displayOptions.IsEnabled = IsVisible;
         }
 
         internal void Update(PixelRect monitor, double scale, bool owner, Rect toolbar, Rect options, Rect side,
@@ -111,21 +118,25 @@ namespace RitsukageGif.Desktop
                         (information || _coordinator.CanEditShapeRegions);
             if (!IsVisible)
             {
+                _displayOptions.IsEnabled = false;
                 OccupiedBounds = default;
                 _manual.Hide();
                 return;
             }
 
+            _displayOptions.IsEnabled = _dialogScope is null && information;
+            var preferences = _coordinator.CapturePreferences;
+            var density = _coordinator.InformationDensity;
             var textKey = (snapshot, measuring, information, _coordinator.HintMode, CultureInfo.CurrentUICulture.Name,
-                _coordinator.SelectionCoordinateUnit);
+                _coordinator.SelectionCoordinateUnit, preferences.InformationUnit, preferences.InformationItems,
+                density);
             if (_textKey != textKey)
             {
                 _textKey = textKey;
                 var region = snapshot.Region;
-                _coordinateText.Text = measuring
-                    ? string.Create(CultureInfo.CurrentCulture, $"{region.X}, {region.Y}")
-                    : string.Create(CultureInfo.CurrentCulture,
-                        $"{region.X}, {region.Y}   {region.Width} × {region.Height} {_coordinator.SelectionCoordinateUnit}");
+                _coordinateText.Text = FormatInformation(region, preferences.InformationUnit,
+                    preferences.InformationItems, density,
+                    _coordinator.SelectionCoordinateUnit == "pt", measuring);
                 var target = snapshot.Target;
                 _title.IsVisible = information && target is not null && !measuring &&
                                    _coordinator.HintMode != SelectionHintMode.Hidden;
@@ -158,7 +169,7 @@ namespace RitsukageGif.Desktop
             _geometry.Update(snapshot);
         }
 
-        private Button CreateAction(string key, string path, bool subtract)
+        private Button CreateAction(string key, IconDefinition path, bool subtract)
         {
             var button = new Button
             {

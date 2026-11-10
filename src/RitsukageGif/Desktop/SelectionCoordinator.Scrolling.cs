@@ -11,6 +11,7 @@ namespace RitsukageGif.Desktop
         private Task? _scrollingTask;
         internal ScrollCapturePreferences ScrollCapturePreferences { get; set; } = new();
         internal Action<bool>? ScrollAutoCropChanged { get; set; }
+        internal Action<bool>? ScrollClearConfirmationChanged { get; set; }
         internal bool ScreenshotPreview { get; private set; }
         internal bool WasScrollingScreenshot { get; private set; }
         private bool UsesLocalSource => ScreenshotPreview || DesktopCapture.UsesSourceSelection;
@@ -19,6 +20,12 @@ namespace RitsukageGif.Desktop
         {
             ScrollCapturePreferences = ScrollCapturePreferences with { AutoCropOnReverse = enabled };
             ScrollAutoCropChanged?.Invoke(enabled);
+        }
+
+        private void SetScrollClearConfirmation(bool skip)
+        {
+            ScrollCapturePreferences = ScrollCapturePreferences with { SkipClearConfirmation = skip };
+            ScrollClearConfirmationChanged?.Invoke(skip);
         }
 
         internal void OverlayClosed()
@@ -30,18 +37,13 @@ namespace RitsukageGif.Desktop
         {
             SelectionLogger.ZLogInformation(
                 $"Scrolling capture requested. SelectionId={_selectionId} Region={Snapshot.Region} Finished={_finished} Scrolling={_scrolling} Busy={Annotations?.IsBusy} ColorMode={Annotations?.OutputColorMode.ToString()}");
-            var vertical = requestedVertical ?? ScrollCapturePreferences.InitialAxis == ScrollCaptureAxis.Vertical;
+            var initialAction = ScrollCapturePreferences.InitialAction;
+            var vertical = requestedVertical ?? initialAction != ScrollCaptureInitialAction.Horizontal;
             if (_finished || _scrolling || _screenshotCompleting || ScreenshotPreview ||
                 Annotations is not { IsBusy: false, IsDrawing: false } annotations || Snapshot.Region.IsEmpty) return;
             if (annotations.HasAnnotations)
             {
                 annotations.SetExportState(false, UiText.Get("ScrollCaptureAnnotationsPresent"));
-                return;
-            }
-
-            if (_cursor && !OperatingSystem.IsWindows())
-            {
-                annotations.SetExportState(false, UiText.Get("ScrollCaptureCursorUnavailable"));
                 return;
             }
 
@@ -92,7 +94,8 @@ namespace RitsukageGif.Desktop
                         DesktopCapture.UsesSourceSelection
                             ? null
                             : (owner as ScreenshotScrollingWindow)?.CaptureOutputOrigin ?? outputOrigin, token),
-                    ScrollCapturePreferences.AutoCropOnReverse, SetScrollAutoCrop, colorMode);
+                    ScrollCapturePreferences.AutoCropOnReverse, SetScrollAutoCrop, colorMode, initialAction,
+                    ScrollCapturePreferences.SkipClearConfirmation, SetScrollClearConfirmation);
                 SelectionLogger.ZLogInformation(
                     $"Scrolling capture returned. SelectionId={_selectionId} Finished={_finished} HasFrame={captured is not null} Action={captured?.Action.ToString()}");
                 if (_finished) return;
@@ -152,15 +155,30 @@ namespace RitsukageGif.Desktop
             WasScrollingScreenshot = true;
             if (action == ScrollingCaptureAction.OcrCopy)
             {
-                var text = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
+                var recognition = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
                     new OcrRecognitionService(), token);
+                var text = RecognitionTextFormatter.Format(recognition, RecognitionPreferences);
                 token.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(text))
                     throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
-                var clipboard = owner.Clipboard ??
-                                throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-                await clipboard.SetTextAsync(text);
-                await clipboard.FlushAsync();
+                if (RecognitionPreferences.ShowDialogOnRecognition)
+                {
+                    await RecognitionWindow.ShowAsync(owner, png, RecognitionMode.Text,
+                        preferences: RecognitionPreferences, initialResult: recognition, token: token,
+                        translationPreferences: TranslationPreferences,
+                        originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,
+                        copyDirectlyNextTime: () =>
+                            DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.Screenshot),
+                        dialogPreferencesChanged: RecognitionDialogPreferencesChanged);
+                }
+                else
+                {
+                    var clipboard = owner.Clipboard ??
+                                    throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
+                    await clipboard.SetTextAsync(text);
+                    await clipboard.FlushAsync();
+                }
+
                 if (RecognitionOutputHandler is { } recognized)
                     await recognized(new(png, ScreenshotOutputAction.Copy)
                     {
@@ -168,10 +186,6 @@ namespace RitsukageGif.Desktop
                         OutputOrigin = outputOrigin, Decoration = Decoration,
                         OutputRegion = bounds,
                     }, token);
-                if (RecognitionPreferences.ShowDialogOnCopyAll)
-                    await RecognitionWindow.ShowAsync(owner, png, RecognitionMode.Text,
-                        preferences: RecognitionPreferences, initialText: text, token: token,
-                        translationPreferences: TranslationPreferences);
                 return true;
             }
 

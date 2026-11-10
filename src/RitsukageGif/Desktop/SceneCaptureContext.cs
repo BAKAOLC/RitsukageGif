@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly bool _bufferSources;
         private readonly int? _captureFps;
-        private readonly List<(nint Handle, bool Cursor, int Fps)> _expired = [];
+        private readonly List<(nint Handle, bool Cursor, int Fps, NativeCaptureSession? NativeSource)> _expired = [];
 
         private readonly Dictionary<(string Name, double Delay, double StaleAfter, bool Hold), ExternalInputFrame?>
             _inputFrames = [];
@@ -23,10 +23,15 @@ namespace RitsukageGif.Desktop
         private readonly Dictionary<ScreenKey, byte[]?> _screens = [];
         private readonly Dictionary<PresetRuntime, PresetRuntimeSnapshot> _snapshots = [];
         private readonly Dictionary<nint, WindowTarget?> _targets = [];
-        private readonly HashSet<(nint Handle, bool Cursor, int Fps)> _unavailable = [];
+
+        private readonly HashSet<(nint Handle, bool Cursor, int Fps, NativeCaptureSession? NativeSource)> _unavailable =
+            [];
+
         private readonly Func<nint, bool, int, ISceneWindowSource> _windowFactory;
 
-        private readonly Dictionary<(nint Handle, bool Cursor, int Fps), WindowEntry> _windows = [];
+        private readonly
+            Dictionary<(nint Handle, bool Cursor, int Fps, NativeCaptureSession? NativeSource), WindowEntry> _windows =
+                [];
 
         private bool _disposed;
         private double _liveTimestamp;
@@ -36,22 +41,26 @@ namespace RitsukageGif.Desktop
         private double? _timeOrigin;
         private DisplayTopology? _topology;
         private IReadOnlyList<WindowTarget> _windowList = [];
+        private readonly string? _includedWindowTitle;
 
         public SceneCaptureContext(int? captureFps = null,
             Func<nint, bool, int, ISceneWindowSource>? windowFactory = null, long maxMediaBytes = 512L * 1024 * 1024,
             ExternalInputHub? inputs = null, bool bufferWindows = false,
-            Func<RecordingOptions, DisplayTopology, int, int, ISceneWindowSource>? screenFactory = null)
+            Func<RecordingOptions, DisplayTopology, int, int, ISceneWindowSource>? screenFactory = null,
+            string? includedWindowTitle = null)
         {
             if (captureFps is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(captureFps));
             if (maxMediaBytes is < 0 or > 512L * 1024 * 1024)
                 throw new ArgumentOutOfRangeException(nameof(maxMediaBytes));
             _maxMediaBytes = maxMediaBytes;
+            _includedWindowTitle = includedWindowTitle;
             _inputs = inputs;
             _captureFps = captureFps;
             _bufferSources = bufferWindows;
             _windowFactory = windowFactory ?? ((handle, cursor, fps) => new WindowSource(handle, cursor, fps));
-            _screenFactory = screenFactory ?? ((options, topology, width, height) =>
-                new ScreenSource(options, topology, width, height));
+            _screenFactory = screenFactory ?? (includedWindowTitle is null
+                ? static (options, topology, width, height) => new ScreenSource(options, topology, width, height, null)
+                : CreateScreenSource);
         }
 
         public double MotionTime { get; private set; } = PresetMotion.Now;
@@ -75,6 +84,12 @@ namespace RitsukageGif.Desktop
             _inputFrames.Clear();
             _targets.Clear();
             _unavailable.Clear();
+        }
+
+        private ScreenSource CreateScreenSource(RecordingOptions options, DisplayTopology topology, int width,
+            int height)
+        {
+            return new(options, topology, width, height, _includedWindowTitle);
         }
 
         public void BeginFrame(double elapsedSeconds)
@@ -168,11 +183,12 @@ namespace RitsukageGif.Desktop
         }
 
         public (byte[]? Pixels, int Width, int Height, PixelRect? Bounds) CaptureWindow(nint handle,
-            RecordingOptions options, PixelRect region, int outputWidth, int outputHeight, CancellationToken token)
+            RecordingOptions options, PixelRect region, int outputWidth, int outputHeight, CancellationToken token,
+            NativeCaptureSession? nativeSource = null)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
-            var key = (handle, options.Cursor, _captureFps ?? options.Fps);
+            var key = (Handle: handle, options.Cursor, Fps: _captureFps ?? options.Fps, NativeSource: nativeSource);
             if (_unavailable.Contains(key)) return (null, 0, 0, null);
             if (!_windows.TryGetValue(key, out var entry))
             {
@@ -180,7 +196,9 @@ namespace RitsukageGif.Desktop
                 var capture = _bufferSources && !OperatingSystem.IsMacOS() && !DesktopCapture.UsesSourceSelection &&
                               _windows.Count < MaximumBufferedSources
                     ? new BufferedSceneWindowSource(() => _windowFactory(handle, options.Cursor, fps), fps)
-                    : _windowFactory(handle, options.Cursor, fps);
+                    : key.NativeSource is { } source
+                        ? new WindowSource(handle, options.Cursor, fps, source)
+                        : _windowFactory(handle, options.Cursor, fps);
                 entry = new(capture);
                 _windows.Add(key, entry);
             }
@@ -226,11 +244,12 @@ namespace RitsukageGif.Desktop
             return source;
         }
 
-        private sealed class WindowSource(nint handle, bool cursor, int fps)
+        private sealed class WindowSource(nint handle, bool cursor, int fps, NativeCaptureSession? nativeSource = null)
             : ISceneWindowSource, IColorFrameSource, ISceneRegionSource
         {
             // Scene consumers finish reading before the next capture; exported scene frames own their buffers.
-            private readonly WindowContentCapture _capture = new(handle, cursor, fps, false);
+            private readonly WindowContentCapture
+                _capture = new(handle, cursor, fps, false, nativeSource: nativeSource);
 
             public CapturedFrameSet CaptureFrames(CancellationToken token = default)
             {

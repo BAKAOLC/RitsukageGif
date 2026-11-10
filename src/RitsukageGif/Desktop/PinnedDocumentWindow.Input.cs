@@ -26,6 +26,8 @@ namespace RitsukageGif.Desktop
         {
             _content.AddHandler(PointerPressedEvent, (_, args) =>
             {
+                if (IsMarkEditing) return;
+                if (BeginDocumentThumbnailPointer(args)) return;
                 if (args.Source is Visual native && (native is ScrollBar ||
                                                      native.GetVisualAncestors().OfType<ScrollBar>().Any())) return;
                 var properties = args.GetCurrentPoint(_content).Properties;
@@ -54,7 +56,8 @@ namespace RitsukageGif.Desktop
                 }
 
                 if (properties.IsLeftButtonPressed &&
-                    (Selectable || (_textView is PinnedRichView && args.KeyModifiers.HasFlag(KeyModifiers.Control))) &&
+                    ((Selectable && (!_isThumbnail || PreferencesProvider().ThumbnailSelectableText)) ||
+                     (_textView is PinnedRichView && args.KeyModifiers.HasFlag(KeyModifiers.Control))) &&
                     _textView?.Control.IsPointerOver == true &&
                     !args.KeyModifiers.HasFlag(KeyModifiers.Alt) && !copyPlain) return;
                 _mouseClicks.Press(button, args.KeyModifiers, args.ClickCount);
@@ -68,6 +71,8 @@ namespace RitsukageGif.Desktop
             }, RoutingStrategies.Tunnel);
             _content.PointerMoved += (sender, args) =>
             {
+                if (IsMarkEditing) return;
+                if (MoveDocumentThumbnailPointer(args)) return;
                 if (!_gesture.IsActive)
                 {
                     _content.Cursor = ResizeEdge(args.GetPosition(this)) switch
@@ -85,7 +90,16 @@ namespace RitsukageGif.Desktop
                 {
                     if (!MouseCommands.TryResolve(MouseGestureContext.Pinned, gesture, MouseCommands.SnapshotBindings(),
                             out var binding)) return;
-                    _dragging = binding!.Action is MouseAction.MoveWindow or MouseAction.MoveWindowIgnoringText;
+                    if (StartDocumentThumbnailDrag(binding!.Action,
+                            _dragTrigger!.GetPosition(_content)))
+                    {
+                        _gesture.Reset();
+                        args.Pointer.Capture(_content);
+                        MoveDocumentThumbnailPointer(args);
+                        return;
+                    }
+
+                    _dragging = binding.Action is MouseAction.MoveWindow or MouseAction.MoveWindowIgnoringText;
                     if (binding.Action == MouseAction.DragContent && Document is PinnedFilesDocument files &&
                         _dragTrigger is { } trigger)
                     {
@@ -108,6 +122,7 @@ namespace RitsukageGif.Desktop
             };
             _content.AddHandler(PointerReleasedEvent, (_, args) =>
             {
+                if (FinishDocumentThumbnailPointer(args)) return;
                 if (args.Route == RoutingStrategies.Tunnel == _nativeItemInteraction) return;
                 if (!_gesture.IsActive) return;
                 var click = _gesture.End(args.InitialPressMouseButton, out var gesture);
@@ -130,18 +145,25 @@ namespace RitsukageGif.Desktop
             _content.PointerCaptureLost += (_, args) =>
             {
                 if (!ReferenceEquals(args.Source, _content)) return;
+                CancelDocumentThumbnailPointer();
                 _gesture.Reset();
                 _dragging = false;
                 _dragTrigger = null;
             };
             _content.AddHandler(PointerWheelChangedEvent, (_, args) =>
             {
-                if (Math.Abs(args.Delta.Y) < double.Epsilon) return;
+                if (IsMarkEditing || Math.Abs(args.Delta.Y) < double.Epsilon) return;
                 args.Handled = ExecuteMouse(new(MouseGestureKind.Wheel, args.KeyModifiers), menu, args.Delta.Y);
             }, RoutingStrategies.Tunnel);
             AddHandler(KeyDownEvent, (sender, args) =>
             {
                 if (args.Handled) return;
+                if (IsMarkEditing)
+                {
+                    DocumentAnnotationKeyDown(args);
+                    return;
+                }
+
                 var action = Document is PinnedTextDocument or PinnedHtmlDocument
                     ? BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedTextContext", args)
                     : null;
@@ -167,12 +189,22 @@ namespace RitsukageGif.Desktop
                 {
                     case "wheel-up": _simulatedWheel.Raise(1); break;
                     case "wheel-down": _simulatedWheel.Raise(-1); break;
+                    case "thumbnail": ToggleDocumentThumbnail(); break;
+                    case "select-roi": SelectDocumentThumbnailRegion(); break;
                     case "text-selection": SetSelectable(!Selectable); break;
                     case "text-ignore-format"
                         when Document is PinnedHtmlDocument: SetIgnoreFormat(!IgnoreFormat); break;
                     case "text-select-all" when Selectable: _textView?.SelectAll(); break;
+                    case "annotate": _ = RunAsync(() => SetMarkEditingAsync(true)); break;
+                    case "hide-mark": SetMarkHidden(!IsMarkHidden); break;
+                    case "copy-plain-text":
+                        _ = RunAsync(() => Presentation.CopySourceMimeAsync(PinnedSourceMimeFormat.PlainText));
+                        break;
+                    case "copy-html":
+                        _ = RunAsync(() => Presentation.CopySourceMimeAsync(PinnedSourceMimeFormat.Html));
+                        break;
                     case "copy": _ = RunAsync(CopyAsync); break;
-                    case "save": _ = RunAsync(SaveDocumentAsync); break;
+                    case "save": _ = RunAsync(SaveRenderedImageAsync); break;
                     case "copy-file": _ = RunAsync(CopyAsFileAsync); break;
                     case "copy-all-text": _ = RunAsync(() => CopyTextAsync(Document.PlainText)); break;
                     case "hide": HideImage(); break;
@@ -204,7 +236,7 @@ namespace RitsukageGif.Desktop
                         _ = RunAsync(() => SaveSelectionRequested?.Invoke(this) ?? Task.CompletedTask); break;
                     default:
                         if (!PinnedImageArrangementCommands.TryResolve(action, out var arrangement)) return;
-                        ArrangeSelectionRequested?.Invoke(this, arrangement);
+                        _ = RunAsync(() => ArrangeSelectionRequested?.Invoke(this, arrangement) ?? Task.CompletedTask);
                         break;
                 }
 
@@ -221,6 +253,7 @@ namespace RitsukageGif.Desktop
             // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
             switch (binding!.Action)
             {
+                case MouseAction.ToggleThumbnail: ToggleDocumentThumbnail(); break;
                 case MouseAction.Copy: _ = RunAsync(CopyAsync); break;
                 case MouseAction.CopyRecognizedText when Document.PlainText.Length > 0:
                     _ = RunAsync(() => CopyTextAsync(Document.PlainText)); break;
@@ -230,7 +263,7 @@ namespace RitsukageGif.Desktop
                         await CopyAsync();
                         CloseRequested?.Invoke(this, false);
                     }); break;
-                case MouseAction.Save: _ = RunAsync(SaveDocumentAsync); break;
+                case MouseAction.Save: _ = RunAsync(SaveRenderedImageAsync); break;
                 case MouseAction.Hide: HideImage(); break;
                 case MouseAction.Close: CloseRequested?.Invoke(this, false); break;
                 case MouseAction.Destroy: CloseRequested?.Invoke(this, true); break;
@@ -241,7 +274,7 @@ namespace RitsukageGif.Desktop
                 case MouseAction.FineZoom when !IsOperationLocked(PinnedLockRestrictions.Move):
                     SetZoom(_zoom * Math.Pow(1 + preferences.FineZoomStep, amount)); break;
                 case MouseAction.AdjustOpacity:
-                    Opacity = Math.Clamp(Opacity + amount * preferences.OpacityStep, 0.15, 1); break;
+                    AdjustOpacity(amount * preferences.OpacityStep); break;
                 case MouseAction.ActualSize when !IsOperationLocked(PinnedLockRestrictions.Move): SetZoom(1); break;
                 case MouseAction.Reset when !IsOperationLocked(PinnedLockRestrictions.Move):
                     SetZoom(1);
@@ -267,8 +300,16 @@ namespace RitsukageGif.Desktop
 
         private void SetZoom(double value)
         {
-            _zoom = Math.Clamp(value, 0.05, 8);
+            ApplyDocumentZoom(Math.Clamp(value, 0.05, _isThumbnail ? double.MaxValue : 8));
+        }
+
+        private void ApplyDocumentZoom(double value)
+        {
+            _zoom = value;
             _layout.LayoutTransform = new ScaleTransform(_zoom, _zoom);
+            RefreshFileIconSampling();
+            if (_isThumbnail) ApplyDocumentThumbnailGeometry();
+            DocumentAnnotationLayoutChanged(false);
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
 

@@ -1,3 +1,5 @@
+using Avalonia.Media;
+
 namespace RitsukageGif.Desktop
 {
     public sealed record PinnedImagePreferences
@@ -7,6 +9,7 @@ namespace RitsukageGif.Desktop
         public PinnedTitlePosition TitlePosition { get; set; }
         public bool HideOthersOnShake { get; set; }
         public bool KeepOthersHiddenOnNewPin { get; set; }
+        public bool SkipNegativeSpacingConfirmation { get; set; }
         public bool ActivateOnNewPin { get; set; } = true;
         public bool FlashOnNewPin { get; set; }
         public bool FlashAfterGroupSwitch { get; set; }
@@ -16,6 +19,8 @@ namespace RitsukageGif.Desktop
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
         public List<PinnedGroupDefinition> Groups { get; set; } = [];
         public bool AutoFit { get; set; } = true;
+        public bool SmoothScaling { get; set; }
+        public PinnedTransparentLayerMode TransparentLayer { get; set; } = PinnedTransparentLayerMode.Checkerboard;
         public int MaximumWindowSize { get; set; } = PinnedViewportGeometry.DefaultMaximumWindowSize;
         public int? QuickThumbnailWidth { get; set; }
         public int? QuickThumbnailHeight { get; set; }
@@ -26,7 +31,12 @@ namespace RitsukageGif.Desktop
         public double MouseThroughOpacity { get; set; } = 0.5;
         public bool SelectableText { get; set; } = true;
         public bool ThumbnailSelectableText { get; set; }
-        public bool CopyVisibleRegion { get; set; } = true;
+        public bool ShowTextPopupMenu { get; set; } = true;
+
+        // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
+        public List<string> TextHighlightColors { get; set; } =
+            ["#FF909C", "#B89FFF", "#74B4FF", "#5AD8A6", "#F6BD16"];
+
         public PinnedImageOutputContent OutputContent { get; set; }
         public PinnedReplacementAction ReplacementAction { get; set; }
         public bool ResizeFromBorder { get; set; } = true;
@@ -52,7 +62,10 @@ namespace RitsukageGif.Desktop
                 .DistinctBy(item => item.Name, StringComparer.Ordinal).ToList();
             return this with
             {
-                Opacity = double.IsFinite(Opacity) ? Math.Clamp(Opacity, 0.15, 1) : 1,
+                TransparentLayer = Enum.IsDefined(TransparentLayer)
+                    ? TransparentLayer
+                    : PinnedTransparentLayerMode.Checkerboard,
+                Opacity = double.IsFinite(Opacity) ? Math.Clamp(Opacity, 0.1, 1) : 1,
                 ZoomStep = double.IsFinite(ZoomStep) ? Math.Clamp(ZoomStep, 0.01, 1) : 0.1,
                 FineZoomStep = double.IsFinite(FineZoomStep) ? Math.Clamp(FineZoomStep, 0.001, 0.1) : 0.01,
                 OpacityStep = double.IsFinite(OpacityStep) ? Math.Clamp(OpacityStep, 0.01, 0.5) : 0.05,
@@ -67,6 +80,7 @@ namespace RitsukageGif.Desktop
                     ? ActiveGroup
                     : "",
                 Groups = groups,
+                TextHighlightColors = NormalizeHighlightColors(TextHighlightColors),
                 SupportedContentKinds = SupportedContentKinds & PinnedContentKinds.All,
                 OutputContent = Enum.IsDefined(OutputContent) ? OutputContent : PinnedImageOutputContent.Current,
                 ReplacementAction = Enum.IsDefined(ReplacementAction)
@@ -84,6 +98,13 @@ namespace RitsukageGif.Desktop
                 WheelZoomAnchor = Enum.IsDefined(WheelZoomAnchor) ? WheelZoomAnchor : PinnedZoomAnchor.TopLeft,
                 ResetZoomAnchor = Enum.IsDefined(ResetZoomAnchor) ? ResetZoomAnchor : PinnedZoomAnchor.Pointer,
             };
+        }
+
+        private static List<string> NormalizeHighlightColors(IEnumerable<string>? colors)
+        {
+            var palette = (colors ?? []).Where(value => Color.TryParse(value, out _))
+                .Select(value => Color.Parse(value).ToString()).ToList();
+            return palette.Count > 0 ? palette : ["#ffffff00", "#ff00ff00", "#ff00ffff", "#ffff00ff", "#ffffa500"];
         }
     }
 }

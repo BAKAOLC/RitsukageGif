@@ -4,6 +4,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly Action<Action> _post;
         private readonly Action<Exception> _reportError;
+        private readonly SemaphoreSlim _scanGate = new(1, 1);
         private bool _disposed;
         private int _revision;
         private object? _source;
@@ -43,7 +44,8 @@ namespace RitsukageGif.Desktop
             var work = CancellationTokenSource.CreateLinkedTokenSource(token);
             _work = work;
             var revision = ++_revision;
-            Pending = DecodeAsync(region, scan, work, revision);
+            var decode = DecodeAsync(region, scan, work, revision);
+            Pending = Pending.IsCompleted ? decode : Task.WhenAll(Pending, decode);
         }
 
         internal void Clear()
@@ -67,7 +69,18 @@ namespace RitsukageGif.Desktop
         {
             try
             {
-                var codes = await scan(work.Token).ConfigureAwait(false);
+                await _scanGate.WaitAsync(work.Token).ConfigureAwait(false);
+                IReadOnlyList<BarcodeRecognitionResult> codes;
+                try
+                {
+                    work.Token.ThrowIfCancellationRequested();
+                    codes = await scan(work.Token).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _scanGate.Release();
+                }
+
                 work.Token.ThrowIfCancellationRequested();
                 _post(() =>
                 {

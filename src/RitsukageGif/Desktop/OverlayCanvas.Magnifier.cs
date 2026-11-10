@@ -22,17 +22,19 @@ namespace RitsukageGif.Desktop
         private SampleColorContext _magnifierContext;
         private SampleColorTemplate? _magnifierFormat;
 
-        private IPen _magnifierGrid = new Pen(new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)), .5);
+        private IPen _magnifierGrid = new Pen(new SolidColorBrush(Color.FromArgb(128, 128, 128, 128)), .5);
         private string? _magnifierGridColor;
         private PixelPoint _magnifierPosition;
         private FormattedText? _magnifierPositionText;
         private SelectionCommandDefinition? _magnifierShortcutCommand;
         private string? _magnifierShortcutCulture;
-        private string? _magnifierShortcutLabel;
+        private SelectionCommandDefinition? _magnifierFormatShortcutCommand;
+        private FormattedText? _magnifierFormatShortcutText;
         private FormattedText? _magnifierShortcutText;
 
         internal SampleColorTemplate SampleColorTemplate { get; set; } = SampleColorFormats.DefaultTemplate;
         internal bool RelativeCoordinates { get; set; }
+        internal ScreenshotAnnotationSession? MagnifierAnnotations { get; set; }
 
         private PixelPoint SamplePosition => RelativeCoordinates && !Selected.IsEmpty
             ? new(Mouse.X - Selected.X, Mouse.Y - Selected.Y)
@@ -66,7 +68,7 @@ namespace RitsukageGif.Desktop
         {
             using var clip = context.PushClip(lens);
             context.FillRectangle(Brushes.Black, lens);
-            var factor = Math.Clamp(CapturePreferences.Magnification, 2, 32);
+            var factor = Math.Clamp(CapturePreferences.Magnification, 1, 100);
             var source = new Rect(Mouse.X - _monitor.X + .5 - lens.Width / factor / 2,
                 Mouse.Y - _monitor.Y + .5 - lens.Height / factor / 2, lens.Width / factor, lens.Height / factor);
             var available = source.Intersect(new(0, 0, _monitor.Width, _monitor.Height));
@@ -91,6 +93,14 @@ namespace RitsukageGif.Desktop
                 }
             }
 
+            if (MagnifierAnnotations is { } annotations)
+            {
+                using var transform = context.PushTransform(new(factor, 0, 0, factor,
+                    lens.Center.X - (Mouse.X + .5) * factor, lens.Center.Y - (Mouse.Y + .5) * factor));
+                if (CapturePreferences.MagnifierAnnotations) annotations.Render(context);
+                if (CapturePreferences.MagnifierAnnotationControls) annotations.RenderSelection(context, Scale);
+            }
+
             var center = lens.Center;
             if (CapturePreferences.MagnifierCrosshair)
             {
@@ -105,7 +115,7 @@ namespace RitsukageGif.Desktop
                     _magnifierGridColor = CapturePreferences.MagnifierGridColor;
                     _magnifierGrid = new Pen(new SolidColorBrush(Color.TryParse(_magnifierGridColor, out var color)
                         ? color
-                        : Color.FromArgb(70, 255, 255, 255)), .5);
+                        : Color.FromArgb(128, 128, 128, 128)), .5);
                 }
 
                 var startX = center.X - factor / 2d - Math.Ceiling(lens.Width / factor / 2) * factor;
@@ -164,20 +174,49 @@ namespace RitsukageGif.Desktop
             context.DrawText(label,
                 new(left + 23, frame.Top + MagnifierHeight + (CapturePreferences.MagnifierCoordinates ? 28 : 6)));
             if (!CapturePreferences.MagnifierShortcuts) return;
-            var command = (ShortcutBindings ?? SelectionCommands.SnapshotBindings())
-                .FirstOrDefault(item => item.Command == SelectionCommand.CopyColor);
-            if (command is null || string.IsNullOrEmpty(command.Gesture)) return;
-            var culture = CultureInfo.CurrentUICulture.Name;
-            if (_magnifierShortcutCommand != command || _magnifierShortcutCulture != culture)
+            var count = UpdateMagnifierShortcuts();
+            var y = frame.Bottom - count * 20 - 4;
+            if (_magnifierFormatShortcutText is { } formatHint)
             {
-                _magnifierShortcutCommand = command;
-                _magnifierShortcutCulture = culture;
-                _magnifierShortcutLabel = $"{command.Gesture}  {UiText.Get(command.DescriptionKey)}";
-                _magnifierShortcutText = HintText(_magnifierShortcutLabel, MagnifierWidth - 16, MutedText, 11, 20);
+                context.DrawText(formatHint, new(frame.Center.X - formatHint.Width / 2, y));
+                y += 20;
             }
 
-            var hint = _magnifierShortcutText!;
-            context.DrawText(hint, new(frame.Center.X - hint.Width / 2, frame.Bottom - 24));
+            if (_magnifierShortcutText is { } copyHint)
+                context.DrawText(copyHint, new(frame.Center.X - copyHint.Width / 2, y));
+        }
+
+        private int UpdateMagnifierShortcuts()
+        {
+            var bindings = ShortcutBindings ?? SelectionCommands.SnapshotBindings();
+            SelectionCommandDefinition? copy = null, format = null;
+            foreach (var binding in bindings)
+            {
+                if (copy is null && binding.Command == SelectionCommand.CopyColor) copy = binding;
+                if (format is null && binding.Command == SelectionCommand.CycleColorFormat) format = binding;
+                if (copy is not null && format is not null) break;
+            }
+
+            var culture = CultureInfo.CurrentUICulture.Name;
+            if (_magnifierShortcutCommand != copy || _magnifierFormatShortcutCommand != format ||
+                _magnifierShortcutCulture != culture)
+            {
+                _magnifierShortcutCommand = copy;
+                _magnifierFormatShortcutCommand = format;
+                _magnifierShortcutCulture = culture;
+                _magnifierShortcutText = ShortcutHint(copy);
+                _magnifierFormatShortcutText = ShortcutHint(format);
+            }
+
+            return (_magnifierShortcutText is null ? 0 : 1) + (_magnifierFormatShortcutText is null ? 0 : 1);
+
+            static FormattedText? ShortcutHint(SelectionCommandDefinition? command)
+            {
+                return command is null || string.IsNullOrEmpty(command.Gesture)
+                    ? null
+                    : HintText($"{command.Gesture}: {UiText.Get(command.DescriptionKey)}", MagnifierWidth - 16,
+                        MutedText, 11, 20);
+            }
         }
 
         internal bool TryGetSampleColor(PixelPoint point, out Color color)

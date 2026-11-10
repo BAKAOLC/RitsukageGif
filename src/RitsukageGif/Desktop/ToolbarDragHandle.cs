@@ -104,7 +104,7 @@ namespace RitsukageGif.Desktop
                 Background = Brushes.Transparent, Foreground = AppTheme.Ink, Focusable = false,
                 IsHitTestVisible = false,
             };
-            if (ToolbarIcon.TryGeometry(key) is { } geometry) icon.Content = ToolbarIcon.Create(icon, geometry);
+            if (ToolbarIcon.FindDefinition(key) is { } geometry) icon.Content = ToolbarIcon.Create(icon, geometry);
             return icon;
         }
 

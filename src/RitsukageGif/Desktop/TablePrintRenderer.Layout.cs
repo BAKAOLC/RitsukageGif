@@ -84,7 +84,7 @@ namespace RitsukageGif.Desktop
                     : 1;
                 var pages = Paginate(table, options, rows, panelStarts.Count - 1, contentHeight, pitch, token);
                 return new(width, height, left, top, contentWidth, contentHeight, pitch, scale, columns,
-                    [.. panelStarts], rows, cells, pages);
+                    [.. panelStarts], rows, cells, pages, (table.OutputStyle ?? TableOutputStyle.Default).Normalize());
             }
             catch
             {

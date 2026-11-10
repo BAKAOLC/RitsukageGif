@@ -1,12 +1,12 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
-using Avalonia.Controls.Shapes;
 using Avalonia.Controls.Templates;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Path = Avalonia.Controls.Shapes.Path;
 
 namespace RitsukageGif.Desktop
 {
@@ -14,6 +14,7 @@ namespace RitsukageGif.Desktop
     // minimum touch-target sizes or horizontal increment buttons.
     internal sealed class CompactNumberInput : UserControl
     {
+
         private readonly TextBox _text = new()
         {
             Padding = new(1, 0), MinHeight = 0, Height = double.NaN,
@@ -22,6 +23,7 @@ namespace RitsukageGif.Desktop
             VerticalContentAlignment = VerticalAlignment.Center,
             Background = Brushes.Transparent, BorderThickness = new(0), CornerRadius = new(0),
         };
+        private readonly RepeatButton[] _stepButtons = new RepeatButton[2];
 
         private decimal _last = 1;
         private bool _updatingText;
@@ -49,7 +51,7 @@ namespace RitsukageGif.Desktop
             for (var i = 0; i < 2; i++)
             {
                 var increment = i == 0 ? 1 : -1;
-                var button = new Button
+                var button = new RepeatButton
                 {
                     Background = Brushes.Transparent,
                     [!ForegroundProperty] = this[!ForegroundProperty],
@@ -69,23 +71,8 @@ namespace RitsukageGif.Desktop
                     }),
                 };
                 button.Classes.Add("number-stepper");
-                button.Content = new Viewbox
-                {
-                    Width = 12, Height = 8,
-                    Child = new Canvas
-                    {
-                        Width = 12, Height = 8,
-                        Children =
-                        {
-                            new Path
-                            {
-                                Data = Geometry.Parse(i == 0 ? "M2,6 L6,2 10,6" : "M2,2 L6,6 10,2"),
-                                Width = 12, Height = 8, StrokeThickness = 1.5,
-                                [!Shape.StrokeProperty] = button[!ForegroundProperty],
-                            },
-                        },
-                    },
-                };
+                _stepButtons[i] = button;
+                button.Content = NumericChevron.Create(button, i == 0);
                 button.Bind(AutomationProperties.NameProperty,
                     LiveText.Resource(i == 0 ? "NumericIncrease" : "NumericDecrease"));
                 button.Click += (_, _) => Step(increment);
@@ -108,10 +95,29 @@ namespace RitsukageGif.Desktop
                 SetValue(value, false);
             };
             _text.LostFocus += (_, _) => SetValue(Value ?? Minimum, true);
+            AddHandler(KeyDownEvent, OnStepKeyDown, RoutingStrategies.Tunnel);
+            UpdateStepButtons();
         }
 
-        public decimal Minimum { get; init; } = 1;
-        public decimal Maximum { get; init; } = 100;
+        public decimal Minimum
+        {
+            get;
+            init
+            {
+                field = value;
+                UpdateStepButtons();
+            }
+        } = 1;
+
+        public decimal Maximum
+        {
+            get;
+            init
+            {
+                field = value;
+                UpdateStepButtons();
+            }
+        } = 100;
 
         public int DecimalPlaces
         {
@@ -168,6 +174,7 @@ namespace RitsukageGif.Desktop
             var next = Math.Clamp(value, Minimum, Maximum);
             var changed = next != _last;
             _last = next;
+            UpdateStepButtons();
             if (write) WriteText();
             if (changed) ValueChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -184,6 +191,19 @@ namespace RitsukageGif.Desktop
             {
                 _updatingText = false;
             }
+        }
+
+        private void UpdateStepButtons()
+        {
+            _stepButtons[0].IsEnabled = _last < Maximum;
+            _stepButtons[1].IsEnabled = _last > Minimum;
+        }
+
+        private void OnStepKeyDown(object? sender, KeyEventArgs args)
+        {
+            if (args.Key is not (Key.Up or Key.Down)) return;
+            Step(args.Key == Key.Up ? 1 : -1);
+            args.Handled = true;
         }
 
         private void Step(int direction)

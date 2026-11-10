@@ -191,6 +191,7 @@ static gboolean control_line(const char *line, struct rgc_portal_video *video, G
                              const char *session, const struct rgc_portal_source *source, uint32_t devices,
                              GCancellable *cancel)
 {
+    gint64 preparation_deadline = g_get_monotonic_time() + 2 * G_TIME_SPAN_SECOND;
     JsonParser *parser = json_parser_new();
     GError *error = NULL;
     gint64 request_id = 0;
@@ -218,14 +219,17 @@ static gboolean control_line(const char *line, struct rgc_portal_video *video, G
     } else if (command && !strcmp(command, "capabilities")) {
         written = rgc_portal_video_capabilities(video, request_id);
     } else if (command && !strcmp(command, "configure")) {
-        gint64 generation, x, y, width, height, output_width, output_height;
+        gint64 generation, x, y, width, height, output_width, output_height, fps;
+        JsonNode *hdr_node = json_object_get_member(object, "retainHdr");
         const char *stream = member_string(object, "streamId");
         JsonNode *region_node = json_object_get_member(object, "region");
         JsonObject *region =
             region_node && JSON_NODE_HOLDS_OBJECT(region_node) ? json_node_get_object(region_node) : NULL;
         char expected_stream[32];
         g_snprintf(expected_stream, sizeof(expected_stream), "%u", source->node_id);
-        if (request_id <= 0 || !member_int(object, "generation", &generation) || generation < 0 ||
+        if (request_id <= 0 || !member_int(object, "fps", &fps) || fps < 1 || fps > 120 ||
+            !hdr_node || !JSON_NODE_HOLDS_VALUE(hdr_node) || json_node_get_value_type(hdr_node) != G_TYPE_BOOLEAN ||
+            !member_int(object, "generation", &generation) || generation < 0 ||
             (uint64_t)generation != source->generation || !stream || strcmp(stream, expected_stream) ||
             !region || !member_int(region, "x", &x) || !member_int(region, "y", &y) ||
             !member_int(region, "width", &width) || !member_int(region, "height", &height) ||
@@ -238,10 +242,11 @@ static gboolean control_line(const char *line, struct rgc_portal_video *video, G
         } else {
             written = rgc_portal_video_configure(video, request_id, (uint64_t)generation, source->node_id,
                                                  (int)x, (int)y, (int)width, (int)height, (int)output_width,
-                                                 (int)output_height);
+                                                 (int)output_height, (int)fps, json_node_get_boolean(hdr_node));
         }
-    } else if (command && !strcmp(command, "scroll")) {
-        gint64 generation, x, y, width, height;
+    } else if (command && (!strcmp(command, "scroll") || !strcmp(command, "prepare-pointer"))) {
+        gboolean prepare = !strcmp(command, "prepare-pointer");
+        gint64 generation, x, y, width, height, source_width = 0, source_height = 0;
         const char *stream = member_string(object, "streamId"), *axis = member_string(object, "axis");
         JsonNode *region_node = json_object_get_member(object, "region");
         JsonObject *region =
@@ -250,7 +255,11 @@ static gboolean control_line(const char *line, struct rgc_portal_video *video, G
         g_snprintf(expected_stream, sizeof(expected_stream), "%u", source->node_id);
         if (!member_int(object, "generation", &generation) || generation < 0 ||
             (uint64_t)generation != source->generation || !stream || strcmp(stream, expected_stream) ||
-            !region || !axis || (strcmp(axis, "vertical") && strcmp(axis, "horizontal")) ||
+            request_id <= 0 || !region ||
+            (!prepare && (!axis || (strcmp(axis, "vertical") && strcmp(axis, "horizontal")))) ||
+            (prepare && (!member_int(object, "sourceWidth", &source_width) || source_width <= 0 ||
+                         source_width > G_MAXINT || !member_int(object, "sourceHeight", &source_height) ||
+                         source_height <= 0 || source_height > G_MAXINT)) ||
             !member_int(region, "x", &x) || !member_int(region, "y", &y) ||
             !member_int(region, "width", &width) || !member_int(region, "height", &height) || x < 0 ||
             y < 0 || width <= 0 || height <= 0 || x > G_MAXINT || y > G_MAXINT || width > G_MAXINT ||
@@ -260,11 +269,57 @@ static gboolean control_line(const char *line, struct rgc_portal_video *video, G
         } else {
             struct rgc_portal_pointer_observation observation;
             rgc_portal_video_pointer(video, &observation);
-            int result = rgc_portal_scroll_input_send(
-                bus, session, devices, source->generation, source->node_id, &observation, (int)x, (int)y,
-                (int)width, (int)height, !strcmp(axis, "vertical") ? 0 : 1, 1, cancel, &error);
-            written = rgc_portal_video_reply(video, request_id,
-                                             result == RGC_SCROLL_SENT          ? "sent"
+            int result = prepare
+                             ? rgc_portal_scroll_input_prepare(
+                                   bus, session, devices, source->generation, source->node_id, &observation,
+                                   (int)source_width, (int)source_height, (int)x, (int)y, (int)width,
+                                   (int)height, cancel, &error)
+                             : rgc_portal_scroll_input_send(
+                                   bus, session, devices, source->generation, source->node_id, &observation,
+                                   (int)x, (int)y, (int)width, (int)height,
+                                   !strcmp(axis, "vertical") ? 0 : 1, 1, cancel, &error);
+            if (prepare && result == RGC_SCROLL_SENT) {
+                int center_x = (int)x + (int)width / 2, center_y = (int)y + (int)height / 2;
+                while (TRUE) {
+                    if (g_cancellable_set_error_if_cancelled(cancel, &error)) {
+                        result = RGC_SCROLL_UNAVAILABLE;
+                        break;
+                    }
+                    struct rgc_portal_pointer_observation current;
+                    rgc_portal_video_pointer(video, &current);
+                    if (current.generation != observation.generation ||
+                        current.stream_id != observation.stream_id || current.width != source_width ||
+                        current.height != source_height) {
+                        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                                            "The authorized capture source changed during pointer preparation.");
+                        result = RGC_SCROLL_UNAVAILABLE;
+                        break;
+                    }
+                    gint64 now = g_get_monotonic_time();
+                    if (now >= preparation_deadline) {
+                        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_TIMED_OUT,
+                                            "No current pointer observation reached the requested capture center.");
+                        result = RGC_SCROLL_UNAVAILABLE;
+                        break;
+                    }
+                    gint64 age = now - current.observed_monotonic_us;
+                    gboolean exact_center = current.cursor_x == center_x && current.cursor_y == center_y;
+                    gboolean updated_center = current.observed_monotonic_us > observation.observed_monotonic_us &&
+                                              (int64_t)current.cursor_x >= (int64_t)center_x - 1 &&
+                                              (int64_t)current.cursor_x <= (int64_t)center_x + 1 &&
+                                              (int64_t)current.cursor_y >= (int64_t)center_y - 1 &&
+                                              (int64_t)current.cursor_y <= (int64_t)center_y + 1;
+                    if (current.cursor_valid && current.observed_monotonic_us > 0 && age >= 0 && age <= 250000 &&
+                        current.cursor_x >= x && current.cursor_y >= y &&
+                        (int64_t)current.cursor_x < x + width && (int64_t)current.cursor_y < y + height &&
+                        (exact_center || updated_center))
+                        break;
+                    g_usleep(5000);
+                }
+            }
+            written = (!prepare || result != RGC_SCROLL_SENT || rgc_portal_video_cursor(video, 0)) &&
+                      rgc_portal_video_reply(video, request_id,
+                                             result == RGC_SCROLL_SENT          ? (prepare ? "prepared" : "sent")
                                              : result == RGC_SCROLL_UNAVAILABLE ? "unavailable"
                                                                                 : "failed",
                                              error ? error->message : NULL);
@@ -432,6 +487,8 @@ int main(int argc, char **argv)
     guint cursor_modes =
         source.portal_version >= 2 ? property_uint(bus, SCREENCAST, "AvailableCursorModes", 1) : 1;
     gboolean metadata_cursor = (cursor_modes & 4) != 0;
+    source.available_cursor_modes = cursor_modes;
+    source.cursor_mode = metadata_cursor ? 4u : cursor ? 2u : 1u;
     guint remote_devices = property_uint(bus, REMOTE_DESKTOP, "AvailableDeviceTypes", 0);
     gboolean can_request_pointer = (remote_devices & 2) != 0;
     if (!(source_types & source.source_type)) {

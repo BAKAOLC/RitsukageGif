@@ -40,7 +40,7 @@ namespace RitsukageGif.Desktop
         private CancellationTokenSource? _operation;
         private string? _path;
 
-        public AnimationEditorWindow(string? initialPath = null)
+        public AnimationEditorWindow(string? initialPath = null, CancellationToken initialToken = default)
         {
             ConfigureTypography();
             Foreground = AppTheme.Ink;
@@ -125,20 +125,7 @@ namespace RitsukageGif.Desktop
                 _thumbnailCache.Dispose();
                 _document?.Dispose();
             };
-            Opened += async (_, _) =>
-            {
-                Logger.ZLogInformation(
-                    $"Animation editor window opened. HasInitialPath={initialPath is not null}");
-                if (initialPath is not null) await LoadAsync(initialPath);
-                else
-                    await RunAsync(async token =>
-                        {
-                            _document = await Task.Run(() => AnimationEditDocument.Create(640, 480), token);
-                            Refresh();
-                        },
-                        // ReSharper disable once ExplicitCallerInfoArgument
-                        "InitializeDocument");
-            };
+            Opened += Initialize;
             UiText.LanguageChanged += RefreshLanguage;
             AddHandler(KeyDownEvent, HandleEditorKeyDown,
                 RoutingStrategies.Tunnel);
@@ -150,6 +137,51 @@ namespace RitsukageGif.Desktop
                 UpdateDraftActions();
             };
             _canvas.SelectionChanged += (_, _) => SyncLayerProperties();
+            return;
+
+            void Initialize(object? sender, EventArgs args)
+            {
+                Opened -= Initialize;
+                _ = InitializeAsync();
+            }
+
+            async Task InitializeAsync()
+            {
+                try
+                {
+                    Logger.ZLogInformation(
+                        $"Animation editor window opened. HasInitialPath={initialPath is not null}");
+                    if (initialPath is not null) await LoadAsync(initialPath, initialToken);
+                    else
+                        await RunAsync(async token =>
+                            {
+                                var document = await Task.Run(() => AnimationEditDocument.Create(640, 480), token);
+                                try
+                                {
+                                    token.ThrowIfCancellationRequested();
+                                }
+                                catch
+                                {
+                                    document.Dispose();
+                                    throw;
+                                }
+
+                                _document = document;
+                                Refresh();
+                            },
+                            // ReSharper disable once ExplicitCallerInfoArgument
+                            "InitializeDocument", initialToken);
+                }
+                catch (Exception error)
+                {
+                    Logger.ZLogError(error, $"Animation editor initialization failed.");
+                    if (_languageClosed) return;
+                    _operation = null;
+                    _editing.IsEnabled = true;
+                    _cancel.IsVisible = false;
+                    SetStatusError(error.Message);
+                }
+            }
         }
 
         private int CurrentFrame => _frames.SelectedIndex >= 0 ? _frames.SelectedIndex : _displayedFrame;

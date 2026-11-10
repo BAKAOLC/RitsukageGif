@@ -86,7 +86,7 @@ jobs:
           ref: ${{ needs.version.outputs.commit }}
           persist-credentials: false
       - name: Setup .NET
-        uses: actions/setup-dotnet@v6.0.0
+        uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: global.json
       - name: Install Linux build dependencies
@@ -107,7 +107,12 @@ jobs:
       - name: Restore
         run: dotnet restore RitsukageGif.sln
       - name: Build
-        run: dotnet build RitsukageGif.sln -c Release --no-restore
+        run: |
+          dotnet build RitsukageGif.sln -c Release --no-restore -m:1
+          if ($LASTEXITCODE -ne 0) { throw 'Solution build failed.' }
+          $desktopAssembly = & dotnet msbuild src/RitsukageGif/RitsukageGif.csproj -nologo -p:Configuration=Release -getProperty:TargetPath
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the desktop metadata host.' }
+          "RG_DESKTOP_ASSEMBLY=$desktopAssembly" >> $env:GITHUB_ENV
       - name: Package application
         env:
           TARGET_RID: ${{ matrix.rid }}
@@ -121,7 +126,7 @@ jobs:
       - name: Package VS Code extension
         env:
           TARGET_RID: ${{ matrix.rid }}
-        run: ./.github/scripts/package-extension.ps1 -RuntimeIdentifier $env:TARGET_RID
+        run: ./.github/scripts/package-extension.ps1 -RuntimeIdentifier $env:TARGET_RID -DesktopAssembly $env:RG_DESKTOP_ASSEMBLY
       - name: Upload artifact
         uses: actions/upload-artifact@v7.0.2
         if: github.event_name != 'pull_request'

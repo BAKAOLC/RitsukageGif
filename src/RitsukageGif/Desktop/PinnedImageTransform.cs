@@ -3,7 +3,7 @@ namespace RitsukageGif.Desktop
     internal enum PinnedImageTransform
     {
         RotateClockwise,
-        Rotate180,
+        RotateCounterclockwise,
         FlipHorizontal,
         FlipVertical,
         Grayscale,

@@ -6,7 +6,7 @@
 #include <spa/param/video/raw.h>
 
 struct rgc_portal_source {
-    uint32_t node_id, source_type, portal_version;
+    uint32_t node_id, source_type, portal_version, cursor_mode, available_cursor_modes;
     uint64_t serial, generation;
     char *id, *restore_token;
     gboolean has_position, has_size, has_logical_size;
@@ -29,6 +29,6 @@ gboolean rgc_portal_video_reply(struct rgc_portal_video *video, gint64 request_i
 gboolean rgc_portal_video_capabilities(struct rgc_portal_video *video, gint64 request_id);
 gboolean rgc_portal_video_configure(struct rgc_portal_video *video, gint64 request_id, uint64_t generation,
                                     uint32_t stream_id, int x, int y, int width, int height, int output_width,
-                                    int output_height);
+                                    int output_height, int fps, gboolean hdr);
 gboolean rgc_portal_video_set_active(struct rgc_portal_video *video, gint64 request_id, gboolean active);
 #endif

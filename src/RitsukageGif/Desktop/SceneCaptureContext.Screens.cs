@@ -8,12 +8,14 @@ namespace RitsukageGif.Desktop
         private readonly Dictionary<ScreenKey, ScreenRetry> _screenRetries = [];
 
         public byte[]? CaptureScreen<TState>(PixelRect area, int width, int height, RecordingOptions options,
-            TState state, Func<TState, byte[]> capture, bool buffer = false, CancellationToken token = default)
+            TState state, Func<TState, byte[]> capture, bool buffer = false,
+            NativeCaptureSession? nativeSource = null, CancellationToken token = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
             var buffered = buffer && _bufferSources && _topology is not null && !DesktopCapture.UsesSourceSelection;
-            var key = new ScreenKey(area, width, height, options.Cursor, _captureFps ?? options.Fps, buffered);
+            var key = new ScreenKey(area, width, height, options.Cursor, _captureFps ?? options.Fps, buffered,
+                nativeSource);
             if (_screens.TryGetValue(key, out var pixels)) return pixels;
             try
             {
@@ -96,7 +98,9 @@ namespace RitsukageGif.Desktop
             int Fps,
             // Keep synchronous and buffered captures in separate cache entries.
             // ReSharper disable once NotAccessedPositionalProperty.Local
-            bool Buffered);
+            bool Buffered,
+            // ReSharper disable once NotAccessedPositionalProperty.Local
+            NativeCaptureSession? NativeSource);
 
         private sealed class BufferedScreen(ISceneWindowSource capture, DisplayTopology topology)
         {
@@ -105,10 +109,17 @@ namespace RitsukageGif.Desktop
             public DisplayTopology Topology { get; } = topology;
         }
 
-        private sealed class ScreenSource(RecordingOptions options, DisplayTopology topology, int width, int height)
+        private sealed class ScreenSource(
+            RecordingOptions options,
+            DisplayTopology topology,
+            int width,
+            int height,
+            string? includedWindowTitle)
             : ISceneWindowSource
         {
-            private readonly DesktopCapture _capture = new(options, topology.Monitors, width, height);
+            private readonly DesktopCapture _capture = new(options, topology.Monitors, width, height,
+                includedWindowTitle: includedWindowTitle);
+
             public int Width => width;
             public int Height => height;
             public bool OwnsFrameBuffers => true;

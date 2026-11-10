@@ -9,6 +9,7 @@ namespace RitsukageGif.Desktop
         internal async Task PinWindowRoiAsync(WindowTarget target, PixelRect region, bool cursor,
             double captureScaling = 1, CancellationToken token = default)
         {
+            await Dispatcher.UIThread.InvokeAsync(PrepareNewPinInput, DispatcherPriority.Normal, token);
             var descriptor = await Task.Run(() => WindowRoiPinSource.Describe(target, region, cursor), token)
                 .ConfigureAwait(false);
             var bounds = OperatingSystem.IsLinux() ? target.Client : target.Bounds;

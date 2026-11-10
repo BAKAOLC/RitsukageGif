@@ -31,6 +31,28 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        internal static unsafe (bool Held, bool Cancelled) CaptureRefreshInputState()
+        {
+            lock (Sync)
+            {
+                var display = Display();
+                if (XQueryPointer(display, XDefaultRootWindow(display), out _, out _, out _, out _, out _, out _,
+                        out var mask) == 0)
+                    throw new IOException("X11 could not read the capture refresh pointer state.");
+                var escape = XKeysymToKeycode(display, 0xFF1B);
+                var keys = stackalloc byte[32];
+                if (XQueryKeymap(display, keys) == 0)
+                    throw new IOException("X11 could not read the capture refresh keyboard state.");
+                return ((mask & 256) != 0, escape != 0 && (keys[escape / 8] & (1 << (escape % 8))) != 0);
+            }
+        }
+
+        [LibraryImport(Library)]
+        private static partial byte XKeysymToKeycode(nint display, nuint key);
+
+        [LibraryImport(Library)]
+        private static unsafe partial int XQueryKeymap(nint display, byte* keys);
+
         [LibraryImport(Library)]
         private static partial int XQueryPointer(nint display, nint window, out nint root, out nint child,
             out int rootX, out int rootY, out int windowX, out int windowY, out uint mask);

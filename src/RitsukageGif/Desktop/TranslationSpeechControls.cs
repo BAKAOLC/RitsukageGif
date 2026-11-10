@@ -190,7 +190,7 @@ namespace RitsukageGif.Desktop
             {
                 button.Tag = key;
                 button.Content = ToolbarIcon.Create(button,
-                    FluentToolbarIcon.Geometry(playing ? "SpeechStop" : "SpeechSpeak") ??
+                    ToolbarIcon.FindDefinition(playing ? "SpeechStop" : "SpeechSpeak") ??
                     throw new InvalidOperationException("Speech toolbar icon is not registered."));
             }
         }

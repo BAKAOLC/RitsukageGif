@@ -21,7 +21,8 @@ namespace RitsukageGif.Desktop
 
         private void RefreshTextEditor()
         {
-            if (!_session.IsCanvasTextEditing || !new Rect(_monitor.X, _monitor.Y, _monitor.Width, _monitor.Height)
+            if (!_session.IsCanvasTextEditing || !new Rect(SourceOrigin.X, SourceOrigin.Y, Bounds.Width * Scale,
+                        Bounds.Height * Scale)
                     .Contains(_session.TextEditPosition))
             {
                 if (_inlineTextEditor is { } previous) Children.Remove(previous);
@@ -49,15 +50,22 @@ namespace RitsukageGif.Desktop
                     {
                         case Key.Escape:
                             args.Handled = true;
-                            _session.CancelTextEdit();
+                            if (_session.IsNumberCaptionEditing) _session.CommitTextEdit();
+                            else _session.CancelTextEdit();
                             break;
-                        case Key.Enter when !args.KeyModifiers.HasFlag(KeyModifiers.Shift):
+                        case Key.Enter when !_session.IsNumberCaptionEditing &&
+                                            !args.KeyModifiers.HasFlag(KeyModifiers.Shift):
                             args.Handled = true;
                             _session.CommitTextEdit();
                             break;
                     }
                 }, RoutingStrategies.Tunnel);
                 AnnotationTextInput.ProtectComposition(created);
+                created.LostFocus += (_, _) =>
+                {
+                    if (ReferenceEquals(created, _inlineTextEditor) && _session.IsNumberCaptionEditing)
+                        _session.CommitTextEdit();
+                };
                 _inlineTextEditor = created;
                 Children.Add(created);
                 Dispatcher.UIThread.Post(() =>
@@ -73,19 +81,19 @@ namespace RitsukageGif.Desktop
             editor.FontFamily = string.IsNullOrEmpty(properties.FontFamily)
                 ? FontFamily.Default
                 : new(properties.FontFamily);
-            editor.FontSize = Math.Max(1, _session.FontSize / Scale);
+            editor.FontSize = Math.Max(1, _session.TextEditFontSize / Scale);
             editor.FontWeight = properties.Bold ? FontWeight.Bold : FontWeight.Normal;
             editor.FontStyle = properties.Italic ? FontStyle.Italic : FontStyle.Normal;
             editor.Foreground = new SolidColorBrush(_session.Color);
-            editor.Padding = new(properties.TextPadding / Scale);
+            editor.Padding = new(0);
             editor.TextWrapping = _session.TextEditWraps ? TextWrapping.Wrap : TextWrapping.NoWrap;
             editor.MaxWidth = double.PositiveInfinity;
             editor.Width = _session.TextEditWraps
-                ? Math.Max(1, (_session.TextEditWrapWidth + properties.TextPadding * 2) / Scale + 2)
+                ? Math.Max(1, _session.TextEditWrapWidth / Scale + 2)
                 : double.NaN;
             if (editor.Text != _session.TextEditValue) editor.Text = _session.TextEditValue;
-            SetLeft(editor, (_session.TextEditPosition.X - _monitor.X) / Scale - 1);
-            SetTop(editor, (_session.TextEditPosition.Y - _monitor.Y) / Scale - 1);
+            SetLeft(editor, (_session.TextEditPosition.X - SourceOrigin.X) / Scale - 1);
+            SetTop(editor, (_session.TextEditPosition.Y - SourceOrigin.Y) / Scale - 1);
         }
     }
 }

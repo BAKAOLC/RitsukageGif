@@ -93,11 +93,11 @@ namespace RitsukageGif.Desktop
             }, token);
         }
 
-        private static IPlatformOcrBackend CreateBackend()
+        private static CompositeOcrBackend CreateBackend()
         {
-            if (OperatingSystem.IsWindows()) return new WindowsOcrBackend();
-            if (OperatingSystem.IsMacOS()) return new MacVisionOcrBackend();
-            return new TesseractOcrBackend();
+            IPlatformOcrBackend platform = OperatingSystem.IsWindows() ? new WindowsOcrBackend() :
+                OperatingSystem.IsMacOS() ? new MacVisionOcrBackend() : new TesseractOcrBackend();
+            return new(platform);
         }
 
         private async Task<OcrRecognitionResult> Run(Func<Task<OcrRecognitionResult>> operation,

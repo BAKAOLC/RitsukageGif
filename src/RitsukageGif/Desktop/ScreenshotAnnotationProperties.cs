@@ -36,7 +36,7 @@ namespace RitsukageGif.Desktop
         public bool NineGrid { get; set; }
         public int Anchor { get; set; } = 4;
         public double ImageWidth { get; set; } = 256;
-        public int BlurRadius { get; set; } = 8;
+        public int BlurRadius { get; set; } = 10;
         public string FontFamily { get; set; } = "";
 
         public ScreenshotAnnotationProperties Normalize()
@@ -50,19 +50,21 @@ namespace RitsukageGif.Desktop
                 StartEndpoint = Enum.IsDefined(StartEndpoint) ? StartEndpoint : AnnotationEndpointStyle.None,
                 EndEndpoint = Enum.IsDefined(EndEndpoint) ? EndEndpoint : AnnotationEndpointStyle.None,
                 TextPadding = double.IsFinite(TextPadding) ? Math.Clamp(TextPadding, 0, 128) : 4,
-                TextOutlineWidth = double.IsFinite(TextOutlineWidth) ? Math.Clamp(TextOutlineWidth, 0, 16) : 1,
+                TextOutlineWidth = double.IsFinite(TextOutlineWidth) ? Math.Clamp(TextOutlineWidth, 1, 50) : 10,
                 WrapWidth = double.IsFinite(WrapWidth) ? Math.Clamp(WrapWidth, 0, 8192) : 0,
                 Opacity = double.IsFinite(Opacity) ? Math.Clamp(Opacity, .01, 1) : .5,
                 Number = Math.Clamp(Number, 0, 999999),
                 Anchor = Math.Clamp(Anchor, 0, 8),
                 ImageWidth = double.IsFinite(ImageWidth) ? Math.Clamp(ImageWidth, 1, 8192) : 256,
-                BlurRadius = Math.Clamp(BlurRadius, 1, 256),
+                BlurRadius = Math.Clamp(BlurRadius, 3, 50),
                 FontFamily = NormalizeFontFamily(FontFamily),
             };
             value.NormalizeMarkerProperties();
             value.NormalizeNumberProperties();
             value.NormalizeMagnifierProperties();
             value.NormalizePixelToolProperties();
+            value.NormalizeWatermarkProperties();
+            value.NormalizeTextProperties();
             return value;
         }
 
@@ -70,6 +72,8 @@ namespace RitsukageGif.Desktop
         partial void NormalizeNumberProperties();
         partial void NormalizeMagnifierProperties();
         partial void NormalizePixelToolProperties();
+        partial void NormalizeWatermarkProperties();
+        partial void NormalizeTextProperties();
 
         private static string NormalizeFontFamily(string? value)
         {

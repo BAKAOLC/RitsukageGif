@@ -40,9 +40,10 @@ namespace RitsukageGif.Desktop
         {
             RefreshSourceMenuState();
             _recordLabel.Text =
-                UiText.Get(_host.IsRecording ? "StopRecording" : _host.IsBusy ? "Processing" : "StartRecording");
+                UiText.Get(_host.IsQuickRecording ? "StopRecording" :
+                    _host.IsQuickRecordingOperation ? "Processing" : "StartRecording");
             _sourceLabel.Text = UiText.Get(_host.SelectedCaptureSourceKey);
-            SetActionTip(_record, UiText.Get(_host.IsRecording ? "MainStopHint" :
+            SetActionTip(_record, UiText.Get(_host.IsQuickRecording ? "MainStopHint" :
                     _host.Region is null ? "SelectAreaHint" :
                     _host.IsBusy ? "Processing" : "StartRecording"),
                 Settings.GetActionShortcut(GlobalActionKind.ToggleRecording));

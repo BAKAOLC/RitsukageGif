@@ -13,16 +13,22 @@ namespace RitsukageGif.Desktop
         private readonly byte[]? _bitmap;
         private readonly Bitmap? _ownedBitmap;
         private readonly PinnedContentKinds _kinds;
+        private readonly (CaptureWindowShape? Shape, double CaptureScaling) _bitmapShape;
+        private readonly IReadOnlyDictionary<string, (CaptureWindowShape? Shape, double CaptureScaling)>? _fileShapes;
 
         private PinnedDropInputSnapshot(PinnedDropDataTransfer transfer, string[] files, byte[]? bitmap,
             Bitmap? ownedBitmap,
-            PinnedContentKinds kinds)
+            PinnedContentKinds kinds,
+            IReadOnlyDictionary<string, (CaptureWindowShape? Shape, double CaptureScaling)>? fileShapes,
+            (CaptureWindowShape? Shape, double CaptureScaling) bitmapShape)
         {
             _transfer = transfer;
             _files = files;
             _bitmap = bitmap;
             _ownedBitmap = ownedBitmap;
             _kinds = kinds;
+            _fileShapes = fileShapes;
+            _bitmapShape = bitmapShape;
         }
 
         public void Dispose()
@@ -34,10 +40,12 @@ namespace RitsukageGif.Desktop
         internal static PinnedDropInputSnapshot Capture(IDataTransfer transfer, PinnedContentKinds kinds,
             bool disposeSourceBitmap, CancellationToken token)
         {
-            var formats = GetFormats(kinds);
+            var formats = GetFormats(kinds, true);
             var items = new List<IAsyncDataTransferItem>();
             var files = new List<string>();
+            Dictionary<string, (CaptureWindowShape? Shape, double CaptureScaling)>? fileShapes = null;
             IDataTransferItem? bitmapItem = null;
+            (CaptureWindowShape? Shape, double CaptureScaling) bitmapShape = (null, 1);
             foreach (var item in transfer.Items)
             {
                 token.ThrowIfCancellationRequested();
@@ -51,6 +59,7 @@ namespace RitsukageGif.Desktop
                     {
                         case byte[] bytes:
                         {
+                            if (format == ClipboardWindowShape.Format && bytes.Length != 24) continue;
                             var isImage = (kinds & PinnedContentKinds.Images) != 0 &&
                                           ClipboardPlatformFormats.ImageNames.Any(name =>
                                               DataFormat.CreateBytesPlatformFormat(name) == format);
@@ -67,10 +76,25 @@ namespace RitsukageGif.Desktop
                 if ((kinds & (PinnedContentKinds.Files | PinnedContentKinds.Images)) != 0 &&
                     item.Formats.Contains(DataFormat.File) &&
                     ReadOptional(() => item.TryGetFile()?.TryGetLocalPath()) is { } path)
+                {
                     files.Add(path);
+                    if (values.TryGetValue(ClipboardWindowShape.Format, out var shapeBytes))
+                    {
+                        var shape = ClipboardWindowShape.Read(shapeBytes as byte[]);
+                        if (shape.Shape is not null || shape.CaptureScaling is not 1)
+                            (fileShapes ??= new(OperatingSystem.IsWindows()
+                                ? StringComparer.OrdinalIgnoreCase
+                                : StringComparer.Ordinal))[path] = shape;
+                    }
+                }
+
                 if ((kinds & PinnedContentKinds.Images) != 0 && bitmapItem is null &&
                     item.Formats.Contains(DataFormat.Bitmap))
+                {
                     bitmapItem = item;
+                    bitmapShape = ClipboardWindowShape.Read(
+                        values.GetValueOrDefault(ClipboardWindowShape.Format) as byte[]);
+                }
             }
 
             token.ThrowIfCancellationRequested();
@@ -89,7 +113,7 @@ namespace RitsukageGif.Desktop
                     if (disposeSourceBitmap) bitmap.Dispose();
                 }
 
-            return new(new(items), [.. files], bitmapBytes, ownedBitmap, kinds);
+            return new(new(items), [.. files], bitmapBytes, ownedBitmap, kinds, fileShapes, bitmapShape);
         }
 
         internal static bool CanRead(IDataTransfer transfer, PinnedContentKinds kinds)
@@ -101,12 +125,15 @@ namespace RitsukageGif.Desktop
                     formats.Contains(DataFormat.File));
         }
 
-        private static List<DataFormat> GetFormats(PinnedContentKinds kinds)
+        private static List<DataFormat> GetFormats(PinnedContentKinds kinds, bool includeSourceMetadata = false)
         {
             var formats = new List<DataFormat>();
             if ((kinds & PinnedContentKinds.Images) != 0)
                 formats.AddRange(ClipboardPlatformFormats.ImageNames.Select(DataFormat.CreateBytesPlatformFormat));
-            if ((kinds & (PinnedContentKinds.Text | PinnedContentKinds.Color)) != 0)
+            if (includeSourceMetadata && (kinds & PinnedContentKinds.Images) != 0)
+                formats.Add(ClipboardWindowShape.Format);
+            if ((includeSourceMetadata && kinds != PinnedContentKinds.None) ||
+                (kinds & (PinnedContentKinds.Text | PinnedContentKinds.Color)) != 0)
             {
                 formats.Add(DataFormat.Text);
                 formats.AddRange(ClipboardPlatformFormats.HtmlNames.Select(DataFormat.CreateBytesPlatformFormat));
@@ -126,17 +153,21 @@ namespace RitsukageGif.Desktop
             var snapshot = await PinnedClipboardSnapshot.ReadEnabledAsync(_transfer, _kinds, token);
             var bitmap = snapshot.Images.Count == 0 && _files.Length == 0 ? await ReadBitmapAsync(token) : null;
             token.ThrowIfCancellationRequested();
-            return snapshot with { Files = _files, Bitmap = bitmap };
+            return snapshot with
+            {
+                Files = _files, Bitmap = bitmap?.Png, FileShapes = _fileShapes,
+                BitmapWindowShape = bitmap?.WindowShape ?? default, BitmapCaptureScaling = bitmap?.CaptureScaling ?? 1,
+            };
         }
 
-        internal async Task<byte[]?> ReadBitmapAsync(CancellationToken token)
+        internal async Task<PinnedBitmapInput?> ReadBitmapAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             var bitmap = _ownedBitmap is null
                 ? _bitmap
                 : await Task.Run(() => ReadOptional(() => EncodeBitmap(_ownedBitmap)), token);
             token.ThrowIfCancellationRequested();
-            return bitmap;
+            return bitmap is null ? null : new(bitmap, _bitmapShape.Shape, _bitmapShape.CaptureScaling);
         }
 
         private static WriteableBitmap? CloneBitmap(Bitmap bitmap)

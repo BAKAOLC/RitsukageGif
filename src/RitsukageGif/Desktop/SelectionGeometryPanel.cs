@@ -34,7 +34,7 @@ namespace RitsukageGif.Desktop
             _ratio.Click += (_, _) => coordinator.LockGeometryRatio(_ratio.IsChecked == true);
             _fixed.Click += (_, _) => coordinator.FixGeometrySize(_fixed.IsChecked == true);
             var swap = new Button { Focusable = false, IsTabStop = false };
-            swap.Content = ToolbarIcon.Create(swap, "M3,7 L20,7 M16,3 L20,7 16,11 M21,17 L4,17 M8,13 L4,17 8,21");
+            swap.Content = ToolbarIcon.Create(swap, ToolbarIcon.GetDefinition("SelectionGeometrySwapDimensions"));
             ToolTip.SetTip(swap, UiText.Get("SelectionGeometrySwap"));
             swap.Click += (_, _) => coordinator.SwapGeometryDimensions();
             var apply = new Button { Focusable = false, IsTabStop = false };

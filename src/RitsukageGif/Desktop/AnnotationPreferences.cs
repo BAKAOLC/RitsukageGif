@@ -4,11 +4,11 @@ namespace RitsukageGif.Desktop
 {
     public sealed record AnnotationPreferences
     {
-        public string Color { get; set; } = "#ffff0000";
+        public string Color { get; set; } = "#ffd84a2f";
         public bool RememberLastTool { get; set; }
         public bool LimitToSelection { get; set; } = true;
         public string LastTool { get; set; } = "Select";
-        public bool SharedColor { get; set; } = true;
+        public bool SharedColor { get; set; }
         public Dictionary<string, AnnotationToolStyle> ToolStyles { get; set; } = [];
 
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
@@ -27,6 +27,9 @@ namespace RitsukageGif.Desktop
         public bool RenumberOnDelete { get; set; } = true;
         public bool NumberStartsAtZero { get; set; }
         public bool GlobalNumberCounter { get; set; }
+        public uint? NumberForegroundColor { get; set; }
+        public AnnotationSizeLevel NumberTextSize { get; set; }
+        public AnnotationSizeLevel NumberArrowSize { get; set; }
         public bool SmoothBrush { get; set; } = true;
         public AnnotationPencilShiftMode PencilShiftMode { get; set; }
         public PenLineJoin PolylineJoin { get; set; } = PenLineJoin.Round;
@@ -67,6 +70,8 @@ namespace RitsukageGif.Desktop
                 PolylineJoin = Enum.IsDefined(PolylineJoin) ? PolylineJoin : PenLineJoin.Round,
                 PolylineCap = Enum.IsDefined(PolylineCap) ? PolylineCap : PenLineCap.Round,
                 TextWrapMode = Enum.IsDefined(TextWrapMode) ? TextWrapMode : AnnotationTextWrapMode.WordOrCharacter,
+                NumberTextSize = Enum.IsDefined(NumberTextSize) ? NumberTextSize : AnnotationSizeLevel.Large,
+                NumberArrowSize = Enum.IsDefined(NumberArrowSize) ? NumberArrowSize : AnnotationSizeLevel.Large,
                 ToolStyles = ToolStyles.Where(pair => ScreenshotToolCatalog.IsStyleKey(pair.Key) &&
                                                       pair.Value is not null)
                     .ToDictionary(pair => pair.Key,

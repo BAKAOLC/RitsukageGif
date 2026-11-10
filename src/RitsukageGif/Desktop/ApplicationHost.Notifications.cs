@@ -11,7 +11,7 @@ namespace RitsukageGif.Desktop
             if (!_startServices) return;
             if (_saveNotification is null)
             {
-                var notification = new SaveNotificationWindow(SetStatus);
+                var notification = new SaveNotificationWindow(SetStatus, CopyFilesAsync);
                 notification.Closed += (_, _) =>
                 {
                     if (ReferenceEquals(_saveNotification, notification)) _saveNotification = null;
@@ -22,7 +22,7 @@ namespace RitsukageGif.Desktop
             var screen = View is { IsVisible: true } view
                 ? view.Screens.ScreenFromWindow(view)
                 : _services.Context.Screens.Primary;
-            _saveNotification.Present(paths, screen);
+            _saveNotification.Present(paths, screen, Settings.ScreenshotSave.QuickNotificationAction);
         }
 
         private void CloseOutputNotification()

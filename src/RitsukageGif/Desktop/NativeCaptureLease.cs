@@ -13,7 +13,7 @@ namespace RitsukageGif.Desktop
         {
             _key = key;
             _entry = entry;
-            _demand = new(() => entry.Session);
+            _demand = new(entry.Session.Retain());
         }
 
         public void Dispose()
@@ -31,9 +31,10 @@ namespace RitsukageGif.Desktop
             if (release) _entry.Session.Dispose();
         }
 
-        public static NativeCaptureLease Screen(PixelRect monitor, bool cursor, int fps, bool retainHdr = false)
+        public static NativeCaptureLease Screen(PixelRect monitor, bool cursor, int fps, bool retainHdr = false,
+            string? includedWindowTitle = null)
         {
-            return Acquire(new(monitor, 0, cursor, Math.Clamp(fps, 1, 120), retainHdr));
+            return Acquire(new(monitor, 0, cursor, Math.Clamp(fps, 1, 120), retainHdr, includedWindowTitle));
         }
 
         public static NativeCaptureLease Window(nint window, bool cursor, int fps = 60, bool retainHdr = false)
@@ -48,7 +49,8 @@ namespace RitsukageGif.Desktop
                 if (!Pool.TryGetValue(key, out var entry) || !entry.Session.IsAvailable)
                 {
                     var session = key.Monitor is { } monitor
-                        ? NativeCaptureSession.CreateScreen(monitor, key.Cursor, key.Fps, key.RetainHdr)
+                        ? NativeCaptureSession.CreateScreen(monitor, key.Cursor, key.Fps, key.RetainHdr,
+                            key.IncludedWindowTitle)
                         : NativeCaptureSession.CreateWindow(key.WindowHandle, key.Cursor, key.Fps, key.RetainHdr);
                     Pool[key] = entry = new(session);
                 }
@@ -71,7 +73,7 @@ namespace RitsukageGif.Desktop
                     Hdr = value.Frames.Hdr is { } hdr ? hdr with { Pixels = hdr.Pixels.ToArray() } : null,
                 },
                 CursorPixels = value.CursorPixels?.ToArray(),
-            }, region, density, requireHdr, token);
+            }, region, density, requireHdr, token: token);
             return result!;
         }
 
@@ -79,12 +81,12 @@ namespace RitsukageGif.Desktop
             PixelRect? region = null, double? density = null, CancellationToken token = default)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-            _demand.Use(consume, region, density, requireHdr, token);
+            _demand.Use(consume, region, density, requireHdr, token: token);
         }
 
         internal void SuspendDemand()
         {
-            _demand.Dispose();
+            _demand.Suspend();
         }
 
         public static void CloseAll()
@@ -99,7 +101,13 @@ namespace RitsukageGif.Desktop
             foreach (var entry in entries) entry.Session.Dispose();
         }
 
-        private sealed record Key(PixelRect? Monitor, nint WindowHandle, bool Cursor, int Fps, bool RetainHdr);
+        private sealed record Key(
+            PixelRect? Monitor,
+            nint WindowHandle,
+            bool Cursor,
+            int Fps,
+            bool RetainHdr,
+            string? IncludedWindowTitle = null);
 
         private sealed class Entry(NativeCaptureSession session)
         {

@@ -4,5 +4,6 @@ namespace RitsukageGif.Desktop
         TableRecognitionResult? Table = null,
         FormulaRecognitionResult? Formula = null,
         string? Error = null,
-        FormulaRenderResult? Rendered = null);
+        FormulaRenderResult? Rendered = null,
+        OcrRecognitionResult? Text = null);
 }

@@ -7,24 +7,23 @@ namespace RitsukageGif.Desktop
     {
         private readonly HashSet<Task> _translationTasks = [];
 
-        private async Task TranslateClipboardAsync()
+        private async Task TranslateClipboardAsync(CancellationToken token)
         {
             var clipboard = _services.Context.Clipboard ??
                             throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-            var text = await clipboard.TryGetTextAsync();
+            var text = await clipboard.TryGetTextAsync().WaitAsync(token);
             if (string.IsNullOrWhiteSpace(text))
                 throw new InvalidOperationException(UiText.Get("GlobalActionClipboardEmpty"));
-            await ShowTranslationAsync(View is { IsVisible: true } ? View : _services.Context, text,
-                _cleanupCancellation.Token);
+            await ShowTranslationAsync(View is { IsVisible: true } ? View : _services.Context, text, token);
         }
 
         private async Task OpenScreenshotTranslationAsync(ReadOnlyMemory<byte> png)
         {
             try
             {
-                await ShowImageTranslationAsync(_services.Context, png, _cleanupCancellation.Token);
+                await ShowImageTranslationAsync(_services.Context, png, _hostCancellation.Token);
             }
-            catch (OperationCanceledException) when (_cleanupCancellation.IsCancellationRequested)
+            catch (OperationCanceledException) when (_hostCancellation.IsCancellationRequested)
             {
             }
             catch (Exception error)
@@ -38,7 +37,7 @@ namespace RitsukageGif.Desktop
         private Task ShowImageTranslationAsync(Window owner, ReadOnlyMemory<byte> png, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            var lifetime = CancellationTokenSource.CreateLinkedTokenSource(_cleanupCancellation.Token);
+            var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token, _hostCancellation.Token);
             var baseline = Settings.Translation with { };
             var task = ImageTranslationWindow.ShowAsync(owner, png, baseline, Settings.Recognition with { },
                 _pinnedImages.TextRecognitionService, true, edited =>
@@ -79,7 +78,7 @@ namespace RitsukageGif.Desktop
 
         private async Task ShowTranslationAsync(Window owner, string text, CancellationToken token)
         {
-            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token, _cleanupCancellation.Token);
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token, _hostCancellation.Token);
             var task = TranslationWindow.ShowAsync(owner, text, Settings.Translation with { }, true, lifetime.Token);
             _translationTasks.Add(task);
             try

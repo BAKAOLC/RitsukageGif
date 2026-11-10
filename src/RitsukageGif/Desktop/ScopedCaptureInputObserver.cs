@@ -2,9 +2,9 @@ namespace RitsukageGif.Desktop
 {
     internal static class ScopedCaptureInputObserver
     {
-        internal static bool IsSupported => OperatingSystem.IsWindows();
+        internal static bool IsSupported => RecordingInputObserver.UnavailableReason is null;
 
-        internal static async Task<IDisposable> StartAsync(Action released, Action cancelled,
+        internal static async Task<IAsyncDisposable> StartAsync(Action released, Action cancelled,
             Action<Exception> failed, CancellationToken token)
         {
             ArgumentNullException.ThrowIfNull(released);
@@ -12,18 +12,20 @@ namespace RitsukageGif.Desktop
             ArgumentNullException.ThrowIfNull(failed);
             token.ThrowIfCancellationRequested();
             if (!IsSupported) throw new PlatformNotSupportedException();
+            if (!OperatingSystem.IsWindows())
+                return await PortableCaptureInputSubscription.StartAsync(released, cancelled, failed, token)
+                    .ConfigureAwait(false);
             var subscription = new ScopedCaptureInputSubscription(released, cancelled, failed, token);
             subscription.Start();
             try
             {
-                var ready = await subscription.Ready.ConfigureAwait(false);
+                await subscription.Ready.ConfigureAwait(false);
                 token.ThrowIfCancellationRequested();
-                return ready;
+                return subscription;
             }
             catch
             {
-                subscription.Dispose();
-                await subscription.Completion.ConfigureAwait(false);
+                await subscription.DisposeAsync().ConfigureAwait(false);
                 throw;
             }
         }
