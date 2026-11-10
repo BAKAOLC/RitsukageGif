@@ -1,97 +1,154 @@
-# 图像合成与动画总览
+# 图像合成与像素效果
 
-`image` 服务处理已有文件，不需要开始录制。相对路径以脚本所在目录为基准。操作返回 `Result<MediaInfo, ServiceError>`；成功结果包含 `path`、`bytes`、`width`、`height`、`frames`、`duration` 和 `format`。
+使用 `image` 可以把多张图片合成一张图、生成动图帧预览，或修复指定区域。处理已有文件的尺寸、裁剪和格式时，使用[媒体服务](services.md#转换与处理)。
 
-## 拼图、叠加与透明度
+以下三个 `image` 函数均返回 `Result<MediaInfo, ServiceError>`。成功时读取 `value`，失败时读取 `error.message`。相对路径以入口预设文件所在目录为基准，在导入的模块中调用时也相同。
 
-```rgscript
-let result = image.compose("../captures/composite.png", {
-    width: 800,
-    height: 600,
-    background: "#20242c",
-    layers: [
-        { path: "../captures/game.gif", frameIndex: 30,
-          x: 0, y: 0, width: 800, height: 600 },
-        { path: "assets/source-offline.png",
-          x: 560, y: 400, width: 240, height: 180, opacity: 0.7 }
-    ]
-});
-if (result.isOk) log(result.value.bytes);
-else log(result.error);
-```
+## 合成图片
 
-图层按数组顺序绘制，后面的覆盖前面的。`x`、`y` 是画布中的左上角，可以为负数，超出画布的部分会被裁掉。动画输入通过 `frameIndex` 选择完整呈现的帧，从 0 开始；默认第 0 帧。
+`image.compose(output, options)` 创建指定大小的画布，并按 `layers` 的顺序叠加图片，后面的图层覆盖在前面的图层上。
+
+| `options` 字段 | 含义 |
+| --- | --- |
+| `width`、`height` | 画布宽高，正整数，必填 |
+| `background` | 背景颜色，默认 `"transparent"` |
+| `layers` | 图层数组，默认空数组，最多 128 层 |
+| `format` | `ImageFormat.Png`、`ImageFormat.WebP`、`ImageFormat.Gif`、`ImageFormat.Jpeg` 或 `ImageFormat.Bmp`；省略时由输出扩展名决定 |
+| `quality` | 1～100，默认 90 |
+| `lossless` | WebP 是否无损，默认 `true` |
+| `overwrite` | 是否覆盖已有输出，默认 `false` |
+
+每个图层可设置：
 
 | 字段 | 含义 |
 | --- | --- |
-| `cropX / cropY / cropWidth / cropHeight` | 源图像素裁剪范围，使用时四个字段都要提供 |
+| `path` | 图片或动图路径，必填 |
+| `frameIndex` | 使用第几帧，从 0 开始，默认 0 |
+| `x`、`y` | 图层在画布中的左上角坐标，默认 0 |
+| `width`、`height` | 图层尺寸；只给一项时保持比例，省略时使用图片尺寸 |
+| `cropX`、`cropY`、`cropWidth`、`cropHeight` | 图层裁剪范围；使用时四项都要给出，且必须位于图片内 |
 | `rotation` | 顺时针旋转 0、90、180 或 270 度，默认 0 |
-| `width / height` | 旋转后的输出尺寸，只提供一个时保持比例；都提供时按指定大小缩放 |
-| `opacity` | 图层不透明度，0 到 1，默认 1 |
-| `effects` | 局部处理列表，结构与 `media.process` 和场景图层使用的 `PixelEffect` 相同 |
+| `opacity` | 不透明度，0～1，默认 1 |
+| `effects` | 像素效果列表 |
 
-`effects` 的 `space: EffectSpace.Source` 使用裁剪后的源图坐标，在旋转与缩放前处理；`EffectSpace.Output` 使用缩放后图层内的局部坐标，在叠加到画布前处理。处理可以用于遮挡、马赛克、模糊、灰度、反色或亮度对比度调整。
+下面的例子不需要输入图片，会生成一张纯色 PNG：
 
 ```rgscript
-let result = image.compose("../captures/redacted.webp", {
-    width: 640, height: 480,
-    layers: [{
-        path: "../captures/screenshot.png", width: 640, height: 480,
-        effects: [{ kind: EffectKind.Mosaic, space: EffectSpace.Output,
-                    region: { x: 10, y: 10, width: 120, height: 40 }, blockSize: 12 }]
-    }],
-    lossless: true
+let result = image.compose("background.png", {
+    width: 640,
+    height: 360,
+    background: "#e8eef8"
 });
+if (result.isOk) {
+    print(result.value.path);
+} else {
+    print(result.error.message);
+}
 ```
 
-输出支持静态 PNG、WebP 和 GIF。默认从扩展名判断，也可以用 `format: MediaFormat.Png` 指定。`quality` 为 1 到 100，默认 90；`lossless` 控制 WebP 无损编码，默认 `true`。GIF 需要量化，无法保留完整真彩色。需要无损保存合成结果时使用 PNG 或无损 WebP。
-
-默认不覆盖已有文件；需要覆盖时设置 `overwrite: true`。仅在合成成功后写入目标路径；取消或失败时保留原目标文件。
-
-## 动画帧总览
+准备好 `photo.png` 和 `logo.png` 后，可将徽标叠加到图片右下方：
 
 ```rgscript
-let sheet = image.contactSheet("../captures/game.gif", "../captures/overview.png", {
-    columns: 6,
-    thumbnailWidth: 160,
-    thumbnailHeight: 120,
-    firstFrame: 0,
-    frameStep: 10,
-    maxFrames: 36,
-    background: "white"
+let result = image.compose("combined.png", {
+    width: 640,
+    height: 360,
+    layers: [
+        {path: "photo.png", width: 640, height: 360},
+        {path: "logo.png", x: 520, y: 280, width: 100, opacity: 0.8}
+    ]
 });
+if (result.isErr) {
+    print(result.error.message);
+}
 ```
 
-每隔 10 帧取一帧，最多 36 帧，组成 6 列的图像。缩略图保持原始比例并在格子里居中。默认 4 列，每格 160 × 120，从第 0 帧开始逐帧选取，最多 64 帧。输出同样支持 PNG、WebP、GIF，默认不覆盖。
+## 像素效果
 
-合成最多 128 个图层；总览最多 1024 帧、128 列。最多同时执行两个图像任务。解码像素量超过限制时返回错误，可降低输入尺寸或减少选取帧数后重试。
+`media.process` 的 `effects` 作用于输入帧；`image.compose` 中每个图层的 `effects` 只作用于该图层。同一坐标阶段中的效果按列表顺序应用，每个列表最多 32 项。
 
-## 图层局部效果
+| `kind` | 效果 | 常用字段 |
+| --- | --- | --- |
+| `EffectKind.Mosaic` | 马赛克 | `blockSize`，默认 8，范围 1～4096 |
+| `EffectKind.Blur` | 模糊 | `radius`，默认 4，范围 1～256 |
+| `EffectKind.Fill` | 纯色填充 | `color`，默认黑色 |
+| `EffectKind.Grayscale` | 灰度 | `amount` |
+| `EffectKind.Invert` | 反色 | `amount` |
+| `EffectKind.BrightnessContrast` | 亮度与对比度 | `brightness`、`contrast` |
 
-`scene.effects(name, effects)` 设置某个图层的处理列表；多路时使用 `scene.effectsFor(output, name, effects)`。`scene.set` / `setFor` 的 `effects` 字段可与裁剪和位置一次更新。空数组 `[]` 清除效果，每层最多 32 项，按列表顺序处理。
+公共字段：
 
-```rgscript
-scene.effects('detail', [{
-    kind: EffectKind.Mosaic,
-    region: {x: 0, y: 0, width: 120, height: 40},
-    blockSize: 12
-}]);
-```
-
-| 字段 | 值与默认值 |
+| 字段 | 含义 |
 | --- | --- |
-| `kind` | `EffectKind.Mosaic`、`Blur`、`Fill`、`Grayscale`、`Invert`、`BrightnessContrast` |
-| `space` | `EffectSpace.Source`（默认）或 `EffectSpace.Output` |
-| `region` | `{x, y, width, height}`，省略时处理整个图层 |
-| `amount` | 混合强度 0～1，默认 1 |
-| `blockSize` | 马赛克块边长 1～4096，默认 8 |
-| `radius` | 模糊半径 1～256，默认 4 |
-| `color` | 填充颜色 `#RRGGBB` 或 `#AARRGGBB`，默认黑色 |
-| `brightness` | 亮度 -1～1，默认 0 |
-| `contrast` | 对比度 0～8，默认 1 |
+| `region` | `{x, y, width, height}`；省略时处理整张图，宽高必须为正整数 |
+| `space` | 默认 `EffectSpace.Source`，在裁剪后、旋转和缩放前的图中定位；`EffectSpace.Output` 在旋转和缩放后的图中定位 |
+| `amount` | 效果强度，0～1，默认 1 |
+| `color` | `"#RRGGBB"` 或 `"#AARRGGBB"` |
+| `brightness` | 亮度调整，-1～1，默认 0 |
+| `contrast` | 对比度，0～8，默认 1 |
 
-实时图层的 Source 坐标以裁剪后的源画面左上角为原点；Output 坐标以该层输出位置的左上角为原点，单位为应用最终录制缩放倍率前的布局像素。
+输出坐标相对于变换后的单张图片或图层，不是合成画布。坐标和尺寸均以像素为单位。
 
-同一个 `PixelEffect[]` 结构也可传给 `media.process` 的 `options.effects`，以及 `image.compose` 每个图层的 `effects`。离线合成的坐标阶段见上文。
+```rgscript
+let result = media.process("input.gif", "masked.gif", {
+    effects: [{
+        kind: EffectKind.Mosaic,
+        region: {x: 20, y: 30, width: 120, height: 60},
+        blockSize: 12
+    }]
+});
+if (result.isErr) {
+    print(result.error.message);
+}
+```
 
-可运行范例：[静态图像合成](../examples/image-composition.rgpreset)、[文件动画与动态效果](../examples/file-animation.rgpreset)。后者使用范例附带的动画文件作为输入。
+## 动图帧预览
+
+`image.contactSheet(input, output, options = {})` 将抽取的帧排列成一张图片。每帧保持比例缩放，并放在自己的缩略图格子中央。
+
+| 字段 | 默认值与含义 |
+| --- | --- |
+| `columns` | 4，每行格数，1～128 |
+| `thumbnailWidth`、`thumbnailHeight` | 160、120，每格的像素尺寸 |
+| `firstFrame` | 0，从哪帧开始 |
+| `frameStep` | 1，每隔多少帧取一帧，至少为 1 |
+| `maxFrames` | 64，最多取多少帧，1～1024 |
+| `background` | `"transparent"`，格子背景 |
+| `overwrite` | `false` |
+
+```rgscript
+let result = image.contactSheet("input.gif", "frames.png", {
+    columns: 4,
+    frameStep: 5,
+    maxFrames: 16
+});
+if (result.isErr) {
+    print(result.error.message);
+}
+```
+
+## 修复图像区域
+
+`image.inpaint(input, output, options)` 用于修复图片中的小范围遮挡。结果取决于周围内容，不保证还原被遮住的原始细节。
+
+`options` 至少提供 `regions` 或 `mask`：
+
+| 字段 | 含义 |
+| --- | --- |
+| `regions` | `{x, y, width, height}` 数组，最多 128 个矩形 |
+| `mask` | 遮罩图片路径，尺寸必须与输入图片相同 |
+| `maskChannel` | 默认 `ImageMaskChannel.Luminance`；也可用 `ImageMaskChannel.Alpha` |
+| `radius` | 修复半径，1～32，默认 4 |
+| `frameIndex` | 取输入中的哪一帧，默认 0；输出单张图片 |
+| `format`、`quality`、`lossless`、`overwrite` | 与合成图片的对应选项相同 |
+
+亮度遮罩中，白色表示修复、黑色表示保留，透明部分不修复。选择 Alpha 通道时，以不透明度决定修复范围。同时指定 `regions` 和 `mask` 时，只修复遮罩在矩形内的部分。
+
+```rgscript
+let result = image.inpaint("photo.png", "restored.png", {
+    regions: [{x: 20, y: 20, width: 30, height: 12}],
+    radius: 4
+});
+if (result.isErr) {
+    print(result.error.message);
+}
+```

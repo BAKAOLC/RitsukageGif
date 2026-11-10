@@ -1,40 +1,98 @@
-# 数据处理
+# JSON、CSV 与字节数据
 
-这些服务可在独立脚本和录制脚本中调用。失败返回 `Err(ServiceError)`，可用 `isErr`、模式匹配或 `?` 处理。
+脚本可以解析文本、生成数据文件，以及在文本、Base64、十六进制和字节数据之间转换。
+
+## 处理调用结果
+
+解析和转换函数通常返回 `Result<值类型, ServiceError>`。先检查 `isOk`，再读取 `value`；失败时读取 `error.code`、`error.message` 和 `error.path`。
+
+```rgscript
+let parsed = json.parse('{"name":"demo","fps":20}');
+if (parsed.isOk) {
+    print(parsed.value);
+} else {
+    print(parsed.error.message);
+}
+```
 
 ## JSON
 
-| 调用 | 结果 |
-| --- | --- |
-| `json.parse(text)` | `Result<any,ServiceError>` |
-| `json.stringify(value, pretty = false)` | `Result<string,ServiceError>` |
+| 调用 | 返回值 | 用途 |
+| --- | --- | --- |
+| `json.parse(text)` | `Result<any, ServiceError>` | 将 JSON 文本转为脚本值 |
+| `json.stringify(value, pretty = false)` | `Result<string, ServiceError>` | 将脚本值转为 JSON 文本 |
 
-支持空值、布尔值、有限数字、字符串、数组和对象。循环引用、函数、宿主类型、重复对象键和非有限数字会报错。JSON 数字遵循脚本的双精度数字精度；大整数标识请用字符串。最大嵌套 64 层，读写最多 100000 个值，输入输出最大 16 MiB。
+JSON 支持对象、数组、字符串、有限数值、布尔值和 `null`。函数等值不能转成 JSON，循环引用也会失败。
+
+```rgscript
+let text = json.stringify({name: "demo", sizes: [320, 640]}, true);
+if (text.isOk) {
+    print(text.value);
+}
+```
+
+JSON 文本上限为 16 MiB，嵌套深度最多 64 层。
 
 ## CSV
 
-`csv.parse(text, delimiter = ",")` 返回 `Result<string[][],ServiceError>`；`csv.stringify(rows, delimiter = ",")` 返回 `Result<string,ServiceError>`。
+| 调用 | 返回值 |
+| --- | --- |
+| `csv.parse(text, delimiter = ",")` | `Result<string[][], ServiceError>` |
+| `csv.stringify(rows, delimiter = ",")` | `Result<string, ServiceError>` |
 
-第一行与其他行一样保留，可自行作为表头。支持引号、双引号转义、字段内换行、CRLF/LF/CR 行尾和空字段。写出时使用 CRLF。分隔符必须是单个字符，不能是引号、换行或空字符。空输入产生空表；空行是一个空字段，不支持零字段行。字段保持字符串，不会隐式推断数字。解析最多 100000 个字段，输入输出最大 16 MiB。
+每行是一个字符串数组。解析不会自动把数字文本转换为数值。字段中的分隔符、双引号和换行可使用 CSV 双引号规则表示。
 
-## 二进制
+```rgscript
+let encoded = csv.stringify([
+    ["名称", "帧率"],
+    ["示例, 一", "20"]
+]);
+if (encoded.isOk) {
+    let decoded = csv.parse(encoded.value);
+    if (decoded.isOk) {
+        print(decoded.value);
+    }
+}
+```
 
-`bytes.fromText(text)`、`bytes.fromBase64(text)`、`bytes.fromHex(text)` 返回 `Result<Bytes,ServiceError>`。
+用 `"\t"` 作为分隔符可处理制表符分隔文本。分隔符必须是一个字符，不能是双引号、换行或空字符。CSV 文本上限为 16 MiB，解析最多接受 100000 个字段。
 
-`Bytes` 表示不可变的二进制数据，最大 16 MiB。
+## 字节数据
 
-| 成员 | 说明 |
+| 调用 | 返回值 |
+| --- | --- |
+| `bytes.fromText(text)` | `Result<Bytes, ServiceError>` |
+| `bytes.fromBase64(text)` | `Result<Bytes, ServiceError>` |
+| `bytes.fromHex(text)` | `Result<Bytes, ServiceError>` |
+
+`fromText` 使用 UTF-8。这三个转换函数生成的字节数据最多为 16 MiB；其他服务返回的 `Bytes` 按各自接口的限制处理。
+
+取得 `Bytes` 后可以使用：
+
+| 成员 | 返回值与含义 |
 | --- | --- |
 | `length` | 字节数 |
-| `slice(start, end = length)` | `Result<Bytes,ServiceError>`；左闭右开，支持负索引；越界返回错误 |
-| `text()` | `Result<string,ServiceError>`；严格 UTF-8 解码 |
+| `text()` | `Result<string, ServiceError>`，按 UTF-8 解码 |
 | `toBase64()` | Base64 字符串 |
 | `toHex()` | 小写十六进制字符串 |
-| `sha256()` | 小写 SHA-256 摘要 |
+| `sha256()` | 小写十六进制 SHA-256 摘要 |
+| `slice(start, end)` | `Result<Bytes, ServiceError>`，截取字节范围 |
 
-`files.readBytes(path, maxBytes = 1048576)` 返回 `Result<Bytes,ServiceError>`，上限可增至 16 MiB。
-`files.writeBytes(path, data, overwrite = false)` 原子写入文件，返回 `Result<string,ServiceError>`。
+`slice` 包含起点、不包含终点；省略 `end` 表示截到末尾。负数索引从末尾计算，例如 `-1` 表示最后一个字节的位置。索引必须是有效范围内的整数，终点不能小于起点。
 
-相对路径以脚本所在目录为基准，已有文件默认不会覆盖。处理图像和动画时，可直接将文件路径传给[媒体服务](services.md#图像与动画-api)。
+```rgscript
+let encoded = bytes.fromText("hello");
+if (encoded.isOk) {
+    print(encoded.value.toHex());
+    print(encoded.value.toBase64());
+    let prefix = encoded.value.slice(0, 2);
+    if (prefix.isOk) {
+        let text = prefix.value.text();
+        if (text.isOk) {
+            print(text.value);
+        }
+    }
+}
+```
 
-可运行范例：[数据处理](../examples/data-processing.rgpreset)。
+字节切片可能落在一个 UTF-8 字符的中间，此时 `text()` 会返回失败。读写字节文件见[文件与媒体服务](services.md)。

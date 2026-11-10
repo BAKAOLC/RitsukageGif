@@ -1,108 +1,114 @@
-# 同步多路录制
+# 多路录制输出
 
-`record.startMany` 同时启动多个输出。每路可以选择相同画面或独立预设，使用自己的帧率、缩放、格式和文件路径。完整范例见 [multi-recording.rgpreset](../examples/multi-recording.rgpreset)。
+`record.startMany(outputs)` 同时录制 1～8 路输出。每路可以使用不同格式、帧率、缩放和画面布局。
 
-## 同画面，不同格式
+## 同一画面输出两种格式
 
-以下片段放在已有预设的 `script` 内：
+下面的完整预设将同一块屏幕区域分别保存为 GIF 和 WebP：
 
-```rgscript
-record.startMany([
-    {name: 'gif', path: './captures/game.gif',
-        options: {format: OutputFormat.Gif, fps: 30, scale: 1, copy: false}},
-    {name: 'webp', path: './captures/game.webp',
-        options: {format: OutputFormat.WebP, fps: 15, scale: 2, copy: false}}
-]);
-wait(5);
-record.stop();
-```
-
-开始前创建输出目录，例如 `files.createDirectory('./captures')?;`。相对路径以入口预设所在目录为基准。文件必须不存在，不覆盖已有录制；已有目标会在开始前拒绝整组。重复运行时换路径或先用文件服务移动旧文件。文件名可用 `{preset}`、`{title}`、`{process}`、`{date}`、`{time}`、`{timestamp}`、`{id}`、`{sequence}`、`{ext}`；目录部分不展开占位符。同一组使用共同时间戳，每路有自己的序号，必要时自动追加对应格式的扩展名。
-
-`name` 是脚本中引用这一路的名称。`options` 沿用 `start(options)` 的字段：`fps`、`scale`、`format`、`quality`、`ffmpeg`、`cursor`、`sound`、`copy`。省略字段时继承所选预设的录制设置，再回退到应用设置。`scale 2` 表示宽高各缩小一半。
-
-## 不同源或不同布局
-
-每个输出可用 `presetFile` 和 `presetName` 选择画面定义：
-
-```rgscript
-record.startMany([
-    {name: 'original', path: './captures/original.gif'},
-    {name: 'camera', path: './captures/camera.gif',
-        presetFile: './sources/luastg-camera.rgpreset'},
-    {name: 'context', path: './captures/context.gif',
-        presetFile: './sources/luastg-screen.rgpreset'}
-]);
-```
-
-- 不指定两者：使用当前预设画面。
-- 只指定 `presetName`：从当前文件选择同名预设。
-- 指定 `presetFile`：从该文件选择；文件有多个预设时还要指定 `presetName`。
-
-被引用预设只提供窗口匹配、捕获来源、区域、布局和录制设置，不执行其中的 `script` 或 `state`。多路入口统一控制开始和停止，文件路径由每个输出的 `path` 决定。
-
-此方式可同时录制两个窗口，或把同一个窗口保存为完整画面、局部镜头和合成画面。`source window` 请求窗口内容；`source screen` 记录窗口所在位置的屏幕上下文，包括遮挡。来源丢失时各区域继续使用自己的 `missing` 规则。
-
-## 每路单独改变画面
-
-在原有 `scene` 方法后加 `For`，第一个参数为输出名称：
-
-```rgscript
-scene.setFor('camera', 'detail', {
-    crop: {x: 100, y: 80, width: 240, height: 180},
-    placement: {x: 16, y: 16, width: 240, height: 180}
-});
-scene.animateFor('camera', 'detail', 80, 20, 240, 180, 1, Easing.EaseInOut);
-```
-
-可用方法为 `setFor`、`getFor`、`moveFor`、`cropFor`、`animateFor`、`visibleFor`、`opacityFor`、`effectsFor`、`playbackFor`。其余参数与对应的单画面方法相同。`setFor` 一次更新裁剪、位置、透明度或可见性，在后续采集帧生效；动画不阻塞脚本。
-
-普通 `scene.*` 更新当前预设及由它派生的输出。需要独立控制时始终使用 `For`，避免后续普通更新覆盖某一路的同一属性。引用其他预设的输出使用自己的区域名称。
-
-这些调用也可以放入外部参数循环：收到参数后调用 `scene.setFor`，即可只让一路镜头跟随，其他输出保持不动。见[外部参数](editor-and-cli.md#外部参数与跟随捕获)。
-
-## 进度与结果
-
-`record.outputs()` 和 `status().streams` 返回每路状态：
-
-| 字段 | 含义 |
-| --- | --- |
-| `name`、`path` | 输出名称与目标路径 |
-| `state` | `recording`、`encoding`、`complete`、`failed` 或 `cancelled` |
-| `captured`、`encoded` | 已捕获和已处理的帧数 |
-| `elapsed` | 录制时长，秒 |
-| `error` | 失败信息，正常时为 `null` |
-
-```rgscript
-record.stop();
-for (const output of record.outputs()) {
-    if (output.error != null) {
-        print(output.name, output.error);
-        continue;
+```rgpreset
+preset "双格式输出" {
+    layout(800, 450) {
+        region "画面" {
+            source screen;
+            area screen(0, 0, 640, 360);
+            place(0, 0, 800, 450);
+        }
     }
-    const file = files.info(output.path)?;
-    print(output.name, file.size / 1000000, 'MB');
+    script {
+        record.startMany([
+            {
+                name: "gif",
+                path: "./captures/{timestamp}-full.gif",
+                options: { format: OutputFormat.Gif, fps: 24, scale: 1, copy: false }
+            },
+            {
+                name: "detail",
+                path: "./captures/{timestamp}-detail.webp",
+                options: { format: OutputFormat.WebP, fps: 16, scale: 2, copy: false }
+            }
+        ]);
+        wait(3);
+        record.stop();
+        for (const output of record.outputs()) {
+            print(output.name, output.state, output.path, output.error);
+        }
+    }
 }
 ```
 
-`record.stop()` 停止所有路的采集，并等待编码和保存完成。`record.cancel()` 取消整个录制组并丢弃未完成的输出。脚本正常退出会结束录制，脚本失败或取消会取消录制。停止完成后，输出文件可用于后续文件和图像处理。
+修改 `area screen(...)` 可选择其他范围。`path` 的相对路径以入口预设所在目录为基准，输出目录会自动创建。
 
-部分路失败时，停止仍返回并保留成功文件，应逐路检查 `error`；全部失败时，停止会报告录制错误。只有目标成功保存后才会进入输出列表。
+同组输出使用相同时间戳。文件名支持 `{preset}`、`{title}`、`{process}`、`{date}`、`{time}`、`{timestamp}`、`{sequence}`、`{id}`、`{ext}`；这些占位符不在目录部分展开。
 
-自动复制将所有有效 `copy` 设置为 `true` 的成功输出一次性写入剪贴板文件列表。每路优先使用 `options.copy`，然后继承来源预设；两者均未设置时默认复制。可给所有路明确设置 `copy: false`。
+输出名称不能重复，目标路径也不能重复。多路录制不会覆盖已有文件；任一目标已存在时，不开始这一组录制。示例中的时间戳可避免重复运行时使用固定文件名。文件名末尾与输出格式不匹配时，会追加该格式的扩展名。
 
-`status().outputs` 列出成功保存的文件，可继续交给 `media.process` 或 `media.processMany` 生成缩略图、封面和较小的分享版本。
+## 配置每一路
 
-## 数量限制与性能
+每个数组元素包含以下字段：
 
-一次允许 1～8 路，名称与目标路径不能重复。各路按同一时间轴采集，可以使用不同帧率。窗口画面的呈现时间由各目标程序及系统合成器决定。编码器使用各自的画面时间戳，避免因处理落后把动画整体放慢。文件动画在预热后按共享录制时钟取样；有限视频文件按 PTS 选择录制时刻对应画面；实时流的同步需要发送端时间戳与接收端时钟对齐，详见[媒体源的时间与播放控制](media-sources.md#播放控制)。
+| 字段 | 含义 |
+| --- | --- |
+| `name` | 输出名称，用于状态查询和独立控制画面 |
+| `path` | 输出文件路径 |
+| `options` | 本路的录制选项，可省略 |
+| `presetName` | 使用的预设名，可省略 |
+| `presetFile` | 包含该预设的文件，可省略 |
 
-两路及以上录制时，同一窗口和光标配置共用一个后台采集源。首帧准备完成后开始计时，各输出在自己的采样时刻读取最近完成的窗口画面；某个窗口采集变慢不会阻塞其他窗口。每个窗口只保留当前显示帧和待取帧，不积压历史画面。超过 250 毫秒或两个采集周期（取较长者）仍未完成采集时，使用该区域的 `missing` 规则；窗口恢复后继续更新。
+`options` 支持 `fps`、`scale`、`format`、`quality`、`cursor`、`sound`、`ffmpeg`、`copy`，取值与[单路录制](recording-reference.md#临时录制选项)相同。帧率、缩放和编码选项省略时，先使用本路所选预设的 `record`，再使用应用当前设置；`copy` 的规则见下文。
 
-固定的屏幕区域也可独立后台采集：区域须使用绝对坐标、关闭跟随（`follow false`），且没有脚本裁剪覆盖。相同区域、输出尺寸和光标配置共用画面。显示器布局或 DPI 变化后重新准备捕获源；暂时不可用时按 `missing` 规则显示，并间隔重试。
+不指定 `presetFile` 和 `presetName` 时，使用当前预设的画面。只指定 `presetName` 时，从当前文件选择同名预设；指定 `presetFile` 时，从该文件选择。文件内有多个预设时，必须同时给出 `presetName`。
 
-跟随窗口或由脚本调整的屏幕区域继续同步捕获，以保证使用当前坐标。后台窗口源和屏幕源各最多八个，超过时使用同步捕获，不限制可录制的区域数量。单路写盘变慢时只跳过该路来不及处理的采样点，其他路继续录制；时间戳保持真实间隔，停止时等待已采集帧处理完毕。
+例如，下面是一条使用其他预设的输出定义，可放入 `startMany` 数组：
 
-多路会增加采集、缩放、编码、内存和磁盘压力。先用适中的尺寸与帧率，再按实际处理速度增加路数。GIF 原生编码可边录边编码；其他编码后端可能仍需停止后完成输出。各路独立报告处理结果，结束后应检查每一路的 `error`。
+```rgscript
+{
+    name: "camera",
+    path: "./captures/{timestamp}-camera.webp",
+    presetFile: "./views.rgpreset",
+    presetName: "窗口细节",
+    options: { format: OutputFormat.WebP, fps: 24, copy: false }
+}
+```
 
-可用捕获源取决于平台后端、窗口类型和权限。
+被引用的预设提供窗口匹配、来源、范围、布局和录制选项，不执行它自己的 `script` 或状态机。输出位置由本路 `path` 决定，不使用被引用预设的 `save`。
+
+这可以用于同时录制多个窗口，或将同一个窗口分别输出为完整画面、局部放大画面和拼接画面。每个区域的来源丢失时，继续使用该区域的 `missing` 设置。
+
+## 单独修改某一路的画面
+
+为 `scene` 方法加上 `For`，并把输出名称放在第一个参数：
+
+```rgscript
+scene.setFor("detail", "画面", {
+    crop: { x: 100, y: 80, width: 320, height: 180 },
+    placement: { x: 16, y: 16, width: 768, height: 418 }
+});
+scene.animateFor("detail", "画面", 80, 40, 640, 360, 1, Easing.EaseInOut);
+```
+
+将这段放在上面完整示例的 `record.startMany(...)` 与 `wait(3)` 之间，只会改变 `detail` 这路画面。
+
+可用方法包括 `setFor`、`getFor`、`moveFor`、`cropFor`、`animateFor`、`visibleFor`、`opacityFor`、`effectsFor`、`playbackFor`；除第一个输出名参数外，其余参数与对应的 `scene` 方法相同。
+
+普通 `scene.*` 调用会同时影响当前预设和由它派生的输出。只想修改一路时使用 `For`；之后再用普通方法修改同一属性，会覆盖这一路的对应设置。引用其他预设时，区域名称应使用那个预设中的 `region` 名称。
+
+## 停止与读取结果
+
+`record.stop()` 停止所有路的采集，并等待编码和保存完成。`record.cancel()` 取消整组录制。脚本正常结束时会停止录制，失败或取消脚本时会取消录制。
+
+`record.outputs()` 返回各路状态；`status().streams` 也可以读取同样的信息。
+
+| 字段 | 含义 |
+| --- | --- |
+| `name`、`path` | 输出名称和文件路径 |
+| `state` | `recording`、`encoding`、`complete`、`failed` 或 `cancelled` |
+| `captured`、`encoded` | 已捕获和已处理的帧数 |
+| `elapsed` | 录制时长，单位为秒 |
+| `error` | 错误信息；正常时为 `null` |
+
+部分输出失败时，成功文件仍保留，应逐路检查 `state` 和 `error`；所有输出都失败时，停止操作会报告错误。录制成功结束后，`status().outputs` 可读取保存的文件路径。
+
+每路的 `copy` 决定是否自动复制输出，优先使用本路 `options.copy`，其次是来源预设的 `record.copy`，均未设置时默认为 `true`。成功且需要复制的输出会一并加入剪贴板文件列表。
+
+多路录制目前使用 SDR 输出，不支持 HDR 或 SDR/HDR 双输出。使用系统来源选择器的平台，`startMany` 只能用于纯媒体布局，不能使用桌面或窗口来源。

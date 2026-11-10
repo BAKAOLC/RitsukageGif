@@ -1,251 +1,263 @@
-# 脚本语言入门
+# 基本语法
 
-本页介绍 `.rgs` 脚本中的通用语言。预设文件的 `script { ... }` 块使用同一套语法。录制源、布局和状态机属于预设层，不能直接当作脚本语句使用。应用的录制入口运行预设文件；下面的独立脚本片段用于学习语法，可放入预设脚本块或公共模块。
+rgscript 用于编写捕获预设和处理脚本。下面的片段可以写在预设的 `script { ... }` 块或公共模块中。捕获、图像处理等功能见 [脚本服务](services.md)。
 
-建议依次阅读本页、[类型与模式匹配](types-and-patterns.md)、[模块与错误处理](modules-and-errors.md)。查某个词时看[关键词索引](keywords.md)。
+## 第一个脚本
 
-## 1. 变量与基本值
-
-`let` 声明可重新赋值的变量，`const` 禁止重新绑定。每个变量声明必须有初始值。声明、表达式、`return` 等简单语句以分号结束；函数和控制流程的代码块不必另加分号。
-
-```rgs
-let fps = 30;
-fps = 60;
-const name = 'preview';
-let enabled = true;
-let missing = null;
-assert(fps == 60);
-```
-
-脚本使用动态类型，支持可选类型注解。没有注解的变量可以重新赋为其他类型；编辑器根据声明和后续操作推断类型。
-
-```rgs
-let value = 1;
-value = 'ready';
-const items = [1, 2];
-items.push(3);
-assert(items.length == 3);
-```
-
-`const` 保护变量绑定，不会递归冻结数组和对象。变量按块作用域查找；同一作用域不能重复声明同名变量，内部块可以遮蔽外部名字。
-
-### 数字、字符串与注释
-
-数字统一为有限的双精度浮点数，支持十进制、科学计数法、十六进制和二进制字面量。
-
-```rgs
-let values = [12, 1.5, 2e3, 0xff, 0b1010];
-let title = "A\nB";
-// 单行注释
-# 也是单行注释
-/* 多行注释 */
-assert(values[4] == 10);
-```
-
-字符串可用单引号或双引号，支持 `\n`、`\r`、`\t`、`\\`、`\'`、`\"`。文本拼接使用 `+` 或 `str()`；字符串不支持反引号模板和 `${...}` 插值。
-
-## 2. 表达式与运算符
-
-| 类别 | 写法 | 说明 |
-| --- | --- | --- |
-| 算术 | `+ - * / %` | 数字运算；除数为零会报错 |
-| 字符串拼接 | `+` | 任一操作数为字符串时拼接文本 |
-| 比较 | `== != < <= > >=` | 大小比较使用数字；不提供 `===`、`!==` |
-| 布尔 | `! && ||` | 也可写 `not`、`and`、`or` |
-| 空值回退 | `a ?? b` | 只有 `a` 为 `null` 才计算 `b` |
-| 条件表达式 | `test ? a : b` | 条件必须为布尔值 |
-| 赋值 | `= += -= *= /= %=` | 变量、可写成员及索引 |
-| 后缀更新 | `x++`、`x--` | 返回更新前的值；没有前缀 `++x` |
-| 通配匹配 | `text ~ pattern` | 通配符匹配，支持 `*`、`?` |
-
-```rgs
+```rgscript
 let width = 640;
-let doubled = width * 2;
-let label = 'width=' + str(width);
-let fallback = null ?? 'default';
-let size = width > 500 ? 'large' : 'small';
-assert('capture.gif' ~ '*.gif');
-assert(doubled == 1280 and size == 'large');
+let height = 480;
+print("画面大小：" + width + " × " + height);
 ```
 
-条件、逻辑运算和谓词回调必须使用 `boolean` 值，非布尔值会报错。`&&`、`||`、`??` 和条件表达式都按需要计算分支。
+变量名区分大小写，以字母或下划线开头，后面可以包含数字。声明、赋值、调用等语句以 `;` 结束，代码块用 `{ }` 包围。
 
-使用括号明确复杂表达式的顺序。`==` 不会在字符串与数字之间隐式转换，也不会逐元素比较数组和对象。
-
-### 可选访问
-
-```rgs
-let entry = null;
-let title = entry?.title ?? 'untitled';
-let first = entry?.[0];
-assert(title == 'untitled');
-assert(first == null);
+```rgscript
+// 单行注释
+# 也可以这样写单行注释
+/* 多行注释 */
 ```
 
-可选成员、索引、调用和切片分别写作 `value?.name`、`value?.[index]`、`callback?.(args)`、`items?.[start:end]`。同一条可选访问链在空值处短路；括号结束当前链，后续普通访问仍可能报错。
+## 值和变量
 
-## 3. 流程控制
+```rgscript
+let count = 3;
+let ratio = 0.75;
+let title = "录制";
+let enabled = true;
+let target = null;
+const limit = 60;
+```
 
-### 条件与循环
+`let` 可以重新赋值，`const` 不能重新赋值。两种声明都需要初始值。`const` 绑定的数组或对象仍可以修改内容。
 
-```rgs
-let total = 0;
-for (let i = 0; i < 5; i++) {
-    if (i == 2) continue;
-    total += i;
+```rgscript
+const options = { width: 640, height: 480 };
+options.width = 800;
+
+let value = 10;
+value = "完成";
+```
+
+未注明类型的变量可以保存不同类型的值。需要限制类型时，在名称后加注解：
+
+```rgscript
+let fps: number = 30;
+let name: string? = null;
+```
+
+注解、转换和类型推断见 [类型与模式匹配](types-and-patterns.md)。
+
+## 数字和字符串
+
+数字可以写成十进制、小数、科学计数法、十六进制或二进制：
+
+```rgscript
+let values = [12, 0.5, .5, 1.2e3, 0xff, 0b1010];
+```
+
+数字必须有限；除以零和产生无穷大的运算会报错。
+
+字符串使用单引号或双引号，支持 `\n`、`\r`、`\t`、`\\`、`\"` 和 `\'` 转义。
+
+```rgscript
+let path = "D:\\Capture\\output.png";
+let message = '第一行\n第二行';
+```
+
+## 运算符
+
+| 用途 | 写法 |
+| --- | --- |
+| 算术 | `+`、`-`、`*`、`/`、`%` |
+| 比较 | `==`、`!=`、`<`、`<=`、`>`、`>=` |
+| 布尔运算 | `!` / `not`、`&&` / `and`、`||` / `or` |
+| 空值回退 | `value ?? fallback` |
+| 条件表达式 | `condition ? yes : no` |
+| 通配符匹配 | `text ~ pattern`，模式中 `*` 匹配任意多个字符，`?` 匹配一个字符 |
+| 赋值 | `=`、`+=`、`-=`、`*=`、`/=`、`%=` |
+| 后置增减 | `count++`、`count--` |
+
+条件和布尔运算要求 `boolean`。数字、字符串和数组不会自动变成真假值。`&&`、`||`、`??` 只在需要时计算右侧。
+
+```rgscript
+let size = width * height;
+let caption = "宽度：" + width;
+let label = title ?? "未命名";
+let valid = width > 0 && height > 0;
+let matched = "capture-001.png" ~ "capture-*.png";
+```
+
+`+` 遇到字符串时进行拼接；其他算术运算要求数字。`==` 不会把字符串转换成数字。数组和对象比较的是是否为同一个值，而非逐项比较内容。
+
+## 条件和循环
+
+```rgscript
+if (fps > 30) {
+    print("高帧率");
+} else {
+    print("普通帧率");
 }
-while (total < 10) {
-    total++;
+
+let remaining = 3;
+while (remaining > 0) {
+    print(remaining);
+    remaining--;
 }
-assert(total == 10);
-```
 
-`if` 可接 `else`；`break` 结束当前循环，`continue` 进入下一次迭代。两者只能出现在循环内。
-
-```rgs
-let total = 0;
-for (const item of [1, 2, 3]) {
-    total += item;
+for (let i = 0; i < 3; i++) {
+    print(i);
 }
-assert(total == 6);
 ```
 
-`for (let item in sequence)` 与 `of` 使用相同的遍历规则：数组遍历元素，对象遍历键。字符串不能直接用于这种循环，可按索引读取字符。
+`break` 结束当前循环，`continue` 跳过当前轮的剩余语句。
 
-`switch` 是可返回值的模式匹配表达式，见[模式匹配](types-and-patterns.md#模式匹配)。分支使用 `模式 => 表达式` 的形式。
+遍历数组时得到元素，遍历对象时得到键名；`in` 和 `of` 在这里作用相同。
 
-## 4. 函数与闭包
-
-函数声明使用 `fn`，也可以写 `function`。函数可作为值传递、返回，也能捕获外层变量。函数声明在所在块内提前可见；普通变量声明没有这种行为。
-
-```rgs
-fn add(a, b = 1) {
-    return a + b;
+```rgscript
+for (const item of [10, 20, 30]) {
+    print(item);
 }
-const twice = x => x * 2;
-const combine = (a, b) => {
-    return a + b;
-};
-assert(add(2) == 3);
-assert(twice(combine(2, 3)) == 10);
-```
 
-箭头函数的表达式体自动返回该表达式；块体需要显式 `return`。不执行带值的 `return` 时，函数返回 `null`。
-
-```rgs
-fn makeCounter(start) {
-    let value = start;
-    return () => {
-        value++;
-        return value;
-    };
+const options = { width: 640, height: 480 };
+for (const key in options) {
+    print(key + ": " + options[key]);
 }
-let counter = makeCounter(10);
-assert(counter() == 11);
-assert(counter() == 12);
 ```
 
-### 剩余参数与展开
+## 函数
 
-```rgs
-fn sum(...values) {
-    let total = 0;
-    for (const value of values) total += value;
-    return total;
+```rgscript
+fn area(width: number, height: number): number {
+    return width * height;
 }
-let base = [1, 2];
-let all = [...base, 3];
-assert(sum(...all) == 6);
+
+print(area(640, 480));
 ```
 
-剩余参数必须放最后。默认值只用于未提供的参数；显式传入 `null` 不会触发默认值。异步 API 调用会等待操作完成，脚本无需添加 `await`；不支持声明 `async` 函数或使用 Promise。
+`function` 与 `fn` 等效。函数可以作为值传递，也可以读取所在作用域的变量。函数声明可在同一代码块中的声明位置之前调用；普通变量应先声明再使用。
 
-## 5. 对象、解构与切片
+```rgscript
+let factor = 2;
+let scale = value => value * factor;
+let add = (left, right) => left + right;
+let square = (value: number): number => value * value;
 
-### 对象与展开
-
-```rgs
-let x = 10;
-let original = { x, y: 20 };
-let changed = { ...original, x: 30 };
-assert(changed.x == 30);
-assert(original.x == 10);
+let doubled = [1, 2, 3].map(scale);
 ```
 
-对象字段可用 `object.name` 或 `object['name']` 访问。展开是浅复制，嵌套对象和数组仍可能共享。
+箭头后是表达式时，表达式的值就是返回值；箭头后是代码块时，用 `return` 返回。没有执行 `return` 的函数返回 `null`。
 
-### 解构
+参数可以有默认值，也可以收集剩余参数：
 
-```rgs
-let [first, , third = 9, ...tail] = [1, 2];
-let { x: left, y = 0, ...extra } = { x: 10, label: 'A' };
-assert(first == 1 and third == 9);
-assert(left == 10 and y == 0);
-assert(extra.label == 'A');
-```
-
-对象中的 `x: left` 表示改名，`y = 0` 表示缺失时使用默认值。数组支持跳过位置，剩余绑定收集其余内容。缺失值没有默认值时会报错；存在且值为 `null` 的字段不会触发默认值。
-
-解构也可用于函数参数和已有变量的赋值。对象解构赋值需要括号，避免被当作代码块。
-
-```rgs
-fn point({x, y = 0}) {
-    return x + y;
+```rgscript
+fn greet(name = "朋友") {
+    return "你好，" + name;
 }
-let left = 0;
-let right = 0;
-[left, right] = [1, 2];
-({x: left} = {x: 5});
-assert(point({x: left}) == 5 and right == 2);
+
+fn collect(first, ...rest) {
+    return [first, ...rest];
+}
 ```
 
-### 索引与切片
+省略实参时使用默认值，显式传入 `null` 时保留 `null`。剩余参数必须在最后。
 
-```rgs
-let items = [0, 1, 2, 3, 4];
-let middle = items[1:4];
-let everyOther = items[::2];
-let reverse = items[::-1];
-assert(middle[0] == 1 and middle.length == 3);
-assert(everyOther[2] == 4 and reverse[0] == 4);
-assert('hello'[-2:] == 'lo');
+## 数组和对象
+
+```rgscript
+let frames = [100, 200, 300];
+print(frames[0]);
+frames[1] = 250;
+frames.push(400);
+
+let region = { x: 10, y: 20, width: 640, height: 480 };
+print(region.width);
+region.x += 5;
+region["height"] = 600;
 ```
 
-切片形式为 `[开始:结束:步长]`，结束位置不包含在结果中。各部分可以省略，负索引从末尾计算，负步长用于反向。边界会截到可用范围；索引和步长必须是整数，步长不能为零。切片生成新数组或字符串，不能作为赋值目标。普通索引 `items[index]` 要求非负索引，不支持用 `items[-1]` 取末项。字符串索引和切片按 UTF-16 代码单元处理，可能拆开代理对或组合字符。
+数组索引从 `0` 开始，普通索引要求非负整数；越界读取会报错。对象也可以用字符串索引访问属性。
 
-## 6. 常用集合处理
+展开用于组合数组、对象或实参：
 
-数组的 `map` 生成转换后的数组，`filter` 保留满足条件的元素，`reduce` 逐个累积结果。谓词必须返回布尔值。
-
-```rgs
-let doubled = [1, 2, 3].map(value => value * 2);
-let selected = doubled.filter(value => value > 2);
-let total = selected.reduce((sum, value) => sum + value, 0);
-assert(total == 10);
+```rgscript
+let first = [1, 2];
+let combined = [...first, 3];
+let base = { x: 0, y: 0, width: 640 };
+let moved = { ...base, x: 20 };
+let dimensions = [640, 480];
+print(area(...dimensions));
 ```
 
-`push`、`pop`、`shift`、`unshift`、`reverse` 会修改原数组；切片、`concat`、`map`、`filter` 生成新数组。对象可用 `keys()`、`values()`、`entries()` 转为可遍历数组。
+对象后写的同名属性覆盖前面的属性。数组展开得到一个新数组，内部对象仍是原来的对象。
 
-```rgs
-let data = {x: 1, y: 2};
-let total = 0;
-for (const [key, value] of data.entries()) total += value;
-assert(total == 3);
+## 解构
+
+解构可以一次取出多个值，用于声明、赋值和函数参数。
+
+```rgscript
+let [first, , third = 0, ...tail] = [10, 20, 30, 40];
+let { x, y: top, width = 640, ...other } = { x: 10, y: 20 };
+
+let left = 1;
+let right = 2;
+[left, right] = [right, left];
+
+fn describe({ width, height }) {
+    return width + " × " + height;
+}
 ```
 
-`Map` 和 `Set` 是标准库提供的集合，直接调用名字构造，不使用 `new`。
+数组中的空位表示跳过元素。对象的 `y: top` 表示读取 `y` 并命名为 `top`。剩余部分 `...rest` 必须在最后。
 
-```rgs
-let lookup: Map = Map([['main', 1], ['preview', 2]]);
-lookup.set('extra', 3);
-let unique: Set = Set([1, 1, 2]);
-unique.add(3);
-assert(lookup.get('extra') == 3);
-assert(unique.size == 3 and unique.has(2));
+默认值只在元素或属性缺失时使用，不替换已有的 `null`。缺失且没有默认值会报错。以对象解构赋值开头的语句需要括号：
+
+```rgscript
+let x = 0;
+({ x } = { x: 30 });
 ```
 
-`Map` 提供 `get/set/has/delete/clear/keys/values/entries`，`Set` 提供 `add/has/delete/clear/values`。它们的大小属性是 `size`；数组和字符串使用 `length`。遍历 `Map`、`Set` 时，先调用 `entries()` 或 `values()` 获取数组。
+## 切片
 
-## 下一步
+数组和字符串支持 `[开始:结束:步长]`。开始位置包含在结果中，结束位置不包含；省略步长时为 `1`。
 
-为函数边界和长期配置加上[类型注解](types-and-patterns.md)，用[Result/Option](modules-and-errors.md#显式结果-result)表达可以预期的失败，再把公共逻辑放到独立模块。
+```rgscript
+let values = [0, 1, 2, 3, 4, 5];
+print(values[1:4]);    // [1, 2, 3]
+print(values[-2:]);    // [4, 5]
+print(values[::2]);    // [0, 2, 4]
+print(values[::-1]);   // [5, 4, 3, 2, 1, 0]
+print("abcdef"[1:4]);  // "bcd"
+```
+
+负数位置从末尾计算，超出边界时截到可用范围。步长必须是非零整数。切片返回新值，不能作为赋值目标。
+
+字符串索引和切片按 UTF-16 单元计算，可能拆开 emoji 等由多个单元组成的字符。
+
+## 可选访问
+
+在可能为 `null` 的值后使用 `?.`，空值会让该访问链返回 `null`；再用 `??` 提供默认值。
+
+```rgscript
+let target = null;
+let width = target?.bounds?.width ?? 640;
+let first = target?.[0];
+let called = target?.(10);
+```
+
+可选访问只处理空值，不会忽略拼错的属性、非法索引或函数内部的错误。括号会结束当前访问链，例如 `(target?.bounds).width` 仍会尝试读取 `.width`。
+
+## 作用域
+
+代码块中的变量只在该代码块内可用。内层可以使用外层变量，也可以声明同名变量；同一作用域不能重复声明同名绑定。
+
+```rgscript
+let size = 100;
+{
+    let size = 200;
+    print(size); // 200
+}
+print(size);     // 100
+```
+
+继续阅读 [类型与模式匹配](types-and-patterns.md)、[关键词速查](keywords.md)。继续阅读 [模块与错误处理](modules-and-errors.md)。

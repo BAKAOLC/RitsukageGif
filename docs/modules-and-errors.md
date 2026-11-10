@@ -1,178 +1,157 @@
 # 模块与错误处理
 
-模块用于抽取公共函数和配置。错误处理分两类：可以预期的失败用 `Result` / `Option`，抛出的错误用 `try` / `catch`。
+## 导入公共函数
 
-## 导出公共逻辑
+把公共函数保存为 `common.rgs`：
 
-例如，保存下面的代码为 `common.rgs`：
-
-```rgs
-export const defaultScale: number = 1;
+```rgscript
 export fn clamp(value: number, min: number, max: number): number {
     if (value < min) return min;
     if (value > max) return max;
     return value;
 }
+
+export const defaultScale = 2;
+```
+
+在同目录的脚本中导入：
+
+```rgscript
+import {clamp, defaultScale as scale} from './common.rgs';
+
+const width = clamp(320 * scale, 100, 1920);
+print(width);
+```
+
+导入路径相对于写下 `import` 的文件。路径要包含完整文件名；不会自动补扩展名。同一次脚本运行中，同一个模块重复导入时只执行一次。循环导入会报错，应把共用部分放到第三个模块。
+
+| 写法 | 用途 |
+| --- | --- |
+| `import {name} from './common.rgs';` | 导入命名成员 |
+| `import {name as local} from './common.rgs';` | 导入后改名 |
+| `import * as common from './common.rgs';` | 用 `common.name` 访问成员 |
+| `import value from './common.rgs';` | 导入默认值 |
+| `import './common.rgs';` | 只执行模块 |
+| `export let name = value;` | 导出变量 |
+| `export const name = value;` | 导出常量 |
+| `export fn name(...) { ... }` | 导出函数 |
+| `export {name as publicName};` | 导出已有名字并改名 |
+| `export default value;` | 导出默认值 |
+
+默认导出也可以是函数：
+
+```rgscript
 export default fn double(value: number): number {
     return value * 2;
 }
 ```
 
-然后在同目录的另一个文件中使用：
+导出语句写在模块顶层。命名导入会读取导出变量的当前值，导入方不能重新给这个名字赋值。`import './common.rgs' as common;` 也可导入模块；文件没有显式导出时，得到它顶层 `return` 返回的值。
 
-```rgs
-import double, {clamp, defaultScale as scale} from './common.rgs';
-let result = clamp(double(3), 0, 10) * scale;
-assert(result == 6);
-```
+显式导出的模块不能在顶层使用 `return` 或后缀 `?`。把需要返回结果的逻辑写在函数内。
 
-模块路径相对于包含导入语句的文件解析，必须指定文件名和 `.rgs` 扩展名。模块不按 npm 包名解析。
+## Result：成功或失败
 
-## 导入、导出的其他形式
+`Result<T,E>` 表示成功值 `T` 或错误值 `E`。用 `result.ok(value)` 和 `result.err(error)` 构造：
 
-| 写法 | 作用 |
-| --- | --- |
-| `import {name} from './file.rgs';` | 命名导入 |
-| `import {name as local} from './file.rgs';` | 命名导入并改名 |
-| `import value from './file.rgs';` | 默认导入 |
-| `import * as lib from './file.rgs';` | 模块命名空间，通过 `lib.name` 访问 |
-| `import './file.rgs';` | 执行模块，不声明本地名字 |
-| `export let name = value;` | 导出变量 |
-| `export const name = value;` | 导出常量 |
-| `export fn name(...) { ... }` | 导出函数 |
-| `export {local as publicName};` | 导出已有绑定并改名 |
-| `export default expression;` | 导出默认值 |
-
-导出语句放在模块顶层。转发其他模块的成员时，先导入，再导出。
-
-```rgs
-import * as common from './common.rgs';
-assert(common.clamp(12, 0, 10) == 10);
-```
-
-命名导入读取导出变量的当前值，但导入方不能重新给导入名字赋值。模块对象的导出成员也不可被导入方替换，但导出数组和对象的内容仍可修改。
-
-### 加载和循环依赖
-
-同一个解释器实例中，成功导入的模块会缓存，重复导入不会重新执行。模块有独立的局部作用域。循环导入会报错；应把双方共用的部分抽到第三个模块。导入嵌套超过深度限制时会报错。
-
-还支持 `import './file.rgs' as name;` 形式：显式导出模块得到模块对象，没有显式导出时得到该文件顶层 `return` 的值。新公共模块建议统一使用显式 `export`。
-
-显式导出不能与顶层 `return` 或 `?` 传播混用。需要传播错误时，将逻辑放入导出的函数。
-
-## 显式结果 Result
-
-`Result<T,E>` 表示操作成功得到 `T`，或者失败得到 `E`。构造值时使用小写的 `result` 表。
-
-```rgs
+```rgscript
 fn divide(a: number, b: number): Result<number,string> {
-    if (b == 0) return result.err('divisor is zero');
+    if (b == 0) return result.err('除数不能为零');
     return result.ok(a / b);
 }
-let outcome = divide(10, 2);
-let text = outcome switch {
-    Ok(var value) => 'value=' + str(value),
+
+const text = divide(10, 2) switch {
+    Ok(var value) => '结果：' + str(value),
     Err(var error) => error
 };
-assert(text == 'value=5');
+print(text);
 ```
 
-`isOk`、`isErr` 可检查状态。只有成功结果可以读取 `.value`，只有失败结果可以读取 `.error`，读取错误的一侧会报错。使用模式匹配可以把状态判断和取值放在一起。
+`isOk`、`isErr` 用于判断状态。成功时读取 `.value`，失败时读取 `.error`；读取不符合状态的成员会报错。
 
-| 方法 | 行为 |
+| 方法 | 返回值 |
 | --- | --- |
-| `unwrapOr(fallback)` | 成功时取值，否则取已经计算好的默认值 |
-| `unwrapOrElse(error => fallback)` | 失败时才调用默认值函数 |
-| `map(value => next)` | 只转换成功值 |
-| `mapErr(error => next)` | 只转换错误值 |
-| `andThen(value => result)` | 成功后调用另一个返回 `Result` 的操作 |
-| `orElse(error => result)` | 失败后调用返回 `Result` 的恢复操作 |
+| `unwrapOr(fallback)` | 成功值，或默认值 |
+| `unwrapOrElse(error => fallback)` | 成功值，或失败时调用函数得到的默认值 |
+| `map(value => next)` | 只转换成功值，返回 `Result` |
+| `mapErr(error => next)` | 只转换错误值，返回 `Result` |
+| `andThen(value => nextResult)` | 成功后继续另一个返回 `Result` 的操作 |
+| `orElse(error => nextResult)` | 失败后执行返回 `Result` 的恢复操作 |
 
-```rgs
-let value = result.ok(3)
+```rgscript
+const value = result.ok(3)
     .map(x => x * 2)
     .andThen(x => result.ok(x + 1))
     .unwrapOr(0);
 assert(value == 7);
 ```
 
-`andThen`、`orElse` 的回调必须返回 `Result`。`map` 不自动展开嵌套结果：回调返回 `Result` 时会得到结果中的结果。
+`andThen` 和 `orElse` 的回调必须返回 `Result`。`map` 会保留回调返回的值，包括嵌套的 `Result`。
 
-## 可选值 Option
+## Option：有值或无值
 
-`Option<T>` 表示有值或无值，不携带错误原因。
+`Option<T>` 用于表示可能不存在的值：
 
-```rgs
-let selected: Option<string> = option.some('main');
-let absent: Option<string> = option.none;
-let name = absent.unwrapOr('default');
-assert(selected.isSome and absent.isNone);
-assert(name == 'default');
-assert(option.fromNullable(null).isNone);
-assert(option.fromNullable(0).isSome);
+```rgscript
+const selected: Option<string> = option.some('main');
+const absent: Option<string> = option.none;
+
+print(selected.value);
+print(absent.unwrapOr('default'));
 ```
 
-无值状态直接使用 `option.none`。`fromNullable` 仅将 `null` 转为无值，`0`、`false` 和空字符串仍是有值。
+`option.fromNullable(value)` 只把 `null` 转为 `None`，`0`、`false` 和空字符串仍是有值。
 
-`Option` 提供 `isSome`、`isNone`、`.value`，以及 `unwrapOr`、`unwrapOrElse`、`map`、`andThen`、`orElse`。无值时读取 `.value` 会报错。它的 `unwrapOrElse` 和 `orElse` 回调没有错误参数。
+| 成员或方法 | 用途 |
+| --- | --- |
+| `isSome`、`isNone` | 判断是否有值 |
+| `.value` | 读取值；`None` 时会报错 |
+| `unwrapOr(fallback)` | 取值或使用默认值 |
+| `unwrapOrElse(() => fallback)` | 无值时才计算默认值 |
+| `map(value => next)` | 转换已有值，返回 `Option` |
+| `andThen(value => nextOption)` | 有值时继续另一个返回 `Option` 的操作 |
+| `orElse(() => nextOption)` | 无值时提供另一个 `Option` |
+| `okOr(error)` | 有值转为 `Ok(value)`，无值转为 `Err(error)` |
 
-`some.okOr(error)` 将有值转换为 `Ok(value)`，将无值转换为 `Err(error)`。
+模式匹配中使用 `Some(var value)` 和 `None`。
 
-## 用 ? 提前返回失败
+## 用 ? 提前返回
 
-后缀 `?` 在成功或有值时取出内部值；遇到 `Err` 或 `None` 时，立即从**当前函数**返回原结果，不再执行该函数剩余语句。
+后缀 `?` 取出 `Ok` 或 `Some` 的值；遇到 `Err` 或 `None`，立即从当前函数返回该结果。
 
-```rgs
-fn parsePositive(text: string): Result<number,string> {
-    let value = result.attempt(() => number(text))?;
-    if (value <= 0) return result.err('must be positive');
+```rgscript
+fn positive(text: string): Result<number,string> {
+    const value = result.attempt(() => number(text))?;
+    if (value <= 0) return result.err('必须大于零');
     return result.ok(value);
 }
-assert(parsePositive('12').value == 12);
-assert(parsePositive('-1').isErr);
-assert(parsePositive('invalid').isErr);
+
+print(positive('12').unwrapOr(0));
 ```
 
-传播规则：
+使用 `Result` 传播的函数，正常路径也要返回 `Result`；使用 `Option` 传播的函数则返回 `Option`。同一次函数调用不能混用两种传播。需要转换时，使用 `mapErr` 或 `okOr`。
 
-- 使用 `Result` 的 `?` 后，正常路径也应返回 `Result`。
-- 使用 `Option` 的 `?` 后，正常路径也应返回 `Option`。
-- 一次函数执行不能混用 `Result` 和 `Option` 的 `?`，即使当时都是成功值。
-- 转换错误类型使用 `mapErr`；将 `Option` 转为 `Result` 使用 `okOr`。传播时不自动转换。
-- `Err` 提前返回不会触发外层 `catch`。
-- `condition ? yes : no` 仍是三元条件表达式，和后缀传播是两种用法。
+`Err` 是普通结果，不会进入 `catch`。预设脚本或事件回调返回 `Err` 时，会结束对应工作并报告失败。
 
-在录制预设里，脚本或事件回调返回 `Err` 会被宿主作为失败处理，并取消相应录制工作。普通工具函数内部的 `Err` 仍由调用方决定如何处理。
+## try、catch 和 finally
 
-## 抛出、捕获与清理
-
-```rgs
-let message = '';
-let finalized = false;
+```rgscript
 try {
-    throw 'operation failed';
+    throw '无法读取输入';
 } catch (error) {
-    message = str(error);
+    print('失败：', str(error));
 } finally {
-    finalized = true;
+    print('处理结束');
 }
-assert(message == 'operation failed' and finalized);
 ```
 
-`throw` 可以抛出脚本值。捕获脚本 `throw` 时，`error` 是原值；捕获 API 异常时通常得到消息字符串，可用 `str(error)` 读取错误文本。
+`throw` 可以抛出任意脚本值，`catch` 接收该值。API 错误通常以消息字符串接收。`finally` 在正常完成、返回和报错后执行；其中的返回或错误会替代先前结果。
 
-`finally` 在代码块完成、返回或报错后执行。块内的 `return` 或错误会替代之前的结果，因此清理代码通常不应返回业务结果。
+希望把抛出的错误改为 `Result` 时，使用 `result.attempt(callback)`：
 
-取消会终止脚本执行，不能通过 `catch`、`result.attempt` 或 `finally` 恢复。取消期间，清理语句也可能中断；应用负责释放录制资源。
-
-### 将抛出的错误变成 Result
-
-```rgs
-let attempt = result.attempt(() => {
-    throw 'unavailable';
-});
-assert(attempt.isErr);
-assert(attempt.error == 'unavailable');
+```rgscript
+const parsed = result.attempt(() => number('12'));
+print(parsed.unwrapOr(0));
 ```
 
-`result.attempt(callback)` 成功时返回 `Ok(callback结果)`，错误时返回 `Err(消息字符串)`。如果回调本来返回 `Result`，它不会自动展平，仍会再包一层 `Ok`。处理可能抛错的操作时使用 `result.attempt`；函数内部检测到预期失败时，直接返回 `result.err(...)`。
+回调成功得到 `Ok(value)`，报错得到 `Err(错误消息)`。回调已经返回 `Result` 时，仍会再包一层 `Ok`。取消会终止执行，不能用 `catch` 或 `result.attempt` 恢复；取消时也不要依赖 `finally` 中的语句全部执行。
