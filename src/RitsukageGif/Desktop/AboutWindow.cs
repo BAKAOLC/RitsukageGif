@@ -126,7 +126,7 @@ namespace RitsukageGif.Desktop
             {
                 download.IsVisible = available is not null;
                 status.Text = statusKey is not null ? UiText.Get(statusKey)
-                    : available is { } release ? UiText.Format("UpdateAvailable", release.Version) : "";
+                    : available is { } release ? UiText.Format("UpdateAvailable", release.DisplayVersion) : "";
             }
         }
 

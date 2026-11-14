@@ -392,7 +392,7 @@ namespace RitsukageGif.Desktop
                 {
                     release = await UpdateChecker.CheckChannelAsync(draft.System.UpdateChannel, cancellation.Token);
                     if (cancellation.IsCancellationRequested) return;
-                    status.Text = release is null ? UiText.Get("UpdateCurrent") : release.Version.ToString(4);
+                    status.Text = release is null ? UiText.Get("UpdateCurrent") : release.DisplayVersion;
                     download.IsVisible = release is not null;
                 }
                 catch (OperationCanceledException) when (cancellation.IsCancellationRequested)

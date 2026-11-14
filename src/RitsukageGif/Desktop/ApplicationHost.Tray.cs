@@ -121,7 +121,7 @@ namespace RitsukageGif.Desktop
             _trayUpdate!.IsVisible = AvailableUpdate is not null;
             _trayUpdate.IsEnabled = !IsClosing && !IsSelecting && AvailableUpdate is not null;
             _trayUpdate.Header = AvailableUpdate is { } release
-                ? UiText.Format("UpdateAvailable", release.Version)
+                ? UiText.Format("UpdateAvailable", release.DisplayVersion)
                 : UiText.Get("CheckUpdate");
             RefreshActionMenus();
             RefreshPinMenus();

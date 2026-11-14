@@ -176,7 +176,7 @@ namespace RitsukageGif.Desktop
         {
             _updateAvailable.IsVisible = _host.AvailableUpdate is not null;
             ToolTip.SetTip(_updateAvailable, _host.AvailableUpdate is { } release
-                ? UiText.Format("UpdateAvailable", release.Version)
+                ? UiText.Format("UpdateAvailable", release.DisplayVersion)
                 : null);
             var settings = _host.EffectiveSettings;
             if (_displayFps != settings.Fps) _fps.Value = _displayFps = settings.Fps;

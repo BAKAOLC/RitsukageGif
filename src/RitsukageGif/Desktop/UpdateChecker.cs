@@ -77,7 +77,9 @@ namespace RitsukageGif.Desktop
             foreach (var item in document.RootElement.EnumerateArray())
             {
                 var candidate = ParseRelease(item, current, rid, true);
-                if (candidate is not null && (latest is null || candidate.Version > latest.Version)) latest = candidate;
+                if (candidate is not null && (latest is null || candidate.Version > latest.Version ||
+                                              (candidate.Version == latest.Version &&
+                                               candidate.ReleaseOrder > latest.ReleaseOrder))) latest = candidate;
             }
 
             return latest;
@@ -111,7 +113,11 @@ namespace RitsukageGif.Desktop
 
             var normalizedCurrent = new Version(current.Major, current.Minor, Math.Max(0, current.Build),
                 Math.Max(0, current.Revision));
-            if (version <= normalizedCurrent) return null;
+            var releaseCandidate = ReleaseCandidate(tag!);
+            var currentCandidate = ReleaseCandidate(ApplicationVersion.Display);
+            if (version < normalizedCurrent || (version == normalizedCurrent &&
+                                                (currentCandidate == int.MaxValue ||
+                                                 releaseCandidate <= currentCandidate))) return null;
 
             var page = ReadString(release, "html_url");
             if (!IsReleaseUrl(page)) page = $"https://github.com/BAKAOLC/RitsukageGif/releases/tag/{tag}";
@@ -129,10 +135,23 @@ namespace RitsukageGif.Desktop
                     if (name != $"RitsukageGif-{tag![1..]}-{suffix}" &&
                         name != $"RitsukageGif-{version.ToString(4)}-{suffix}") continue;
                     var url = ReadString(asset, "browser_download_url");
-                    if (IsReleaseUrl(url)) return new(version, url!);
+                    if (IsReleaseUrl(url)) return new(version, url!, tag[1..], releaseCandidate);
                 }
 
-            return new(version, page!);
+            return new(version, page!, tag![1..], releaseCandidate);
+        }
+
+        private static int ReleaseCandidate(string version)
+        {
+            var separator = version.IndexOf('-');
+            if (separator < 0) return int.MaxValue;
+            var suffix = version.AsSpan(separator + 1);
+            var end = suffix.IndexOf('-');
+            if (end >= 0) suffix = suffix[..end];
+            return suffix.StartsWith("rc", StringComparison.Ordinal) &&
+                   int.TryParse(suffix[2..], NumberStyles.None, CultureInfo.InvariantCulture, out var candidate)
+                ? candidate
+                : 0;
         }
 
         private static bool TryVersion(string tag, out Version version)
