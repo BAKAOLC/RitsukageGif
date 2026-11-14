@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)][string]$Commit
 )
 $ErrorActionPreference = 'Stop'
-if ($Tag -notmatch '^v\d+\.\d+\.\d+\.\d+$' -or $Commit -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+if ($Tag -cnotmatch '^v\d+\.\d+\.\d+\.\d+(?:-rc[1-9]\d*)?$' -or $Commit -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
     throw 'Invalid release tag or commit.'
 }
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
