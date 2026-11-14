@@ -48,7 +48,7 @@ jobs:
           "commit=$commit" >> $env:GITHUB_OUTPUT
           $build = $true
           if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -eq 'refs/heads/main') {
-            $build = !(./.github/scripts/test-tagged-commit.ps1 -Tag "v$($versions.NumericVersion)" -Commit $commit)
+            $build = !(./.github/scripts/test-tagged-commit.ps1 -Tag "v$($versions.ReleaseVersion)" -Commit $commit)
           }
           "build=$($build.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
 

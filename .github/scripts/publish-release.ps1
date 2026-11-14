@@ -32,6 +32,7 @@ $notesPath = [IO.Path]::GetTempFileName()
 try {
     $notes | Set-Content -LiteralPath $notesPath -Encoding utf8NoBOM
     $assets = @($files.FullName)
+    $releaseFlags = @(if ($versions.Prerelease) { '--prerelease' })
     $existingJson = & gh release view $Tag --json isDraft,assets 2>$null
     if ($LASTEXITCODE -eq 0) {
         $existing = ($existingJson -join "`n") | ConvertFrom-Json
@@ -41,11 +42,11 @@ try {
         }
         & gh release upload $Tag @assets --clobber
         if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed; rerun this job to retry.' }
-        & gh release edit $Tag --draft=false --title "RitsukageGif $($versions.Application)" --notes-file $notesPath
+        & gh release edit $Tag --draft=false "--prerelease=$($versions.Prerelease.ToString().ToLowerInvariant())" --title "RitsukageGif $($versions.Application)" --notes-file $notesPath
         if ($LASTEXITCODE -ne 0) { throw 'Draft publication failed; rerun this job to retry.' }
     }
     else {
-        & gh release create $Tag @assets --verify-tag --title "RitsukageGif $($versions.Application)" --notes-file $notesPath
+        & gh release create $Tag @assets --verify-tag @releaseFlags --title "RitsukageGif $($versions.Application)" --notes-file $notesPath
         if ($LASTEXITCODE -ne 0) { throw 'Release creation failed; rerun this job to retry an interrupted draft upload.' }
     }
 }
