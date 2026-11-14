@@ -38,7 +38,7 @@ Linux、macOS 使用对应可执行文件路径。窗口查询、全局输入和
 | --- | --- |
 | `select` | 交互选择快速录制区域，等待选区操作结束 |
 | `select <x> <y> <width> <height>` | 直接设置屏幕区域，并切换为屏幕捕获 |
-| `select-window <process> [title]` | 选择匹配窗口的客户区，并跟随窗口；使用当前捕获来源设置 |
+| `select-window <process> [title]` | 选择匹配窗口的客户区，并跟随该窗口。使用当前捕获来源设置 |
 | `start` | 使用当前区域与设置进行快速录制，等待本次录制及输出完成 |
 | `stop` | 停止当前录制 |
 | `cancel` | 取消当前截图、选区或正在处理的录制任务 |
@@ -109,6 +109,8 @@ Linux、macOS 使用对应可执行文件路径。窗口查询、全局输入和
 `preset run` 的文件路径相对于执行命令的目录。文件中有多个预设时必须填写名称；`--arg` 可重复，每次只跟一个赋值，名称应放在全部 `--arg` 之前。
 
 在独立任务会话中，`preset run` 等待本次预设执行结束，回复包括 `OperationId` 和脚本返回值 `Value`。需要从另一个终端控制时，先保留会话，再用 `script list` 查找该预设的操作标识，或用 `script cancel <operationId>` 取消。连接常驻程序时，`preset run` 激活预设后返回。需要在常驻程序里等待执行结果时，使用 `script file`。
+
+预设录制成功保存时，`Output` 是本次录制的第一条路径，`Outputs` 是该次录制的全部路径。
 
 参数值中的 `true`、`false`、`null` 和数值按对应类型读取，其余为字符串。名称区分大小写，同次调用不能重复。每组最多 256 项，名称长度为 1～128，字符串值最长 4096 个字符。
 
@@ -235,7 +237,7 @@ Get-Content -Raw -Encoding utf8 './process.rgs' | & $exe script stdin
 & $exe --task screenshot screen
 ```
 
-使用截图示例时，选好区域后选择保存，独立任务会在保存完成后自动退出。
+选好区域后保存或复制，独立任务会在输出完成后退出。一次性任务从截图工具栏转入录制后，会等待录制输出完成；直接关闭且没有输出时，返回退出码 `130`。
 
 | 前置参数 | 用途 |
 | --- | --- |
@@ -247,7 +249,9 @@ Get-Content -Raw -Encoding utf8 './process.rgs' | & $exe script stdin
 
 这些参数必须放在命令前。`--keep-alive` 与 `--exit-when-done` 控制同一选项，后出现的生效；不需要同时填写。
 
-独立任务读取已有设置，但本次设置修改只影响该任务，不自动写回常驻程序配置。显式 `settings export` 或脚本保存文件仍会写入指定位置。`--reuse-core` 确实连接已有常驻程序时，按该程序的正常设置与保存方式执行，也不会因任务命令结束而自动关闭它。
+`help` 和 `--help` 只显示帮助，即使带上 `--task --keep-alive` 也不会创建或保留任务。
+
+独立任务读取已有设置，但本次修改只影响该任务。截图不会触发自动保存、保存后复制或自动粘贴；仍可主动保存和复制。显式 `settings export` 或脚本保存文件仍会写入指定位置。`--reuse-core` 确实连接已有常驻程序时，按该程序的正常设置与保存方式执行，也不会因任务命令结束而自动关闭它。
 
 需要持续操作窗口或从另一个终端停止长任务时，先用 `--task --keep-alive status` 获取 `SessionId`，再向同一会话发送命令。
 
@@ -258,7 +262,7 @@ $task = & $exe --task --keep-alive status | ConvertFrom-Json
 & $exe --session $task.SessionId exit
 ```
 
-`exit` 退出当前连接的程序或会话。省略 `--session` 时会退出常驻程序。打开录制界面、编辑器或分多条命令录制时，可用 `--keep-alive` 保留独立任务，操作完成后再退出。
+`exit` 退出当前连接的程序或会话。不带前置参数时退出常驻程序；`--session <sessionId> exit` 退出指定任务；`--task exit` 只退出本次新建的任务。若加上 `--reuse-core` 并连接了常驻程序，则会退出该常驻程序。需要保留贴图、翻译窗口或编辑器，或者分多条命令录制时，可用 `--keep-alive` 保留独立任务，操作完成后再退出。
 
 ## 配置
 
@@ -351,7 +355,7 @@ $task = & $exe --task --keep-alive status | ConvertFrom-Json
 | `State` | 当前状态，如 `idle`、`selecting`、`recording`、`processing`、`waiting`、`configuring`、`closing` |
 | `Message` | 说明或错误消息；`windows`、`presets` 的列表也放在这里 |
 | `Region` | `X`、`Y`、`Width`、`Height`。截图回复为本次选区，`status` 等状态回复为当前区域 |
-| `Output`、`Outputs` | 截图回复为本次第一条路径和全部路径。`settings export` 的 `Output` 为本次导出的绝对路径。`status` 等状态回复显示最近输出 |
+| `Output`、`Outputs` | 截图和已保存的预设录制回复分别给出本次第一条路径和全部路径。`settings export` 的 `Output` 为本次导出的绝对路径。`status` 等状态回复显示最近输出 |
 | `Captured`、`Encoded` | 当前采集帧数、编码帧数 |
 | `CapturedFps`、`ElapsedSeconds` | 实际采集帧率、已录制秒数 |
 | `Preset`、`PresetState`、`PresetError` | 当前预设、状态和错误 |

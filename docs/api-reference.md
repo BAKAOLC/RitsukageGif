@@ -1677,6 +1677,18 @@ pins.thumbnailRegion(id: string, region: EffectRect): Result<PinInfo,ServiceErro
 | `id` | `string` | 必填 | — |
 | `region` | `EffectRect` | 必填 | — |
 
+### pins.translation
+
+```rgscript
+pins.translation(id: string, enabled?: boolean?): Result<boolean,ServiceError>
+```
+
+适用于静态图像、纯文本和 HTML 贴图。省略 `enabled` 时读取当前是否显示译文，传入 `true` 或 `false` 时开启或关闭翻译并等待显示更新。翻译使用已配置的服务和目标语言。
+
+```powershell
+& $exe script eval 'return pins.translation(params.string("id"), true);' --arg "id=$pinId"
+```
+
 ### pins.transform
 
 ```rgscript

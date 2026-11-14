@@ -82,7 +82,7 @@ area client(16, 16, width - 32, height - 32);
 | `cursor` | `true` / `false`，是否包含光标 |
 | `sound` | `true` / `false`，是否播放提示音，不是录制音轨 |
 | `ffmpeg` | `true` / `false`，是否使用 FFmpeg 编码路径 |
-| `copy` | `true` / `false`，完成后是否自动复制输出；默认 `true` |
+| `copy` | `true` / `false`，完成后是否自动复制输出；常驻程序默认 `true`，独立任务默认 `false` |
 
 也可以只为某次 `start` 覆盖选项：
 

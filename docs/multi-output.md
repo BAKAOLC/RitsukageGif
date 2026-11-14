@@ -109,6 +109,6 @@ scene.animateFor("detail", "画面", 80, 40, 640, 360, 1, Easing.EaseInOut);
 
 部分输出失败时，成功文件仍保留，应逐路检查 `state` 和 `error`；所有输出都失败时，停止操作会报告错误。录制成功结束后，`status().outputs` 可读取保存的文件路径。
 
-每路的 `copy` 决定是否自动复制输出，优先使用本路 `options.copy`，其次是来源预设的 `record.copy`，均未设置时默认为 `true`。成功且需要复制的输出会一并加入剪贴板文件列表。
+每路的 `copy` 决定是否自动复制输出，优先使用本路 `options.copy`，其次是来源预设的 `record.copy`，均未设置时，常驻程序默认 `true`，独立任务默认 `false`。成功且需要复制的输出会一并加入剪贴板文件列表。
 
 多路录制目前使用 SDR 输出，不支持 HDR 或 SDR/HDR 双输出。使用系统来源选择器的平台，`startMany` 只能用于纯媒体布局，不能使用桌面或窗口来源。
