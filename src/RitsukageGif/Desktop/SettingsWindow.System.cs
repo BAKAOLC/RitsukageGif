@@ -110,6 +110,7 @@ namespace RitsukageGif.Desktop
             general.Children.Add(Setting(SystemCheck("MinimizeToTray", draft.MinimizeToTray,
                 value => draft.MinimizeToTray = value), static settings => settings.MinimizeToTray));
             page.Children.Add(SettingsSection("GeneralHeading", general));
+            page.Children.Add(SettingsSection("DpiOutputHeading", BuildDpiOutputSettings(draft)));
             page.Children.Add(SettingsSection("ScreenshotClipboardHeading", clipboard));
             var tray = Page();
             var single = TrayActionBox(draft.System.TraySingleClick,

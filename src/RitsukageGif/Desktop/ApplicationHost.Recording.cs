@@ -82,7 +82,8 @@ namespace RitsukageGif.Desktop
                 options = options with
                 {
                     PixelDensity = (preset is null || ReferenceEquals(preset, _manualPreset)) && preset?.Layout is null
-                        ? NativeDisplayCatalog.Density(region)
+                        ? RecordingOutputDensity(region, DpiOutputFeature.QuickRecording,
+                            NativeDisplayCatalog.Density(region))
                         : 1,
                 };
                 options.Validate();

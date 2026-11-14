@@ -26,25 +26,12 @@ namespace RitsukageGif.Desktop
             get
             {
                 if (ScreenshotPreview) return _previewCaptureScaling;
-                if (DesktopCapture.UsesSourceSelection) return 1;
+                if (DesktopCapture.UsesSourceSelection && _sourceSelection is { } source) return source.OutputScaling;
                 var snapshot = Snapshot;
                 var bounds = snapshot is { WindowSource: true, Target: not null }
                     ? snapshot.Target.Bounds
                     : snapshot.Region;
-                if (OperatingSystem.IsMacOS()) return NativeDisplayCatalog.Density(bounds);
-                long largest = 0;
-                double scaling = 1;
-                foreach (var screen in _screens.All)
-                {
-                    var intersect = bounds.Intersect(new(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width,
-                        screen.Bounds.Height));
-                    var area = (long)intersect.Width * intersect.Height;
-                    if (intersect.IsEmpty || area <= largest) continue;
-                    largest = area;
-                    scaling = screen.Scaling;
-                }
-
-                return double.IsFinite(scaling) && scaling is >= 1 and <= 16 ? scaling : 1;
+                return DisplayOutputScaling.ForRegion(_screens, bounds);
             }
         }
     }

@@ -13,5 +13,6 @@ namespace RitsukageGif.Desktop
         public PixelPoint ContentOffset { get; init; }
         public PixelPoint? OutputOrigin { get; init; }
         public PixelRect? OutputRegion { get; init; }
+        internal bool IsScrollingCapture { get; init; }
     }
 }

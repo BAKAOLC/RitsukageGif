@@ -6,8 +6,8 @@ namespace RitsukageGif.Desktop
     {
         private readonly Func<DisplayTopology> _displayProvider;
         private readonly DesktopDisplayState? _displays;
-        private readonly WindowSourceLoss _sourceLoss;
         private readonly WindowPreset? _preset;
+        private readonly WindowSourceLoss _sourceLoss;
 
         private ScreenshotCaptureSourceContext(SelectionResult selection, RecordingOptions options,
             Func<DisplayTopology> displayProvider, DesktopDisplayState? displays, WindowSourceLoss sourceLoss,
@@ -34,12 +34,19 @@ namespace RitsukageGif.Desktop
 
         internal static Task<ScreenshotCaptureSourceContext> CreateAsync(SelectionResult selection,
             RecordingOptions options, Screens screens, WindowSourceLoss sourceLoss,
-            CancellationToken token)
+            CancellationToken token, double outputScale = 1)
         {
             var preset = selection.CreatePreset();
             var region = preset?.Layout is { } layout
                 ? new(0, 0, layout.Width, layout.Height)
                 : selection.Region;
+            options = options with
+            {
+                Region = region, Transparent = options.Transparent || preset is not null,
+                PixelDensity =
+                preset?.Layout is null ? NativeDisplayCatalog.Density(selection.Region) * outputScale : 1,
+            };
+            options.Validate();
             if (DesktopCapture.UsesSourceSelection)
             {
                 token.ThrowIfCancellationRequested();
@@ -48,12 +55,6 @@ namespace RitsukageGif.Desktop
                 {
                     var topology = new DisplayTopology(
                         [source.Session.NativeBounds ?? throw new CaptureSourceLostException()]);
-                    options = options with
-                    {
-                        Region = region, Transparent = options.Transparent || preset is not null,
-                        PixelDensity = preset?.Layout is null ? NativeDisplayCatalog.Density(selection.Region) : 1,
-                    };
-                    options.Validate();
                     return Task.FromResult(new ScreenshotCaptureSourceContext(selection, options, () => topology, null,
                         sourceLoss, preset, source));
                 }
@@ -67,12 +68,6 @@ namespace RitsukageGif.Desktop
             var displays = new DesktopDisplayState(screens);
             try
             {
-                options = options with
-                {
-                    Region = region, Transparent = options.Transparent || preset is not null,
-                    PixelDensity = preset?.Layout is null ? NativeDisplayCatalog.Density(selection.Region) : 1,
-                };
-                options.Validate();
                 return Task.FromResult(new ScreenshotCaptureSourceContext(selection, options, displays.Read, displays,
                     sourceLoss, preset));
             }

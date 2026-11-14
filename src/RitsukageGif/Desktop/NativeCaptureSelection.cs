@@ -13,6 +13,8 @@ namespace RitsukageGif.Desktop
                 CapturedFramePixels.ToStraightBgra(snapshot.Frames.Sdr), snapshot.Geometry.X, snapshot.Geometry.Y)
             { CoordinateBounds = snapshot.Geometry.Bounds, PixelDensity = snapshot.Geometry.BackingScale };
 
+        internal double OutputScaling { get; } = session.OutputScaling;
+
         public void Dispose()
         {
             NativeCaptureSession? candidate;

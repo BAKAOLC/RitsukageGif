@@ -17,6 +17,7 @@ namespace RitsukageGif.Desktop
                 "GeneralHeading" => value with
                 {
                     Language = defaults.Language, System = defaults.System, Network = defaults.Network,
+                    DpiOutput = defaults.DpiOutput,
                     Recognition = defaults.Recognition,
                     Translation = defaults.Translation,
                     CheckForUpdates = defaults.CheckForUpdates, CloseToTray = defaults.CloseToTray,

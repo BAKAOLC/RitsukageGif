@@ -223,10 +223,10 @@ namespace RitsukageGif.Desktop
             if (result.Action != ScreenshotOutputAction.QuickSave)
                 return await OutputScreenshotAsync(owner, result, token);
             token.ThrowIfCancellationRequested();
-            var preferences = ScreenshotSaveForOutput.Normalize().Quick;
+            var preferences = ScaleScreenshotSave(result, ScreenshotSaveForOutput.Normalize().Quick);
             var format = result.ColorMode == OutputColorMode.Sdr ? preferences.Format : StaticImageFormat.Png;
             var path = (preferences with { Directory = directory }).CreatePath(Settings.OutputDirectory,
-                ScreenshotName(result), format);
+                ScreenshotName(result, preferences.OutputSize), format);
             return await SaveScreenshotAsync(result, path, preferences, false, false, token,
                 owner as ScreenshotScrollingWindow);
         }

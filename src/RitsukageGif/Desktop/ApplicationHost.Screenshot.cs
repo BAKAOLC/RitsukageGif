@@ -354,7 +354,11 @@ namespace RitsukageGif.Desktop
                     _screenshotInvocation.Value = invocation;
                     try
                     {
-                        var raw = result with { CaptureScaling = selection.ScreenshotCaptureScaling };
+                        var raw = result with
+                        {
+                            CaptureScaling = selection.ScreenshotCaptureScaling,
+                            IsScrollingCapture = selection.WasScrollingScreenshot,
+                        };
                         result = copyTextOutput
                             ? raw
                             : await ScreenshotOutputDecoration.PrepareAsync(raw, cancellationToken);
@@ -482,7 +486,7 @@ namespace RitsukageGif.Desktop
                     return true;
                 case ScreenshotOutputAction.QuickSave:
                 {
-                    var quickProfile = ScreenshotSaveForOutput.Normalize().Quick;
+                    var quickProfile = ScaleScreenshotSave(result, ScreenshotSaveForOutput.Normalize().Quick);
                     var format = mode == OutputColorMode.Sdr ? quickProfile.Format : StaticImageFormat.Png;
                     var quickPath = quickProfile.CreatePath(Settings.OutputDirectory,
                         ScreenshotName(result, quickProfile.OutputSize), format);
@@ -497,7 +501,7 @@ namespace RitsukageGif.Desktop
                     throw new ArgumentOutOfRangeException(nameof(result));
             }
 
-            var profile = ScreenshotSaveForOutput.ManualProfile();
+            var profile = ScaleScreenshotSave(result, ScreenshotSaveForOutput.ManualProfile());
             var path = await ScreenshotOutputStorage.PickPathAsync(owner, context.StorageProvider,
                 profile, Settings.OutputDirectory, "Screenshot", mode, Settings.Appearance.SaveDialogStyle,
                 ScreenshotName(result, profile.OutputSize), token);
@@ -608,7 +612,7 @@ namespace RitsukageGif.Desktop
             var preferences = Settings.ScreenshotSave.Normalize();
             if (!preferences.AutoSaveEnabled || (preferences.AutoSaveTriggers & trigger) == 0) return;
             result = await ScreenshotOutputDecoration.PrepareAsync(result, token);
-            var profile = preferences.Automatic;
+            var profile = ScaleScreenshotSave(result, preferences.Automatic);
             var format = result.ColorMode == OutputColorMode.Sdr ? profile.Format : StaticImageFormat.Png;
             var path = profile.CreatePath(Settings.OutputDirectory, ScreenshotName(result, profile.OutputSize), format);
             await SaveScreenshotAsync(result, path, profile, false, true, token);
@@ -630,10 +634,11 @@ namespace RitsukageGif.Desktop
         {
             var clipboard = _services.Context.Clipboard ??
                             throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-            var output = ScreenshotOutputTransform.ResolveClipboardSize(result, Settings.ScreenshotClipboard);
-            await ClipboardImage.CopyAsync(clipboard, result, Settings.ScreenshotClipboard,
+            var (image, preferences) = ScaleScreenshotCopy(result);
+            var output = ScreenshotOutputTransform.ResolveClipboardSize(image, preferences);
+            await ClipboardImage.CopyAsync(clipboard, image, preferences,
                 _services.Context.StorageProvider, Settings.ScreenshotSave.Quality,
-                new(Settings.ScreenshotSave, ScreenshotName(result, output.OutputSize)), token);
+                new(Settings.ScreenshotSave, ScreenshotName(image, output.OutputSize)), token);
         }
     }
 }

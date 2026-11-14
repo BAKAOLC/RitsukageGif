@@ -116,7 +116,8 @@ namespace RitsukageGif.Desktop
                 Path.GetFileNameWithoutExtension(path) + ".hdr.png");
             using var preparing = CancellationTokenSource.CreateLinkedTokenSource(stop, cancel);
             using var context = await ScreenshotCaptureSourceContext.CreateAsync(selection,
-                options with { Cursor = false }, Screens, loss, preparing.Token);
+                options with { Cursor = false }, Screens, loss, preparing.Token,
+                CaptureOutputScale(selection.Region, DpiOutputFeature.ScreenshotRecording, selection.CaptureSession));
             _screenshotRecorder?.SetRecordingNativeSize(context.Options);
             using var progress = new RecordingProgressPresenter(value =>
             {
@@ -191,7 +192,8 @@ namespace RitsukageGif.Desktop
             using var preparing = CancellationTokenSource.CreateLinkedTokenSource(stop, cancel);
             using var context = await ScreenshotCaptureSourceContext.CreateAsync(selection,
                 options.Capture with { Cursor = !editable && options.Capture.Cursor }, Screens,
-                loss, preparing.Token);
+                loss, preparing.Token,
+                CaptureOutputScale(selection.Region, DpiOutputFeature.VideoRecording, selection.CaptureSession));
             options = options with { Capture = context.Options };
             if (editable)
             {

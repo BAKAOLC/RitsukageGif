@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
             var profile = quick ? ScreenshotSaveForOutput.Normalize().Quick : ScreenshotSaveForOutput.ManualProfile();
             var source = owner.StreamingSize;
             var geometry = CaptureDecorationProcessor.MeasureStreaming(source.Width, source.Height, decoration);
-            const double scale = 1;
+            var scale = Settings.DpiOutput.ScaleFor(DpiOutputFeature.LongScreenshotSave, captureScaling);
             var size = StreamingOutputSize(profile.OutputSize, geometry.Width, geometry.Height, scale);
             var target = _screenshotSelection?.Snapshot.Target;
             var name = new ScreenshotNameContext(DateTime.Now, target?.Title, target?.Process, size.Width, size.Height);

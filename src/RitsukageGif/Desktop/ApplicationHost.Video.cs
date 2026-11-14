@@ -49,7 +49,8 @@ namespace RitsukageGif.Desktop
                 {
                     Capture = options.Capture with
                     {
-                        PixelDensity = NativeDisplayCatalog.Density(options.Capture.Region),
+                        PixelDensity = RecordingOutputDensity(options.Capture.Region, DpiOutputFeature.VideoRecording,
+                            NativeDisplayCatalog.Density(options.Capture.Region)),
                     },
                 };
             options.Validate();

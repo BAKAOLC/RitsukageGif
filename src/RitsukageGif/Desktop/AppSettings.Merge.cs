@@ -64,6 +64,7 @@ namespace RitsukageGif.Desktop
                 ScreenshotClipboard = Merge(current.ScreenshotClipboard, baseline.ScreenshotClipboard,
                     edited.ScreenshotClipboard),
                 ScreenshotSave = Merge(current.ScreenshotSave, baseline.ScreenshotSave, edited.ScreenshotSave),
+                DpiOutput = current.DpiOutput.MergeChanges(baseline.DpiOutput, edited.DpiOutput),
                 Annotation = Merge(current.Annotation, baseline.Annotation, edited.Annotation),
                 PinnedImages = Merge(current.PinnedImages, baseline.PinnedImages, edited.PinnedImages),
                 PresetFiles =

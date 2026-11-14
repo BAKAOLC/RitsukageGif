@@ -5141,4 +5141,18 @@ X {0}, Y {1}</value>
   <data name="RecordingAnnotationUnavailable" xml:space="preserve">
     <value>此功能在视频录制期间不可用。</value>
   </data>
+  <data name="DpiOutputHeading" xml:space="preserve"><value>输出像素比例</value></data>
+  <data name="DpiOutputDefault" xml:space="preserve"><value>默认</value></data>
+  <data name="DpiOutputInherit" xml:space="preserve"><value>跟随默认</value></data>
+  <data name="DpiOutputPhysical" xml:space="preserve"><value>原始像素</value></data>
+  <data name="DpiOutputLogical" xml:space="preserve"><value>逻辑像素（按显示缩放）</value></data>
+  <data name="DpiOutputScreenshotSave" xml:space="preserve"><value>保存截图</value></data>
+  <data name="DpiOutputScreenshotCopy" xml:space="preserve"><value>复制截图</value></data>
+  <data name="DpiOutputLongScreenshotSave" xml:space="preserve"><value>保存长截图</value></data>
+  <data name="DpiOutputLongScreenshotCopy" xml:space="preserve"><value>复制长截图</value></data>
+  <data name="DpiOutputQuickRecording" xml:space="preserve"><value>快速录制</value></data>
+  <data name="DpiOutputScreenshotRecording" xml:space="preserve"><value>动图录制</value></data>
+  <data name="DpiOutputVideoRecording" xml:space="preserve"><value>视频录制</value></data>
+  <data name="DpiOutputHelp" xml:space="preserve"><value>显示缩放为 200% 时，逻辑像素会将宽度和高度减半。其他输出尺寸设置仍然生效。</value></data>
+  <data name="DpiOutputClipboardHelp" xml:space="preserve"><value>单独选择原始像素或逻辑像素时，以这里的设置为准。跟随默认时，保留已设置的剪贴板高 DPI 目标。</value></data>
 </root>

@@ -110,6 +110,8 @@ namespace RitsukageGif.Desktop
         private static void Validate(AppSettings settings)
         {
             var recording = settings.ScreenshotRecording;
+            // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+            if (settings.DpiOutput is null) throw Invalid(nameof(AppSettings.DpiOutput));
             if (recording != recording.Normalize()) throw Invalid(nameof(AppSettings.ScreenshotRecording));
             if (settings.Fps is < 1 or > 100 || settings.Divisor is < 1 or > 100 ||
                 settings.SnapRadius is < 0 or > 50 || settings.EdgeThreshold is < 1 or > 765 ||

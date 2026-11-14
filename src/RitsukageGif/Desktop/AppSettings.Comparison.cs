@@ -26,6 +26,7 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<bool>.Default.Equals(left.RestorePinnedImages, right.RestorePinnedImages) &&
                    Same(left.ScreenshotClipboard, right.ScreenshotClipboard) &&
                    Same(left.ScreenshotSave, right.ScreenshotSave) &&
+                   left.DpiOutput == right.DpiOutput &&
                    Same(left.Annotation, right.Annotation) &&
                    Same(left.PinnedImages, right.PinnedImages) &&
                    SameSequence(left.PresetFiles, right.PresetFiles,

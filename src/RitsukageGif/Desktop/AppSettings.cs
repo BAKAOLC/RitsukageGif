@@ -17,6 +17,7 @@ namespace RitsukageGif.Desktop
         public bool RestorePinnedImages { get; set; } = true;
         public ScreenshotClipboardPreferences ScreenshotClipboard { get; set; } = new();
         public ScreenshotSavePreferences ScreenshotSave { get; set; } = new();
+        public DpiOutputPreferences DpiOutput { get; set; } = new();
         public AnnotationPreferences Annotation { get; set; } = new();
         public PinnedImagePreferences PinnedImages { get; set; } = new();
         public List<string> PresetFiles { get; set; } = [];
@@ -106,6 +107,8 @@ namespace RitsukageGif.Desktop
                 settings.ScreenshotClipboard = (settings.ScreenshotClipboard ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.ScreenshotSave = (settings.ScreenshotSave ?? new()).Normalize();
+                // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
+                settings.DpiOutput ??= new();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.Annotation = (settings.Annotation ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract

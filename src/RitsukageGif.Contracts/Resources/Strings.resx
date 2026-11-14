@@ -5145,4 +5145,18 @@ screenshot</value>
   <data name="RecordingAnnotationUnavailable" xml:space="preserve">
     <value>This feature is unavailable during video recording.</value>
   </data>
+  <data name="DpiOutputHeading" xml:space="preserve"><value>Output pixel scale</value></data>
+  <data name="DpiOutputDefault" xml:space="preserve"><value>Default</value></data>
+  <data name="DpiOutputInherit" xml:space="preserve"><value>Use default</value></data>
+  <data name="DpiOutputPhysical" xml:space="preserve"><value>Original pixels</value></data>
+  <data name="DpiOutputLogical" xml:space="preserve"><value>Logical pixels (follow display scale)</value></data>
+  <data name="DpiOutputScreenshotSave" xml:space="preserve"><value>Save screenshot</value></data>
+  <data name="DpiOutputScreenshotCopy" xml:space="preserve"><value>Copy screenshot</value></data>
+  <data name="DpiOutputLongScreenshotSave" xml:space="preserve"><value>Save scrolling screenshot</value></data>
+  <data name="DpiOutputLongScreenshotCopy" xml:space="preserve"><value>Copy scrolling screenshot</value></data>
+  <data name="DpiOutputQuickRecording" xml:space="preserve"><value>Quick recording</value></data>
+  <data name="DpiOutputScreenshotRecording" xml:space="preserve"><value>Animation recording</value></data>
+  <data name="DpiOutputVideoRecording" xml:space="preserve"><value>Video recording</value></data>
+  <data name="DpiOutputHelp" xml:space="preserve"><value>Logical pixels halve the width and height at 200% display scaling. Other output size settings still apply.</value></data>
+  <data name="DpiOutputClipboardHelp" xml:space="preserve"><value>A specific choice overrides the clipboard's high-DPI target. Use default keeps any clipboard target you set.</value></data>
 </root>

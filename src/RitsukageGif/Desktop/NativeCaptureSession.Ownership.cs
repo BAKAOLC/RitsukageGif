@@ -3,8 +3,8 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class NativeCaptureSession
     {
-        private int _references = 1;
         private int _ownerReleased;
+        private int _references = 1;
 
         internal bool IsWindowSource { get; }
 
@@ -13,6 +13,31 @@ namespace RitsukageGif.Desktop
             get
             {
                 lock (_gate) return _frames is null ? null : _sourceGeometry?.Bounds;
+            }
+        }
+
+        internal double OutputScaling
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    if (_sourceGeometry is not { PixelWidth: > 0, PixelHeight: > 0 } source) return 1;
+                    if (_packet?.Metadata.Portal?.LogicalSize is not [> 0, > 0] logical) return 1;
+                    var scale = (double)source.PixelWidth / logical[0];
+                    // The portal may omit logical size or report it with compositor rounding.
+                    return scale is > 1 and <= 16 && Math.Abs(source.PixelHeight - logical[1] * scale) <= scale
+                        ? scale
+                        : 1;
+                }
+            }
+        }
+
+        internal static double SharedOutputScaling
+        {
+            get
+            {
+                lock (SharedLock) return _shared?.OutputScaling ?? 1;
             }
         }
 
