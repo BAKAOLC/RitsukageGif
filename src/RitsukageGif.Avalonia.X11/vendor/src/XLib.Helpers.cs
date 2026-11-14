@@ -1,0 +1,65 @@
+using System;
+using System.Runtime.InteropServices;
+
+namespace Avalonia.X11
+{
+    internal static partial class XLib
+    {
+        public static IntPtr[]? XGetWindowPropertyAsIntPtrArray(IntPtr display, IntPtr window, IntPtr atom,
+            IntPtr reqType)
+        {
+            if (XGetWindowProperty(display, window, atom, IntPtr.Zero, new(0x7fffffff),
+                    false, reqType, out var actualType, out var actualFormat, out var nitems, out _,
+                    out var prop) != 0)
+                return null;
+
+            try
+            {
+                if (actualType != reqType || actualFormat != 32 || nitems == IntPtr.Zero)
+                    return null;
+
+                var buffer = new IntPtr[nitems.ToInt32()];
+                Marshal.Copy(prop, buffer, 0, buffer.Length);
+                return buffer;
+            }
+            finally
+            {
+                if (prop != 0)
+                    XFree(prop);
+            }
+        }
+
+        public static IntPtr? XGetWindowPropertyAsIntPtr(IntPtr display, IntPtr window, IntPtr atom, IntPtr reqType)
+        {
+            if ((Status)XGetWindowProperty(
+                    display, window, atom, 0, 1, false, reqType,
+                    out var actualType, out var actualFormat, out var itemCount, out _, out var prop) != Status.Success)
+                return null;
+
+            try
+            {
+                if (actualType != reqType || actualFormat != 32 || itemCount != 1)
+                    return null;
+
+                unsafe
+                {
+                    return *(IntPtr*)prop;
+                }
+            }
+            finally
+            {
+                if (prop != 0)
+                    XFree(prop);
+            }
+        }
+
+        public static unsafe IntPtr[] XRRListOutputPropertiesAsArray(IntPtr display, IntPtr output)
+        {
+            var pList = XRRListOutputProperties(display, output, out var propertyCount);
+            var rv = new IntPtr[propertyCount];
+            new Span<IntPtr>(pList, propertyCount).CopyTo(rv);
+            XFree(pList);
+            return rv;
+        }
+    }
+}

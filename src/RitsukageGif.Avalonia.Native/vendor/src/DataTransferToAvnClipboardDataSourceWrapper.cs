@@ -10,8 +10,8 @@ namespace Avalonia.Native
     ///     This class is called by native code.
     /// </summary>
     /// <param name="dataTransfer">The data transfer object to wrap.</param>
-    internal sealed class DataTransferToAvnClipboardDataSourceWrapper(IDataTransfer dataTransfer)
-        : NativeOwned, IAvnClipboardDataSource
+    internal sealed partial class DataTransferToAvnClipboardDataSourceWrapper(IDataTransfer dataTransfer)
+        : NativeOwned, IAvnClipboardDataSource, IAvnDragPreview
     {
         private IDataTransfer? _dataTransfer = dataTransfer;
 

@@ -1,0 +1,245 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using Windows.Win32;
+using Windows.Win32.Graphics.Gdi;
+using Avalonia.Logging;
+using Avalonia.OpenGL.Egl;
+using Avalonia.Platform.Surfaces;
+using Avalonia.Rendering;
+using MicroCom.Runtime;
+using static Avalonia.Win32.DirectX.DirectXUnmanagedMethods;
+using static Avalonia.Win32.Interop.UnmanagedMethods;
+
+namespace Avalonia.Win32.DirectX
+{
+    internal unsafe class DxgiConnection : IRenderTimer, IWindowsSurfaceFactory
+    {
+        public const uint ENUM_CURRENT_SETTINGS = unchecked((uint)-1);
+
+        public bool RunsInBackground => true;
+
+        private volatile Action<TimeSpan>? _tick;
+        private readonly object _syncLock;
+        private readonly AutoResetEvent _wakeEvent = new(false);
+        private volatile bool _stopped = true;
+
+        private IDXGIOutput? _output;
+
+        private Stopwatch? _stopwatch;
+
+        public DxgiConnection(object syncLock)
+        {
+            _syncLock = syncLock;
+        }
+        private const string LogArea = "DXGI";
+
+        public Action<TimeSpan>? Tick
+        {
+            get => _tick;
+            set
+            {
+                if (value != null)
+                {
+                    _tick = value;
+                    _stopped = false;
+                    _wakeEvent.Set();
+                }
+                else
+                {
+                    _stopped = true;
+                    _tick = null;
+                }
+            }
+        }
+
+        public bool RequiresNoRedirectionBitmap => false;
+
+        public IPlatformRenderSurface CreateSurface(EglGlPlatformSurface.IEglWindowGlPlatformSurfaceInfo info)
+        {
+            return new DxgiSwapchainWindow(this, info);
+        }
+
+        public static bool TryCreateAndRegister()
+        {
+            try
+            {
+                TryCreateAndRegisterCore();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.TryGet(LogEventLevel.Error, LogArea)
+                    ?.Log(null, "Unable to establish Dxgi: {0}", ex);
+                return false;
+            }
+        }
+
+        private void RunLoop()
+        {
+            _stopwatch = Stopwatch.StartNew();
+            try
+            {
+                GetBestOutputToVWaitOn();
+            }
+            catch (Exception ex)
+            {
+                Logger.TryGet(LogEventLevel.Error, LogArea)
+                    ?.Log(this, $"Failed to wait for vblank, Exception: {ex.Message}, HRESULT = {ex.HResult}");
+            }
+
+            while (true)
+                try
+                {
+                    if (_stopped)
+                        _wakeEvent.WaitOne();
+
+                    lock (_syncLock)
+                    {
+                        if (_output is not null)
+                            try
+                            {
+                                _output.WaitForVBlank();
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.TryGet(LogEventLevel.Error, LogArea)
+                                    ?.Log(this,
+                                        $"Failed to wait for vblank, Exception: {ex.Message}, HRESULT = {ex.HResult}");
+                                _output.Dispose();
+                                _output = null;
+                                GetBestOutputToVWaitOn();
+                            }
+                        else
+                            // well since that obviously didn't work, then let's use the lowest-common-denominator instead 
+                            // for reference, this has never happened on my machine,
+                            // but theoretically someone could have a weirder setup out there 
+                            DwmFlush();
+
+                        _tick?.Invoke(_stopwatch.Elapsed);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.TryGet(LogEventLevel.Error, LogArea)
+                        ?.Log(this, $"Failed to wait for vblank, Exception: {ex.Message}, HRESULT = {ex.HResult}");
+                }
+        }
+
+        // Note: Defining best as display with highest refresh rate on 
+        private void GetBestOutputToVWaitOn()
+        {
+            var highestRefreshRate = 0.0d;
+
+            // IDXGIFactory Guid: [Guid("7B7166EC-21C7-44AE-B21A-C9AE321AE369")]
+            var factoryGuid = MicroComRuntime.GetGuidFor(typeof(IDXGIFactory));
+            CreateDXGIFactory(ref factoryGuid, out var factPointer);
+
+            using var fact = MicroComRuntime.CreateProxyFor<IDXGIFactory>(factPointer, true);
+
+            void* adapterPointer = null;
+
+            ushort adapterIndex = 0;
+
+            var monitorFrequencies = GetAllMonitorFrequencies();
+
+            // this looks odd, but that's just how one enumerates adapters in DXGI 
+            while (fact.EnumAdapters(adapterIndex, &adapterPointer) == 0)
+            {
+                using var adapter = MicroComRuntime.CreateProxyFor<IDXGIAdapter>(adapterPointer, true);
+                void* outputPointer = null;
+                ushort outputIndex = 0;
+                while (adapter.EnumOutputs(outputIndex, &outputPointer) == 0)
+                {
+                    using var output = MicroComRuntime.CreateProxyFor<IDXGIOutput>(outputPointer, true);
+                    var outputDesc = output.Desc;
+
+                    var hMonitor = new HMONITOR(outputDesc.Monitor.Value);
+
+                    var frequency =
+                        monitorFrequencies.TryGetValue(hMonitor, out var frequencyValue)
+                            ? frequencyValue
+                            : highestRefreshRate;
+
+                    if (highestRefreshRate < frequency)
+                    {
+                        // ooh I like this output! 
+                        if (_output is not null)
+                        {
+                            _output.Dispose();
+                            _output = null;
+                        }
+
+                        _output = output.CloneReference();
+                        highestRefreshRate = frequency;
+                    }
+
+                    // and then increment index to move onto the next monitor 
+                    outputIndex++;
+                }
+
+                // and then increment index to move onto the next display adapater
+                adapterIndex++;
+            }
+        }
+
+        private Dictionary<HMONITOR /*MonitorHandler*/, uint /*Frequency*/> GetAllMonitorFrequencies()
+        {
+            var monitorHandlers = ScreenImpl.GetAllDisplayMonitorHandlers();
+            var dictionary = new Dictionary<HMONITOR /*MonitorHandler*/, uint /*Frequency*/>(monitorHandlers.Count);
+
+            foreach (var monitorHandler in monitorHandlers)
+            {
+                var info = MONITORINFOEX.Create();
+                var hMonitor = new HMONITOR(monitorHandler);
+                PInvoke.GetMonitorInfo(hMonitor, (MONITORINFO*)&info);
+
+                var deviceMode = new DEVMODEW
+                {
+                    dmFields = DEVMODE_FIELD_FLAGS.DM_DISPLAYORIENTATION | DEVMODE_FIELD_FLAGS.DM_DISPLAYFREQUENCY,
+                    dmSize = (ushort)Marshal.SizeOf<DEVMODEW>(),
+                };
+                PInvoke.EnumDisplaySettings(info.szDevice.ToString(), ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS,
+                    ref deviceMode);
+
+                var frequency = deviceMode.dmDisplayFrequency;
+
+                dictionary[hMonitor] = frequency;
+            }
+
+            return dictionary;
+        }
+
+        // Used the windows composition as a blueprint for this startup/creation 
+        private static bool TryCreateAndRegisterCore()
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            var pumpLock = new object();
+            var thread = new Thread(() =>
+            {
+                try
+                {
+                    var connection = new DxgiConnection(pumpLock);
+
+                    AvaloniaLocator.CurrentMutable.Bind<IWindowsSurfaceFactory>().ToConstant(connection);
+                    AvaloniaLocator.CurrentMutable.Bind<IRenderLoop>().ToConstant(RenderLoop.FromTimer(connection));
+                    tcs.SetResult(true);
+                    connection.RunLoop();
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+            thread.IsBackground = true;
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Name = "DxgiRenderTimerLoop";
+            thread.Start();
+            // block until 
+            return tcs.Task.Result;
+        }
+    }
+}

@@ -1,0 +1,48 @@
+<Project>
+  <PropertyGroup>
+    <_AvaloniaMacNative
+      Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('osx-')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')))">
+      true
+    </_AvaloniaMacNative>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(_AvaloniaMacNative)' == 'true'">
+    <_AvaloniaMacArchitecture>arm64</_AvaloniaMacArchitecture>
+    <_AvaloniaMacArchitecture
+      Condition="'$(RuntimeIdentifier)' == 'osx-x64' Or ('$(RuntimeIdentifier)' == '' And '$(NETCoreSdkRuntimeIdentifier)' == 'osx-x64')">
+      x86_64
+    </_AvaloniaMacArchitecture>
+    <_AvaloniaMacSource>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', 'vendor/native'))</_AvaloniaMacSource>
+    <_AvaloniaMacOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'avalonia-macos', '$(Configuration)', '$(_AvaloniaMacArchitecture)'))</_AvaloniaMacOutput>
+    <_AvaloniaMacHeader>$(_AvaloniaMacOutput)avalonia-native.h</_AvaloniaMacHeader>
+    <_AvaloniaMacDylib>$(_AvaloniaMacOutput)libAvalonia.Native.OSX.dylib</_AvaloniaMacDylib>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(_AvaloniaMacNative)' == 'true'">
+    <PackageReference Include="MicroCom.CodeGenerator.MSBuild" Version="0.11.6" PrivateAssets="all" />
+    <MicroComIdl Update="vendor/src/avn.idl" CppHeaderPath="$(_AvaloniaMacHeader)" />
+    <_AvaloniaMacInput
+      Include="$(_AvaloniaMacSource)inc/**/*.h;$(_AvaloniaMacSource)src/OSX/**/*.mm;$(_AvaloniaMacSource)src/OSX/**/*.h;$(_AvaloniaMacSource)src/OSX/**/*.pbxproj" />
+    <Content Include="$(_AvaloniaMacDylib)" Link="libAvaloniaNative.dylib"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+  <Target Name="PrepareAvaloniaMacNativeHeader" BeforeTargets="GenerateMicroComItems"
+          Condition="'$(_AvaloniaMacNative)' == 'true'">
+    <MakeDir Directories="$(_AvaloniaMacOutput)" />
+    <ItemGroup>
+      <FileWrites Include="$(_AvaloniaMacHeader);$(_AvaloniaMacDylib)" />
+    </ItemGroup>
+  </Target>
+  <Target Name="BuildAvaloniaMacNative"
+          BeforeTargets="CoreCompile;GetCopyToOutputDirectoryItems;GetCopyToPublishDirectoryItems"
+          DependsOnTargets="GenerateMicroComItems"
+          Inputs="@(_AvaloniaMacInput);$(_AvaloniaMacHeader);$(MSBuildAllProjects)" Outputs="$(_AvaloniaMacDylib)"
+          Condition="'$(_AvaloniaMacNative)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!$([MSBuild]::IsOSPlatform('OSX'))"
+           Text="Building libAvaloniaNative.dylib requires Xcode on macOS." />
+    <Error
+      Condition="'$(RuntimeIdentifier)' != '' And '$(RuntimeIdentifier)' != 'osx-arm64' And '$(RuntimeIdentifier)' != 'osx-x64'"
+      Text="Unsupported Avalonia macOS runtime identifier: $(RuntimeIdentifier)." />
+    <Exec
+      Command="xcodebuild -quiet -project &quot;$(_AvaloniaMacSource)src/OSX/Avalonia.Native.OSX.xcodeproj&quot; -target Avalonia.Native.OSX -configuration &quot;$(Configuration)&quot; ARCHS=$(_AvaloniaMacArchitecture) ONLY_ACTIVE_ARCH=NO CONFIGURATION_BUILD_DIR=&quot;$(_AvaloniaMacOutput)&quot; OBJROOT=&quot;$(_AvaloniaMacOutput)xcode&quot; HEADER_SEARCH_PATHS=&quot;\&quot;$(_AvaloniaMacSource)inc\&quot; \&quot;$(_AvaloniaMacOutput)\&quot;&quot; CODE_SIGNING_ALLOWED=NO" />
+    <Error Condition="!Exists('$(_AvaloniaMacDylib)')" Text="Xcode did not produce $(_AvaloniaMacDylib)." />
+  </Target>
+</Project>

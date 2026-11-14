@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Avalonia.X11</AssemblyName>
+    <PackageId>Avalonia.X11.Patched</PackageId>
+    <RootNamespace>Avalonia.X11</RootNamespace>
+    <Version>12.1.4</Version>
+    <AssemblyVersion>12.1.4.0</AssemblyVersion>
+    <FileVersion>12.1.4.0</FileVersion>
+    <InformationalVersion>12.1.4</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableRuntimeMarshalling>true</EnableRuntimeMarshalling>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../RitsukageGif.Avalonia.Native/vendor/avalonia.snk</AssemblyOriginatorKeyFile>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="vendor/src/**/*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="vendor/shared/RawEventGrouping.cs" Link="RawEventGrouping.cs" />
+    <Content Include="vendor/LICENSE" Link="THIRD-PARTY-NOTICES/Avalonia.X11.txt"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <ProjectReference Include="../RitsukageGif.DragPreview/RitsukageGif.DragPreview.csproj" />
+    <ProjectReference Include="../RitsukageGif.Avalonia.Generators/RitsukageGif.Avalonia.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+    <PackageReference Include="Avalonia" Version="12.1.4" GeneratePathProperty="true" ExcludeAssets="compile" />
+    <Reference Include="$(PkgAvalonia)/lib/net10.0/*.dll" Private="false" />
+    <PackageReference Include="Avalonia.FreeDesktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.FreeDesktop.AtSpi" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.4" />
+  </ItemGroup>
+</Project>

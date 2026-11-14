@@ -1,0 +1,159 @@
+﻿using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+using MicroCom.Runtime;
+
+namespace Avalonia.Win32.WinRT
+{
+    internal static class NativeWinRTMethods
+    {
+        private static bool s_initialized;
+
+        [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll", CallingConvention = CallingConvention.StdCall,
+            PreserveSig = false)]
+        internal static extern IntPtr WindowsCreateString(
+            [MarshalAs(UnmanagedType.LPWStr)] string sourceString,
+            int length);
+
+        internal static IntPtr WindowsCreateString(string sourceString)
+        {
+            return WindowsCreateString(sourceString, sourceString.Length);
+        }
+
+        [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll", CallingConvention = CallingConvention.StdCall)]
+        internal static extern unsafe char* WindowsGetStringRawBuffer(IntPtr hstring, uint* length);
+
+        [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll",
+            CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
+        internal static extern void WindowsDeleteString(IntPtr hString);
+
+        [DllImport("Windows.UI.Composition", EntryPoint = "DllGetActivationFactory",
+            CallingConvention = CallingConvention.StdCall, PreserveSig = false)]
+        private static extern IntPtr GetWindowsUICompositionActivationFactory(
+            IntPtr activatableClassId);
+
+        internal static IActivationFactory GetWindowsUICompositionActivationFactory(string className)
+        {
+            //"Windows.UI.Composition.Compositor"
+            var s = WindowsCreateString(className);
+            var factory = GetWindowsUICompositionActivationFactory(s);
+            return MicroComRuntime.CreateProxyFor<IActivationFactory>(factory, true);
+        }
+
+        internal static T CreateInstance<T>(string fullName) where T : IUnknown
+        {
+            var s = WindowsCreateString(fullName);
+            EnsureRoInitialized();
+            var pUnk = RoActivateInstance(s);
+            using var unk = MicroComRuntime.CreateProxyFor<IUnknown>(pUnk, true);
+            WindowsDeleteString(s);
+            return unk.QueryInterface<T>();
+        }
+
+        internal static TFactory CreateActivationFactory<TFactory>(string fullName) where TFactory : IUnknown
+        {
+            var s = WindowsCreateString(fullName);
+            EnsureRoInitialized();
+            var guid = MicroComRuntime.GetGuidFor(typeof(TFactory));
+            var pUnk = RoGetActivationFactory(s, ref guid);
+            using var unk = MicroComRuntime.CreateProxyFor<IUnknown>(pUnk, true);
+            WindowsDeleteString(s);
+            return unk.QueryInterface<TFactory>();
+        }
+
+        [DllImport("coremessaging.dll", PreserveSig = false)]
+        internal static extern IntPtr CreateDispatcherQueueController(DispatcherQueueOptions options);
+
+        [DllImport("combase.dll", PreserveSig = false)]
+        private static extern void RoInitialize(RO_INIT_TYPE initType);
+
+        [DllImport("combase.dll", PreserveSig = false)]
+        private static extern IntPtr RoActivateInstance(IntPtr activatableClassId);
+
+        [DllImport("combase.dll", PreserveSig = false)]
+        private static extern IntPtr RoGetActivationFactory(IntPtr activatableClassId, ref Guid iid);
+
+        private static void EnsureRoInitialized()
+        {
+            if (s_initialized)
+                return;
+            RoInitialize(Thread.CurrentThread.GetApartmentState() == ApartmentState.STA
+                ? RO_INIT_TYPE.RO_INIT_SINGLETHREADED
+                : RO_INIT_TYPE.RO_INIT_MULTITHREADED);
+            s_initialized = true;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate int GetActivationFactoryDelegate(IntPtr classId, out IntPtr ppv);
+
+        internal enum DISPATCHERQUEUE_THREAD_APARTMENTTYPE
+        {
+            DQTAT_COM_NONE = 0,
+            DQTAT_COM_ASTA = 1,
+            DQTAT_COM_STA = 2,
+        }
+
+        internal enum DISPATCHERQUEUE_THREAD_TYPE
+        {
+            DQTYPE_THREAD_DEDICATED = 1,
+            DQTYPE_THREAD_CURRENT = 2,
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct DispatcherQueueOptions
+        {
+            public int dwSize;
+
+            [MarshalAs(UnmanagedType.I4)] public DISPATCHERQUEUE_THREAD_TYPE threadType;
+
+            [MarshalAs(UnmanagedType.I4)] public DISPATCHERQUEUE_THREAD_APARTMENTTYPE apartmentType;
+        }
+
+        internal enum RO_INIT_TYPE
+        {
+            RO_INIT_SINGLETHREADED = 0, // Single-threaded application
+            RO_INIT_MULTITHREADED = 1, // COM calls objects on any thread.
+        }
+    }
+
+    internal class HStringInterop : IDisposable
+    {
+        private readonly bool _owns;
+
+        public HStringInterop(string? s)
+        {
+            Handle = s == null ? IntPtr.Zero : NativeWinRTMethods.WindowsCreateString(s);
+            _owns = true;
+        }
+
+        public HStringInterop(IntPtr str, bool owns = false)
+        {
+            Handle = str;
+            _owns = owns;
+        }
+
+        public IntPtr Handle { get; private set; }
+
+        public unsafe string? Value
+        {
+            get
+            {
+                if (Handle == IntPtr.Zero)
+                    return null;
+
+                uint length;
+                var buffer = NativeWinRTMethods.WindowsGetStringRawBuffer(Handle, &length);
+                return new(buffer, 0, (int)length);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (Handle != IntPtr.Zero && _owns)
+            {
+                NativeWinRTMethods.WindowsDeleteString(Handle);
+                Handle = IntPtr.Zero;
+            }
+        }
+    }
+}

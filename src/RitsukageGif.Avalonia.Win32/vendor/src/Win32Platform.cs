@@ -1,0 +1,354 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Platform;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Rendering;
+using Avalonia.Rendering.Composition;
+using Avalonia.Threading;
+using Avalonia.Utilities;
+using Avalonia.Win32;
+using Avalonia.Win32.Input;
+using static Avalonia.Win32.Interop.UnmanagedMethods;
+
+namespace Avalonia
+{
+    public static class Win32ApplicationExtensions
+    {
+        public static AppBuilder UseWin32(this AppBuilder builder)
+        {
+            return builder
+                .UseStandardRuntimePlatformSubsystem()
+                .UseWindowingSubsystem(
+                    () => Win32Platform.Initialize(
+                        AvaloniaLocator.Current.GetService<Win32PlatformOptions>() ?? new Win32PlatformOptions()),
+                    "Win32");
+        }
+    }
+}
+
+namespace Avalonia.Win32
+{
+    internal class Win32Platform : IWindowingPlatform, IPlatformIconLoader, IPlatformLifetimeEventsImpl
+    {
+        private static Win32PlatformOptions? s_options;
+        private static Compositor? s_compositor;
+        internal const int TIMERID_DISPATCHER = 1;
+        private const int DefaultFramesPerSecond = 60;
+        private WndProc? _wndProcDelegate;
+        private readonly Win32DispatcherImpl _dispatcher;
+
+        public Win32Platform()
+        {
+            CreateMessageWindow();
+            _dispatcher = new(Handle);
+        }
+
+        internal static Win32Platform Instance { get; } = new();
+
+        internal IPlatformSettings PlatformSettings => AvaloniaLocator.Current.GetRequiredService<IPlatformSettings>();
+        internal ScreenImpl Screen => (ScreenImpl)AvaloniaLocator.Current.GetRequiredService<IScreenImpl>();
+
+        internal IntPtr Handle { get; private set; }
+
+        /// <summary>
+        ///     Gets the actual WindowsVersion. Same as the info returned from RtlGetVersion.
+        /// </summary>
+        public static Version WindowsVersion { get; } = RtlGetVersion();
+
+        internal static bool UseOverlayPopups => Options.OverlayPopups;
+
+        public static Win32PlatformOptions Options
+            => s_options ?? throw new InvalidOperationException($"{nameof(Win32Platform)} hasn't been initialized");
+
+        internal static Compositor Compositor
+            => s_compositor ?? throw new InvalidOperationException($"{nameof(Win32Platform)} hasn't been initialized");
+
+        public IWindowIconImpl LoadIcon(string fileName)
+        {
+            using (var stream = File.OpenRead(fileName)) return new IconImpl(stream);
+        }
+
+        public IWindowIconImpl LoadIcon(Stream stream)
+        {
+            return new IconImpl(stream);
+        }
+
+        public IWindowIconImpl LoadIcon(IBitmapImpl bitmap)
+        {
+            using (var memoryStream = new MemoryStream())
+            {
+                bitmap.Save(memoryStream, PngBitmapEncoderOptions.Default);
+                memoryStream.Seek(0, SeekOrigin.Begin);
+                return new IconImpl(memoryStream);
+            }
+        }
+
+        public event EventHandler<ShutdownRequestedEventArgs>? ShutdownRequested;
+
+        public ITrayIconImpl CreateTrayIcon()
+        {
+            return new TrayIconImpl();
+        }
+
+        public IWindowImpl CreateWindow()
+        {
+            return new WindowImpl();
+        }
+
+        public ITopLevelImpl CreateEmbeddableTopLevel()
+        {
+            return CreateEmbeddableWindow();
+        }
+
+        public IWindowImpl CreateEmbeddableWindow()
+        {
+            var embedded = new EmbeddedWindowImpl();
+            embedded.Show(false, false);
+            return embedded;
+        }
+
+        public void GetWindowsZOrder(ReadOnlySpan<IWindowImpl> windows, Span<long> zOrder)
+        {
+            var handlesToIndex = new Dictionary<IntPtr, int>(windows.Length);
+            var outputArray = new long[windows.Length];
+
+            for (var i = 0; i < windows.Length; i++)
+                if (windows[i] is WindowImpl platformImpl)
+                    handlesToIndex.Add(platformImpl.Handle.Handle, i);
+
+            long nextZOrder = 0;
+
+            bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam)
+            {
+                if (handlesToIndex.TryGetValue(hWnd, out var index))
+                {
+                    // We negate the z-order so that the topmost window has the highest number.
+                    outputArray[index] = -nextZOrder;
+                    nextZOrder++;
+                }
+
+                return nextZOrder < outputArray.Length;
+            }
+
+            EnumChildWindows(IntPtr.Zero, EnumWindowsProc, IntPtr.Zero);
+
+            outputArray.CopyTo(zOrder);
+        }
+
+        public static void Initialize()
+        {
+            Initialize(new());
+        }
+
+        public static void Initialize(Win32PlatformOptions options)
+        {
+            s_options = options;
+
+            SetDpiAwareness();
+
+            Dispatcher.InitializeUIThreadDispatcher(Instance._dispatcher);
+
+            IRenderTimer renderTimer = options.ShouldRenderOnUIThread
+                ? new UiThreadRenderTimer(DefaultFramesPerSecond)
+                : new SleepLoopRenderTimer(DefaultFramesPerSecond);
+            var clipboardImpl = new ClipboardImpl();
+            var clipboard = new Clipboard(clipboardImpl);
+
+            AvaloniaLocator.CurrentMutable
+                .Bind<IClipboardImpl>().ToConstant(clipboardImpl)
+                .Bind<IClipboard>().ToConstant(clipboard)
+                .Bind<ICursorFactory>().ToConstant(CursorFactory.Instance)
+                .Bind<IKeyboardDevice>().ToConstant(WindowsKeyboardDevice.Instance)
+                .Bind<IPlatformSettings>().ToSingleton<Win32PlatformSettings>()
+                .Bind<IScreenImpl>().ToSingleton<ScreenImpl>()
+                .Bind<IRenderLoop>().ToConstant(RenderLoop.FromTimer(renderTimer))
+                .Bind<IWindowingPlatform>().ToConstant(Instance)
+                .Bind<PlatformHotkeyConfiguration>().ToConstant(new PlatformHotkeyConfiguration(KeyModifiers.Control)
+                {
+                    OpenContextMenu =
+                    {
+                        // Add Shift+F10
+                        new(Key.F10, KeyModifiers.Shift),
+                    },
+                })
+                .Bind<KeyGestureFormatInfo>().ToConstant(new KeyGestureFormatInfo(new Dictionary<Key, string>(), "Win"))
+                .Bind<IPlatformIconLoader>().ToConstant(Instance)
+                .Bind<NonPumpingLockHelper.IHelperImpl>().ToConstant(NonPumpingWaitHelperImpl.Instance)
+                .Bind<IMountedVolumeInfoProvider>().ToConstant(new WindowsMountedVolumeInfoProvider())
+                .Bind<IPlatformLifetimeEventsImpl>().ToConstant(Instance);
+
+            IPlatformGraphics? platformGraphics;
+            if (options.CustomPlatformGraphics is not null)
+            {
+                if (options.CompositionMode?.Contains(Win32CompositionMode.RedirectionSurface) == false)
+                    throw new InvalidOperationException(
+                        $"{nameof(Win32PlatformOptions)}.{nameof(Win32PlatformOptions.CustomPlatformGraphics)} is only " +
+                        $"compatible with {nameof(Win32CompositionMode)}.{nameof(Win32CompositionMode.RedirectionSurface)}");
+
+                platformGraphics = options.CustomPlatformGraphics;
+            }
+            else
+            {
+                platformGraphics = Win32GlManager.Initialize();
+            }
+
+            if (OleContext.Current != null)
+                AvaloniaLocator.CurrentMutable.Bind<IPlatformDragSource>().ToSingleton<DragSource>();
+
+            UpdateTimerFps();
+
+            s_compositor = new(platformGraphics);
+            AvaloniaLocator.CurrentMutable.Bind<Compositor>().ToConstant(s_compositor);
+        }
+
+        [SuppressMessage("Microsoft.StyleCop.CSharp.NamingRules", "SA1305:FieldNamesMustNotUseHungarianNotation",
+            Justification = "Using Win32 naming for consistency.")]
+        private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        {
+            if (msg == (int)WindowsMessage.WM_DISPATCH_WORK_ITEM
+                && wParam.ToInt64() == Win32DispatcherImpl.SignalW
+                && lParam.ToInt64() == Win32DispatcherImpl.SignalL)
+                _dispatcher?.DispatchWorkItem();
+
+            if (msg == (uint)WindowsMessage.WM_QUERYENDSESSION)
+                if (ShutdownRequested != null)
+                {
+                    // https://learn.microsoft.com/en-us/windows/win32/shutdown/wm-queryendsession
+                    // > LPARAM lParam   // logoff option
+                    // >
+                    // > This parameter can be one or more of the following values. If this parameter is 0, the system is shutting down or restarting (it is not possible to determine which event is occurring).
+                    // >
+                    // > - ENDSESSION_CLOSEAPP 0x00000001 The application is using a file that must be replaced, the system is being serviced, or system resources are exhausted. For more information, see Guidelines for Applications.
+                    // > - ENDSESSION_CRITICAL 0x40000000 The application is forced to shut down.
+                    // > - ENDSESSION_LOGOFF 0x80000000 The user is logging off.
+                    var e = new ShutdownRequestedEventArgs
+                    {
+                        IsOSShutdown = lParam == IntPtr.Zero,
+                    };
+
+                    ShutdownRequested(this, e);
+
+                    if (e.Cancel) return IntPtr.Zero;
+                }
+
+            if (msg == (uint)WindowsMessage.WM_DISPLAYCHANGE)
+            {
+                Screen?.OnChanged();
+                UpdateTimerFps();
+            }
+
+            if (msg == (uint)WindowsMessage.WM_SETTINGCHANGE)
+            {
+                if (PlatformSettings is Win32PlatformSettings win32PlatformSettings)
+                {
+                    var changedSetting = Marshal.PtrToStringAuto(lParam);
+                    if (changedSetting == "ImmersiveColorSet" // dark/light mode
+                        || changedSetting == "WindowsThemeElement") // high contrast mode
+                        win32PlatformSettings.OnColorValuesChanged();
+                }
+
+                // Notify WorkingArea changed to Screens
+                if ((SystemParametersInfo)wParam == SystemParametersInfo.SPI_SETWORKAREA) Screen?.OnChanged();
+            }
+
+            if (msg == (uint)WindowsMessage.WM_TIMER)
+                if (wParam == TIMERID_DISPATCHER)
+                    _dispatcher?.FireTimer();
+
+            TrayIconImpl.ProcWnd(hWnd, msg, wParam, lParam);
+
+            return DefWindowProc(hWnd, msg, wParam, lParam);
+        }
+
+        internal static void UpdateTimerFps()
+        {
+            var maxDisplayFrequency =
+                Math.Max(60, Instance.Screen?.AllScreens?.Max(s => (s as WinScreen)?.Frequency) ?? 0);
+            if (AvaloniaLocator.Current.GetService<IRenderLoop>() is DefaultRenderLoop defaultRenderLoop &&
+                defaultRenderLoop.Timer is SleepLoopRenderTimer sleepLoopRenderTimer)
+                sleepLoopRenderTimer.DesiredFps = maxDisplayFrequency;
+        }
+
+        private void CreateMessageWindow()
+        {
+            // Ensure that the delegate doesn't get garbage collected by storing it as a field.
+            _wndProcDelegate = WndProc;
+
+            var wndClassEx = new WNDCLASSEX
+            {
+                cbSize = Marshal.SizeOf<WNDCLASSEX>(),
+                lpfnWndProc = _wndProcDelegate,
+                hInstance = GetModuleHandle(null),
+                lpszClassName = "AvaloniaMessageWindow " + Guid.NewGuid(),
+            };
+
+            var atom = RegisterClassEx(ref wndClassEx);
+
+            if (atom == 0) throw new Win32Exception();
+
+            Handle = CreateWindowEx(0, atom, null, 0, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+
+            if (Handle == IntPtr.Zero) throw new Win32Exception();
+
+            TrayIconImpl.ChangeWindowMessageFilter(Handle);
+        }
+
+        private static void SetDpiAwareness()
+        {
+            // Ideally we'd set DPI awareness in the manifest but this doesn't work for netcoreapp2.0
+            // apps as they are actually dlls run by a console loader. Instead we have to do it in code,
+            // but there are various ways to do this depending on the OS version.
+            var user32 = LoadLibrary("user32.dll");
+            var method = GetProcAddress(user32, nameof(SetProcessDpiAwarenessContext));
+
+            var dpiAwareness = Options.DpiAwareness;
+
+            if (method != IntPtr.Zero)
+            {
+                if (dpiAwareness == Win32DpiAwareness.Unaware)
+                {
+                    if (SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_UNAWARE)) return;
+                }
+                else if (dpiAwareness == Win32DpiAwareness.SystemDpiAware)
+                {
+                    if (SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_SYSTEM_AWARE)) return;
+                }
+                else if (dpiAwareness == Win32DpiAwareness.PerMonitorDpiAware)
+                {
+                    if (SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) ||
+                        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE))
+                        return;
+                }
+            }
+
+            var shcore = LoadLibrary("shcore.dll");
+            method = GetProcAddress(shcore, nameof(SetProcessDpiAwareness));
+
+            if (method != IntPtr.Zero)
+            {
+                var awareness = dpiAwareness switch
+                {
+                    Win32DpiAwareness.Unaware => PROCESS_DPI_AWARENESS.PROCESS_DPI_UNAWARE,
+                    Win32DpiAwareness.SystemDpiAware => PROCESS_DPI_AWARENESS.PROCESS_SYSTEM_DPI_AWARE,
+                    Win32DpiAwareness.PerMonitorDpiAware => PROCESS_DPI_AWARENESS.PROCESS_PER_MONITOR_DPI_AWARE,
+                    _ => PROCESS_DPI_AWARENESS.PROCESS_PER_MONITOR_DPI_AWARE,
+                };
+
+                SetProcessDpiAwareness(awareness);
+                return;
+            }
+
+            if (dpiAwareness != Win32DpiAwareness.Unaware)
+                SetProcessDPIAware();
+        }
+    }
+}

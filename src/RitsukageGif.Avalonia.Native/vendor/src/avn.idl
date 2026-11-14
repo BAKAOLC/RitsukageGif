@@ -1015,6 +1015,15 @@ interface IAvnClipboardDataSource : IUnknown
     HRESULT GetItem(int index, IAvnClipboardDataItem**ppv);
 }
 
+[uuid(5c89e8c3-4b51-4bdb-aef3-9598202df86d)]
+interface IAvnDragPreview : IUnknown
+{
+    HRESULT GetPixelSize(AvnPixelSize* ret);
+    HRESULT GetHotSpot(AvnPoint* ret);
+    double GetScaling();
+    HRESULT CopyPixels(void* buffer, int bufferSize);
+}
+
 [uuid(e40f36d9-69f4-45fd-9ca2-6e64e80feb6d)]
 interface IAvnClipboardDataItem : IUnknown
 {

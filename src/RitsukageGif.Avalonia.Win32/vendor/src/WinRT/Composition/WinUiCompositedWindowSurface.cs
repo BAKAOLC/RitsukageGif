@@ -1,0 +1,259 @@
+using System;
+using System.Diagnostics.CodeAnalysis;
+using Avalonia.OpenGL.Egl;
+using Avalonia.Platform;
+using Avalonia.Rendering.Composition;
+using Avalonia.Win32.DirectX;
+using Avalonia.Win32.Interop;
+using MicroCom.Runtime;
+
+namespace Avalonia.Win32.WinRT.Composition
+{
+    internal class WinUiCompositedWindowSurface : IDirect3D11TexturePlatformSurface, IDirect3D11TexturePlatformSurface2,
+        IDisposable, ICompositionEffectsSurface
+    {
+        private readonly WinUiCompositionShared _shared;
+        private readonly EglGlPlatformSurface.IEglWindowGlPlatformSurfaceInfo _info;
+        private WinUiCompositedWindow? _window;
+
+        public WinUiCompositedWindowSurface(WinUiCompositionShared shared,
+            EglGlPlatformSurface.IEglWindowGlPlatformSurfaceInfo info)
+        {
+            _shared = shared;
+            _info = info;
+        }
+
+        public bool IsBlurSupported(BlurEffect effect)
+        {
+            return effect switch
+            {
+                BlurEffect.None => true,
+                BlurEffect.Acrylic => Win32Platform.WindowsVersion >= WinUiCompositionShared.MinAcrylicVersion,
+                BlurEffect.MicaLight => Win32Platform.WindowsVersion >= WinUiCompositionShared.MinHostBackdropVersion,
+                BlurEffect.MicaDark => Win32Platform.WindowsVersion >= WinUiCompositionShared.MinHostBackdropVersion,
+                _ => false,
+            };
+        }
+
+        IDirect3D11TextureRenderTarget IDirect3D11TexturePlatformSurface.CreateRenderTarget(
+            IPlatformGraphicsContext context, IntPtr d3dDevice)
+        {
+            return (IDirect3D11TextureRenderTarget)CreateRenderTarget(context, d3dDevice);
+        }
+
+        public IDirect3D11TextureRenderTarget2 CreateRenderTarget(IPlatformGraphicsContext context, IntPtr d3dDevice)
+        {
+            var cornerRadius = AvaloniaLocator.Current.GetService<Win32PlatformOptions>()
+                ?.WinUICompositionBackdropCornerRadius;
+            _window ??= new(_info, _shared, cornerRadius);
+
+            return new WinUiCompositedWindowRenderTarget(context, _window, d3dDevice, _shared.Compositor);
+        }
+
+        public void Dispose()
+        {
+            _window?.Dispose();
+            _window = null;
+        }
+    }
+
+    internal class WinUiCompositedWindowRenderTarget : IDirect3D11TextureRenderTarget, IDirect3D11TextureRenderTarget2
+    {
+        private static readonly Guid IID_ID3D11Texture2D = Guid.Parse("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
+
+        private readonly IPlatformGraphicsContext _context;
+        private readonly WinUiCompositedWindow _window;
+        private readonly IUnknown _d3dDevice;
+        private readonly ICompositor _compositor;
+        private readonly ICompositorInterop _interop;
+        private readonly ICompositionGraphicsDevice _compositionDevice;
+        private readonly ICompositionGraphicsDevice2 _compositionDevice2;
+        private ICompositionSurface? _surface;
+        private PixelSize _size;
+        private bool _lost;
+        private bool _isSurfaceSupportTransparency;
+        private ICompositionDrawingSurfaceInterop? _surfaceInterop;
+        private ICompositionDrawingSurface? _drawingSurface;
+
+        public WinUiCompositedWindowRenderTarget(IPlatformGraphicsContext context,
+            WinUiCompositedWindow window, IntPtr device,
+            ICompositor compositor)
+        {
+            _context = context;
+            _window = window;
+
+            try
+            {
+                _d3dDevice = MicroComRuntime.CreateProxyFor<IUnknown>(device, false).CloneReference();
+                _compositor = compositor.CloneReference();
+                _interop = compositor.QueryInterface<ICompositorInterop>();
+                _compositionDevice = _interop.CreateGraphicsDevice(_d3dDevice);
+                _compositionDevice2 = _compositionDevice.QueryInterface<ICompositionGraphicsDevice2>();
+            }
+            catch
+            {
+                _compositionDevice2?.Dispose();
+                _compositionDevice?.Dispose();
+                _interop?.Dispose();
+                _compositor?.Dispose();
+                _d3dDevice?.Dispose();
+                throw;
+            }
+        }
+
+        public void Dispose()
+        {
+            _surface?.Dispose();
+            _surfaceInterop?.Dispose();
+            _drawingSurface?.Dispose();
+            _compositionDevice2.Dispose();
+            _compositionDevice.Dispose();
+            _interop.Dispose();
+            _compositor.Dispose();
+            _d3dDevice.Dispose();
+        }
+
+        public PlatformRenderTargetState State =>
+            _context.IsLost || _lost ? PlatformRenderTargetState.Corrupted : PlatformRenderTargetState.Ready;
+
+        IDirect3D11TextureRenderTargetRenderSession IDirect3D11TextureRenderTarget.BeginDraw()
+        {
+            var fallbackSceneInfo = new IRenderTarget.RenderTargetSceneInfo(_window.WindowInfo.Size,
+                _window.WindowInfo.Scaling, CompositionTransparencyLevel.None);
+            return BeginDraw(fallbackSceneInfo);
+        }
+
+        public unsafe IDirect3D11TextureRenderTargetRenderSession BeginDraw(
+            IRenderTarget.RenderTargetSceneInfo sceneInfo)
+        {
+            if (State.IsCorrupted)
+                throw new RenderTargetCorruptedException();
+            var transaction = _window.BeginTransaction();
+
+            var needsEndDraw = false;
+            try
+            {
+                var isTransparency = sceneInfo.TransparencyLevel != CompositionTransparencyLevel.None;
+
+                if (_surface is null || _surfaceInterop is null || _drawingSurface is null ||
+                    _isSurfaceSupportTransparency != isTransparency)
+                {
+                    // Re-create the surface with correct alpha mode if the transparency support is not correct. This can happen when the transparency level is changed.
+                    _surface?.Dispose();
+                    _surfaceInterop?.Dispose();
+                    _drawingSurface?.Dispose();
+
+                    CreateSurface(in sceneInfo);
+                }
+
+                var size = sceneInfo.Size;
+                var scale = sceneInfo.Scaling;
+                _window.ResizeIfNeeded(size);
+                _window.ApplyEffects(sceneInfo.TransparencyLevel,
+                    (sceneInfo.PlatformSpecificSceneInfo as Win32TopLevelSceneInfo)?.ThemeVariant ??
+                    PlatformThemeVariant.Light);
+                _window.SetSurface(_surface);
+
+                void* pTexture;
+                UnmanagedMethods.POINT off;
+                try
+                {
+                    if (_size != size)
+                    {
+                        _surfaceInterop.Resize(new()
+                        {
+                            X = size.Width,
+                            Y = size.Height,
+                        });
+                        _size = size;
+                    }
+
+                    var iid = IID_ID3D11Texture2D;
+                    off = _surfaceInterop.BeginDraw(null, &iid, &pTexture);
+                }
+                catch (Exception e)
+                {
+                    _lost = true;
+                    throw new RenderTargetCorruptedException(e);
+                }
+
+                needsEndDraw = true;
+                var offset = new PixelPoint(off.X, off.Y);
+                using var texture = MicroComRuntime.CreateProxyFor<IUnknown>(pTexture, true);
+
+                var session = new Session(_surfaceInterop, texture, transaction, _size, offset, scale);
+                transaction = null;
+                return session;
+            }
+            finally
+            {
+                if (transaction != null)
+                {
+                    if (needsEndDraw)
+                        _surfaceInterop?.EndDraw();
+                    transaction.Dispose();
+                }
+            }
+        }
+
+        [MemberNotNull(nameof(_drawingSurface), nameof(_surface), nameof(_surfaceInterop))]
+        private void CreateSurface(in IRenderTarget.RenderTargetSceneInfo sceneInfo)
+        {
+            var isTransparency = sceneInfo.TransparencyLevel != CompositionTransparencyLevel.None;
+            var surfaceSize = sceneInfo.Size;
+
+            // Do not use Premultiplied when the window is not Transparency. Because the Premultiplied AlphaMode will increase the performance loss of DWM. See https://github.com/AvaloniaUI/Avalonia/issues/20643
+            var alphaMode = isTransparency ? DirectXAlphaMode.Premultiplied : DirectXAlphaMode.Ignore;
+            _drawingSurface = _compositionDevice2.CreateDrawingSurface2(new()
+                {
+                    X = surfaceSize.Width,
+                    Y = surfaceSize.Height,
+                },
+                DirectXPixelFormat.B8G8R8A8UIntNormalized, alphaMode);
+            _surface = _drawingSurface.QueryInterface<ICompositionSurface>();
+            _surfaceInterop = _drawingSurface.QueryInterface<ICompositionDrawingSurfaceInterop>();
+
+            _isSurfaceSupportTransparency = isTransparency;
+            _size = surfaceSize;
+        }
+
+        private class Session : IDirect3D11TextureRenderTargetRenderSession
+        {
+            private readonly IDisposable _transaction;
+            private readonly ICompositionDrawingSurfaceInterop _surfaceInterop;
+            private readonly IUnknown _texture;
+
+            public Session(ICompositionDrawingSurfaceInterop surfaceInterop, IUnknown texture, IDisposable transaction,
+                PixelSize size, PixelPoint offset, double scaling)
+            {
+                _transaction = transaction;
+                Size = size;
+                Offset = offset;
+                Scaling = scaling;
+                _surfaceInterop = surfaceInterop.CloneReference();
+                _texture = texture.CloneReference();
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    _texture.Dispose();
+                    _surfaceInterop.EndDraw();
+                    _surfaceInterop.Dispose();
+                }
+                finally
+                {
+                    _transaction.Dispose();
+                }
+            }
+
+            public IntPtr D3D11Texture2D => _texture.GetNativeIntPtr();
+            public PixelSize Size { get; }
+
+            public PixelPoint Offset { get; }
+
+            public double Scaling { get; }
+        }
+    }
+}

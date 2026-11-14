@@ -19,6 +19,7 @@
     <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../RitsukageGif.DragPreview/RitsukageGif.DragPreview.csproj" />
     <Compile Include="vendor/src/**/*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
     <Content Include="vendor/LICENSE" Link="THIRD-PARTY-NOTICES/Avalonia.Native.txt"
              CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -28,13 +29,6 @@
     <Reference Include="$(PkgAvalonia)/lib/net10.0/*.dll" Private="false" />
     <PackageReference Include="MicroCom.Runtime" Version="0.11.6" />
     <PackageReference Include="MicroCom.CodeGenerator.Roslyn" Version="0.11.6" PrivateAssets="all" />
-    <PackageReference Include="Avalonia.Native" Version="12.1.4" ExcludeAssets="all" PrivateAssets="all"
-                      GeneratePathProperty="true" />
   </ItemGroup>
-  <ItemGroup
-    Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('osx')) Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('OSX')))">
-    <Content Include="$(PkgAvalonia_Native)/runtimes/osx/native/libAvaloniaNative.dylib"
-             Link="libAvaloniaNative.dylib" CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest" />
-  </ItemGroup>
+  <Import Project="Avalonia.Native.macOS.targets" />
 </Project>

@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="vendor/AvaloniaPublicKey.props" />
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Avalonia.Win32</AssemblyName>
+    <PackageId>Avalonia.Win32.Patched</PackageId>
+    <RootNamespace>Avalonia.Win32</RootNamespace>
+    <Version>12.1.4</Version>
+    <AssemblyVersion>12.1.4.0</AssemblyVersion>
+    <FileVersion>12.1.4.0</FileVersion>
+    <InformationalVersion>12.1.4</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableRuntimeMarshalling>true</EnableRuntimeMarshalling>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>../RitsukageGif.Avalonia.Native/vendor/avalonia.snk</AssemblyOriginatorKeyFile>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="vendor/src/**/*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="vendor/LICENSE" Link="THIRD-PARTY-NOTICES/Avalonia.Win32.txt"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="Avalonia.Win32.Interoperability, PublicKey=$(AvaloniaPublicKey)" />
+    <InternalsVisibleTo Include="Avalonia.WinUI, PublicKey=$(AvaloniaPublicKey)" />
+    <InternalsVisibleTo Include="Avalonia.IntegrationTests.Win32, PublicKey=$(AvaloniaPublicKey)" />
+    <ProjectReference Include="../RitsukageGif.DragPreview/RitsukageGif.DragPreview.csproj" />
+    <ProjectReference Include="../RitsukageGif.Avalonia.Generators/RitsukageGif.Avalonia.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed" />
+    <PackageReference Include="Avalonia" Version="12.1.4" GeneratePathProperty="true" ExcludeAssets="compile" />
+    <Reference Include="$(PkgAvalonia)/lib/net10.0/*.dll" Private="false" />
+    <PackageReference Include="Avalonia.Win32" Version="12.1.4" GeneratePathProperty="true" ExcludeAssets="all" PrivateAssets="all" />
+    <Reference Include="Avalonia.Win32.Automation" HintPath="$(PkgAvalonia_Win32)/lib/net10.0/Avalonia.Win32.Automation.dll" Private="true" />
+    <PackageReference Include="Avalonia.Angle.Windows.Natives" Version="2.1.27548.20260419" ExcludeAssets="build;analyzers" />
+    <PackageReference Include="MicroCom.Runtime" Version="0.11.6" />
+    <PackageReference Include="MicroCom.CodeGenerator.Roslyn" Version="0.11.6" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.257" PrivateAssets="all" />
+    <AdditionalFiles Include="vendor/src/NativeMethods.txt" />
+    <MicroComIdl Include="vendor/src/**/*.idl" />
+  </ItemGroup>
+</Project>

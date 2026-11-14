@@ -1,0 +1,48 @@
+//
+//  AvnTextInputMethod.h
+//  Avalonia.Native.OSX
+//
+//  Created by Benedikt Stebner on 22.11.22.
+//  Copyright © 2022 Avalonia. All rights reserved.
+//
+
+#ifndef AvnTextInputMethod_h
+#define AvnTextInputMethod_h
+
+#import <Foundation/Foundation.h>
+
+#include "com.h"
+#include "comimpl.h"
+#include "avalonia-native.h"
+#import "AvnTextInputMethodDelegate.h"
+
+class AvnTextInputMethod : public virtual ComObject, public virtual IAvnTextInputMethod
+{
+    id<AvnTextInputMethodDelegate> _inputMethodDelegate;
+
+public:
+    FORWARD_IUNKNOWN()
+
+    BEGIN_INTERFACE_MAP()
+    INTERFACE_MAP_ENTRY(IAvnTextInputMethod, IID_IAvnTextInputMethod)
+    END_INTERFACE_MAP()
+
+    virtual ~AvnTextInputMethod();
+
+    AvnTextInputMethod(id<AvnTextInputMethodDelegate> inputMethodDelegate);
+
+    bool IsActive();
+
+    HRESULT SetClient(IAvnTextInputMethodClient* client) override;
+
+    virtual void Reset() override;
+
+    virtual void SetCursorRect(AvnRect rect) override;
+
+    virtual void SetSurroundingText(char* text, int start, int end) override;
+
+    virtual void SetSelectionInSurroundingText(int start, int end) override;
+
+    ComPtr<IAvnTextInputMethodClient> Client;
+};
+#endif /* AvnTextInputMethod_h */

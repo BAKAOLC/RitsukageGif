@@ -32,6 +32,11 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Native" Version="12.1.4" ExcludeAssets="all" />
     <ProjectReference Include="../RitsukageGif.Avalonia.Native/Avalonia.Native.Patched.csproj" />
+    <PackageReference Include="Avalonia.Win32" Version="12.1.4" ExcludeAssets="all" />
+    <PackageReference Include="Avalonia.X11" Version="12.1.4" ExcludeAssets="all" />
+    <ProjectReference Include="../RitsukageGif.Avalonia.Win32/Avalonia.Win32.Patched.csproj" />
+    <ProjectReference Include="../RitsukageGif.Avalonia.X11/Avalonia.X11.Patched.csproj" />
+    <ProjectReference Include="../RitsukageGif.DragPreview/RitsukageGif.DragPreview.csproj" />
     <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.4" />
     <PackageReference Include="Semi.Avalonia" Version="12.1.0.1" />
     <PackageReference Include="Markdig" Version="1.4.2" />
