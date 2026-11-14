@@ -7,7 +7,7 @@ namespace RitsukageGif.Desktop
         private async Task<bool> ExportScreenshotDocumentAsync(Window? owner, ScreenshotResult result,
             CancellationToken token)
         {
-            var profile = Settings.ScreenshotSave.ManualProfile();
+            var profile = ScreenshotSaveForOutput.ManualProfile();
             var context = ScreenshotName(result);
             var name = Path.ChangeExtension(profile.CreateFileName(context), ".pdf");
             var path = await DocumentExportWindow.ShowAsync(owner, result.Png, name, token,

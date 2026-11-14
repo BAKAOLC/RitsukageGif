@@ -19,6 +19,8 @@ namespace RitsukageGif.Desktop
 
         internal ScreenshotAnnotationSession? Annotations { get; private set; }
         internal bool PropagateOutputErrors { get; init; }
+        internal bool DeferCopyOutput { get; init; }
+        internal ScreenshotResult? DeferredOutput { get; private set; }
 
         internal Func<Window?, ScreenshotResult, CancellationToken, Task<bool>>? ScreenshotOutputHandler { get; set; }
 
@@ -137,7 +139,7 @@ namespace RitsukageGif.Desktop
 
         private void CompleteSelection(SelectionResult? result)
         {
-            if (!ScreenshotMode || result is null || RecordingRequested || !TranslationRequestedPng.IsEmpty)
+            if (!ScreenshotMode || result is null || RecordingRequested || TranslationRequested is not null)
             {
                 Finish(result);
                 return;
@@ -192,6 +194,14 @@ namespace RitsukageGif.Desktop
                     ColorMode = paperOutput ? OutputColorMode.Sdr : annotations.OutputColorMode,
                     Decoration = decoration, OutputOrigin = outputOrigin,
                 };
+                if (ConfirmAction == ScreenshotOutputAction.Save ||
+                    (ConfirmAction == ScreenshotOutputAction.Copy && DeferCopyOutput))
+                {
+                    DeferredOutput = completed;
+                    Finish(result);
+                    return;
+                }
+
                 if (ScreenshotOutputHandler is { } output)
                 {
                     foreach (var window in _windows) window.Topmost = false;

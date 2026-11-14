@@ -54,16 +54,24 @@ namespace RitsukageGif.Desktop
                 Refresh();
                 RequestLiveApply();
             };
-            clearActions.Click += (_, _) =>
+            clearActions.Click += async (_, _) =>
             {
-                var identifiers = draft.GlobalActions.Select(action => action.Id).ToHashSet(StringComparer.Ordinal);
-                draft.GlobalActions.Clear();
+                var token = ContentCancellationToken;
+                if (!await ConfirmSettingsChangeAsync("GlobalActionClearAll", "GlobalActionClearAllQuestion") ||
+                    token.IsCancellationRequested) return;
+                var identifiers = draft.GlobalActions.Where(action => !IsMouseOnly(action)).Select(action => action.Id)
+                    .ToHashSet(StringComparer.Ordinal);
+                draft.GlobalActions.RemoveAll(action => identifiers.Contains(action.Id));
                 draft.GlobalMouseBindings.RemoveAll(binding => identifiers.Contains(binding.ActionId));
                 Refresh();
                 RequestLiveApply();
             };
-            clearShortcuts.Click += (_, _) =>
+            clearShortcuts.Click += async (_, _) =>
             {
+                var token = ContentCancellationToken;
+                if (!await ConfirmSettingsChangeAsync("GlobalActionClearShortcuts",
+                        "GlobalActionClearShortcutsQuestion") ||
+                    token.IsCancellationRequested) return;
                 foreach (var action in draft.GlobalActions) action.Shortcut = "";
                 Refresh();
                 RequestLiveApply();
@@ -80,7 +88,7 @@ namespace RitsukageGif.Desktop
             {
                 rows.Children.Clear();
                 statuses.Clear();
-                foreach (var action in draft.GlobalActions.ToArray())
+                foreach (var action in draft.GlobalActions.Where(action => !IsMouseOnly(action)))
                 {
                     var label = ActionLabel(action);
                     var row = ActionSettingsRow(label);
@@ -141,6 +149,12 @@ namespace RitsukageGif.Desktop
                 ValidateDraft();
             }
 
+            bool IsMouseOnly(GlobalActionBinding action)
+            {
+                return GlobalMouseActionCatalog.IsMouseOnly(action) &&
+                       draft.GlobalMouseBindings.Any(binding => binding.ActionId == action.Id);
+            }
+
             IEnumerable<string> ReservedKeys()
             {
                 return draft.PresetHotkeys.Select(binding => binding.Shortcut);
@@ -171,6 +185,43 @@ namespace RitsukageGif.Desktop
                         rowErrors.Count > 0 ? string.Join(Environment.NewLine, rowErrors) : null);
                 }
             }
+        }
+
+        private Task<bool> ConfirmSettingsChangeAsync(string title, string message)
+        {
+            var dialog = new Window
+            {
+                Width = 400, SizeToContent = SizeToContent.Height, CanResize = false, ShowInTaskbar = false,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner, Background = AppTheme.Surface,
+                [!TitleProperty] = LiveText.Resource(title),
+            };
+            var cancel = new Button
+            {
+                Name = "SettingsConfirmNo", IsDefault = true, IsCancel = true,
+                [!ContentProperty] = LiveText.Resource("SettingsConfirmNo"),
+            };
+            var clear = new Button
+            {
+                Name = "SettingsConfirmYes", [!ContentProperty] = LiveText.Resource("SettingsConfirmYes"),
+            };
+            cancel.Click += (_, _) => dialog.Close(false);
+            clear.Click += (_, _) => dialog.Close(true);
+            dialog.Content = new StackPanel
+            {
+                Margin = new(12), Spacing = 10,
+                Children =
+                {
+                    new TextBlock
+                        { [!TextBlock.TextProperty] = LiveText.Resource(message), TextWrapping = TextWrapping.Wrap },
+                    new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
+                        Spacing = 6, Children = { cancel, clear },
+                    },
+                },
+            };
+            dialog.Opened += (_, _) => cancel.Focus();
+            return dialog.ShowDialog<bool>(this);
         }
 
         private static Button ActionPageButton(string key)

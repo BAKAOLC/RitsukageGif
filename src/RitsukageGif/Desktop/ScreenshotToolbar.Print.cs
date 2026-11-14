@@ -12,7 +12,6 @@ namespace RitsukageGif.Desktop
         {
             if (_actionButtons.TryGetValue(ToolbarActionId.Print, out var button))
                 ToolTip.SetShowOnDisabled(button, true);
-            _moreCommands.Opened += (_, _) => _ = RefreshPrintCapabilitiesAsync();
             _ = RefreshPrintCapabilitiesAsync();
         }
 

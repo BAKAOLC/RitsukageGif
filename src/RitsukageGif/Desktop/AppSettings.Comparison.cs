@@ -37,6 +37,8 @@ namespace RitsukageGif.Desktop
                    Same(left.HotkeyPolicy, right.HotkeyPolicy) &&
                    SameSequence(left.GlobalActions, right.GlobalActions, static (a, b) => Same(a, b)) &&
                    SameSequence(left.GlobalMouseBindings, right.GlobalMouseBindings, static (a, b) => Same(a, b)) &&
+                   SameSequence(left.GlobalMouseIgnoredPrograms, right.GlobalMouseIgnoredPrograms,
+                       ProgramExclusionRules.Same) &&
                    Same(left.VideoRecording, right.VideoRecording) &&
                    left.ScreenshotRecording == right.ScreenshotRecording &&
                    EqualityComparer<int>.Default.Equals(left.Fps, right.Fps) &&
@@ -90,6 +92,8 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<AppearanceDialogStyle>.Default.Equals(left.SaveDialogStyle,
                        right.SaveDialogStyle) &&
                    EqualityComparer<double>.Default.Equals(left.SelectionBorderWidth, right.SelectionBorderWidth) &&
+                   EqualityComparer<bool>.Default.Equals(left.SelectionBorderFollowsTheme,
+                       right.SelectionBorderFollowsTheme) &&
                    EqualityComparer<uint?>.Default.Equals(left.SelectionBorderColor, right.SelectionBorderColor) &&
                    EqualityComparer<SelectionAnchorMode>.Default.Equals(left.SelectionAnchors,
                        right.SelectionAnchors) &&
@@ -171,6 +175,7 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<bool>.Default.Equals(left.RenumberOnDelete, right.RenumberOnDelete) &&
                    EqualityComparer<bool>.Default.Equals(left.NumberStartsAtZero, right.NumberStartsAtZero) &&
                    EqualityComparer<bool>.Default.Equals(left.GlobalNumberCounter, right.GlobalNumberCounter) &&
+                   left.NumberForegroundUsesDefault == right.NumberForegroundUsesDefault &&
                    EqualityComparer<uint?>.Default.Equals(left.NumberForegroundColor, right.NumberForegroundColor) &&
                    EqualityComparer<AnnotationSizeLevel>.Default.Equals(left.NumberTextSize, right.NumberTextSize) &&
                    EqualityComparer<AnnotationSizeLevel>.Default.Equals(left.NumberArrowSize, right.NumberArrowSize) &&
@@ -195,7 +200,8 @@ namespace RitsukageGif.Desktop
             if (ReferenceEquals(left, right)) return true;
             if (left is null || right is null) return false;
             return left.SupportedContentKinds == right.SupportedContentKinds &&
-                   left.TitlePosition == right.TitlePosition && left.ActiveGroup == right.ActiveGroup &&
+                   left.TitlePosition == right.TitlePosition && left.DisplayPosition == right.DisplayPosition &&
+                   left.ActiveGroup == right.ActiveGroup &&
                    left.Groups.SequenceEqual(right.Groups) &&
                    left.HideOthersOnShake == right.HideOthersOnShake &&
                    left.KeepOthersHiddenOnNewPin == right.KeepOthersHiddenOnNewPin &&
@@ -215,9 +221,11 @@ namespace RitsukageGif.Desktop
                    EqualityComparer<double>.Default.Equals(left.FineZoomStep, right.FineZoomStep) &&
                    EqualityComparer<double>.Default.Equals(left.OpacityStep, right.OpacityStep) &&
                    EqualityComparer<double>.Default.Equals(left.MouseThroughOpacity, right.MouseThroughOpacity) &&
+                   left.ShowMouseThroughToolbar == right.ShowMouseThroughToolbar &&
                    EqualityComparer<bool>.Default.Equals(left.SelectableText, right.SelectableText) &&
                    EqualityComparer<bool>.Default.Equals(left.ThumbnailSelectableText, right.ThumbnailSelectableText) &&
                    left.ShowTextPopupMenu == right.ShowTextPopupMenu &&
+                   left.ConfirmLongTextPaste == right.ConfirmLongTextPaste &&
                    SameSequence(left.TextHighlightColors, right.TextHighlightColors, SameColor) &&
                    left.OutputContent == right.OutputContent &&
                    left.ReplacementAction == right.ReplacementAction &&
@@ -245,7 +253,9 @@ namespace RitsukageGif.Desktop
                        right.InitialAction) &&
                    EqualityComparer<bool>.Default.Equals(left.RespondShortcuts, right.RespondShortcuts) &&
                    left.AutoCropOnReverse == right.AutoCropOnReverse &&
-                   left.SkipClearConfirmation == right.SkipClearConfirmation;
+                   left.SkipClearConfirmation == right.SkipClearConfirmation &&
+                   left.SkipFileOnlyWarning == right.SkipFileOnlyWarning &&
+                   left.SkipMatchFailureWarning == right.SkipMatchFailureWarning;
         }
 
         internal static bool Same(CapturePreferences? left, CapturePreferences? right)
@@ -431,6 +441,7 @@ namespace RitsukageGif.Desktop
             return SameSequence(left.Columns, right.Columns,
                        static (a, b) => SameSequence(a, b,
                            static (a, b) => EqualityComparer<ScreenshotTool>.Default.Equals(a, b))) &&
+                   SameDictionary(left.ColumnValues, right.ColumnValues, static (a, b) => a == b) &&
                    SameSequence(left.Actions, right.Actions, static (a, b) => Same(a, b));
         }
 

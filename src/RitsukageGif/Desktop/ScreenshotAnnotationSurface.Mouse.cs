@@ -7,6 +7,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly MouseClickDispatcher _mouseClicks = new();
         private readonly MouseGestureTracker _mouseGesture = new();
+        private bool _duplicatingAnnotation;
         private bool _mouseSelecting, _mouseChordCancelled, _mouseButtonsPressed;
         private PixelPoint _mouseStart;
         private bool _movingObject;
@@ -20,8 +21,16 @@ namespace RitsukageGif.Desktop
                 if (IsTextEditorSource(args.Source)) return;
                 args.Handled = true;
                 var properties = args.GetCurrentPoint(this).Properties;
+                var button = properties.PointerUpdateKind switch
+                {
+                    PointerUpdateKind.LeftButtonPressed => MouseButton.Left,
+                    PointerUpdateKind.RightButtonPressed => MouseButton.Right,
+                    PointerUpdateKind.MiddleButtonPressed => MouseButton.Middle,
+                    _ => MouseButton.None,
+                };
+                var clickCount = _mouseGesture.GetClickCount(args, button, this);
                 if (_session.IsDrawingPolyline &&
-                    (properties.IsRightButtonPressed || (properties.IsLeftButtonPressed && args.ClickCount == 2)))
+                    (properties.IsRightButtonPressed || (properties.IsLeftButtonPressed && clickCount == 2)))
                 {
                     _session.FinishPolyline();
                     _mouseGesture.Reset();
@@ -37,9 +46,9 @@ namespace RitsukageGif.Desktop
                 if (_session.IsDrawingPointLine &&
                     (properties.IsLeftButtonPressed || properties.IsRightButtonPressed))
                 {
-                    var screenshotDoubleClick = properties.IsLeftButtonPressed && args.ClickCount == 2 &&
+                    var screenshotDoubleClick = properties.IsLeftButtonPressed && clickCount == 2 &&
                                                 coordinator?.MouseContext == MouseGestureContext.Screenshot;
-                    if (properties.IsLeftButtonPressed && args.ClickCount != 2)
+                    if (properties.IsLeftButtonPressed && clickCount != 2)
                         _session.ConfirmPointLine(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
                     else
                         _session.CancelGesture();
@@ -54,7 +63,7 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                if (_session.IsPrivacyDetectionActive && properties.IsLeftButtonPressed && args.ClickCount >= 2 &&
+                if (_session.IsPrivacyDetectionActive && properties.IsLeftButtonPressed && clickCount >= 2 &&
                     _session.HasPrivacyCandidate(sourcePoint(args)))
                 {
                     _mouseGesture.Reset();
@@ -82,8 +91,11 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                if (properties.IsLeftButtonPressed &&
-                    (_session.Tool == ScreenshotTool.Text || args.ClickCount == 2) &&
+                var duplicating = button == MouseButton.Left && !_mouseGesture.IsActive && !_mouseChordCancelled &&
+                                  args.KeyModifiers.HasFlag(KeyModifiers.Alt) &&
+                                  _session.ArmAnnotationDuplicate(sourcePoint(args));
+                if (!duplicating && properties.IsLeftButtonPressed &&
+                    (_session.Tool == ScreenshotTool.Text || clickCount == 2) &&
                     _session.BeginTextEdit(sourcePoint(args), _session.Tool != ScreenshotTool.Text))
                 {
                     _mouseButtonsPressed = false;
@@ -93,15 +105,8 @@ namespace RitsukageGif.Desktop
 
                 _mouseButtonsPressed = AnyPressed(properties);
                 coordinator?.SetMouseInputHeld(_mouseButtonsPressed);
-                var button = properties.PointerUpdateKind switch
-                {
-                    PointerUpdateKind.LeftButtonPressed => MouseButton.Left,
-                    PointerUpdateKind.RightButtonPressed => MouseButton.Right,
-                    PointerUpdateKind.MiddleButtonPressed => MouseButton.Middle,
-                    _ => MouseButton.None,
-                };
-                _mouseClicks.Press(button, args.KeyModifiers, args.ClickCount);
-                if (button == MouseButton.Left && args.ClickCount == 2 &&
+                _mouseClicks.Press(button, args.KeyModifiers, clickCount);
+                if (!duplicating && button == MouseButton.Left && clickCount == 2 &&
                     _session.TryBeginArrowComment(sourcePoint(args)))
                     return;
                 if (_mouseGesture.IsActive)
@@ -112,11 +117,12 @@ namespace RitsukageGif.Desktop
                 }
 
                 if (_mouseChordCancelled ||
-                    !_mouseGesture.Begin(button, args.KeyModifiers, args.GetPosition(this), args.ClickCount)) return;
+                    !_mouseGesture.Begin(button, args.KeyModifiers, args.GetPosition(this), clickCount)) return;
                 _mouseStart = sourcePoint(args);
                 _captured = args.Pointer;
                 args.Pointer.Capture(this);
-                if (button == MouseButton.Left && _session.UsesPointLineCreation &&
+                _duplicatingAnnotation = duplicating;
+                if (!duplicating && button == MouseButton.Left && _session.UsesPointLineCreation &&
                     Resolve(new(MouseGestureKind.LeftClick, args.KeyModifiers), out var clickBinding) &&
                     clickBinding!.Action == MouseAction.Select &&
                     Resolve(new(MouseGestureKind.LeftDrag, args.KeyModifiers), out var dragBinding) &&
@@ -130,7 +136,8 @@ namespace RitsukageGif.Desktop
             {
                 if (IsTextEditorSource(args.Source)) return;
                 args.Handled = true;
-                _pointerPosition = sourcePoint(args);
+                var pointerPosition = sourcePoint(args);
+                _pointerPosition = pointerPosition;
                 _session.NotifyHover(_pointerPosition);
                 RefreshCursor();
                 InvalidateAnnotations();
@@ -140,6 +147,13 @@ namespace RitsukageGif.Desktop
                 if (_mouseGesture.IsActive && properties.PointerUpdateKind == PointerUpdateKind.RightButtonPressed)
                     CancelChord(args);
                 if (_mouseChordCancelled || _session.IsBusy) return;
+                if (_duplicatingAnnotation)
+                {
+                    if (properties.IsLeftButtonPressed)
+                        _session.MoveAnnotationDuplicate(pointerPosition, args.KeyModifiers.HasFlag(KeyModifiers.Alt));
+                    return;
+                }
+
                 if (_session.IsDrawingPolyline && !_mouseSelecting)
                     _session.MovePolylinePreview(sourcePoint(args), args.KeyModifiers.HasFlag(KeyModifiers.Shift));
                 if (_session.IsDrawingPointLine && !_mouseSelecting)
@@ -180,6 +194,25 @@ namespace RitsukageGif.Desktop
                     {
                         _mouseChordCancelled = false;
                         Release();
+                    }
+
+                    return;
+                }
+
+                if (_duplicatingAnnotation && args.InitialPressMouseButton == MouseButton.Left)
+                {
+                    _duplicatingAnnotation = false;
+                    _mouseGesture.Reset();
+                    _completing = true;
+                    try
+                    {
+                        var completion = _session.FinishAnnotationDuplicateAsync();
+                        if (!_mouseButtonsPressed) Release();
+                        await completion;
+                    }
+                    finally
+                    {
+                        _completing = false;
                     }
 
                     return;
@@ -287,6 +320,7 @@ namespace RitsukageGif.Desktop
                 if (!Resolve(new(MouseGestureKind.RightClick, args.KeyModifiers), out var cancel) ||
                     cancel!.Action != MouseAction.Cancel) return;
                 _session.CancelWork();
+                _duplicatingAnnotation = false;
                 _mouseGesture.Reset();
                 _mouseSelecting = false;
                 _mouseChordCancelled = true;

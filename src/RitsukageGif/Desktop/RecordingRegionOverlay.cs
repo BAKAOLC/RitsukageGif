@@ -18,6 +18,7 @@ namespace RitsukageGif.Desktop
         private readonly Cursor _diagonalCursor = new(StandardCursorType.TopLeftCorner);
         private readonly Cursor _otherDiagonalCursor = new(StandardCursorType.TopRightCorner);
         private PixelRect _region;
+        private IBrush _brush = AppTheme.Accent;
         private PixelRect _dragRegion;
         private Avalonia.PixelPoint? _dragOrigin;
         private int _dragEdge;
@@ -44,6 +45,13 @@ namespace RitsukageGif.Desktop
         }
 
         internal event Action? LayoutChanged;
+
+        internal void SetBrush(IBrush brush)
+        {
+            if (ReferenceEquals(_brush, brush)) return;
+            _brush = brush;
+            foreach (var border in _borders) ((Border)border.Content!).BorderBrush = brush;
+        }
 
         internal void Update(Window owner, PixelRect region, bool editable, bool visible)
         {
@@ -106,7 +114,7 @@ namespace RitsukageGif.Desktop
                 CanResize = false, MinWidth = 0, MinHeight = 0,
                 Background = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)),
                 TransparencyLevelHint = [WindowTransparencyLevel.Transparent],
-                Content = new Border { BorderBrush = AppTheme.Accent },
+                Content = new Border { BorderBrush = _brush },
                 WindowStartupLocation = WindowStartupLocation.Manual,
             };
             TransientWindowShell.Configure(border);

@@ -7,6 +7,8 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotAnnotationSession
     {
         private static readonly IPen SelectedAnnotationPen = new Pen(Brushes.DeepSkyBlue, 1, DashStyle.Dash);
+        private ScreenshotAnnotation? _duplicateSource;
+        private PixelPoint _duplicateStart;
         private PixelPoint _moveStart;
         private ScreenshotAnnotation? _moving;
         private int _polylineNode = -1;
@@ -154,6 +156,81 @@ namespace RitsukageGif.Desktop
                 ? 0
                 : Math.Clamp(((point.X - start.X) * vector.X + (point.Y - start.Y) * vector.Y) / lengthSquared, 0, 1);
             return Distance(point, start + vector * fraction);
+        }
+
+        internal bool ArmAnnotationDuplicate(PixelPoint point)
+        {
+            if (!CanAnnotate || IsBusy || IsDrawing || Tool == ScreenshotTool.Select) return false;
+            if (FindMoveAnnotation(point, false) is not { } source) return false;
+            if (source is not
+                {
+                    Tool: ScreenshotTool.Rectangle or ScreenshotTool.Ellipse or ScreenshotTool.Arrow or
+                    ScreenshotTool.Line or ScreenshotTool.Polyline or ScreenshotTool.Text or ScreenshotTool.Number or
+                    ScreenshotTool.Highlight or ScreenshotTool.Spotlight or ScreenshotTool.Magnifier,
+                } && !IsDuplicablePixelAnnotation(source))
+                return false;
+            _duplicateSource = source;
+            return true;
+        }
+
+        internal void MoveAnnotationDuplicate(PixelPoint point, bool alt)
+        {
+            if (_duplicateSource is not { } source || IsBusy) return;
+            if (_gesture is null)
+            {
+                if (!alt)
+                {
+                    _duplicateSource = null;
+                    return;
+                }
+
+                _duplicateStart = point;
+                _gesture = source.Tool == ScreenshotTool.Number ? DuplicateNumber(source) : CloneAnnotation(source);
+                _selected = null;
+            }
+
+            var bounds = AnnotationObjectBounds(source);
+            var dx = Math.Clamp(point.X - _duplicateStart.X, Math.Min(0, AnnotationBounds.X - bounds.Left),
+                Math.Max(0, AnnotationBounds.Right - bounds.Right));
+            var dy = Math.Clamp(point.Y - _duplicateStart.Y, Math.Min(0, AnnotationBounds.Y - bounds.Top),
+                Math.Max(0, AnnotationBounds.Bottom - bounds.Bottom));
+            var updatePixelPreview = IsDuplicablePixelAnnotation(source) &&
+                                     (_gesture.ImageTiles.Count == 0 ||
+                                      _gesture.Points[0] != source.Points[0] + new Vector(dx, dy));
+            for (var index = 0; index < source.Points.Count; index++)
+                _gesture.Points[index] = new(source.Points[index].X + dx, source.Points[index].Y + dy);
+            if (updatePixelPreview)
+            {
+                ClearDuplicatePixelTiles(_gesture);
+                QueueDuplicatePixelPreview();
+            }
+
+            Changed?.Invoke();
+        }
+
+        internal Task FinishAnnotationDuplicateAsync()
+        {
+            if (_duplicateSource is null) return Task.CompletedTask;
+            _duplicateSource = null;
+            if (_gesture is not { } copy) return Task.CompletedTask;
+            _gesture = null;
+            if (IsDuplicablePixelAnnotation(copy))
+            {
+                CancelDuplicatePixelPreview();
+                ClearDuplicatePixelTiles(copy);
+                var commit = CommitCompletedAnnotationAsync(copy, false, _duplicatePreviewTask);
+                _duplicatePixelCommit = commit;
+                return commit;
+            }
+
+            Commit(copy);
+            if (copy.Tool == ScreenshotTool.Number &&
+                (_behavior.GlobalNumberCounter ||
+                 copy.Properties.NumberFormat == StyleFor(ScreenshotTool.Number).Properties.NumberFormat) &&
+                copy.Properties.Number >= NextNumber)
+                CompleteNumber(copy.Properties.Number);
+            Changed?.Invoke();
+            return Task.CompletedTask;
         }
 
         public bool BeginObjectMove(PixelPoint point, bool currentToolOnly = false)

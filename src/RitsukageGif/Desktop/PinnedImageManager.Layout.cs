@@ -13,16 +13,6 @@ namespace RitsukageGif.Desktop
                 : [];
         }
 
-        private bool CanArrangeSelection(IPinnedWindow source, PinnedImageArrangement arrangement)
-        {
-            var images = SelectionSnapshot(source);
-            var minimum = arrangement is PinnedImageArrangement.DistributeHorizontal
-                or PinnedImageArrangement.DistributeVertical
-                ? 3
-                : 2;
-            return images.Length >= minimum && images.All(window => window.CanArrangeSelection);
-        }
-
         private async Task ArrangeSelection(IPinnedWindow source, PinnedImageArrangement arrangement)
         {
             Dispatcher.UIThread.VerifyAccess();

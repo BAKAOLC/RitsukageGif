@@ -22,6 +22,7 @@ namespace RitsukageGif.Desktop
                 Thumbnail = CaptureDocumentThumbnail(), ThumbnailRequest = _thumbnailRequest,
                 Annotations = _annotationScene?.CaptureDocument(), AnnotationScaling = _annotationScaling,
                 FileListMaximumSize = _fileListMaximumSize,
+                Translation = CaptureInlineTranslationState(),
             };
             Presentation.Capture(saved.Window);
             return saved;
@@ -67,7 +68,7 @@ namespace RitsukageGif.Desktop
 
             IgnoreFormat = saved.IgnoreFormat;
             Selectable = saved.Selectable;
-            if (rebuild) RebuildContent();
+            if (RestoreInlineTranslationState(saved.Translation) || rebuild) RebuildContent();
             else _textView?.SetSelectable(Selectable);
             UpdateLayout();
             SetContentScrollOffset(new(state.ScrollX, state.ScrollY));

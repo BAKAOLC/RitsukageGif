@@ -28,6 +28,17 @@ namespace RitsukageGif.Desktop
             _messageTimer.Start();
         }
 
+        internal void ShowMouseThroughMessage(bool enabled)
+        {
+            ShowMessage(UiText.Get(enabled ? "PinnedMouseThroughEnabled" : "PinnedMouseThroughDisabled"));
+        }
+
+        internal void ShowOpacityMessage()
+        {
+            var percent = (int)Math.Floor(_owner.Opacity * 100 + .5);
+            ShowMessage(UiText.Format("PinnedOpacityStatus", percent));
+        }
+
         internal Grid CreateGroupMenuHeader(PinnedGroupDefinition definition)
         {
             var counts = GroupCountsProvider(definition.Id);

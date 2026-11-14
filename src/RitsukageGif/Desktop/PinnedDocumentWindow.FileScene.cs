@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 
@@ -74,12 +74,9 @@ namespace RitsukageGif.Desktop
             var file = new PinnedFileRowButton(entry, automatic, imageScale, _lifetime.Token);
             file.DoubleTapped += async (_, args) =>
             {
+                if (args.Pointer.Type != PointerType.Touch) return;
                 args.Handled = true;
-                await RunAsync(() =>
-                {
-                    Process.Start(new ProcessStartInfo(entry.Path!) { UseShellExecute = true })?.Dispose();
-                    return Task.CompletedTask;
-                });
+                await RunAsync(() => OpenFileAsync(entry.Path!));
             };
             return file;
         }

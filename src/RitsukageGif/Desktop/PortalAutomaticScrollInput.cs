@@ -28,9 +28,8 @@ namespace RitsukageGif.Desktop
                 return Unavailable(binding.FaultReason() ?? "The authorized capture source changed.");
             var pointer = binding.ReadPointer();
             if (pointer is not { Valid: true } || pointer.Generation != binding.Generation ||
-                pointer.StreamId != binding.StreamId || !region.Contains(pointer.Position))
-                return Unavailable(
-                    "The authorized source has no current pointer observation inside the capture region.");
+                pointer.StreamId != binding.StreamId)
+                return Unavailable("The authorized source has no current pointer observation.");
             var result = binding.SendScroll(axis, region, token);
             if (result is AutomaticScrollInputResult.Unavailable or AutomaticScrollInputResult.Failed)
                 UnavailableReason = binding.FaultReason() ?? "The portal rejected the pointer scroll event.";

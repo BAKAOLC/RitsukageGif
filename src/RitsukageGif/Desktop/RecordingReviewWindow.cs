@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -15,19 +16,26 @@ namespace RitsukageGif.Desktop
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.RecordingReview");
 
-        private readonly RecordingReviewDocument _document;
+        private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 2 };
 
-        private readonly CancellationTokenSource _lifetime;
+        private readonly Button _audioButton = new();
+
+        private readonly Stopwatch _clock = new();
+        private readonly Button _closeButton = new();
 
         private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        private readonly HdrPreviewHost _hdrPreview = new();
-        private RecordingInputTraceDocument? _trace;
-        private RecordingInputEffects _inputEffects;
-        private RecordingProgressEffects _progressEffects;
-        private RecordingInputEffects _persistedInputEffects;
-        private RecordingProgressEffects _persistedProgressEffects;
+        private readonly RecordingReviewDocument _document;
+        private readonly Button _format = new();
+
+        private readonly HdrPreviewHost _hdrPreview = new() { TransparentComposition = true };
+
+        private readonly CancellationTokenSource _lifetime;
+
+        private readonly Button _play = new();
         private readonly Image _preview = new() { Stretch = Stretch.Uniform };
+
+        private readonly Button _speed = new() { Content = "1×", MinHeight = 28, MinWidth = 42 };
 
         private readonly TextBlock _status = new()
             { TextWrapping = TextWrapping.Wrap, Margin = new(4), IsVisible = false };
@@ -36,51 +44,44 @@ namespace RitsukageGif.Desktop
 
         private readonly RecordingReviewTimeline _timeline = new();
 
-        private readonly StackPanel _actions = new() { Orientation = Orientation.Horizontal, Spacing = 2 };
+        private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(16) };
 
         private readonly Popup _toolbar = new();
 
-        private readonly Stopwatch _clock = new();
-
-        private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(16) };
-
-        private readonly Button _play = new();
-
-        private readonly Button _audioButton = new();
-        private readonly Button _closeButton = new();
-
-        private readonly Button _speed = new() { Content = "1×", MinHeight = 28, MinWidth = 42 };
-        private readonly Button _format = new();
-
-
-        private RecordingReviewSource? _source;
-
         private RecordingAudioPreview? _audio;
-
-        private WriteableBitmap? _bitmap;
-
-        private Task _loading = Task.CompletedTask, _frames = Task.CompletedTask, _command = Task.CompletedTask;
-
-        private CancellationTokenSource? _export;
-
-        private double _position, _playStart, _rate = 1;
-
-        private double? _pendingFrame;
-
-        private bool _playing, _closing, _audioFinished, _exported;
 
         private bool _autoExitAfterEncoding, _exitAfterExport;
 
-        private RecordingReviewQuality _quality;
+        private WriteableBitmap? _bitmap;
 
         private long _displayedSecond = -1;
         private string _durationText = "";
 
-        private int _seekRevision;
+        private CancellationTokenSource? _export;
+        private RecordingInputEffects _inputEffects;
+
+        private Task _loading = Task.CompletedTask, _frames = Task.CompletedTask, _command = Task.CompletedTask;
 
         private string _outputFormat;
 
+        private double? _pendingFrame;
+        private RecordingInputEffects _persistedInputEffects;
+        private RecordingProgressEffects _persistedProgressEffects;
+
+        private bool _playing, _closing, _audioFinished, _exported;
+
+        private double _position, _playStart, _rate = 1;
+        private RecordingProgressEffects _progressEffects;
+
+        private RecordingReviewQuality _quality;
+
         private RecordingReviewResult _result;
+
+        private int _seekRevision;
+
+
+        private RecordingReviewSource? _source;
+        private RecordingInputTraceDocument? _trace;
 
         private RecordingReviewWindow(Window owner, RecordingReviewDocument document, CancellationToken token)
 
@@ -128,6 +129,7 @@ namespace RitsukageGif.Desktop
                 Child = new Grid { Children = { _preview, _hdrPreview } },
             };
 
+            _hdrPreview.PresentationChanged += visible => _preview.Opacity = visible ? 0 : 1;
             _status.PropertyChanged += (_, args) =>
             {
                 if (args.Property == TextBlock.TextProperty) _status.IsVisible = !string.IsNullOrEmpty(_status.Text);
@@ -172,6 +174,7 @@ namespace RitsukageGif.Desktop
                 _closed.TrySetResult();
             };
 
+            AddHandler(KeyDownEvent, NavigationKeyPressed, RoutingStrategies.Tunnel);
             KeyDown += KeyPressed;
         }
 
@@ -290,6 +293,7 @@ namespace RitsukageGif.Desktop
         private async Task RunCoreAsync(Func<Task> operation)
 
         {
+            SetActionsEnabled(false);
             try
             {
                 await operation();
@@ -306,6 +310,10 @@ namespace RitsukageGif.Desktop
                 Logger.ZLogError(error, $"Recording review operation failed.");
 
                 if (!_closing) _status.Text = error.Message;
+            }
+            finally
+            {
+                if (!_closing) SetActionsEnabled(true);
             }
         }
 

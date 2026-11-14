@@ -38,10 +38,28 @@ namespace RitsukageGif.Desktop
             await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Translate, output);
         }
 
+        private async Task<(byte[] Png, ScreenshotResult? SaveOutput)> PrepareRecognitionInputAsync()
+        {
+            var token = _lifetime.Token;
+            token.ThrowIfCancellationRequested();
+            if (AnimationActive || LiveCaptureActive)
+            {
+                var current = await CaptureOutputAsync(OutputColorMode.Sdr, token);
+                return (current.Png, current);
+            }
+
+            var source = _sdrPng ?? _png;
+            var saveOutput = AutomaticSave is not null &&
+                             (SavePreferencesProvider().Normalize().AutoSaveTriggers &
+                              ScreenshotAutoSaveTriggers.Recognize) != 0
+                ? await CaptureOutputAsync(OutputColorMode.Sdr, token)
+                : null;
+            return (source, saveOutput);
+        }
+
         private async Task RecognizeAsync(RecognitionMode mode)
         {
-            var output = await CaptureOutputAsync(OutputColorMode.Sdr, _lifetime.Token);
-            var png = output.Png;
+            var (png, output) = await PrepareRecognitionInputAsync();
             var preferences = RecognitionPreferencesProvider().Normalize();
             if (mode == RecognitionMode.Text && !preferences.ShowDialogOnRecognition)
             {
@@ -52,12 +70,13 @@ namespace RitsukageGif.Desktop
                 var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
                 await clipboard.SetTextAsync(text);
                 await clipboard.FlushAsync();
-                await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output);
+                if (output is not null) await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output);
                 return;
             }
 
             await RecognitionWindow.ShowAsync(this, png, mode,
-                _ => SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output), preferences,
+                output is null ? null : _ => SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output),
+                preferences,
                 token: _lifetime.Token, translationPreferences: TranslationPreferencesProvider(),
                 copyFormatChanged: FormulaCopyFormatChanged,
                 originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,

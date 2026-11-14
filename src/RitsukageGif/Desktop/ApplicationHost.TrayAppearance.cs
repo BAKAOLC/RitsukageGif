@@ -19,7 +19,6 @@ namespace RitsukageGif.Desktop
             if (_trayAppearance == mode && _trayColor == color) return;
             if (mode == TrayIconAppearance.Hidden)
             {
-                if (View is not { IsVisible: true } && !IsClosing) ShowMainWindow();
                 _tray.IsVisible = false;
             }
             else

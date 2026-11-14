@@ -7,13 +7,7 @@ namespace RitsukageGif.Desktop
             CapturedFrameSet frames;
             if (_desktop is not null)
             {
-                if (_current != region)
-                {
-                    _desktop.Move(region);
-                    _current = region;
-                }
-
-                frames = _desktop.CaptureFrames(token);
+                frames = ConfigureDesktopRegion(region).CaptureFrames(token);
             }
             else
             {

@@ -28,21 +28,58 @@ namespace RitsukageGif.Desktop
                 TextWrapping = TextWrapping.Wrap, FontSize = 12,
             });
             var rows = new StackPanel();
-            page.Children.Add(MouseSettingsCard(rows));
+            var clear = ActionPageButton("GlobalMouseClearAll");
+            clear.Name = "ClearGlobalMouseBindings";
+            clear.Bind(ContentProperty, LiveText.Resource("GlobalMouseClearAll"));
+            var ignored = ActionPageButton("HotkeyIgnoredPrograms");
+            ignored.Name = "GlobalMouseIgnoredPrograms";
+            ignored.HorizontalAlignment = HorizontalAlignment.Left;
+            ignored.IsEnabled = GlobalMouseService.Supported && PortableForegroundPolicy.Supported;
+            if (!PortableForegroundPolicy.Supported)
+                ignored.Bind(ToolTip.TipProperty, LiveText.Resource("HotkeyPolicyUnavailable"));
+            ignored.Click += async (_, _) =>
+            {
+                var programs = await EditIgnoredProgramsAsync(draft.GlobalMouseIgnoredPrograms);
+                if (programs is null) return;
+                draft.GlobalMouseIgnoredPrograms = programs;
+                RefreshIgnored();
+                RequestLiveApply();
+            };
+            SettingsField.Track(ignored, ignored, static settings => settings.GlobalMouseIgnoredPrograms.Count);
+            var maskRow = new Grid { ColumnDefinitions = new("*,Auto"), Margin = new(0, 6) };
+            maskRow.Children.Add(Setting(mask, static settings => settings.GlobalMouseShowMask));
+            Grid.SetColumn(clear, 1);
+            maskRow.Children.Add(clear);
+            page.Children.Add(MouseSettingsCard(new StackPanel
+            {
+                Children = { rows, maskRow, ignored },
+            }));
             var statuses = new Dictionary<string, ContentControl>(StringComparer.Ordinal);
+            clear.Click += (_, _) =>
+            {
+                draft.GlobalMouseBindings.Clear();
+                draft.GlobalActions.RemoveAll(GlobalMouseActionCatalog.IsMouseOnly);
+                Refresh();
+                RequestLiveApply();
+            };
             page.AttachedToVisualTree += (_, _) => Refresh();
             SubscribeContentLanguage(Refresh);
             HotkeyRegistrationsChanged += Validate;
             RegisterContentCleanup(() => HotkeyRegistrationsChanged -= Validate);
             Refresh();
-            page.Children.Add(Setting(mask, static settings => settings.GlobalMouseShowMask));
             return page;
+
+            void RefreshIgnored()
+            {
+                ignored.Content = string.Format(UiText.Get("HotkeyIgnoredPrograms"),
+                    draft.GlobalMouseIgnoredPrograms.Count);
+            }
 
             void Refresh()
             {
                 rows.Children.Clear();
                 statuses.Clear();
-                foreach (var target in Targets())
+                foreach (var (target, fixedRow) in Targets())
                 {
                     var binding = draft.GlobalMouseBindings.FirstOrDefault(item => item.ActionId == target.Id);
                     _ = InputMouseGesture.TryParse(binding?.Gesture, out var gesture);
@@ -61,13 +98,8 @@ namespace RitsukageGif.Desktop
                     };
                     var status = new ContentControl { Width = 24, VerticalAlignment = VerticalAlignment.Center };
                     statuses[target.Id] = status;
-                    var label = target.Id.StartsWith("builtin.mouse.", StringComparison.Ordinal)
-                        ? target.Kind switch
-                        {
-                            GlobalActionKind.Screenshot => UiText.Get("GlobalMouseScreenshotAndEdit"),
-                            GlobalActionKind.ScreenshotAndRecord => UiText.Get("GlobalMouseGifShot"),
-                            _ => UiText.Get("GlobalAction" + target.Kind),
-                        }
+                    var label = fixedRow
+                        ? GlobalMouseActionCatalog.FixedLabel(target.Kind)
                         : ActionLabel(target);
                     var row = MouseSettingsRow(label, modifiers, kindBox, status);
                     SettingsField.Track(row, ((Grid)row.Child!).Children[0],
@@ -98,44 +130,41 @@ namespace RitsukageGif.Desktop
                             });
                         }
 
-                        if (target.Id.StartsWith("builtin.mouse.", StringComparison.Ordinal) &&
-                            !target.ShowInTray && string.IsNullOrWhiteSpace(target.Shortcut) &&
+                        if (GlobalMouseActionCatalog.IsMouseOnly(target) &&
                             draft.GlobalMouseBindings.All(item => item.ActionId != target.Id))
                             draft.GlobalActions.Remove(target);
+                        clear.IsEnabled = draft.GlobalMouseBindings.Count != 0;
                         Validate();
                         RequestLiveApply();
                     }
                 }
 
+                clear.IsEnabled = GlobalMouseService.Supported && draft.GlobalMouseBindings.Count != 0;
+                RefreshIgnored();
                 Validate();
             }
 
-            GlobalActionBinding[] Targets()
+            (GlobalActionBinding Action, bool FixedRow)[] Targets()
             {
-                var kinds = new[]
-                {
-                    GlobalActionKind.ScreenshotAndPin, GlobalActionKind.ScreenshotAndCopy,
-                    GlobalActionKind.ScreenshotAndCopyText, GlobalActionKind.ScreenshotQuickSave,
-                    GlobalActionKind.ScreenshotAndTranslate, GlobalActionKind.Screenshot,
-                    GlobalActionKind.ScreenshotAndSave, GlobalActionKind.ScreenshotAndScroll,
-                    GlobalActionKind.ScreenshotAndRecord,
-                };
-                var result = new List<GlobalActionBinding>();
+                var result = new List<(GlobalActionBinding Action, bool FixedRow)>();
                 var included = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var kind in kinds)
+                foreach (var kind in GlobalMouseActionCatalog.FixedKinds)
                 {
-                    var id = "builtin.mouse." + kind;
+                    var id = GlobalMouseActionCatalog.FixedId(kind);
+                    var standardId = AppSettings.DefaultActionId(kind);
                     var action = draft.GlobalActions.FirstOrDefault(item => item.Id == id && item.Kind == kind &&
                                                                             draft.GlobalMouseBindings.Any(binding =>
                                                                                 binding.ActionId == id)) ??
-                                 draft.GlobalActions.FirstOrDefault(item => item.Kind == kind &&
-                                                                            string.IsNullOrEmpty(item.Parameter) &&
-                                                                            item.Arguments.Count == 0) ??
+                                 draft.GlobalActions.FirstOrDefault(item =>
+                                     item.Id == standardId && item.Kind == kind &&
+                                     string.IsNullOrEmpty(item.Parameter) &&
+                                     item.Arguments.Count == 0) ??
+                                 draft.GlobalActions.FirstOrDefault(item => item.Id == id && item.Kind == kind) ??
                                  new GlobalActionBinding
                                  {
                                      Id = id, Kind = kind, Enabled = false, ShowInTray = false,
                                  };
-                    result.Add(action);
+                    result.Add((action, true));
                     included.Add(action.Id);
                 }
 
@@ -145,7 +174,7 @@ namespace RitsukageGif.Desktop
                     var action = draft.GlobalActions.FirstOrDefault(item => item.Id == binding.ActionId);
                     if (action is null) continue;
                     included.Add(action.Id);
-                    result.Add(action);
+                    result.Add((action, false));
                 }
 
                 return [.. result];

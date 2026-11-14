@@ -29,6 +29,7 @@ namespace RitsukageGif.Desktop
             window.Presentation.ConfigurationRequested =
                 () => OpenConfigurationRequested?.Invoke() ?? Task.CompletedTask;
             window.Presentation.SwitchNextRequested = () => SwitchToNextPin(window);
+            window.Presentation.ResetSelectedPeersRequested = () => ResetSelectedPeers(window);
             AttachDrop(window);
         }
 
@@ -146,7 +147,8 @@ namespace RitsukageGif.Desktop
 
         private void SwitchToNextPin(IPinnedWindow source)
         {
-            var visible = AllWindows.Where(window => window.Group == source.Group && window.IsVisible).ToArray();
+            var visible = AllWindows.Where(window => window.Group == source.Group && window.IsVisible)
+                .OrderBy(window => window.Presentation.RegistrationOrder).ToArray();
             if (visible.Length < 2) return;
             var current = Array.IndexOf(visible, source);
             visible[(current + 1) % visible.Length].Window.Activate();

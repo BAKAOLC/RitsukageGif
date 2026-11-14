@@ -79,26 +79,36 @@ namespace RitsukageGif.Desktop
                 static settings => settings.Annotation.GlobalNumberCounter);
             var automaticNumberColor = new RadioButton
             {
-                GroupName = "NumberForeground", IsChecked = value.NumberForegroundColor is null,
+                GroupName = "NumberForeground", IsChecked = value.NumberForegroundUsesDefault,
                 VerticalAlignment = VerticalAlignment.Center,
                 [!ContentProperty] = LiveText.Resource("AnnotationNumberAutomaticForeground"),
             };
             var customNumberColor = new RadioButton
             {
-                GroupName = "NumberForeground", IsChecked = value.NumberForegroundColor is not null,
+                GroupName = "NumberForeground", IsChecked = !value.NumberForegroundUsesDefault,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             var numberColor = CreateAppearanceColorPicker("AnnotationNumberForegroundColor",
                 value.NumberForegroundColor ?? 0xFFFFFFFF, true, () => draft.Appearance.ColorDialogStyle);
+            var rememberedNumberColor = value.NumberForegroundColor;
             numberColor.IsEnabled = customNumberColor.IsChecked == true;
-            customNumberColor.IsCheckedChanged += (_, _) => numberColor.IsEnabled = customNumberColor.IsChecked == true;
+            customNumberColor.IsCheckedChanged += (_, _) =>
+            {
+                numberColor.IsEnabled = customNumberColor.IsChecked == true;
+                if (numberColor.IsEnabled) rememberedNumberColor = numberColor.Color.ToUInt32();
+            };
+            numberColor.ColorChanged += (_, _) =>
+            {
+                if (numberColor.IsEnabled) rememberedNumberColor = numberColor.Color.ToUInt32();
+            };
             var numberColors = new StackPanel
             {
                 Orientation = Orientation.Horizontal, Spacing = 6,
                 Children = { automaticNumberColor, customNumberColor, numberColor },
             };
             Add(numbers, "AnnotationNumberForegroundColor", numberColors,
-                static settings => settings.Annotation.NumberForegroundColor);
+                static settings => (settings.Annotation.NumberForegroundUsesDefault,
+                    settings.Annotation.NumberForegroundColor));
             var numberTextSize = Choice("AnnotationNumberTextSize", (int)value.NumberTextSize,
                 "AnnotationSizeLarge", "AnnotationSizeMedium", "AnnotationSizeSmall");
             var numberArrowSize = Choice("AnnotationNumberArrowSize", (int)value.NumberArrowSize,
@@ -110,7 +120,8 @@ namespace RitsukageGif.Desktop
 
             var pencil = Section("AnnotationPencilBehavior");
             var shift = Choice("AnnotationPencilShiftMode", (int)value.PencilShiftMode,
-                "AnnotationShiftFreeAngle", "AnnotationShiftSnapAngle");
+                "AnnotationShiftFreeAngle", "AnnotationShiftSnapAngle", "AnnotationShiftSnap30Degrees",
+                "AnnotationShiftSnap15Degrees", "AnnotationShiftSnap10Degrees", "AnnotationShiftSnap5Degrees");
             Add(pencil, "AnnotationPencilShiftMode", shift, static settings => settings.Annotation.PencilShiftMode);
             var smooth = Check("AnnotationSmoothBrush", value.SmoothBrush);
             Add(pencil, "AnnotationSmoothBrush", smooth, static settings => settings.Annotation.SmoothBrush);
@@ -165,7 +176,8 @@ namespace RitsukageGif.Desktop
                 ControlPointVisibility = (AnnotationControlPointVisibility)controlPoints.SelectedIndex,
                 RenumberOnDelete = renumber.IsChecked == true, NumberStartsAtZero = fromZero.IsChecked == true,
                 GlobalNumberCounter = globalNumbers.IsChecked == true,
-                NumberForegroundColor = automaticNumberColor.IsChecked == true ? null : numberColor.Color.ToUInt32(),
+                NumberForegroundUsesDefault = automaticNumberColor.IsChecked == true,
+                NumberForegroundColor = rememberedNumberColor,
                 NumberTextSize = (AnnotationSizeLevel)numberTextSize.SelectedIndex,
                 NumberArrowSize = (AnnotationSizeLevel)numberArrowSize.SelectedIndex,
                 PencilShiftMode = (AnnotationPencilShiftMode)shift.SelectedIndex,

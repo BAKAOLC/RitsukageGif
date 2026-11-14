@@ -78,7 +78,8 @@ namespace RitsukageGif.Desktop
                         var prepared = await Task.Run(() => input.Prepare(region, _automaticLifetime.Token),
                             _automaticLifetime.Token);
                         if (_closed) return;
-                        if (prepared && generation == _session.Generation && region == _region)
+                        if (prepared && generation == _session.Generation && region == _region &&
+                            _resizePointer is null)
                         {
                             if (_session.Paused) StartCapture();
                             _session.AutomaticEnabled = true;

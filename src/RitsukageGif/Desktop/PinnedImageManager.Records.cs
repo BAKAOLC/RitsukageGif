@@ -26,12 +26,12 @@ namespace RitsukageGif.Desktop
 
                     if (history)
                     {
-                        foreach (var entry in _closedImages) entry.Dispose();
-                        _closedImages.Clear();
+                        for (var index = _closedImages.Count - 1; index >= 0; index--)
+                            DropClosedImage(index);
                         _closedDocuments.Clear();
                     }
 
-                    if (onScreen)
+                    if (history || onScreen)
                     {
                         _saveTimer.Stop();
                         _sessionTouched = true;

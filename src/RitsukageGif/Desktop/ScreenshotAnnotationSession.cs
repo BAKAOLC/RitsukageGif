@@ -17,6 +17,7 @@ namespace RitsukageGif.Desktop
         private (PixelRect Region, byte[] Pixels)? _overlayFrame;
 
         private ScreenshotTool _tool;
+        private ScreenshotTool _toolBeforeWatermark;
 
         public bool CanAnnotate
         {
@@ -40,10 +41,9 @@ namespace RitsukageGif.Desktop
             }
         } = true;
 
-        public bool CanStartScrolling =>
-            CanScroll && CanExport && !HasAnnotations;
+        public bool CanStartScrolling => CanScroll && CanExport;
 
-        private bool CanExport => !IsBusy && !Selection.IsEmpty && !IsDrawing && !IsEditingText;
+        private bool CanExport => !IsBusy && !Selection.IsEmpty && !IsDrawing;
 
         public ScreenshotTool Tool
         {
@@ -57,6 +57,7 @@ namespace RitsukageGif.Desktop
                 else CancelGesture();
                 _selected = null;
                 StoreToolStyle(_styleTool);
+                if (value == ScreenshotTool.Watermark) _toolBeforeWatermark = _tool;
                 _tool = value;
                 RestoreToolStyle(value);
                 EnsureManualWatermark();
@@ -250,10 +251,19 @@ namespace RitsukageGif.Desktop
                 {
                     if (_shiftAnchorIndex < 0) _shiftAnchorIndex = annotation.Points.Count - 1;
                     var anchor = annotation.Points[_shiftAnchorIndex];
-                    if (_behavior.PencilShiftMode == AnnotationPencilShiftMode.SnapAngleLine)
+                    var angleStep = _behavior.PencilShiftMode switch
+                    {
+                        AnnotationPencilShiftMode.SnapAngleLine => Math.PI / 4,
+                        AnnotationPencilShiftMode.Snap30DegreeLine => Math.PI / 6,
+                        AnnotationPencilShiftMode.Snap15DegreeLine => Math.PI / 12,
+                        AnnotationPencilShiftMode.Snap10DegreeLine => Math.PI / 18,
+                        AnnotationPencilShiftMode.Snap5DegreeLine => Math.PI / 36,
+                        _ => 0,
+                    };
+                    if (angleStep > 0)
                     {
                         var vector = new Vector(current.X - anchor.X, current.Y - anchor.Y);
-                        var angle = Math.Round(Math.Atan2(vector.Y, vector.X) / (Math.PI / 4)) * Math.PI / 4;
+                        var angle = Math.Floor(Math.Atan2(vector.Y, vector.X) / angleStep + .5) * angleStep;
                         current = anchor + new Vector(Math.Cos(angle), Math.Sin(angle)) * vector.Length;
                     }
 
@@ -311,6 +321,12 @@ namespace RitsukageGif.Desktop
                     return;
             }
 
+            await CommitCompletedAnnotationAsync(annotation, true);
+        }
+
+        private async Task CommitCompletedAnnotationAsync(ScreenshotAnnotation annotation, bool advanceNumber,
+            Task? pendingPreview = null)
+        {
             try
             {
                 if (annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase
@@ -318,11 +334,13 @@ namespace RitsukageGif.Desktop
                     or ScreenshotTool.Eraser)
                 {
                     IsBusy = true;
-                    Changed?.Invoke();
                     using var work = CancellationTokenSource.CreateLinkedTokenSource(_cancel.Token);
                     _gestureWork = work;
+                    Changed?.Invoke();
                     try
                     {
+                        if (pendingPreview is not null) await pendingPreview;
+                        work.Token.ThrowIfCancellationRequested();
                         annotation.ImageTiles =
                             await CreateImageEffectAsync(annotation, work.Token);
                         work.Token.ThrowIfCancellationRequested();
@@ -340,7 +358,8 @@ namespace RitsukageGif.Desktop
                 }
 
                 Commit(annotation);
-                if (annotation.Tool == ScreenshotTool.Number) CompleteNumber(annotation.Properties.Number);
+                if (advanceNumber && annotation.Tool == ScreenshotTool.Number)
+                    CompleteNumber(annotation.Properties.Number);
             }
             catch (OperationCanceledException)
             {
@@ -385,8 +404,10 @@ namespace RitsukageGif.Desktop
             ReleaseNumberCaptionKey();
             CancelPrivacyDetection();
             CancelErase();
+            CancelDuplicatePixelPreview();
             _gesture?.Dispose();
             _gesture = null;
+            _duplicateSource = null;
             CancelMove();
             Changed?.Invoke();
         }

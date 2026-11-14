@@ -26,14 +26,14 @@ namespace RitsukageGif.Desktop
                 [!ContentProperty] = LiveText.Resource("ScreenshotRememberExtension"),
             };
             manual.Children.Add(Setting(remember, static settings => settings.ScreenshotSave.RememberExtension));
-            page.Children.Add(SettingsSection("ScreenshotManualSave", manual));
+            page.Children.Add(SaveSection("ScreenshotManualSave", "Manual", manual));
             var notificationAction = new ComboBox
             {
                 Name = "ScreenshotQuickNotificationAction", SelectedIndex = (int)value.QuickNotificationAction,
             };
             RefreshNotificationActions();
             SubscribeContentLanguage(RefreshNotificationActions);
-            page.Children.Add(SettingsSection("ScreenshotQuickSave",
+            page.Children.Add(SaveSection("ScreenshotQuickSave", "Quick",
                 SaveProfileEditor(value.Quick, draft.OutputDirectory, out var readQuick,
                     static settings => settings.ScreenshotSave.Quick, notificationAction: notificationAction)));
             var automatic = SaveProfileEditor(value.Automatic, draft.OutputDirectory, out var readAutomatic,
@@ -69,9 +69,7 @@ namespace RitsukageGif.Desktop
             automatic.Children.Add(SettingRow("ScreenshotAutoTriggers", triggers,
                 static settings => settings.ScreenshotSave.AutoSaveTriggers));
             automatic.Children.Add(cleanupRow);
-            var automaticSection = SettingsSection("ScreenshotAutomaticSave", automatic);
-            automaticSection.Children[0] = enabled;
-            page.Children.Add(automaticSection);
+            page.Children.Add(SaveSection("ScreenshotAutomaticSave", "Automatic", automatic, enabled));
             apply = () =>
             {
                 var current = readManual();
@@ -102,6 +100,31 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private StackPanel SaveSection(string title, string profile, StackPanel fields, Control? titleControl = null)
+        {
+            var section = SettingsSection(title, fields);
+            var heading = titleControl ?? section.Children[0];
+            section.Children.RemoveAt(0);
+            var row = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 8 };
+            row.Children.Add(heading);
+            var reference = new Button
+            {
+                Name = "ScreenshotSaveVariables" + profile, Classes = { "tool" },
+                MinHeight = 24, Padding = new(4, 0), Foreground = AppTheme.Muted,
+                VerticalAlignment = VerticalAlignment.Center,
+                Content = new TextBlock
+                {
+                    [!TextBlock.TextProperty] = LiveText.Resource("ScreenshotSaveVariablesLink"),
+                    TextDecorations = TextDecorations.Underline,
+                },
+            };
+            reference.Click += (_, _) => new ScreenshotSaveVariablesWindow().Show(this);
+            Grid.SetColumn(reference, 1);
+            row.Children.Add(reference);
+            section.Children.Insert(0, row);
+            return section;
+        }
+
         private StackPanel SaveProfileEditor(ScreenshotSaveProfile value, string fallbackDirectory,
             out Func<ScreenshotSaveProfile> read, Func<AppSettings, ScreenshotSaveProfile> profileGetter,
             bool manual = false, ComboBox? notificationAction = null)
@@ -120,7 +143,6 @@ namespace RitsukageGif.Desktop
                     : Path.Combine(string.IsNullOrWhiteSpace(value.Directory) ? fallbackDirectory : value.Directory,
                         value.NameTemplate),
             };
-            ToolTip.SetTip(name, UiText.Get("ScreenshotNameTemplateHint"));
             var conflict = new ComboBox
                 { ItemsSource = ScreenshotConflictLabels(), SelectedIndex = (int)value.ConflictPolicy };
             var notify = new CheckBox

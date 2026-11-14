@@ -113,12 +113,39 @@ namespace RitsukageGif.Desktop
                 var from = _draft.Actions.FindIndex(action => action.Id == id);
                 var target = InsertionAt(point);
                 var action = _draft.Actions[from];
-                _draft.Actions.RemoveAt(from);
                 if (from < target) target--;
-                _draft.Actions.Insert(Math.Clamp(target, 0, _draft.Actions.Count), action);
+                target = Math.Clamp(target, 0, _draft.Actions.Count - 1);
+                _draft.Actions.RemoveAt(from);
+                _draft.Actions.Insert(target, action);
+                var previous = target == 0 ? null : (ToolbarButtonVisibility?)_draft.Actions[target - 1].Visibility;
+                var next = target + 1 < _draft.Actions.Count
+                    ? _draft.Actions[target + 1].Visibility
+                    : (ToolbarButtonVisibility?)null;
+                action.Visibility = DropVisibility(action.Visibility, previous, next);
             }
 
             CancelDrag();
+            RenderRows();
+        }
+
+        private static ToolbarButtonVisibility DropVisibility(ToolbarButtonVisibility current,
+            ToolbarButtonVisibility? previous, ToolbarButtonVisibility? next)
+        {
+            if (previous is null) return next ?? ToolbarButtonVisibility.Toolbar;
+            if (next is null) return current;
+            if (previous == next || (current != previous && current != next)) return previous.Value;
+            return current;
+        }
+
+        private void ChangeVisibility(ToolbarActionPreference action, ToolbarButtonVisibility visibility)
+        {
+            if (action.Visibility == visibility) return;
+            action.Visibility = visibility;
+            _draft.Actions.Remove(action);
+            var target = _draft.Actions.FindLastIndex(row => row.Visibility == visibility);
+            if (target < 0)
+                target = _draft.Actions.FindLastIndex(row => row.Visibility < visibility);
+            _draft.Actions.Insert(target + 1, action);
             RenderRows();
         }
 

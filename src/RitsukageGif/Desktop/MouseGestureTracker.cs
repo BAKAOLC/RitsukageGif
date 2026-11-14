@@ -6,11 +6,32 @@ namespace RitsukageGif.Desktop
     internal sealed class MouseGestureTracker
     {
         private MouseButton _button;
+        private int _clickCount;
         private bool _doubleClick;
+        private MouseButton _lastPressButton;
+        private IPointer? _lastPressPointer;
+        private Visual? _lastPressTarget;
+        private int _lastRawClickCount;
         private KeyModifiers _modifiers;
         internal bool IsActive { get; private set; }
         private bool IsDragging { get; set; }
         private Point Start { get; set; }
+
+        internal int GetClickCount(PointerPressedEventArgs args, MouseButton button, Visual target)
+        {
+            var raw = args.ClickCount;
+            if (args.Pointer.Type == PointerType.Touch) return raw;
+            _clickCount = _clickCount == 1 && raw > 1 && raw == _lastRawClickCount + 1 &&
+                          button == _lastPressButton &&
+                          ReferenceEquals(target, _lastPressTarget) && ReferenceEquals(args.Pointer, _lastPressPointer)
+                ? 2
+                : 1;
+            _lastRawClickCount = raw;
+            _lastPressButton = button;
+            _lastPressTarget = target;
+            _lastPressPointer = args.Pointer;
+            return _clickCount;
+        }
 
         internal bool Begin(MouseButton button, KeyModifiers modifiers, Point point, int clickCount)
         {

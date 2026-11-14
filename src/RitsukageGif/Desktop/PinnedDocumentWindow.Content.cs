@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -9,7 +10,9 @@ namespace RitsukageGif.Desktop
         private Bitmap? _documentBitmap;
         private ItemsControl? _fileList;
         private Task<byte[]?>? _formulaPngTask;
+        private (Avalonia.PixelPoint Center, Avalonia.PixelPoint Position)? _pendingFormulaPlacement;
         private bool _restoredLayout;
+        private bool _waitingForFormulaSize;
 
         private void RebuildContent()
         {
@@ -21,7 +24,7 @@ namespace RitsukageGif.Desktop
             _documentBitmap = null;
             switch (Document)
             {
-                case PinnedHtmlDocument html when !IgnoreFormat:
+                case PinnedHtmlDocument html when !IgnoreFormat && DisplayedTranslation is null:
                     var rich = PinnedHtmlView.Create(html, _htmlResources ??= PinnedHtmlView.CreateResources());
                     rich.LinkRequested += OpenHtmlLink;
                     rich.SceneContentChanged += (_, _) => DocumentAnnotationLayoutChanged(true);
@@ -47,19 +50,11 @@ namespace RitsukageGif.Desktop
                     _surface.Child = _fileList;
                     break;
                 case PinnedColorDocument color:
-                    _textView = new PinnedTextView(color.Value) { FontSize = 16 };
-                    _surface.Child = new Grid
-                    {
-                        RowDefinitions = new("*,Auto"), MinHeight = 140,
-                        Children =
-                        {
-                            new Border { Background = new SolidColorBrush(Color.Parse(color.Value)), MinHeight = 100 },
-                            new Border { Padding = new(0, 8, 0, 0), Child = _textView.Control, [Grid.RowProperty] = 1 },
-                        },
-                    };
+                    _surface.Padding = new(0);
+                    _surface.Child = new PinnedColorScene(color);
                     break;
                 default:
-                    _textView = new PinnedTextView(Document.PlainText);
+                    _textView = new PinnedTextView(DisplayedTranslation?.Text ?? Document.PlainText);
                     _surface.Child = _textView.Control;
                     break;
             }
@@ -105,8 +100,15 @@ namespace RitsukageGif.Desktop
                 image.Source = _documentBitmap;
                 if (!_restoredLayout && !_isThumbnail)
                 {
+                    var previousSize = new Size(Width, Height);
+                    var hadInitialPlacement = _pendingFormulaPlacement.HasValue;
+                    _waitingForFormulaSize =
+                        _pendingFormulaPlacement is { } placement && placement.Position == Position;
                     FitInitialContent();
-                    RestoreToScreen();
+                    if (_waitingForFormulaSize && previousSize == new Size(Width, Height))
+                        CompleteFormulaPlacement();
+                    else if (!hadInitialPlacement && _newPinCenter is null)
+                        RestoreToScreen();
                 }
 
                 ApplyDocumentThumbnailRequest();
@@ -129,6 +131,10 @@ namespace RitsukageGif.Desktop
                 }
 
                 return null;
+            }
+            finally
+            {
+                if (!_waitingForFormulaSize) _pendingFormulaPlacement = null;
             }
         }
 

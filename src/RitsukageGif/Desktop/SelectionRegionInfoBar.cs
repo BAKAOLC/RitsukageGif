@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace RitsukageGif.Desktop
 {
@@ -130,7 +131,8 @@ namespace RitsukageGif.Desktop
             var textKey = (snapshot, measuring, information, _coordinator.HintMode, CultureInfo.CurrentUICulture.Name,
                 _coordinator.SelectionCoordinateUnit, preferences.InformationUnit, preferences.InformationItems,
                 density);
-            if (_textKey != textKey)
+            var contentChanged = _textKey != textKey;
+            if (contentChanged)
             {
                 _textKey = textKey;
                 var region = snapshot.Region;
@@ -153,18 +155,31 @@ namespace RitsukageGif.Desktop
                 }
             }
 
+            var canEditShapeRegions = _coordinator.CanEditShapeRegions;
+            contentChanged |= _coordinates.IsVisible != information || _add.IsVisible != canEditShapeRegions;
             _coordinates.IsVisible = information;
-            _add.IsVisible = _remove.IsVisible = _coordinator.CanEditShapeRegions;
+            _add.IsVisible = _remove.IsVisible = canEditShapeRegions;
             var viewport = new Size(monitor.Width / scale, monitor.Height / scale);
             MaxWidth = Math.Max(1, Math.Min(280, viewport.Width - 16));
             var rowButtons = _add.IsVisible ? 56 : 0;
             _coordinateText.MaxWidth = Math.Max(1, MaxWidth - 20 - rowButtons);
             _title.MaxWidth = _semantic.MaxWidth = Math.Max(1, MaxWidth - 20);
+            if (contentChanged)
+            {
+                for (var ancestor = _coordinateText.GetVisualParent();
+                     ancestor is Layoutable layout && !ReferenceEquals(layout, this);
+                     ancestor = ancestor.GetVisualParent())
+                    layout.InvalidateMeasure();
+                Child!.InvalidateMeasure();
+            }
+
             Child!.Measure(new(Math.Max(1, MaxWidth - 20), Math.Max(1, viewport.Height - 12)));
             var size = new Size(Math.Min(MaxWidth, Child.DesiredSize.Width + 20), Child.DesiredSize.Height + 12);
             var local = snapshot.Region.ToLocal(monitor, scale);
+            var offsets = _coordinator.RegionInformationOffsets(snapshot.Region, scale);
             OccupiedBounds = SelectionRegionInfoLayout.Place(viewport,
-                new(local.X, local.Y, local.Width, local.Height), size, toolbar, options, side, modePicker);
+                new(local.X, local.Y, local.Width, local.Height), size, toolbar, options, side, modePicker,
+                offsets.Near, offsets.Far);
             Margin = new(OccupiedBounds.X, OccupiedBounds.Y, 0, 0);
             _geometry.Update(snapshot);
         }
@@ -181,6 +196,7 @@ namespace RitsukageGif.Desktop
             icon.Width = icon.Height = 16;
             button.Content = icon;
             button.Bind(ToolTip.TipProperty, LiveText.Resource(key));
+            AnchoredSelectionTooltip.Configure(button);
             button.Bind(AutomationProperties.NameProperty, LiveText.Resource(key));
             button.Click += (_, _) => _coordinator.BeginRegionEdit(subtract);
             return button;

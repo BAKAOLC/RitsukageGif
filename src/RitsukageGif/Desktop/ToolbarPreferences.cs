@@ -23,13 +23,16 @@ namespace RitsukageGif.Desktop
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
         public List<ToolbarActionPreference> Actions { get; set; } = CreateDefaultActions();
 
+        // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
+        public Dictionary<string, ScreenshotTool> ColumnValues { get; init; } = new(StringComparer.Ordinal);
+
         public int SchemaRevision { get; set; }
 
         public ToolbarPreferences Merge(ToolbarPreferences changes, bool? tools)
         {
             return (tools switch
             {
-                true => this with { Columns = changes.Columns },
+                true => this with { Columns = changes.Columns, ColumnValues = changes.ColumnValues },
                 false => this with { Actions = changes.Actions },
                 null => changes,
             }).Normalize();
@@ -66,7 +69,17 @@ namespace RitsukageGif.Desktop
             foreach (var action in CreateDefaultActions())
                 if (identifiers.Add(action.Id))
                     actions.Add(action);
-            return this with { Columns = columns, Actions = actions };
+            var values = new Dictionary<string, ScreenshotTool>(StringComparer.Ordinal);
+            if (ColumnValues is { Count: > 0 })
+                foreach (var column in columns)
+                {
+                    if (column.Count < 2) continue;
+                    var key = column[0].ToString();
+                    if (ColumnValues.TryGetValue(key, out var value) && value != column[0] && column.Contains(value))
+                        values.Add(key, value);
+                }
+
+            return this with { Columns = columns, Actions = actions, ColumnValues = values };
         }
 
         private static List<List<ScreenshotTool>> CreateDefaultColumns()

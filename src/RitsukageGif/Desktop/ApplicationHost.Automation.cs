@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
                 }), () => DiagnosticsActions.LogDirectory, DiagnosticsActions.OpenLogs, this, _pinnedImages);
         }
 
-        private async Task RunRecordingCommandAsync(CancellationToken token)
+        private async Task<RecordingOutcome> RunRecordingCommandAsync(CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             if (IsClosing || _screenshotRecordingActive || _screenshotRecordingPreparing)
@@ -80,6 +80,7 @@ namespace RitsukageGif.Desktop
                 if (outcome.Cancelled)
                     throw new OperationCanceledException(UiText.Get("Cancelled"), new CancellationToken(true));
                 outcome.EnsureCompleted();
+                return outcome;
             }
             finally
             {
@@ -308,9 +309,11 @@ namespace RitsukageGif.Desktop
             if (!CanExecuteAction(selected)) return new(false, CurrentState, UiText.Get("CommandNotReady"));
             return await RunCommandOperationAsync(operationId, "action", null, async operationToken =>
             {
-                var screenshot = await ExecuteActionCoreAsync(selected, operationToken, true, true);
+                CommandReply? ownedReply = null;
+                var screenshot = await ExecuteActionCoreAsync(selected, operationToken, true, true,
+                    reply => ownedReply = reply);
                 return screenshot is null
-                    ? new(true, CurrentState, Output: LastPath, Region: Region, Outputs: LastOutputs)
+                    ? ownedReply ?? new(true, CurrentState, Region: Region)
                     : ScreenshotReply(screenshot);
             }, token);
         }

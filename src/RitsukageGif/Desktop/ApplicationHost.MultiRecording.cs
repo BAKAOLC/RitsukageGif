@@ -5,7 +5,7 @@ namespace RitsukageGif.Desktop
         private IReadOnlyList<PresetRecordingStreamStatus> _streams = [];
         public IReadOnlyList<PresetRecordingStreamStatus> Streams => Volatile.Read(ref _streams);
 
-        private void StartMultiple(IReadOnlyList<PresetRecordingOutput> definitions)
+        private Task<RecordingOutcome> StartMultiple(IReadOnlyList<PresetRecordingOutput> definitions)
         {
             if (Settings.CaptureColorMode != OutputColorMode.Sdr)
                 throw new NotSupportedException(UiText.Get("HdrMultipleUnsupported"));
@@ -70,6 +70,7 @@ namespace RitsukageGif.Desktop
             _abort = new();
             _operation = RecordMultipleAsync(outputs, sources, Settings.CaptureToneMap, _stop.Token, _abort.Token);
             Notify();
+            return _operation;
         }
 
         private async Task<RecordingOutcome> RecordMultipleAsync(List<MultiRecordingOutput> outputs,
@@ -140,7 +141,7 @@ namespace RitsukageGif.Desktop
                 LastPath = successfulOutputs[0];
                 var copied = results.Where(result => result.Success &&
                                                      (sources[result.Name].Settings?.Copy ??
-                                                      sources[result.Name].Preset?.Settings.Copy ?? true))
+                                                      sources[result.Name].Preset?.Settings.Copy ?? !IsTaskHost))
                     .Select(result => result.Path).ToArray();
                 if (copied.Length > 0)
                     try
@@ -167,7 +168,7 @@ namespace RitsukageGif.Desktop
                     : UiText.Get("RecordingFailed") + string.Join(", ",
                         results.Where(result => !result.Success).Select(result => result.Name)));
                 _presets.Signal("saved");
-                return new();
+                return new() { Outputs = successfulOutputs };
             }
             catch (OperationCanceledException)
             {

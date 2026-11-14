@@ -59,9 +59,10 @@ namespace RitsukageGif.Desktop
                 } while (window != 0);
 
                 _ = XSync(_display, 0);
-                if (X11ErrorTrap.HasError(_display) || !targetFound || !region.Contains(new(x, y)))
-                    return Unavailable(
-                        "Move the pointer inside the selected capture window to use automatic scrolling.");
+                if (X11ErrorTrap.HasError(_display))
+                    return Unavailable("The current pointer position is unavailable.");
+                if (!region.Contains(new(x, y))) return AutomaticScrollInputResult.PointerOutside;
+                if (!targetFound) return Unavailable("The pointer is no longer over the selected window.");
                 token.ThrowIfCancellationRequested();
                 var button = axis == ScrollCaptureAxis.Vertical ? 5u : 7u;
                 var pressed = XTestFakeButtonEvent(_display, button, 1, 0);

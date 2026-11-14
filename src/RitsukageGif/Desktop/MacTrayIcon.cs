@@ -59,9 +59,11 @@ namespace RitsukageGif.Desktop
             var entries = MenuModel.Capture();
             NativeMenuReset(_native);
             foreach (var entry in entries)
-                NativeMenuItem(_native, entry.Id, entry.Parent, entry.Enabled ? 1 : 0, entry.Toggle,
-                    entry.Checked ? 1 : 0, entry.Separator ? 1 : 0, entry.Label,
-                    TrayGestureEncoding.MacKey(entry.Gesture), TrayGestureEncoding.MacModifiers(entry.Gesture));
+                fixed (byte* icon = entry.IconPng)
+                    NativeMenuItem(_native, entry.Id, entry.Parent, entry.Enabled ? 1 : 0, entry.Toggle,
+                        entry.Checked ? 1 : 0, entry.Separator ? 1 : 0, entry.Label,
+                        TrayGestureEncoding.MacKey(entry.Gesture), TrayGestureEncoding.MacModifiers(entry.Gesture),
+                        icon, entry.IconPng?.Length ?? 0);
             NativeMenuCommit(_native);
         }
 
@@ -118,7 +120,7 @@ namespace RitsukageGif.Desktop
 
         [LibraryImport(Library, EntryPoint = "rg_tray_menu_item", StringMarshalling = StringMarshalling.Utf8)]
         private static partial void NativeMenuItem(nint tray, int identifier, int parent, int enabled, int toggle,
-            int check, int separator, string label, string key, uint modifiers);
+            int check, int separator, string label, string key, uint modifiers, byte* icon, int iconLength);
 
         [LibraryImport(Library, EntryPoint = "rg_tray_menu_commit")]
         private static partial void NativeMenuCommit(nint tray);

@@ -32,6 +32,14 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private void ResetSelectedPeers(IPinnedWindow source)
+        {
+            foreach (var window in SelectionSnapshot(source))
+                if (!ReferenceEquals(window, source) && window.Group == source.Group &&
+                    window is { IsInteractionLocked: false, OutputLifetime.IsCancellationRequested: false })
+                    window.Presentation.ResetFromSelection?.Invoke();
+        }
+
         private void MoveSelection(IPinnedWindow source, Avalonia.PixelPoint delta)
         {
             if (!_selectedImages.Contains(source)) return;

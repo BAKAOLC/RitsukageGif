@@ -167,7 +167,7 @@ namespace RitsukageGif.Desktop
             var statistics = _recordingControl!.GetStatistics()!;
             return new()
             {
-                Outputs = outputs, SourceLost = loss.WasLost,
+                Outputs = outputs, OutputsAreTemporary = true, SourceLost = loss.WasLost,
                 RecordedDuration = statistics.MediaDuration, AcceptedCaptures = statistics.AcceptedCaptures,
             };
 
@@ -230,7 +230,8 @@ namespace RitsukageGif.Desktop
             var statistics = _recordingControl!.GetStatistics();
             return new(!published)
             {
-                Outputs = published ? options.GetOutputPaths(path) : [], SourceLost = loss.WasLost,
+                Outputs = published ? options.GetOutputPaths(path) : [], OutputsAreTemporary = editable,
+                SourceLost = loss.WasLost,
                 RecordedDuration = statistics?.MediaDuration ?? TimeSpan.Zero,
                 AcceptedCaptures = statistics?.AcceptedCaptures ?? 0,
             };

@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
         {
             AddHandler(KeyUpEvent, (_, args) =>
             {
+                if (_annotationToolbar?.HandleAnnotationMenuKey(args, false) == true) return;
                 _markTextKeys.Remove(args.Key);
                 _annotationScene?.ReleasePolylineArrowKey(args.Key);
                 if (IsMarkEditing && _annotationScene?.HandleNumberCaptionKey(args.Key, args.KeyModifiers, false) ==
@@ -27,6 +28,7 @@ namespace RitsukageGif.Desktop
 
         private void DocumentAnnotationKeyDown(KeyEventArgs args)
         {
+            if (_annotationToolbar?.HandleAnnotationMenuKey(args, true) == true) return;
             if (_annotationScene is not { } session) return;
             if (args.Handled || _markTextKeys.Contains(args.Key) ||
                 ((session.IsEditingText || FocusManager.GetFocusedElement() is TextBox) &&
@@ -60,6 +62,7 @@ namespace RitsukageGif.Desktop
 
             switch (pin)
             {
+                case "annotate-toolbar":
                 case "annotate":
                     args.Handled = true;
                     EndDocumentMark();
@@ -81,22 +84,6 @@ namespace RitsukageGif.Desktop
                 case "print":
                     args.Handled = true;
                     session.RequestComplete(ScreenshotOutputAction.Print);
-                    return;
-                case "annotate-toolbar":
-                    args.Handled = true;
-                    if (_annotationToolbar is { } toolbar)
-                    {
-                        if (toolbar.IsVisible)
-                        {
-                            toolbar.Hide();
-                        }
-                        else
-                        {
-                            toolbar.Show(this);
-                            toolbar.Place();
-                        }
-                    }
-
                     return;
             }
 

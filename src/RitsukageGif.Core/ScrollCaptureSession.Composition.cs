@@ -12,6 +12,12 @@ namespace RitsukageGif.Core
             for (var position = from; position < to - 1; position++)
             {
                 if ((position & 31) == 0) token.ThrowIfCancellationRequested();
+                if (masked && ChangedPixels(position - offset) <= _crossLength / 2)
+                {
+                    runStart = position + 1;
+                    continue;
+                }
+
                 var input = pixels.AsSpan((position - offset) * _rowBytes, _rowBytes);
                 var next = pixels.AsSpan((position - offset + 1) * _rowBytes, _rowBytes);
                 var stored = Row(position);
@@ -21,8 +27,7 @@ namespace RitsukageGif.Core
                 for (var channel = 0; channel < 3; channel++)
                     texture += Math.Min(Math.Abs(next[index + channel] - input[index + channel]),
                         Math.Abs(storedNext[index + channel] - stored[index + channel]));
-                var reliable = RowDifference(input, stored) <= 4 && (double)texture / (_crossLength * 3) >= 2 &&
-                               (!masked || ChangedPixels(position - offset) > _crossLength / 2);
+                var reliable = RowDifference(input, stored) <= 4 && (double)texture / (_crossLength * 3) >= 2;
                 if (!reliable)
                 {
                     runStart = position + 1;

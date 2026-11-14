@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -38,6 +39,7 @@ namespace RitsukageGif.Desktop
         private bool _busy;
         private bool _languagesLoaded;
         private Task _operation = Task.CompletedTask;
+        private Exception? _recognitionError;
         private bool _recognitionReported;
         private Func<CancellationToken, Task>? _recognized;
         private CancellationTokenSource? _work;
@@ -58,6 +60,7 @@ namespace RitsukageGif.Desktop
             _speechService = speech;
             _recognizedResult = initialResult;
             _recognizedPlainText = initialResult?.Text ?? initialText ?? "";
+            _recognitionReported = !string.IsNullOrWhiteSpace(_recognizedPlainText);
             Width = 680;
             Height = 500;
             MinWidth = 420;
@@ -163,7 +166,7 @@ namespace RitsukageGif.Desktop
             Action? copyDirectlyNextTime = null,
             Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged = null,
             ISpeechPlaybackService? speech = null, OcrRecognitionResult? initialResult = null,
-            Func<int>? imageSaveQuality = null, CancellationToken token = default)
+            Func<int>? imageSaveQuality = null, bool requireResult = false, CancellationToken token = default)
         {
             token.ThrowIfCancellationRequested();
             if (mode is RecognitionMode.Table or RecognitionMode.Formula)
@@ -172,7 +175,8 @@ namespace RitsukageGif.Desktop
                 await StructuredRecognitionWindow.ShowAsync(owner, image, mode == RecognitionMode.Formula,
                     recognized, token, normalized.CopyFormat, copyFormatChanged,
                     normalized.ShowOriginalImage, originalImageVisibilityChanged, normalized.LatexFormat,
-                    latexFormatChanged, imageSaveQuality, normalized.Dialog, dialogPreferencesChanged);
+                    latexFormatChanged, imageSaveQuality, normalized.Dialog, dialogPreferencesChanged,
+                    requireResult);
                 return;
             }
 
@@ -180,6 +184,7 @@ namespace RitsukageGif.Desktop
                     translationPreferences,
                     copyDirectlyNextTime, dialogPreferencesChanged, originalImageVisibilityChanged, speech)
                 { _recognized = recognized };
+            if (mode == RecognitionMode.Text) window.FitTextDialogToScreen(owner);
             await using var registration = token.Register(static state =>
                 Dispatcher.UIThread.Post(((RecognitionWindow)state!).CancelAndClose), window);
             try
@@ -208,6 +213,16 @@ namespace RitsukageGif.Desktop
                 window._originalBitmap?.Dispose();
                 window._lifetime.Dispose();
             }
+
+            if (requireResult) EnsureRecognitionCompleted(window._recognitionReported, window._recognitionError, token);
+        }
+
+        internal static void EnsureRecognitionCompleted(bool completed, Exception? error, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (completed) return;
+            if (error is not null) ExceptionDispatchInfo.Throw(error);
+            throw new OperationCanceledException("Screenshot recognition cancelled.", new CancellationToken(true));
         }
 
         private void CancelAndClose()
@@ -232,6 +247,7 @@ namespace RitsukageGif.Desktop
             _codes.Items.Clear();
             _codes.IsVisible = false;
             _status.Text = UiText.Get("RecognitionWorking");
+            _recognitionError = null;
             try
             {
                 if (_mode == RecognitionMode.Text)
@@ -261,12 +277,19 @@ namespace RitsukageGif.Desktop
                     _text.Text = results.Count > 0 ? results[0].Text : "";
                 }
 
-                _status.Text = string.IsNullOrWhiteSpace(_text.Text) ? UiText.Get("RecognitionEmpty") : "";
-                if (!_recognitionReported && !string.IsNullOrWhiteSpace(_text.Text) && _recognized is { } recognized)
+                if (string.IsNullOrWhiteSpace(_text.Text))
                 {
-                    work.Token.ThrowIfCancellationRequested();
-                    await recognized(work.Token);
-                    _recognitionReported = true;
+                    _status.Text = UiText.Get("RecognitionEmpty");
+                    _recognitionError = new InvalidOperationException(_status.Text);
+                }
+                else
+                {
+                    _status.Text = "";
+                    if (!_recognitionReported)
+                    {
+                        if (_recognized is { } recognized) await recognized(work.Token);
+                        _recognitionReported = true;
+                    }
                 }
             }
             catch (OperationCanceledException) when (work.IsCancellationRequested)
@@ -275,6 +298,7 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception error)
             {
+                _recognitionError = error;
                 if (!_lifetime.IsCancellationRequested) _status.Text = error.Message;
             }
             finally
@@ -319,6 +343,7 @@ namespace RitsukageGif.Desktop
             if (!capabilities.Available)
             {
                 _status.Text = UiText.Get("RecognitionUnavailable");
+                _recognitionError = new InvalidOperationException(capabilities.FailureReason ?? _status.Text);
                 ToolTip.SetTip(_status, capabilities.FailureReason);
                 return false;
             }

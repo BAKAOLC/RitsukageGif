@@ -19,16 +19,21 @@ namespace RitsukageGif.Desktop
             { Orientation = Orientation.Horizontal, ItemWidth = 40, ItemHeight = 36 };
 
         private readonly Border _poolArea;
+        private readonly Action<ToolbarPreferences> _publish;
         private readonly bool _recording;
         private readonly List<List<ToolbarDragHandle>> _toolCells = [];
         private ToolbarPreferences _draft;
         private int? _draggedColumn;
         private ScreenshotTool? _draggedTool;
+        private List<List<ScreenshotTool>> _publishedColumns;
 
-        public ToolbarToolsWindow(ToolbarPreferences preferences, bool recording = false)
+        public ToolbarToolsWindow(ToolbarPreferences preferences, Action<ToolbarPreferences> publish,
+            bool recording = false)
         {
             _recording = recording;
             _draft = preferences.Normalize();
+            _publishedColumns = [.. _draft.Columns.Select(column => column.ToList())];
+            _publish = publish;
             Title = UiText.Get("ToolbarToolsTitle");
             Width = 624;
             MinWidth = 400;
@@ -74,26 +79,20 @@ namespace RitsukageGif.Desktop
             };
             Grid.SetRow(_poolArea, 2);
             layout.Children.Add(_poolArea);
-            var footer = new Grid { ColumnDefinitions = new("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
-            footer.Children.Add(ToolbarDragHandle.Command("ToolbarRestoreDefaults", () =>
+            var restore = ToolbarDragHandle.Command("ToolbarRestoreDefaults", () =>
             {
                 _draft = _draft with { Columns = new ToolbarPreferences().Columns };
+                PublishLayout(true);
                 RenderColumns();
-            }));
-            var cancel = ToolbarDragHandle.Command("Cancel", () => Close(null));
-            Grid.SetColumn(cancel, 2);
-            footer.Children.Add(cancel);
-            var save = ToolbarDragHandle.Command("ImageSave", () => Close(_draft.Normalize()));
-            save.Classes.Add("primary");
-            Grid.SetColumn(save, 3);
-            footer.Children.Add(save);
-            Grid.SetRow(footer, 3);
-            layout.Children.Add(footer);
+            });
+            restore.HorizontalAlignment = HorizontalAlignment.Right;
+            Grid.SetRow(restore, 3);
+            layout.Children.Add(restore);
             Content = layout;
             AddHandler(KeyDownEvent, (_, args) =>
             {
                 if (args.Handled || args.Key != Key.Escape) return;
-                Close(null);
+                Close();
                 args.Handled = true;
             }, RoutingStrategies.Bubble);
             Opened += (_, _) =>
@@ -226,7 +225,18 @@ namespace RitsukageGif.Desktop
             }
 
             CancelDrag();
+            PublishLayout();
             RenderColumns();
+        }
+
+        private void PublishLayout(bool reset = false)
+        {
+            if (SettingsField.SameColumns(_draft.Columns, _publishedColumns) &&
+                (!reset || _draft.ColumnValues.Count == 0)) return;
+            _draft = _draft with { ColumnValues = new(StringComparer.Ordinal) };
+            var layout = _draft.Normalize();
+            _publish(layout);
+            _publishedColumns = layout.Columns;
         }
 
         private void CancelDrag()

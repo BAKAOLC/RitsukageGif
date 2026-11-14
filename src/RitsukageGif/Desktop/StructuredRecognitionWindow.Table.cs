@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Layout;
 
 namespace RitsukageGif.Desktop
 {
@@ -9,6 +10,7 @@ namespace RitsukageGif.Desktop
     internal sealed partial class StructuredRecognitionWindow
     {
         private readonly Button _tableExcel = new();
+        private readonly Button _tablePrint = new() { IsEnabled = false };
 
         private static KeyModifiers CommandModifier =>
             Application.Current?.PlatformSettings?.HotkeyConfiguration.CommandModifiers ??
@@ -16,8 +18,21 @@ namespace RitsukageGif.Desktop
 
         private void AddTableOutputButtons(StackPanel toolbar)
         {
-            BindButton(_tableExcel, "TableOpenExcel", () => _operation = OpenTableExcelAsync());
+            _save.Classes.Add("primary");
+            var printLabel = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+            printLabel.Bind(TextBlock.TextProperty, LiveText.Resource("Print"));
+            _tablePrint.Content = new StackPanel
+            {
+                Orientation = Orientation.Horizontal, Spacing = 4,
+                Children = { ToolbarIcon.Create(_tablePrint, ToolbarIcon.GetDefinition("Print")), printLabel },
+            };
+            _tablePrint.Click += (_, _) => _operation = PrintTableAsync(false);
+            ToolTip.SetShowOnDisabled(_tablePrint, true);
+            BindButton(_tableExcel, "TableOpenExcel", () => _operation = OpenTableExcelAsync(false));
+            toolbar.Children.Add(_save);
+            toolbar.Children.Add(_tablePrint);
             toolbar.Children.Add(_tableExcel);
+            toolbar.Children.Add(_copy);
         }
 
         private ContextMenu CreateTableMenu()
@@ -50,7 +65,7 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(new Separator());
             Output("ScreenshotCopy", () => OutputAsync(false));
             Output("ScreenshotSave", () => OutputAsync(true));
-            Output("TableOpenExcel", OpenTableExcelAsync);
+            Output("TableOpenExcel", () => OpenTableExcelAsync(true));
             AddTablePrintItem(menu);
             menu.Opening += (_, _) =>
             {
@@ -126,11 +141,13 @@ namespace RitsukageGif.Desktop
             _table.ApplyAxisChange(vertical, null, removed);
         }
 
-        private TableRecognitionResult? TableForOutput()
+        private TableRecognitionResult? TableForOutput(bool selectionOnly)
         {
             if (!_table.CommitEdit()) return null;
             return _table.Document is { } document
-                ? WithTableOutputStyle(_table.HasSelection ? document.Extract(_table.SelectedRanges) : document.Table)
+                ? WithTableOutputStyle(selectionOnly && _table.HasSelection
+                    ? document.Extract(_table.SelectedRanges)
+                    : document.Table)
                 : null;
         }
     }

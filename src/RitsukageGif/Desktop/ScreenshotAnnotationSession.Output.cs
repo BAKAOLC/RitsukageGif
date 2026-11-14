@@ -14,7 +14,9 @@ namespace RitsukageGif.Desktop
 
         public void RequestScrolling(bool? vertical = null)
         {
-            if (CanStartScrolling) StartScrollingRequested?.Invoke(vertical);
+            if (!CanStartScrolling) return;
+            CommitTextEdit();
+            StartScrollingRequested?.Invoke(vertical);
         }
 
         private async Task<IReadOnlyList<(Bitmap Image, Rect Bounds)>> CreateMosaicAsync(Rect rectangle, int block,

@@ -6,6 +6,8 @@ namespace RitsukageGif.Desktop
         private void StartCapture()
         {
             _captureStarted = true;
+            UpdateMoveControl();
+            UpdateResizeTargets();
             ScrollingUiLogger.ZLogInformation($"Scrolling capture started. Region={_region} Axis={_axis.ToString()}");
             _session.Paused = false;
             _statusNoticeKey = null;
@@ -17,7 +19,7 @@ namespace RitsukageGif.Desktop
 
         private async Task ToggleCaptureAsync()
         {
-            if (_closed || _outputting || _clearDialog is not null) return;
+            if (_closed || _outputting || HasCaptureDialog || _resizePointer is not null) return;
             if (!_captureStarted)
             {
                 StartCapture();

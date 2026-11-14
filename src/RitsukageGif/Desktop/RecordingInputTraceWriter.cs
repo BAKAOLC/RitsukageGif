@@ -5,6 +5,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed class RecordingInputTraceWriter : IDisposable
     {
+        internal const int Magic = 0x32544752;
         internal const int HeaderSize = 32;
         internal const int FrameSize = 96;
         internal const int EventSize = 64;
@@ -27,7 +28,7 @@ namespace RitsukageGif.Desktop
                 _events = Open(path + ".events");
                 _shapes = Open(path + ".shapes");
                 _geometry = Open(path + ".geometry");
-                _frames.Write(0x31544752);
+                _frames.Write(Magic);
                 _frames.Write(FrameSize);
                 _frames.Write(Stopwatch.Frequency);
                 _trackFlags = (keyboard ? 1 : 0) | (mouse ? 2 : 0) | 4;
@@ -91,7 +92,10 @@ namespace RitsukageGif.Desktop
                     foreach (var layer in geometry)
                     {
                         WriteRect(_geometry, layer.Region);
-                        WriteRect(_geometry, layer.Destination);
+                        _geometry.Write(layer.Destination.Left);
+                        _geometry.Write(layer.Destination.Top);
+                        _geometry.Write(layer.Destination.Right);
+                        _geometry.Write(layer.Destination.Bottom);
                         _geometry.Write(layer.OwnsCursor);
                         _geometry.Write(layer.ClipEvenOdd);
                         _geometry.Write(layer.ClipPathData ?? string.Empty);

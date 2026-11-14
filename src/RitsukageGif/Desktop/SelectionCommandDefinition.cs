@@ -9,7 +9,8 @@ namespace RitsukageGif.Desktop
         string DescriptionKey,
         bool Repeat = false,
         ScreenshotTool? Tool = null,
-        Key DirectionKey = Key.None)
+        Key DirectionKey = Key.None,
+        bool ScreenshotOnly = false)
     {
         internal string Id => Command == SelectionCommand.SelectTool
             ? "tool." + Tool!.Value.ToString().ToLowerInvariant()

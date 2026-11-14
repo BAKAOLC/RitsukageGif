@@ -12,13 +12,12 @@ namespace RitsukageGif.Desktop
             CancellationToken token)
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
+            if (mode == OutputColorMode.Hdr) throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable"));
             return await (view switch
             {
-                PinOutputView.Preferred => CapturePreferredOutputAsync(mode, linked.Token),
-                PinOutputView.Original => ((IPinnedWindow)this).CaptureSceneOutputAsync(mode, linked.Token),
-                PinOutputView.Displayed when mode != OutputColorMode.Hdr => CaptureCurrentDocumentViewAsync(
-                    linked.Token),
-                PinOutputView.Displayed => throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable")),
+                PinOutputView.Preferred => CapturePreferredOutputAsync(linked.Token),
+                PinOutputView.Original => CaptureDocumentSceneAsync(true, linked.Token),
+                PinOutputView.Displayed => CaptureCurrentDocumentViewAsync(linked.Token),
                 _ => throw new ArgumentOutOfRangeException(nameof(view)),
             });
         }

@@ -26,11 +26,9 @@ namespace RitsukageGif.Desktop
                 if (windowSource && next is null)
                 {
                     if (target is null) throw new CaptureSourceLostException();
-                    var targets = ShapeMode == SelectionShapeMode.MultiWindow && _selectionWindows.Count > 1
-                        ? SelectedShapeWindows()
-                        : [target];
-                    var region = targets.Length > 1 ? _state.Selected : target.Client;
-                    var pixels = await Task.Run(() => CaptureSelectedWindows(targets, region, work.Token), work.Token);
+                    var selection = CreateWindowScreenshotSelection(target);
+                    var region = selection.Region;
+                    var pixels = await Task.Run(() => CaptureWindowScreenshot(selection, work.Token), work.Token);
                     work.Token.ThrowIfCancellationRequested();
                     created = next = new(target, region, pixels.Pixels, pixels.Hdr, pixels.NativeFrames);
                 }

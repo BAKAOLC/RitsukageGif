@@ -99,7 +99,7 @@ namespace RitsukageGif.Desktop
         private PinnedImageWindow? Pin(PinnedImageContent content, PixelPoint? position, string group,
             double captureScaling = 1,
             PixelPoint contentOffset = default, CaptureWindowShape? windowShape = null,
-            Action<PinnedImageWindow>? prepareView = null)
+            Action<PinnedImageWindow>? prepareView = null, bool preservePosition = false)
         {
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -138,9 +138,11 @@ namespace RitsukageGif.Desktop
             try
             {
                 prepareView?.Invoke(window);
-                if (position is { } location) window.SetCapturePlacement(location, contentOffset);
+                if (preservePosition && position is { } location) window.SetCapturePlacement(location, contentOffset);
+                else
+                    window.SetNewPinPlacement(Preferences.DisplayPosition, position, contentOffset,
+                        PinnedGroupPointer.Read);
                 ShowNewPin(window);
-                if (position is null) window.RestoreToScreen();
                 if (window.Group != Preferences.ActiveGroup) window.InitializeTextRecognition();
                 PinLogger.ZLogInformation(
                     $"Pinned image window opened. WindowCount={_windows.Count} Width={content.Width} Height={content.Height}");
@@ -240,13 +242,8 @@ namespace RitsukageGif.Desktop
             window.OpacityAdjustmentRequested = AdjustSelectionOpacity;
             window.CloseRequested = CloseSelection;
             window.MoveSelectionRequested = MoveSelection;
-            window.SelectionCountProvider = source => SelectionSnapshot(source).Length;
-            window.CanArrangeSelectionProvider = CanArrangeSelection;
             window.ArrangeSelectionRequested = ArrangeSelection;
             window.SaveSelectionRequested = SaveSelectionAsync;
-            window.CanSaveSelectionProvider = source => !_savingSelection &&
-                                                        SelectionSnapshot(source) is { Length: >= 2 } images &&
-                                                        images.All(image => image.CanSaveSelection);
             window.AnnotationPreferencesProvider = () => AnnotationPreferences;
             window.SavePreferencesProvider = () => SavePreferencesProvider();
             window.OutputColorModeProvider = () => OutputColorModeProvider();

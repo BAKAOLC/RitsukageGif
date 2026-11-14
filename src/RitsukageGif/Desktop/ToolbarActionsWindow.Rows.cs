@@ -48,7 +48,7 @@ namespace RitsukageGif.Desktop
                 visibility.SelectionChanged += (_, _) =>
                 {
                     if (visibility.SelectedIndex >= 0)
-                        action.Visibility = (ToolbarButtonVisibility)visibility.SelectedIndex;
+                        ChangeVisibility(action, (ToolbarButtonVisibility)visibility.SelectedIndex);
                 };
                 Grid.SetColumn(visibility, 3);
                 content.Children.Add(visibility);

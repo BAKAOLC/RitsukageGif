@@ -21,9 +21,15 @@ namespace RitsukageGif.Desktop
 
         public static IReadOnlyList<AudioCaptureDevice> EnumerateDevices(bool systemAudio)
         {
+            return EnumerateDevices(systemAudio, CancellationToken.None);
+        }
+
+        internal static IReadOnlyList<AudioCaptureDevice> EnumerateDevices(bool systemAudio, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
             if (OperatingSystem.IsWindows()) return WindowsAudioCapture.EnumerateDevices(systemAudio);
-            if (OperatingSystem.IsLinux()) return LinuxAudioCapture.EnumerateDevices(systemAudio);
-            if (OperatingSystem.IsMacOSVersionAtLeast(13)) return MacAudioCapture.EnumerateDevices(systemAudio);
+            if (OperatingSystem.IsLinux()) return LinuxAudioCapture.EnumerateDevices(systemAudio, token);
+            if (OperatingSystem.IsMacOSVersionAtLeast(13)) return MacAudioCapture.EnumerateDevices(systemAudio, token);
             throw new PlatformNotSupportedException(UiText.Get("VideoAudioUnavailable"));
         }
     }

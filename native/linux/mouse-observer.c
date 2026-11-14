@@ -315,6 +315,9 @@ static void record_events(XPointer closure, XRecordInterceptData *record) {
                     observer->modifiers = event[9];
                     if (observer->recording_input && !recording_emit(observer, 6, 0, 0, 0, 0, 0,
                         canonical_modifiers(observer), get32(event + 4, record->client_swapped))) request_stop(observer);
+                    if (!observer->recording_input && observer->pointer_known && observer->buttons != 0 &&
+                        !emit(0x0100, observer->x, observer->y, 0, canonical_modifiers(observer),
+                            get32(event + 4, record->client_swapped))) request_stop(observer);
                 }
                 else if (event[1] == XkbNewKeyboardNotify || event[1] == XkbMapNotify)
                     synchronize_pointer(observer);

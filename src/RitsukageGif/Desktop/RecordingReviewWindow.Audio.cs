@@ -10,12 +10,21 @@ namespace RitsukageGif.Desktop
     internal sealed partial class RecordingReviewWindow
     {
         private readonly Dictionary<int, RecordingAudioTrackMix> _pendingMix = [];
-        private Task _mixing = Task.CompletedTask;
-        private HoverPropertyPanel? _audioPanel;
         private bool _audioBuffering;
+        private HoverPropertyPanel? _audioPanel;
+        private Task _mixing = Task.CompletedTask;
 
         private void BuildAudioControls()
         {
+            if (_audioPanel is not null)
+            {
+                _audioPanel.Dispose();
+                _propertyPanels.Remove(_audioPanel);
+                _audioPanel = null;
+            }
+
+            _audioButton.IsVisible = _audio is { HasSystemAudio: true } or { HasMicrophone: true };
+            if (!_audioButton.IsVisible) return;
             var panel = new StackPanel { Spacing = 8, MinWidth = 220 };
             if (_audio is not null)
                 foreach (var track in _audio.Tracks.Where(track =>
@@ -69,14 +78,7 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
-            if (_audioPanel is not null)
-            {
-                _audioPanel.Dispose();
-                _propertyPanels.Remove(_audioPanel);
-            }
-
             _audioPanel = AttachPropertyPanel(_audioButton, panel);
-            _audioButton.IsEnabled = _audio is { HasSystemAudio: true } or { HasMicrophone: true };
         }
 
         private void QueueMix(RecordingAudioTrackMix mix)

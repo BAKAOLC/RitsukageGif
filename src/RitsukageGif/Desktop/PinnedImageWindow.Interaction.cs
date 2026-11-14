@@ -9,17 +9,16 @@ namespace RitsukageGif.Desktop
     {
         private long _createdAtUtcTicks = DateTimeOffset.UtcNow.UtcTicks;
         private double? _opacityBeforeThrough;
-        private double? _throughAppliedOpacity;
-        public string Id { get; private set; } = Guid.NewGuid().ToString("N");
-        public string Group { get; private set; } = "";
         private bool IsLocked { get; set; }
-        public bool IsInteractionLocked => IsOperationLocked(PinnedLockRestrictions.Move);
-        public bool IsIncomingDropLocked => IsOperationLocked(PinnedLockRestrictions.IncomingDrop);
-        public bool IsCloseLocked => PinnedInputContext.IsCloseBlocked(IsLocked, CurrentPreferences.LockRestrictions);
         private bool IsMouseThrough { get; set; }
         public Func<IReadOnlyList<PinnedGroupDefinition>> GroupsProvider { get; set; } = () => [];
         public Action<IPinnedWindow, string>? GroupChangeRequested { get; set; }
         public Func<IPinnedWindow, Task>? NewGroupRequested { get; set; }
+        public string Id { get; private set; } = Guid.NewGuid().ToString("N");
+        public string Group { get; private set; } = "";
+        public bool IsInteractionLocked => IsOperationLocked(PinnedLockRestrictions.Move);
+        public bool IsIncomingDropLocked => IsOperationLocked(PinnedLockRestrictions.IncomingDrop);
+        public bool IsCloseLocked => PinnedInputContext.IsCloseBlocked(IsLocked, CurrentPreferences.LockRestrictions);
 
         public void SetGroup(string value)
         {
@@ -188,7 +187,6 @@ namespace RitsukageGif.Desktop
                     if (Opacity > CurrentPreferences.MouseThroughOpacity)
                     {
                         _opacityBeforeThrough = Opacity;
-                        _throughAppliedOpacity = CurrentPreferences.MouseThroughOpacity;
                         Opacity = CurrentPreferences.MouseThroughOpacity;
                     }
 
@@ -200,23 +198,22 @@ namespace RitsukageGif.Desktop
                     {
                         Opacity = previous;
                         _opacityBeforeThrough = null;
-                        _throughAppliedOpacity = null;
                         throw;
                     }
 
                     break;
                 case false:
                     ApplyMouseThrough(false);
-                    // ReSharper disable once CompareOfFloatsByEqualityOperator
-                    if (_opacityBeforeThrough is { } restored && Opacity == _throughAppliedOpacity)
+                    if (_opacityBeforeThrough is { } restored)
                         Opacity = restored;
                     _opacityBeforeThrough = null;
-                    _throughAppliedOpacity = null;
                     break;
             }
 
             IsMouseThrough = value;
             RefreshWindowShadow();
+            Presentation.ShowMouseThroughMessage(value);
+            Presentation.RefreshMouseThroughToolbar();
             StateChanged?.Invoke(this, EventArgs.Empty);
         }
 

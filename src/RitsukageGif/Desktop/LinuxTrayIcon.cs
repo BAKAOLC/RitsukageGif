@@ -85,7 +85,7 @@ namespace RitsukageGif.Desktop
             var update = new StringBuilder("RESET\n");
             foreach (var entry in MenuModel.Capture())
                 update.Append(CultureInfo.InvariantCulture,
-                    $"ITEM {entry.Id} {entry.Parent} {(entry.Enabled ? 1 : 0)} {entry.Toggle} {(entry.Checked ? 1 : 0)} {(entry.Separator ? 1 : 0)} {Encode(entry.Label)} {Encode(TrayGestureEncoding.LinuxKeys(entry.Gesture))}\n");
+                    $"ITEM {entry.Id} {entry.Parent} {(entry.Enabled ? 1 : 0)} {entry.Toggle} {(entry.Checked ? 1 : 0)} {(entry.Separator ? 1 : 0)} {Encode(entry.Label)} {Encode(TrayGestureEncoding.LinuxKeys(entry.Gesture))} {(entry.IconPng is { } png ? Convert.ToBase64String(png) : "-")}\n");
             update.Append(_icon).Append('\n').Append("TEXT ").Append(_tooltip).Append('\n')
                 .Append("VISIBLE ").Append(_visible ? '1' : '0').Append("\nCOMMIT\n");
             _updates.Writer.TryWrite(update.ToString());

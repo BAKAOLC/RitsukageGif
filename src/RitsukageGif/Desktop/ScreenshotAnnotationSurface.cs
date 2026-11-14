@@ -60,6 +60,7 @@ namespace RitsukageGif.Desktop
                 coordinator?.SetMouseInputHeld(false);
                 _mouseGesture.Reset();
                 _mouseSelecting = false;
+                _duplicatingAnnotation = false;
                 if (!_completing) _session.CancelGesture();
             };
         }

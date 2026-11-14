@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class TranslationService(HttpClient? client = null)
     {
-        private const int MaximumInputLength = 100_000;
+        internal const int MaximumInputLength = 100_000;
         private const int MaximumResponseBytes = 2 * 1024 * 1024;
 
         private static readonly HttpClient SharedClient = CreateClient();
@@ -103,8 +103,7 @@ namespace RitsukageGif.Desktop
                     "Translation timeout must be between 1 and 300 seconds.");
             if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > MaximumInputLength)
                 throw new ArgumentException("Translation text must contain between 1 and 100000 characters.");
-            if (!ValidLanguage(request.SourceLanguage) || !ValidLanguage(request.TargetLanguage) ||
-                request.TargetLanguage.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            if (!ValidLanguage(request.SourceLanguage) || !ValidTargetLanguage(request.TargetLanguage))
                 throw new ArgumentException("Translation source and target must be valid language identifiers.");
             // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
             switch (options.Provider)
@@ -115,6 +114,12 @@ namespace RitsukageGif.Desktop
                 case TranslationProvider.OpenAiCompatible when string.IsNullOrWhiteSpace(options.Model):
                     throw new ArgumentException("An OpenAI-compatible translation model is required.");
             }
+        }
+
+        internal static bool ValidTargetLanguage(string? value)
+        {
+            return value is not null && !value.Equals("auto", StringComparison.OrdinalIgnoreCase) &&
+                   ValidLanguage(value);
         }
 
         private static bool ValidLanguage(string? value)

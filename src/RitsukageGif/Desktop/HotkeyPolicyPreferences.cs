@@ -16,10 +16,5 @@ namespace RitsukageGif.Desktop
         {
             return ProgramExclusionRules.TryNormalize(value, out normalized);
         }
-
-        internal bool Ignores(string? path)
-        {
-            return ProgramExclusionRules.Matches(IgnoredPrograms, path);
-        }
     }
 }

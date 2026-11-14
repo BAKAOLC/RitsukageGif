@@ -8,10 +8,10 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotScrollingMaskWindow : Window
     {
         private static readonly ILogger MaskLogger = LogHub.GetLogger("Desktop.Capture.Mask");
-        private readonly double _borderWidth;
+        private readonly int _borderWidth;
         private readonly ScreenshotScrollingMaskSurface _surface;
 
-        public ScreenshotScrollingMaskWindow(AppearancePreferences appearance)
+        public ScreenshotScrollingMaskWindow(AppearancePreferences appearance, int borderWidth)
         {
             WindowDecorations = WindowDecorations.None;
             ShowActivated = false;
@@ -25,8 +25,8 @@ namespace RitsukageGif.Desktop
             MinWidth = 0;
             MinHeight = 0;
             TransientWindowShell.Configure(this);
-            _surface = new(appearance);
-            _borderWidth = appearance.SelectionBorderWidth;
+            _surface = new(appearance, borderWidth);
+            _borderWidth = borderWidth;
             Content = _surface;
         }
 
@@ -53,7 +53,7 @@ namespace RitsukageGif.Desktop
                 _ = NativeMethods.SetWindowPos(handle.Handle, toolbar != 0 ? toolbar : -1, monitor.X, monitor.Y,
                     monitor.Width,
                     monitor.Height, 0x0010);
-                ApplyShape(handle.Handle, monitor, capture, excluded, (int)Math.Ceiling(_borderWidth * RenderScaling));
+                ApplyShape(handle.Handle, monitor, capture, excluded, _borderWidth);
             }
 
             _surface.Update(monitor, capture, RenderScaling, excluded);

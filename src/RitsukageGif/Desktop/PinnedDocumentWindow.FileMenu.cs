@@ -11,22 +11,19 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
+        private Point? _fileMenuPoint;
+
         private void ConfigureFileMenu(ContextMenu menu)
         {
             if (Document is not PinnedFilesDocument files) return;
-            Point? requestedPoint = null;
             Button? highlighted = null;
             IBrush? previousBackground = null;
             _content.AddHandler(ContextRequestedEvent, (_, args) =>
             {
-                if (!args.Handled && args.TryGetPosition(_content, out var point)) requestedPoint = point;
+                if (!args.Handled && args.TryGetPosition(_content, out var point)) _fileMenuPoint = point;
             }, RoutingStrategies.Tunnel);
 
-            var open = FileCommand("PinnedFileOpen", path =>
-            {
-                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
-                return Task.CompletedTask;
-            });
+            var open = FileCommand("PinnedFileOpen", OpenFileAsync);
             var copyThis = FileCommand("PinnedFileCopy", path => CopyFilesAsync([path]));
             var copyAll = Command(files.Paths.Length == 1 ? "PinnedFileCopySingle" : "PinnedFileCopyAll",
                 () => CopyFilesAsync(files.Paths));
@@ -39,8 +36,8 @@ namespace RitsukageGif.Desktop
 
             menu.Opened += (_, _) =>
             {
-                var point = requestedPoint;
-                requestedPoint = null;
+                var point = _fileMenuPoint;
+                _fileMenuPoint = null;
                 if (point is null && PinnedGroupPointer.Read() is { } pointer)
                     point = _content.PointToClient(pointer);
                 var visual = point is { } position ? _content.InputHitTest(position) as Visual : null;
@@ -62,11 +59,17 @@ namespace RitsukageGif.Desktop
             };
             menu.Closed += (_, _) =>
             {
-                requestedPoint = null;
+                _fileMenuPoint = null;
                 highlighted?.Background = previousBackground;
                 highlighted = null;
                 previousBackground = null;
             };
+        }
+
+        private static Task OpenFileAsync(string path)
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
+            return Task.CompletedTask;
         }
 
         private MenuItem FileCommand(string key, Func<string, Task> execute)

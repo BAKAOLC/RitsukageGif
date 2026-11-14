@@ -17,7 +17,7 @@ namespace RitsukageGif.Desktop
         private async Task QuickSaveRenderedImageAsync()
         {
             var token = _lifetime.Token;
-            var output = await CapturePreferredOutputAsync(OutputColorMode.Sdr, token);
+            var output = await CapturePreferredOutputAsync(token);
             var profile = SavePreferencesProvider().Normalize().Quick;
             var dimensions = PngImageCodec.ReadDimensions(output.Png);
             var size = profile.OutputSize.Resolve(dimensions.Width, dimensions.Height);
@@ -35,7 +35,7 @@ namespace RitsukageGif.Desktop
         private async Task ExportDocumentImageAsync()
         {
             var token = _lifetime.Token;
-            var output = await CapturePreferredOutputAsync(OutputColorMode.Sdr, token);
+            var output = await CapturePreferredOutputAsync(token);
             var profile = SavePreferencesProvider().Normalize().ManualProfile();
             var dimensions = PngImageCodec.ReadDimensions(output.Png);
             var context = new ScreenshotNameContext(DateTime.Now, Width: dimensions.Width, Height: dimensions.Height);
@@ -61,7 +61,7 @@ namespace RitsukageGif.Desktop
         private async Task PrintDocumentImageAsync()
         {
             var token = _lifetime.Token;
-            var output = await CapturePreferredOutputAsync(OutputColorMode.Sdr, token);
+            var output = await CapturePreferredOutputAsync(token);
             await ScreenshotPrintService.PrintAsync(TryGetPlatformHandle()?.Handle ?? 0, output.Png, "RitsukageGif",
                 token);
         }

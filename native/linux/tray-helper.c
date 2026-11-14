@@ -14,6 +14,7 @@ typedef struct {
     gboolean enabled, checked, separator;
     gint toggle;
     gchar *label, *shortcut;
+    GBytes *icon;
 } MenuItem;
 
 typedef struct {
@@ -96,6 +97,7 @@ static void free_item(gpointer value)
     MenuItem *item = value;
     g_free(item->label);
     g_free(item->shortcut);
+    g_clear_pointer(&item->icon, g_bytes_unref);
     g_free(item);
 }
 
@@ -142,6 +144,8 @@ static GVariant *item_property(MenuItem *item, gint id, const gchar *name)
     if (g_str_equal(name, "type")) return g_variant_new_string(item && item->separator ? "separator" : "standard");
     if (g_str_equal(name, "children-display")) return g_variant_new_string(has_children(id) ? "submenu" : "");
     if (g_str_equal(name, "shortcut")) return shortcut_variant(item ? item->shortcut : "");
+    if (g_str_equal(name, "icon-data") && item && item->icon)
+        return g_variant_new_from_bytes(G_VARIANT_TYPE("ay"), item->icon, TRUE);
     if (g_str_equal(name, "toggle-type") && item && item->toggle)
         return g_variant_new_string(item->toggle == 2 ? "radio" : "checkmark");
     if (g_str_equal(name, "toggle-state") && item && item->toggle)
@@ -152,7 +156,7 @@ static GVariant *item_property(MenuItem *item, gint id, const gchar *name)
 static GVariant *properties(gint id, const gchar *const *requested)
 {
     static const gchar *all[] = { "visible", "enabled", "label", "type", "children-display",
-        "shortcut", "toggle-type", "toggle-state", NULL };
+        "shortcut", "icon-data", "toggle-type", "toggle-state", NULL };
     const gchar *const *names = requested && requested[0] ? requested : all;
     MenuItem *item = find_item(id);
     GVariantBuilder result;
@@ -509,7 +513,7 @@ static gboolean command(gchar *line)
             if (bus) g_dbus_connection_emit_signal(bus, NULL, MENU_PATH, MENU_IFACE, "LayoutUpdated",
                 g_variant_new("(ui)", revision, 0), NULL);
         }
-    } else if (count == 9 && g_str_equal(parts[0], "ITEM")) {
+    } else if (count == 10 && g_str_equal(parts[0], "ITEM")) {
         gint id, parent, enabled, toggle, checked, separator;
         valid = parse_int(parts[1], &id) && parse_int(parts[2], &parent) && parse_int(parts[3], &enabled) &&
             parse_int(parts[4], &toggle) && parse_int(parts[5], &checked) && parse_int(parts[6], &separator) &&
@@ -521,6 +525,14 @@ static gboolean command(gchar *line)
             item->checked = checked; item->separator = separator;
             item->label = decode_text(parts[7]); item->shortcut = decode_text(parts[8]);
             valid = item->label && item->shortcut;
+            if (valid && !g_str_equal(parts[9], "-")) {
+                static const guint8 png_header[] = { 137, 'P', 'N', 'G', 13, 10, 26, 10 };
+                gsize length; guchar *bytes = g_base64_decode(parts[9], &length);
+                valid = !item->separator && length > sizeof png_header &&
+                    memcmp(bytes, png_header, sizeof png_header) == 0;
+                if (valid) item->icon = g_bytes_new_take(bytes, length);
+                else g_free(bytes);
+            }
             if (valid) g_ptr_array_add(staging, item); else free_item(item);
         }
     } else if (count == 4 && g_str_equal(parts[0], "ICON")) {

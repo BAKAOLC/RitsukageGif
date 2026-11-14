@@ -5,24 +5,24 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
+        private long _annotationAppliedVersion = -1;
+        private bool _annotationExtentDirty;
+        private long _annotationFailedVersion = -1;
+        private bool _annotationGeometryDirty;
+        private int _annotationOutputs;
+        private Task _annotationRefresh = Task.CompletedTask;
+        private bool _annotationRefreshing;
+        private double _annotationScaling = 1;
         private ScreenshotAnnotationSession? _annotationScene;
+        private Color _annotationSourceInk = AppTheme.Ink.Color;
+        private byte[]? _annotationSourcePixels;
+        private Color _annotationSourceSurface = AppTheme.Surface.Color;
+        private long _annotationSourceVersion;
         private ScreenshotAnnotationSurface? _annotationSurface;
         private PinnedAnnotationToolbar? _annotationToolbar;
-        private double _annotationScaling = 1;
-        private bool _annotationGeometryDirty;
-        private bool _annotationExtentDirty;
-        private long _annotationSourceVersion;
-        private long _annotationAppliedVersion = -1;
-        private long _annotationFailedVersion = -1;
-        private bool _annotationRefreshing;
-        private Task _annotationRefresh = Task.CompletedTask;
-        private byte[]? _annotationSourcePixels;
         private PinnedDocumentState? _closedDocumentState;
         private bool _documentSourcesReleased;
-        private int _annotationOutputs;
         private bool _preparingAnnotationSurface;
-        private Color _annotationSourceSurface = AppTheme.Surface.Color;
-        private Color _annotationSourceInk = AppTheme.Ink.Color;
 
         internal Func<AnnotationPreferences> AnnotationPreferencesProvider { get; init; } = () => new();
         internal Action<AnnotationPreferences>? AnnotationPreferencesChanged { get; init; }

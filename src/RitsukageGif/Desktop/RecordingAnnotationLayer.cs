@@ -15,13 +15,13 @@ namespace RitsukageGif.Desktop
     {
         private readonly bool _autoSelectPrivacy;
         private readonly RecordingAnnotationOverlay _overlay;
-        private readonly AnnotationPropertyPresenter _properties;
+        private readonly Action<AnnotationPreferences>? _persistPreferences;
         private readonly IDisposable? _popupSubscription;
+        private readonly Func<AnnotationPreferences>? _preferencesProvider;
+        private readonly AnnotationPropertyPresenter _properties;
         private readonly Flyout _propertyPopup;
         private readonly AnnotationToolsStrip _tools;
         private readonly Button _undo;
-        private readonly Action<AnnotationPreferences>? _persistPreferences;
-        private readonly Func<AnnotationPreferences>? _preferencesProvider;
         private bool _disposed;
         private CapturedFrame? _latestSource;
         private PixelSize _nativeSize;
@@ -119,6 +119,12 @@ namespace RitsukageGif.Desktop
             Session.Dispose();
             Volatile.Write(ref _snapshot, null);
             Volatile.Write(ref _latestSource, null);
+        }
+
+        internal event Action? BlockedToolClicked
+        {
+            add => _tools.BlockedToolClicked += value;
+            remove => _tools.BlockedToolClicked -= value;
         }
 
         internal void UpdateGeometry(Window owner, PixelRect region, PixelSize nativeSize, bool visible,
@@ -320,7 +326,7 @@ namespace RitsukageGif.Desktop
             _toolbarRevision = Session.ToolbarRevision;
             _toolbarIdentity = identity;
             _propertyPopup.Hide();
-            _tools.Rebuild(Session.ToolbarPreferences.Columns);
+            _tools.Rebuild(Session.ToolbarPreferences);
         }
 
         private void ToolbarChanged(ToolbarPreferences preferences, bool? tools)
@@ -339,7 +345,10 @@ namespace RitsukageGif.Desktop
             {
                 HideFlyouts();
                 Session.CanAnnotate = false;
-                var editor = new ToolbarToolsWindow(Session.ToolbarPreferences, Session.RecordingContext);
+                var editor = new ToolbarToolsWindow(Session.ToolbarPreferences, result =>
+                {
+                    if (!_disposed) Session.UpdateToolbarPreferences(result, true);
+                }, Session.RecordingContext);
                 PrepareNativeEditor(editor);
                 if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041))
                 {
@@ -351,8 +360,7 @@ namespace RitsukageGif.Desktop
                     };
                 }
 
-                if (await editor.ShowDialog<ToolbarPreferences?>(owner) is { } result && !_disposed)
-                    Session.UpdateToolbarPreferences(result, true);
+                await editor.ShowDialog(owner);
             }
             catch (Exception error)
             {

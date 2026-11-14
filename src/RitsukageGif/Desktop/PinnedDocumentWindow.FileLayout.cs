@@ -9,8 +9,8 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
-        private PinnedFileListMaximumSize? _fileListMaximumSize;
         private PinnedFilesLayoutSnapshot? _fileLayoutSnapshot;
+        private PinnedFileListMaximumSize? _fileListMaximumSize;
 
         private PinnedFilesLayoutSnapshot FileLayoutSnapshot => _fileLayoutSnapshot ??=
             PinnedFilesLayoutSnapshot.Create(((PinnedFilesDocument)Document).Paths,

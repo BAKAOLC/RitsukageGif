@@ -15,7 +15,7 @@ namespace RitsukageGif.Desktop
 
         public Color NumberForeground(Color background)
         {
-            return _behavior.NumberForegroundColor is { } color
+            return _behavior.EffectiveNumberForegroundColor is { } color
                 ? Color.FromUInt32(color)
                 : AnnotationContrast.Foreground(background);
         }
@@ -25,6 +25,19 @@ namespace RitsukageGif.Desktop
             _nextNumber = Math.Min(999999, number + 1);
             if (_behavior.GlobalNumberCounter)
                 Interlocked.Exchange(ref _globalNumber, _nextNumber - (_behavior.NumberStartsAtZero ? 0 : 1));
+        }
+
+        private ScreenshotAnnotation DuplicateNumber(ScreenshotAnnotation source)
+        {
+            var number = 0;
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+            foreach (var annotation in _annotations)
+                if (annotation.Tool == ScreenshotTool.Number &&
+                    annotation.Properties.NumberFormat == source.Properties.NumberFormat)
+                    number = Math.Max(number, annotation.Properties.Number);
+
+            return CloneAnnotation(source,
+                properties: source.Properties with { Number = Math.Min(999999, number + 1) });
         }
 
         private async Task ReplaceNumberPropertiesAsync(ScreenshotAnnotation original, ScreenshotAnnotation replacement)
@@ -153,7 +166,7 @@ namespace RitsukageGif.Desktop
             if (annotation.NumberLayout is { } cached && cached.Properties == properties &&
                 cached.Color == annotation.Color && cached.FontSize.Equals(annotation.FontSize) &&
                 cached.TextSize == _behavior.NumberTextSize && cached.ArrowSize == _behavior.NumberArrowSize &&
-                cached.ForegroundColor == _behavior.NumberForegroundColor &&
+                cached.ForegroundColor == _behavior.EffectiveNumberForegroundColor &&
                 cached.Thickness.Equals(annotation.Thickness) && cached.Caption == annotation.Text &&
                 cached.Center == center && cached.Target == target && cached.CaptionAnchor == captionAnchor)
                 return cached;
@@ -261,7 +274,7 @@ namespace RitsukageGif.Desktop
                 Properties = properties, Color = annotation.Color, FontSize = annotation.FontSize,
                 Thickness = annotation.Thickness, Caption = annotation.Text, Center = center, Target = target,
                 TextSize = _behavior.NumberTextSize, ArrowSize = _behavior.NumberArrowSize,
-                ForegroundColor = _behavior.NumberForegroundColor,
+                ForegroundColor = _behavior.EffectiveNumberForegroundColor,
                 CaptionAnchor = captionAnchor,
                 MarkerBounds = markerBounds, Bounds = bounds, Marker = marker, Label = label,
                 LabelOrigin = new(center.X - labelBounds.Center.X, center.Y - labelBounds.Center.Y), Ink = ink,

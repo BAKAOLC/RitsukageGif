@@ -18,7 +18,13 @@ namespace RitsukageGif.Core
                 }
             }
 
-            return FindMatchAgainst(pixels, false, false, token);
+            var history = FindMatchAgainst(pixels, false, false, token);
+            if (!_hasReference || history.Status != ScrollCaptureStatus.Unmatched ||
+                !TryFindRegionalMotion(pixels, token, out var offset, out var confidence)) return history;
+            // Regional evidence must not change an already covered viewport without a verified join.
+            if (offset >= StartOffset && offset + _axisLength <= _end) return history;
+            useDifferenceMask = true;
+            return Result(ScrollCaptureStatus.Appended, offset, 0, confidence);
         }
 
         private ScrollCaptureResult FindMatchAgainst(byte[] pixels, bool previous, bool masked, CancellationToken token)

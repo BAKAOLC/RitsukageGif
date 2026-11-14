@@ -15,16 +15,20 @@ namespace RitsukageGif.Desktop
         private readonly Action<Control>? _opening;
         private readonly Popup _popup;
         private readonly DispatcherTimer _closeTimer;
-        private Border? _panel;
+        private readonly bool _useFlyoutPresenter;
+        private Control? _panel;
+        private Control? _content;
         private bool _targetHovered;
         private bool _panelHovered;
         private bool _disposed;
 
-        public HoverPropertyPanel(Control target, Func<Control> create, Action<Control>? opening = null)
+        public HoverPropertyPanel(Control target, Func<Control> create, Action<Control>? opening = null,
+            bool useFlyoutPresenter = false)
         {
             Target = target;
             _create = create;
             _opening = opening;
+            _useFlyoutPresenter = useFlyoutPresenter;
             _popup = new()
             {
                 Placement = PlacementMode.Bottom, PlacementTarget = target,
@@ -73,11 +77,21 @@ namespace RitsukageGif.Desktop
             {
                 _panel.PointerEntered -= PanelPointerEntered;
                 _panel.PointerExited -= PanelPointerExited;
-                _panel.Child = null;
+                switch (_panel)
+                {
+                    case Border frame: frame.Child = null; break;
+                    case FlyoutPresenter presenter: presenter.Content = null; break;
+                }
             }
 
+            _content = null;
             _popup.Child = null;
             ((ISetLogicalParent)_popup).SetParent(null);
+        }
+
+        internal void SetPlacement(PlacementMode placement)
+        {
+            _popup.Placement = placement;
         }
 
         public void Hide()
@@ -101,19 +115,22 @@ namespace RitsukageGif.Desktop
             _closeTimer.Stop();
             if (_panel is null)
             {
-                _panel = new()
-                {
-                    Child = _create(), Padding = new(4), Background = AppTheme.Surface,
-                    BorderBrush = AppTheme.Outline, BorderThickness = new(1), CornerRadius = new(5),
-                    [TextElement.ForegroundProperty] = AppTheme.Ink,
-                };
+                _content = _create();
+                _panel = _useFlyoutPresenter
+                    ? new FlyoutPresenter { Content = _content }
+                    : new Border
+                    {
+                        Child = _content, Padding = new(4), Background = AppTheme.Surface,
+                        BorderBrush = AppTheme.Outline, BorderThickness = new(1), CornerRadius = new(5),
+                        [TextElement.ForegroundProperty] = AppTheme.Ink,
+                    };
                 _panel.PointerEntered += PanelPointerEntered;
                 _panel.PointerExited += PanelPointerExited;
                 _popup.Child = _panel;
             }
 
             ActivatePanel();
-            if (!_popup.IsOpen) _opening?.Invoke(_panel.Child!);
+            if (!_popup.IsOpen) _opening?.Invoke(_content!);
             _popup.IsOpen = true;
         }
 

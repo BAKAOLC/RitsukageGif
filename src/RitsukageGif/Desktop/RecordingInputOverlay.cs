@@ -162,8 +162,8 @@ namespace RitsukageGif.Desktop
                 canvas.Save();
                 Clip(canvas, geometry);
                 var area = RecordingMouseAnimation.Draw(canvas, Map(geometry, input.X, input.Y),
-                    (float)geometry.Destination.Width / geometry.Region.Width,
-                    (float)geometry.Destination.Height / geometry.Region.Height, input, age, effects);
+                    geometry.Destination.Width / geometry.Region.Width,
+                    geometry.Destination.Height / geometry.Region.Height, input, age, effects);
                 if (!area.IsEmpty) Include(ref affected, area);
                 canvas.Restore();
             }
@@ -316,16 +316,15 @@ namespace RitsukageGif.Desktop
 
         private static SKPoint Map(RecordingInputGeometry geometry, double x, double y)
         {
-            return new((float)(geometry.Destination.X + (x - geometry.Region.X) * geometry.Destination.Width /
+            return new((float)(geometry.Destination.Left + (x - geometry.Region.X) * geometry.Destination.Width /
                     geometry.Region.Width),
-                (float)(geometry.Destination.Y + (y - geometry.Region.Y) * geometry.Destination.Height /
+                (float)(geometry.Destination.Top + (y - geometry.Region.Y) * geometry.Destination.Height /
                     geometry.Region.Height));
         }
 
         private static void Clip(SKCanvas canvas, RecordingInputGeometry geometry)
         {
-            canvas.ClipRect(new(geometry.Destination.X, geometry.Destination.Y,
-                geometry.Destination.Right, geometry.Destination.Bottom));
+            canvas.ClipRect(geometry.Destination, SKClipOperation.Intersect, true);
             if (geometry.ClipPathData is null) return;
             using var path = SKPath.ParseSvgPathData(geometry.ClipPathData);
             path.FillType = geometry.ClipEvenOdd ? SKPathFillType.EvenOdd : SKPathFillType.Winding;

@@ -16,11 +16,9 @@ namespace RitsukageGif.Desktop
             if (_appearance == preferences) return;
             _appearance = preferences;
             _dimBrush = new SolidColorBrush(Color.FromUInt32(preferences.SelectionMaskColor));
-            _candidatePen = new Pen(new SolidColorBrush(Color.FromUInt32(preferences.LockedWindowColor)),
-                preferences.SelectionBorderWidth, DashStyle.Dash);
             _selectionBrush =
-                new SolidColorBrush(Color.FromUInt32(preferences.SelectionBorderColor ?? preferences.AccentColor));
-            _selectedPen = new Pen(_selectionBrush, preferences.SelectionBorderWidth);
+                new SolidColorBrush(Color.FromUInt32(preferences.EffectiveSelectionBorderColor));
+            UpdateSelectionPens(new SolidColorBrush(Color.FromUInt32(preferences.LockedWindowColor)));
             if (!preferences.AnimateSelection)
             {
                 _selectionAnimationStart = 0;
@@ -29,6 +27,14 @@ namespace RitsukageGif.Desktop
             }
 
             InvalidateVisual();
+        }
+
+        private void UpdateSelectionPens(IBrush? candidateBrush = null)
+        {
+            var width = _appearance?.SelectionBorderWidth ?? AppearancePreferences.DefaultSelectionBorderWidth;
+            var thickness = Math.Max(1, width) / Scale;
+            _candidatePen = new(candidateBrush ?? _candidatePen.Brush, thickness, DashStyle.Dash);
+            _selectedPen = new Pen(_selectionBrush, thickness);
         }
 
         private double SelectionBorderOpacity()

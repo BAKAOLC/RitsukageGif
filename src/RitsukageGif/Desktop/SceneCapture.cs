@@ -137,6 +137,7 @@ namespace RitsukageGif.Desktop
 
             ResetInputGeometry();
             _drawing.Clear(_background);
+            var scale = (float)(_options.PixelDensity / _options.Divisor);
             foreach (var layer in _layers)
             {
                 token.ThrowIfCancellationRequested();
@@ -147,9 +148,8 @@ namespace RitsukageGif.Desktop
                 var p = state?.Motion?.At(_frameMotionTime) ??
                         state?.Placement ?? layer.Definition.Placement;
                 _paint.Color = SKColors.White.WithAlpha((byte)Math.Round(255 * (state?.Opacity ?? 1)));
-                var scale = (float)(_options.PixelDensity / _options.Divisor);
-                _drawing.DrawSampledBitmap(layer.Bitmap,
-                    new(p.X * scale, p.Y * scale, p.Right * scale, p.Bottom * scale), _paint);
+                layer.Destination = ScalePlacement(p, scale);
+                _drawing.DrawSampledBitmap(layer.Bitmap, layer.Destination, _paint);
             }
 
             _paint.Color = SKColors.White;
@@ -437,6 +437,11 @@ namespace RitsukageGif.Desktop
             return value == "transparent" ? SKColors.Transparent : SKColor.Parse(value);
         }
 
+        private static SKRect ScalePlacement(PixelRect placement, float scale)
+        {
+            return new(placement.X * scale, placement.Y * scale, placement.Right * scale, placement.Bottom * scale);
+        }
+
         private sealed class Layer : IDisposable
         {
             public readonly PresetLayer Definition;
@@ -463,6 +468,7 @@ namespace RitsukageGif.Desktop
             public DesktopCapture? Screen;
             public SKBitmap? SourceBitmap, FallbackImage;
             public WindowContentCapture? Window;
+            public SKRect Destination;
 
             public Layer(PresetLayer definition, int divisor, double pixelDensity)
             {

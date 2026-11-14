@@ -86,11 +86,6 @@ namespace RitsukageGif.Desktop
             Refresh();
         }
 
-        internal int GetSizeLimit(int slot)
-        {
-            return _session.GetSizeLimit(slot, _region.Width, _region.Height);
-        }
-
         private void QueueFrame()
         {
             if (Volatile.Read(ref _disposed) != 0 || Interlocked.Exchange(ref _queued, 1) != 0) return;

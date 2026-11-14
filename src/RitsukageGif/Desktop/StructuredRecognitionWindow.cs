@@ -45,6 +45,7 @@ namespace RitsukageGif.Desktop
         private Task _operation = Task.CompletedTask;
         private Bitmap? _originalBitmap;
         private bool _recognitionReported;
+        private Exception? _recognitionError;
         private int _renderRevision;
         private CancellationTokenSource? _renderWork;
         private CancellationTokenSource? _work;
@@ -80,20 +81,28 @@ namespace RitsukageGif.Desktop
             var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             BindButton(_run, "RecognitionRetry", () => _operation = RunAsync());
             BindButton(_cancel, "Cancel", () => _work?.Cancel());
-            BindButton(_copy, "ScreenshotCopy", () => _operation = OutputAsync(false));
+            BindButton(_copy, "ScreenshotCopy", () => _operation = OutputAsync(false, false));
             _copy.IsVisible = !formula;
             _formulaCopy.IsVisible = formula;
             _formulaCopy.Bind(ContentProperty, LiveText.Resource("ScreenshotCopy"));
             _formulaCopy.Click += (_, _) => _operation = OutputAsync(false);
             _formulaCopy.Flyout = CreateFormulaCopyMenu();
-            BindButton(_save, "ScreenshotSave", () => _operation = OutputAsync(true));
+            BindButton(_save, "ScreenshotSave", () => _operation = OutputAsync(true, false));
             BindButton(_install, "RecognitionInstallComponents", () => _operation = InstallAsync());
             toolbar.Children.Add(_run);
             toolbar.Children.Add(_cancel);
-            toolbar.Children.Add(_copy);
-            toolbar.Children.Add(_formulaCopy);
-            toolbar.Children.Add(_save);
-            if (formula) toolbar.Children.Add(CreateFormulaOpenWordButton());
+            if (formula)
+            {
+                toolbar.Children.Add(_copy);
+                toolbar.Children.Add(_formulaCopy);
+                toolbar.Children.Add(_save);
+                toolbar.Children.Add(CreateFormulaOpenWordButton());
+            }
+            else
+            {
+                AddTableOutputButtons(toolbar);
+            }
+
             var showOriginal = new CheckBox
             {
                 IsChecked = showOriginalImage, VerticalAlignment = VerticalAlignment.Center,
@@ -107,7 +116,6 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                AddTableOutputButtons(toolbar);
                 toolbar.Children.Add(CreateTableSettingsButton());
                 _table.ContentAlignment = _dialogOptions.Table.Alignment;
             }
@@ -171,6 +179,7 @@ namespace RitsukageGif.Desktop
                 SetBusy(false);
             }
 
+            if (!formula) Opened += (_, _) => _ = RefreshTablePrintCapabilitiesAsync();
             Closed += (_, _) =>
             {
                 _renderTimer.Stop();
@@ -193,7 +202,8 @@ namespace RitsukageGif.Desktop
             FormulaLatexFormat latexFormat = FormulaLatexFormat.DisplayDollar,
             Action<FormulaLatexFormat>? latexFormatChanged = null, Func<int>? imageSaveQuality = null,
             RecognitionDialogPreferences? dialogPreferences = null,
-            Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged = null)
+            Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? dialogPreferencesChanged = null,
+            bool requireResult = false)
         {
             var window = new StructuredRecognitionWindow(image, formula, recognized, copyFormat,
                 copyFormatChanged,
@@ -224,6 +234,10 @@ namespace RitsukageGif.Desktop
                 window._formulaBitmap?.Dispose();
                 window._lifetime.Dispose();
             }
+
+            if (requireResult)
+                RecognitionWindow.EnsureRecognitionCompleted(window._recognitionReported, window._recognitionError,
+                    token);
         }
 
         private void Remember()
@@ -254,6 +268,7 @@ namespace RitsukageGif.Desktop
             _undo.Clear();
             _redo.Clear();
             _status.Text = UiText.Get("RecognitionWorking");
+            _recognitionError = null;
             try
             {
                 if (_originalBitmap is null)
@@ -270,6 +285,7 @@ namespace RitsukageGif.Desktop
                 if (!capabilities.Available)
                 {
                     _status.Text = UiText.Get("RecognitionComponentMissing");
+                    _recognitionError = new InvalidOperationException(capabilities.UnavailableReason ?? _status.Text);
                     ToolTip.SetTip(_status, capabilities.UnavailableReason);
                     return;
                 }
@@ -278,6 +294,12 @@ namespace RitsukageGif.Desktop
                 {
                     var result = await ((IFormulaRecognitionService)service).RecognizeAsync(_image, work.Token);
                     work.Token.ThrowIfCancellationRequested();
+                    if (result.Formulas.Count == 0)
+                    {
+                        ShowEmptyRecognition();
+                        return;
+                    }
+
                     ApplyFormulaResult(result);
                     _renderTimer.Stop();
                     await RenderFormulaAsync();
@@ -286,14 +308,20 @@ namespace RitsukageGif.Desktop
                 {
                     var result = await ((ITableRecognitionService)service).RecognizeAsync(_image, work.Token);
                     work.Token.ThrowIfCancellationRequested();
+                    if (result.Rows <= 0 || result.Columns <= 0)
+                    {
+                        ShowEmptyRecognition();
+                        return;
+                    }
+
                     _table.Document = new(result);
                     _undo.Clear();
                     _redo.Clear();
                 }
 
-                if (!_recognitionReported && _recognized is not null)
+                if (!_recognitionReported)
                 {
-                    await _recognized(work.Token);
+                    if (_recognized is not null) await _recognized(work.Token);
                     _recognitionReported = true;
                 }
 
@@ -305,6 +333,7 @@ namespace RitsukageGif.Desktop
             }
             catch (Exception error)
             {
+                _recognitionError = error;
                 if (!_lifetime.IsCancellationRequested) _status.Text = error.Message;
             }
             finally
@@ -312,6 +341,13 @@ namespace RitsukageGif.Desktop
                 _work = null;
                 SetBusy(false);
             }
+        }
+
+        private void ShowEmptyRecognition()
+        {
+            var message = UiText.Get("RecognitionEmpty");
+            _status.Text = message;
+            _recognitionError = new InvalidOperationException(message);
         }
 
         private async Task RenderFormulaAsync()
@@ -367,12 +403,13 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async Task OutputAsync(bool save)
+        private async Task OutputAsync(bool save, bool selectionOnly = true)
         {
             if (_busy || (save ? !_save.IsEnabled : !_copy.IsEnabled)) return;
             try
             {
-                if (!_table.CommitEdit()) return;
+                var table = _formula ? null : TableForOutput(selectionOnly);
+                if (!_formula && table is null) return;
                 if (!save)
                 {
                     var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
@@ -382,14 +419,11 @@ namespace RitsukageGif.Desktop
                         return;
                     }
 
-                    if (_table.Document is { } document)
+                    if (table is not null)
                     {
-                        var result = WithTableOutputStyle(_table.HasSelection
-                            ? document.Extract(_table.SelectedRanges)
-                            : document.Table);
                         var transfer = new DataTransfer();
-                        var item = DataTransferItem.CreateText(TableRecognitionExport.ToTsv(result));
-                        var html = TableRecognitionExport.ToHtml(result);
+                        var item = DataTransferItem.CreateText(TableRecognitionExport.ToTsv(table));
+                        var html = TableRecognitionExport.ToHtml(table);
                         ClipboardPlatformFormats.SetHtml(item, html);
                         if (OperatingSystem.IsWindows())
                             item.Set(DataFormat.CreateBytesPlatformFormat("HTML Format"),
@@ -481,23 +515,20 @@ namespace RitsukageGif.Desktop
                         default: throw new NotSupportedException("The formula output format is not supported.");
                     }
                 }
-                else if (_table.Document is { } document)
+                else if (table is not null)
                 {
-                    var result = WithTableOutputStyle(_table.HasSelection
-                        ? document.Extract(_table.SelectedRanges)
-                        : document.Table);
                     switch (extension)
                     {
                         case ".tsv":
-                            await AtomicFileOutput.WriteTextAsync(path, TableRecognitionExport.ToTsv(result),
+                            await AtomicFileOutput.WriteTextAsync(path, TableRecognitionExport.ToTsv(table),
                                 _lifetime.Token);
                             break;
                         case ".html":
-                            await AtomicFileOutput.WriteTextAsync(path, TableRecognitionExport.ToHtml(result),
+                            await AtomicFileOutput.WriteTextAsync(path, TableRecognitionExport.ToHtml(table),
                                 _lifetime.Token);
                             break;
                         case ".xlsx":
-                            await TableRecognitionExport.SaveXlsxAsync(result, path, _lifetime.Token);
+                            await TableRecognitionExport.SaveXlsxAsync(table, path, _lifetime.Token);
                             break;
                         default: throw new NotSupportedException("The table output format is not supported.");
                     }
@@ -558,6 +589,7 @@ namespace RitsukageGif.Desktop
             _install.IsEnabled = !busy;
             _tableExcel.IsEnabled = !busy && _table.Document is not null;
             if (_formula) SetFormulaResultsBusy(busy);
+            else UpdateTablePrintState();
         }
 
         private void OnShortcut(object? sender, KeyEventArgs e)

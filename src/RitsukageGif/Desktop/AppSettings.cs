@@ -26,6 +26,7 @@ namespace RitsukageGif.Desktop
         public HotkeyPolicyPreferences HotkeyPolicy { get; set; } = new();
         public List<GlobalActionBinding> GlobalActions { get; set; } = CreateDefaultActions();
         public List<GlobalMouseBinding> GlobalMouseBindings { get; set; } = [];
+        public List<string> GlobalMouseIgnoredPrograms { get; set; } = [];
         public VideoRecordingPreferences VideoRecording { get; set; } = new();
         public ScreenshotRecordingPreferences ScreenshotRecording { get; set; } = new();
         public int Fps { get; set; } = 20;
@@ -121,6 +122,8 @@ namespace RitsukageGif.Desktop
                 settings.Translation = (settings.Translation ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.HotkeyPolicy = (settings.HotkeyPolicy ?? new()).Normalize();
+                settings.GlobalMouseIgnoredPrograms =
+                    ProgramExclusionRules.Normalize(settings.GlobalMouseIgnoredPrograms);
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
                 settings.CapturePreferences = (settings.CapturePreferences ?? new()).Normalize();
                 // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract

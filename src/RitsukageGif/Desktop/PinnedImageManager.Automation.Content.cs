@@ -29,6 +29,16 @@ namespace RitsukageGif.Desktop
 
         private sealed partial class AutomationService
         {
+            public Task<bool> TranslationAsync(string id, bool? enabled = null, CancellationToken token = default)
+            {
+                return OnUi(() => manager.AutomationFind(id) switch
+                {
+                    PinnedImageWindow image => image.TranslationAutomationAsync(enabled, token),
+                    PinnedDocumentWindow document => document.TranslationAutomationAsync(enabled, token),
+                    _ => throw new NotSupportedException("This pin does not support inline translation."),
+                }, token);
+            }
+
             public Task<PinInfo> CreateImageAsync(ReadOnlyMemory<byte> image, CancellationToken token = default)
             {
                 return OnUi(async () =>

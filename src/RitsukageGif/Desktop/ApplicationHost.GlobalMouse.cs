@@ -4,6 +4,7 @@ namespace RitsukageGif.Desktop
 {
     public sealed partial class ApplicationHost
     {
+        private static readonly List<string> NoGlobalMouseExclusions = [];
         private readonly List<ScreenshotScrollingMaskWindow> _globalMouseMasks = [];
         private GlobalMouseService? _globalMouse;
         private HotkeyRegistrationResult _globalMouseRegistration = new(string.Empty, HotkeyRegistrationState.Disabled);
@@ -50,7 +51,7 @@ namespace RitsukageGif.Desktop
                         SetGlobalMouseRegistration(HotkeyRegistrationState.Registered);
                         ClearInputConfigurationStatus(InputConfigurationStatusSource.GlobalMouse);
                     },
-                    Settings.GlobalMouseShowMask ? UpdateGlobalMousePreview : null);
+                    GetGlobalMousePreview(), Settings.GlobalMouseIgnoredPrograms);
             }
             catch (Exception error)
             {
@@ -64,7 +65,7 @@ namespace RitsukageGif.Desktop
             CloseGlobalMousePreview();
             var action = Settings.GlobalActions.SingleOrDefault(item => item.Id == id);
             if (action is null || !action.Enabled || IsClosing) return;
-            if (!AllowsGlobalActionInput(action)) return;
+            if (!AllowsGlobalMouseInput(action)) return;
             var startsInRegion = region is { IsEmpty: false } && !IsRecording &&
                                  action.Kind is GlobalActionKind.StartRecording or GlobalActionKind.ToggleRecording;
             if (startsInRegion)
@@ -124,12 +125,22 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private Action<string?, PixelRect?>? GetGlobalMousePreview()
+        {
+            return Settings.GlobalMouseShowMask || Settings.GlobalMouseBindings.Any(binding => binding.Enabled &&
+                Settings.GlobalActions.Any(action => action.Enabled && action.Id == binding.ActionId &&
+                                                     action.Kind == GlobalActionKind.Screenshot))
+                ? UpdateGlobalMousePreview
+                : null;
+        }
+
         private void UpdateGlobalMousePreview(string? id, PixelRect? region)
         {
             var action = Settings.GlobalActions.SingleOrDefault(item => item.Id == id);
-            if (!Settings.GlobalMouseShowMask || IsClosing || IsBusy || IsSelecting || IsRecording || IsConfiguring ||
+            if (IsClosing || IsBusy || IsSelecting || IsRecording || IsConfiguring ||
                 region is not { IsEmpty: false } capture || action is null || !action.Enabled ||
-                !SupportsGlobalMousePreview(action.Kind) || !AllowsGlobalActionInput(action) ||
+                (!Settings.GlobalMouseShowMask && action.Kind != GlobalActionKind.Screenshot) ||
+                !SupportsGlobalMousePreview(action.Kind) || !AllowsGlobalMouseInput(action) ||
                 (!CanExecuteAction(action) &&
                  action.Kind is not (GlobalActionKind.StartRecording or GlobalActionKind.ToggleRecording)))
             {
@@ -147,11 +158,26 @@ namespace RitsukageGif.Desktop
             for (var index = 0; index < monitors.Count; index++)
             {
                 if (index == _globalMouseMasks.Count)
-                    _globalMouseMasks.Add(new(Settings.Appearance) { Operation = "GlobalMouse" });
+                    _globalMouseMasks.Add(new(Settings.Appearance, (int)Settings.Appearance.SelectionBorderWidth)
+                        { Operation = "GlobalMouse" });
                 var screen = monitors[index];
                 _globalMouseMasks[index].Update(new(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width,
                     screen.Bounds.Height), capture, screen.Scaling, 0);
             }
+        }
+
+        private bool AllowsGlobalMouseInput(GlobalActionBinding action)
+        {
+            var ignoredPrograms = OperatingSystem.IsWindows() && _globalMouse is not null
+                ? NoGlobalMouseExclusions
+                : Settings.GlobalMouseIgnoredPrograms;
+            var program = ignoredPrograms.Count != 0 || action.IgnoredPrograms.Count != 0;
+            var fullscreen = Settings.HotkeyPolicy.DisableInFullscreen;
+            var context = program || fullscreen
+                ? GlobalInputContextReader(fullscreen, program)
+                : UnrestrictedInputContext;
+            return GlobalInputDisabledReason(action, context, action.Kind == GlobalActionKind.ToggleGlobalShortcuts,
+                ignoredPrograms) is null;
         }
 
         private void CloseGlobalMousePreview()
@@ -168,7 +194,8 @@ namespace RitsukageGif.Desktop
                 or GlobalActionKind.ScreenshotAndCopyCodeText
                 or GlobalActionKind.ScreenshotAndTranslate or GlobalActionKind.ScreenshotAndRecognizeText
                 or GlobalActionKind.ScreenshotAndRecognizeTable or GlobalActionKind.ScreenshotAndRecognizeFormula
-                or GlobalActionKind.ScreenshotAndScroll or GlobalActionKind.SelectRegion
+                or GlobalActionKind.ScreenshotAndScroll or GlobalActionKind.ScreenshotAndRecord
+                or GlobalActionKind.SelectRegion
                 or GlobalActionKind.StartRecording or GlobalActionKind.ToggleRecording;
         }
     }

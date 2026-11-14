@@ -43,11 +43,11 @@ namespace RitsukageGif.Desktop
                 context.DrawLine(MeasurementPen, start, end);
                 var midpoint = new PixelPoint(line.Start.X + (line.End.X - line.Start.X) / 2,
                     line.Start.Y + (line.End.Y - line.Start.Y) / 2);
-                if (!_monitor.Contains(midpoint)) continue;
                 var horizontal = Math.Abs(start.X - end.X) >= Math.Abs(start.Y - end.Y);
                 var cap = horizontal ? new Vector(0, 3) : new Vector(3, 0);
                 context.DrawLine(MeasurementPen, start - cap, start + cap);
                 context.DrawLine(MeasurementPen, end - cap, end + cap);
+                if (!_monitor.Contains(midpoint)) continue;
                 var width = Math.Min(text.Width + 8, Bounds.Width);
                 var height = text.Height + 4;
                 var center = new Point((start.X + end.X) / 2, (start.Y + end.Y) / 2);

@@ -32,8 +32,8 @@ namespace RitsukageGif.Desktop
                 var scale = size / (100d * cursor.PixelScale);
                 var sx = geometry.Destination.Width / (double)geometry.Region.Width;
                 var sy = geometry.Destination.Height / (double)geometry.Region.Height;
-                var anchorX = geometry.Destination.X + (cursor.X - geometry.Region.X) * sx;
-                var anchorY = geometry.Destination.Y + (cursor.Y - geometry.Region.Y) * sy;
+                var anchorX = geometry.Destination.Left + (cursor.X - geometry.Region.X) * sx;
+                var anchorY = geometry.Destination.Top + (cursor.Y - geometry.Region.Y) * sy;
                 if (next is not null && next.Position > frame.Position && next.Cursor.Visible &&
                     next.Cursor.ShapeId == cursor.ShapeId && next.Geometry.Count > index &&
                     next.CaptureSequence != frame.CaptureSequence)
@@ -43,9 +43,9 @@ namespace RitsukageGif.Desktop
                     {
                         var fraction = Math.Clamp((position - frame.Position).Ticks /
                                                   (double)(next.Position - frame.Position).Ticks, 0, 1);
-                        var targetX = following.Destination.X + (next.Cursor.X - following.Region.X) *
+                        var targetX = following.Destination.Left + (next.Cursor.X - following.Region.X) *
                             following.Destination.Width / following.Region.Width;
-                        var targetY = following.Destination.Y + (next.Cursor.Y - following.Region.Y) *
+                        var targetY = following.Destination.Top + (next.Cursor.Y - following.Region.Y) *
                             following.Destination.Height / following.Region.Height;
                         anchorX += (targetX - anchorX) * fraction;
                         anchorY += (targetY - anchorY) * fraction;
@@ -79,8 +79,8 @@ namespace RitsukageGif.Desktop
                     {
                         var rawX = crop.X + (x + 0.5) / previewScaleX;
                         var rawY = crop.Y + (y + 0.5) / previewScaleY;
-                        if (rawX < geometry.Destination.X || rawX >= geometry.Destination.Right ||
-                            rawY < geometry.Destination.Y || rawY >= geometry.Destination.Bottom ||
+                        if (rawX < geometry.Destination.Left || rawX >= geometry.Destination.Right ||
+                            rawY < geometry.Destination.Top || rawY >= geometry.Destination.Bottom ||
                             (path is not null && !path.Contains((float)rawX, (float)rawY))) continue;
                         var u = Math.Clamp((int)((rawX - left) * cursor.Width / width), 0, cursor.Width - 1);
                         var v = Math.Clamp((int)((rawY - top) * cursor.Height / height), 0, cursor.Height - 1);

@@ -6,7 +6,8 @@
                                              (Tool == ScreenshotTool.Highlight &&
                                               Properties.MarkerPath == AnnotationMarkerPath.Line);
 
-        public bool IsDrawingPointLine => _gesture is { } annotation && IsPointLine(annotation);
+        public bool IsDrawingPointLine =>
+            _duplicateSource is null && _gesture is { } annotation && IsPointLine(annotation);
 
         private static bool IsPointLine(ScreenshotAnnotation annotation)
         {

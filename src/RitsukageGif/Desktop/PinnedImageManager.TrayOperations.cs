@@ -88,21 +88,20 @@ namespace RitsukageGif.Desktop
         {
             Dispatcher.UIThread.VerifyAccess();
             if (!CanSaveAllPins) return;
-            var pins = AllWindows.ToArray();
             _savingSelection = true;
             try
             {
                 var preferences = SavePreferencesProvider().Normalize();
-                var directory = preferences.ResolveDirectory(OutputDirectoryProvider() ??
-                                                             Environment.GetFolderPath(Environment.SpecialFolder
-                                                                 .MyPictures));
+                var directory = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 var folders = await owner.StorageProvider.OpenFolderPickerAsync(new()
                 {
                     Title = UiText.Get("TrayNativePinSaveDirectory"), AllowMultiple = false,
                     SuggestedStartLocation = await owner.StorageProvider.TryGetFolderFromPathAsync(directory),
                 });
                 if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } selectedDirectory) return;
-                if (_disposed || pins.Any(pin => !pin.CanSaveSelection)) return;
+                if (_disposed) return;
+                var pins = AllWindows.ToArray();
+                if (pins.Length == 0 || pins.Any(pin => !pin.CanSaveSelection)) return;
                 var stem = Path.GetFileNameWithoutExtension(preferences.CreateFileName(DateTime.Now,
                     StaticImageFormat.Png));
                 var profile = new ScreenshotSaveProfile
@@ -137,9 +136,9 @@ namespace RitsukageGif.Desktop
                     return;
                 }
                 catch (IOException) when (output.ColorMode == OutputColorMode.Both
-                                              ? File.Exists(Path.Combine(directory, name + ".sdr.png")) ||
-                                                File.Exists(Path.Combine(directory, name + ".hdr.png"))
-                                              : File.Exists(path))
+                                              ? Path.Exists(Path.Combine(directory, name + ".sdr.png")) ||
+                                                Path.Exists(Path.Combine(directory, name + ".hdr.png"))
+                                              : Path.Exists(path))
                 {
                 }
             }

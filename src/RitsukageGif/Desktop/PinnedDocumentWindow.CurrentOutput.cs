@@ -72,8 +72,8 @@ namespace RitsukageGif.Desktop
                         drawing.FillRectangle(Brushes.White, sourceViewport.Intersect(new(formula.Size)));
                         drawing.DrawImage(formula, new(formula.Size));
                         break;
-                    case PinnedColorDocument:
-                        DrawColorViewport(drawing, sourceViewport, token);
+                    case PinnedColorDocument when _surface.Child is PinnedColorScene color:
+                        color.Draw(drawing);
                         break;
                     default:
                         switch (_textView)
@@ -98,18 +98,6 @@ namespace RitsukageGif.Desktop
                 bitmap.Dispose();
                 throw;
             }
-        }
-
-        private void DrawColorViewport(DrawingContext drawing, Rect sourceViewport, CancellationToken token)
-        {
-            var content = (Grid)_surface.Child!;
-            var swatch = (Border)content.Children[0];
-            drawing.FillRectangle(swatch.Background!, swatch.Bounds.Intersect(sourceViewport));
-            var text = (PinnedTextView)_textView!;
-            var position = text.TextArea.TextView.TranslatePoint(default, content)!.Value;
-            var offset = new Vector(position.X - text.ScrollOffset.X, position.Y - text.ScrollOffset.Y);
-            using var transform = drawing.PushTransform(Matrix.CreateTranslation(offset.X, offset.Y));
-            text.DrawSceneViewport(drawing, sourceViewport.Translate(-offset), token);
         }
 
         private async Task<RenderTargetBitmap> RenderFileViewportAsync(Size size, Point origin, double viewScale,

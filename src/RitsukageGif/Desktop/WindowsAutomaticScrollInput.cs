@@ -34,6 +34,9 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             UnavailableReason = null;
             if (!ValidateRegion(region)) return AutomaticScrollInputResult.Unavailable;
+            if (NativeMethods.GetCursorPos(out var pointer) == 0)
+                return Unavailable("The current pointer position is unavailable.");
+            if (!region.Contains(new(pointer.X, pointer.Y))) return AutomaticScrollInputResult.PointerOutside;
             var bar = axis == ScrollCaptureAxis.Vertical ? 1 : 0;
             var info = new WindowsAutomaticScrollInfo
                 { Size = (uint)Marshal.SizeOf<WindowsAutomaticScrollInfo>(), Mask = 7 };

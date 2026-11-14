@@ -2,6 +2,9 @@ namespace RitsukageGif.Desktop
 {
     public sealed record AppearancePreferences
     {
+        internal const int DefaultSelectionBorderWidth = 4;
+        internal const int MaximumSelectionBorderWidth = 20;
+
         public AppearanceThemeMode ThemeMode { get; set; } = AppearanceThemeMode.Light;
         public string FontFamily { get; set; } = "";
         public uint AccentColor { get; set; } = 0xFF0064FA;
@@ -12,11 +15,15 @@ namespace RitsukageGif.Desktop
         public uint TrayIconColor { get; set; } = 0xFFFFFFFF;
         public ToolbarIconSize ToolbarIconSize { get; set; } = ToolbarIconSize.Medium;
         public AppearanceDialogStyle ColorDialogStyle { get; set; }
-        public AppearanceDialogStyle SaveDialogStyle { get; set; } = AppearanceDialogStyle.System;
-        public double SelectionBorderWidth { get; set; } = 1.5;
+        public AppearanceDialogStyle SaveDialogStyle { get; set; } = AppearanceDialogStyle.Modern;
+        public double SelectionBorderWidth { get; set; } = DefaultSelectionBorderWidth;
+        public bool SelectionBorderFollowsTheme { get; set; } = true;
         public uint? SelectionBorderColor { get; set; }
         public SelectionAnchorMode SelectionAnchors { get; set; } = SelectionAnchorMode.Eight;
         public bool AnimateSelection { get; set; } = true;
+
+        internal uint EffectiveSelectionBorderColor =>
+            SelectionBorderFollowsTheme ? AccentColor : SelectionBorderColor ?? AccentColor;
 
         public AppearancePreferences Normalize()
         {
@@ -29,9 +36,11 @@ namespace RitsukageGif.Desktop
                 TrayIcon = Enum.IsDefined(TrayIcon) ? TrayIcon : TrayIconAppearance.Original,
                 ToolbarIconSize = Enum.IsDefined(ToolbarIconSize) ? ToolbarIconSize : ToolbarIconSize.Medium,
                 ColorDialogStyle = Enum.IsDefined(ColorDialogStyle) ? ColorDialogStyle : AppearanceDialogStyle.Modern,
-                SaveDialogStyle = Enum.IsDefined(SaveDialogStyle) ? SaveDialogStyle : AppearanceDialogStyle.System,
-                SelectionBorderWidth =
-                double.IsFinite(SelectionBorderWidth) ? Math.Clamp(SelectionBorderWidth, 1, 8) : 1.5,
+                SaveDialogStyle = Enum.IsDefined(SaveDialogStyle) ? SaveDialogStyle : AppearanceDialogStyle.Modern,
+                SelectionBorderWidth = double.IsFinite(SelectionBorderWidth)
+                    ? Math.Round(Math.Clamp(SelectionBorderWidth, 0, MaximumSelectionBorderWidth),
+                        MidpointRounding.AwayFromZero)
+                    : DefaultSelectionBorderWidth,
                 SelectionAnchors = Enum.IsDefined(SelectionAnchors) ? SelectionAnchors : SelectionAnchorMode.Eight,
             };
         }

@@ -5,19 +5,19 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
-        private bool _isThumbnail;
-        private bool _thumbnailManualRegion;
-        private Rect _thumbnailRegion;
-        private Size _thumbnailNormalSize;
-        private Size _thumbnailSurfaceSize;
-        private Vector _thumbnailNormalScroll;
-        private double _thumbnailNormalZoom = 1;
-        private double _thumbnailSavedZoom = 1;
-        private bool _thumbnailHasSavedZoom;
         private bool _applyingThumbnail;
-        private PinnedDocumentThumbnailRequest? _thumbnailRequest;
+        private bool _isThumbnail;
+        private bool _thumbnailHasSavedZoom;
+        private bool _thumbnailManualRegion;
+        private Vector _thumbnailNormalScroll;
+        private Size _thumbnailNormalSize;
+        private double _thumbnailNormalZoom = 1;
         private (Point Source, Avalonia.PixelPoint Screen)? _thumbnailPendingAnchor;
         private Vector? _thumbnailPendingScroll;
+        private Rect _thumbnailRegion;
+        private PinnedDocumentThumbnailRequest? _thumbnailRequest;
+        private double _thumbnailSavedZoom = 1;
+        private Size _thumbnailSurfaceSize;
 
         public void SetThumbnailDisplay(bool value, Avalonia.PixelPoint? screenAnchor = null)
         {
@@ -49,10 +49,23 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private void ToggleDocumentThumbnail()
+        private void ToggleDocumentThumbnail(bool usePointer = false, Avalonia.PixelPoint? screenAnchor = null)
         {
             if (IsInteractionLocked || IsMarkEditing) return;
-            SetThumbnailDisplay(!(_thumbnailRequest?.Enabled ?? _isThumbnail));
+            var enable = !(_thumbnailRequest?.Enabled ?? _isThumbnail);
+            SetThumbnailDisplay(enable, enable && usePointer ? DocumentThumbnailPointerAnchor() : screenAnchor);
+        }
+
+        private Avalonia.PixelPoint? DocumentThumbnailPointerAnchor()
+        {
+            var screenPoint = PinnedGroupPointer.Read();
+            var local = screenPoint is { } point
+                ? PinnedWindowCoordinates.PointToClient(this, Presentation.Frame, _content, point)
+                : _simulatedWheel.PointerPosition is { } pointer
+                    ? this.TranslatePoint(pointer, _content)
+                    : null;
+            if (local is not { } anchor || !new Rect(_content.Bounds.Size).Contains(anchor)) return null;
+            return screenPoint ?? PinnedWindowCoordinates.PointToScreen(this, Presentation.Frame, _content, anchor);
         }
 
         private void BeginDocumentThumbnail(Point sourceAnchor, Rect? selectedRegion = null)

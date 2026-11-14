@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 
 namespace RitsukageGif.Desktop
@@ -86,6 +87,13 @@ namespace RitsukageGif.Desktop
                 width.IsEnabled = _session.Properties.SpotlightStroke;
             });
             row.Children.Add(width);
+            row.PointerWheelChanged += async (_, args) =>
+            {
+                if (_disposed || _refreshing || args.KeyModifiers != KeyModifiers.None || args.Delta.Y == 0)
+                    return;
+                args.Handled = true;
+                await _session.AdjustToolWheelWithModifiersAsync(Math.Sign(args.Delta.Y), args.KeyModifiers);
+            };
             return row;
         }
     }

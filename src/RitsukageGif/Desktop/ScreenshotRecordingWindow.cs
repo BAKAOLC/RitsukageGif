@@ -9,48 +9,50 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotRecordingWindow : Window
     {
+        private readonly Button _audio;
+        private readonly Button _camera;
         private readonly ScreenshotRecordingController _controller;
-        private readonly RecordingRegionOverlay _frame;
+        private readonly Button _delaySelector;
         private readonly TextBlock _elapsed = new() { MinWidth = 58, VerticalAlignment = VerticalAlignment.Center };
 
+        private readonly TextBlock _error = new()
+            { Foreground = AppTheme.Error, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
+
         private readonly TextBlock _fps = new() { MinWidth = 44, VerticalAlignment = VerticalAlignment.Center };
+        private readonly Button _fpsSelector;
+        private readonly RecordingRegionOverlay _frame;
+        private readonly Button _input;
+        private readonly Button _move;
+        private readonly Button _pause;
+        private readonly Button _record;
+        private readonly HoverPropertyPanel _recordModePanel;
 
         private readonly TextBlock _regionInfo = new()
             { FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center };
 
-        private readonly TextBlock _error = new()
-            { Foreground = AppTheme.Error, TextWrapping = TextWrapping.Wrap, MaxWidth = 420 };
-        private readonly Button _record;
-        private readonly HoverPropertyPanel _recordModePanel;
-        private readonly Button _pause;
-        private readonly Button _audio;
-        private readonly Button _input;
-        private readonly Button _camera;
-        private readonly Button _fpsSelector;
-        private readonly Button _delaySelector;
-
         private readonly Button _rerecord;
-        private readonly Button _move;
-        private Avalonia.PixelPoint? _moveOrigin;
-        private PixelRect _moveRegion;
-        private bool _closed;
-        private bool _hasShown;
+        private bool _allowClose;
+        private PixelRect? _annotationDensityRegion;
+        private int _annotationDivisor;
+        private PixelSize _annotationProvisionalSize;
+        private bool _annotationUnavailable;
+        private Task _cameraInitialization = Task.CompletedTask;
         private bool _captureExcluded;
         private bool _captureHidden;
-        private bool? _recordingVisual;
+        private bool _closed;
+        private bool _hasShown;
+        private Avalonia.PixelPoint? _moveOrigin;
+        private PixelRect _moveRegion;
         private bool? _pausedVisual;
-        private Task _cameraInitialization = Task.CompletedTask;
-        private bool _annotationUnavailable;
-        private PixelRect? _annotationDensityRegion;
-        private PixelSize _annotationProvisionalSize;
-        private int _annotationDivisor;
         private PixelSize? _recordingNativeSize;
+        private bool? _recordingVisual;
 
         internal ScreenshotRecordingWindow(ApplicationHost host, SelectionResult selection,
             Func<AnnotationPreferences> preferencesProvider, Action<AnnotationPreferences> persistPreferences)
         {
             _controller = new(host, selection);
             _controller.PrepareCapture = PrepareCaptureAsync;
+            _controller.CompleteCapturePreparation = CompleteToolbarCapturePreparationAsync;
             _controller.CameraSessionChanging = ChangeCameraPreviewAsync;
             _controller.PrepareSourceExclusion = PrepareNativeSourceExclusionAsync;
             _controller.BeforeSourceRelease = ReleaseRecorderExclusionAsync;
@@ -62,6 +64,8 @@ namespace RitsukageGif.Desktop
             _frame.LayoutChanged += InvalidateAnnotationDensity;
             Annotations = new(preferencesProvider(), preferencesProvider, persistPreferences);
             Annotations.CancelRequested += CancelAnnotationContext;
+            Annotations.BlockedToolClicked += ShowBlockedRecordingToolNotice;
+            _blockedToolNoticeTimer.Tick += BlockedRecordingToolNoticeTick;
             Annotations.NativeExclusionFailed += NativeAnnotationExclusionFailed;
             WindowDecorations = WindowDecorations.None;
             SizeToContent = SizeToContent.WidthAndHeight;
@@ -155,7 +159,12 @@ namespace RitsukageGif.Desktop
             _rerecord = ToolButton("RecordingRerecord", null, _controller.RerecordAsync);
             _rerecord.Content = ToolbarIcon.Create(_rerecord, "RecordingRerecord");
             strip.Children.Add(_rerecord);
-            var content = new StackPanel { Spacing = 4, Children = { strip, _error } };
+            var noticeLayer = new Canvas { IsHitTestVisible = false, ClipToBounds = true };
+            noticeLayer.Children.Add(_blockedToolNotice);
+            noticeLayer.SizeChanged += (_, _) => PlaceBlockedRecordingToolNotice(noticeLayer);
+            _blockedToolNotice.SizeChanged += (_, _) => PlaceBlockedRecordingToolNotice(noticeLayer);
+            var toolbarLayer = new Grid { Children = { strip, noticeLayer } };
+            var content = new StackPanel { Spacing = 4, Children = { toolbarLayer, _error } };
             Content = new Border
             {
                 Background = AppTheme.Surface, BorderBrush = AppTheme.Outline, BorderThickness = new(1),
@@ -180,11 +189,11 @@ namespace RitsukageGif.Desktop
             Screens.Changed += RecordingScreensChanged;
             Closing += (sender, args) =>
             {
+                if (_allowClose) return;
                 HideRecorderPanels();
                 Annotations.HideFlyouts();
-                if (_controller.IsClosed) return;
                 args.Cancel = true;
-                _ = GuardAsync(_controller.CloseAsync);
+                if (!_controller.IsClosed) _ = GuardAsync(_controller.CloseAsync);
             };
             Closed += (_, _) =>
             {
@@ -197,8 +206,12 @@ namespace RitsukageGif.Desktop
                 UiText.LanguageChanged -= Refresh;
                 _frame.LayoutChanged -= InvalidateAnnotationDensity;
                 Screens.Changed -= RecordingScreensChanged;
+                CloseCountdownWindow();
                 _frame.Dispose();
                 Annotations.CancelRequested -= CancelAnnotationContext;
+                Annotations.BlockedToolClicked -= ShowBlockedRecordingToolNotice;
+                _blockedToolNoticeTimer.Tick -= BlockedRecordingToolNoticeTick;
+                HideBlockedRecordingToolNotice();
                 Annotations.NativeExclusionFailed -= NativeAnnotationExclusionFailed;
                 Annotations.Dispose();
                 foreach (var panel in _recorderPanels) panel.Dispose();
@@ -206,6 +219,11 @@ namespace RitsukageGif.Desktop
                 _controller.Dispose();
             };
             Refresh();
+        }
+
+        internal Action<IReadOnlyList<string>, PixelRect>? PublishOutput
+        {
+            set => _controller.PublishOutput = value;
         }
 
         internal bool CanAcceptSelection => _controller.CanConfigure;
@@ -240,6 +258,7 @@ namespace RitsukageGif.Desktop
 
         private async Task PrepareCaptureAsync(CancellationToken token)
         {
+            _toolbarCaptureBeforeStart = null;
             await _cameraInitialization.WaitAsync(token);
             await _controller.EnsureCameraReadyAsync();
             HideRecorderPanels();
@@ -300,6 +319,8 @@ namespace RitsukageGif.Desktop
             if (!_controller.IsWorking) _recordingNativeSize = null;
             if (_controller.IsClosed || _controller.Reviewing)
             {
+                HideBlockedRecordingToolNotice();
+                CloseCountdownWindow();
                 _frame.Update(this, _controller.Selection.Region, false, false);
                 UpdateAnnotations(false);
                 UpdateCameraPreview(false);
@@ -344,6 +365,7 @@ namespace RitsukageGif.Desktop
             _camera.IsEnabled = _controller is { IsClosed: false, Reviewing: false, IsPreparingSource: false };
             _audio.IsVisible = !stopping;
             _audio.IsEnabled = _controller.CanConfigure && AudioCaptureBackend.IsSupported;
+            _input.IsVisible = !_controller.Quick;
             _input.IsEnabled = _controller.CanChangeKeyboardActions || _controller.CanChangeMouseActions;
             ToolTip.SetTip(_input,
                 UiText.Get(_controller.InputUnavailableReason is null
@@ -354,7 +376,15 @@ namespace RitsukageGif.Desktop
             _rerecord.IsEnabled = _controller.IsRecording;
             _error.Text = _controller.Error;
             _error.IsVisible = _controller.Error is not null;
-            _frame.Update(this, _controller.Selection.Region, _controller.CanConfigure, IsVisible);
+            var frameBrush = _controller.IsCountingDown || _controller.IsPaused
+                ? WaitingFrameBrush
+                : _controller.IsRecording
+                    ? ActiveFrameBrush
+                    : AppTheme.Accent;
+            _frame.SetBrush(frameBrush);
+            _sourceViewport?.SetFrameBrush(frameBrush);
+            _frame.Update(this, region, _controller.CanConfigure, IsVisible);
+            UpdateCountdownWindow();
             UpdateAnnotations(IsVisible);
             UpdateCameraPreview(IsVisible);
             Reposition();
@@ -415,18 +445,20 @@ namespace RitsukageGif.Desktop
             else Dispatcher.UIThread.Post(InvalidateAnnotationDensity);
         }
 
+        private PixelRect RecorderPlacementRegion()
+        {
+            if (_sourceViewport is not { IsVisible: true } sourceViewport) return _controller.Selection.Region;
+            var coordinateScale = OperatingSystem.IsMacOS() ? 1 : sourceViewport.RenderScaling;
+            return new(sourceViewport.Position.X, sourceViewport.Position.Y,
+                Math.Max(1, (int)Math.Ceiling(sourceViewport.Bounds.Width * coordinateScale)),
+                Math.Max(1, (int)Math.Ceiling(sourceViewport.Bounds.Height * coordinateScale)));
+        }
+
         private void Reposition()
         {
             if (_closed || _controller.Reviewing) return;
-            var region = _controller.Selection.Region;
-            if (_sourceViewport is { IsVisible: true } sourceViewport)
-            {
-                var coordinateScale = OperatingSystem.IsMacOS() ? 1 : sourceViewport.RenderScaling;
-                region = new(sourceViewport.Position.X, sourceViewport.Position.Y,
-                    Math.Max(1, (int)Math.Ceiling(sourceViewport.Bounds.Width * coordinateScale)),
-                    Math.Max(1, (int)Math.Ceiling(sourceViewport.Bounds.Height * coordinateScale)));
-            }
-
+            var region = RecorderPlacementRegion();
+            _countdownWindow?.UpdateAnchor(region);
             var screen = Screens.ScreenFromPoint(new(region.X + region.Width / 2, region.Y + region.Height / 2)) ??
                          Screens.Primary;
             if (screen is null) return;
@@ -441,7 +473,9 @@ namespace RitsukageGif.Desktop
 
         private void Finish()
         {
-            if (!_closed) Close();
+            if (_closed) return;
+            _allowClose = true;
+            Close();
         }
     }
 }

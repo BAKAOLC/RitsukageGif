@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 
 namespace RitsukageGif.Desktop
@@ -5,13 +6,19 @@ namespace RitsukageGif.Desktop
     internal sealed partial class PinnedWindowPresentation
     {
         private readonly Window _owner;
+        private readonly IPinnedWindow _pin;
+        private readonly Func<PinnedImagePreferences> _preferences;
         private readonly PinnedWindowShake _shake = new();
         private bool _visibleInGroup = true;
+        private (double Zoom, double Opacity) _beforeMouseReset = (1, 1);
 
-        internal PinnedWindowPresentation(Window owner, Grid content, Func<PinnedImagePreferences> preferences,
+        internal PinnedWindowPresentation(IPinnedWindow pin, Grid content, Func<PinnedImagePreferences> preferences,
             Func<Func<Task>, Task> runOperation, TextBlock status)
         {
+            var owner = pin.Window;
             _owner = owner;
+            _pin = pin;
+            _preferences = preferences;
             InitializeShade(content, preferences);
             _runOperation = runOperation;
             _status = status;
@@ -20,10 +27,19 @@ namespace RitsukageGif.Desktop
                 _messageTimer.Stop();
                 if (_status.Text == _message) _status.IsVisible = false;
             };
-            owner.Closed += (_, _) => _messageTimer.Stop();
+            owner.Closed += (_, _) =>
+            {
+                _messageTimer.Stop();
+                CloseMouseThroughToolbar();
+            };
             Title = new(owner, content, preferences);
             content.Children.Add(Title);
             Attention = new(owner, content, () => preferences().TranslucentOnAttention);
+            owner.PropertyChanged += (_, change) =>
+            {
+                if (change.Property == Visual.IsVisibleProperty || change.Property == Window.WindowStateProperty)
+                    RefreshMouseThroughToolbar();
+            };
             owner.PositionChanged += (_, _) =>
             {
                 if (owner is { IsVisible: true, IsActive: true } && preferences().HideOthersOnShake &&
@@ -40,7 +56,18 @@ namespace RitsukageGif.Desktop
         private bool VisibleInGroup => GroupHidden ? _visibleInGroup : _owner.IsVisible;
         internal Action? HideOthersRequested { get; set; }
         internal Action? SwitchNextRequested { get; set; }
+        internal Action? ResetSelectedPeersRequested { get; set; }
+        internal Action? ResetFromSelection { get; set; }
         internal Func<Task>? MoveGroupRequested { get; set; }
+
+        internal (double Zoom, double Opacity) ToggleMouseReset(double zoom)
+        {
+            var opacity = _owner.Opacity;
+            if (zoom is 1 && opacity is 1) return _beforeMouseReset;
+
+            _beforeMouseReset = (zoom, opacity);
+            return (1, 1);
+        }
 
         internal bool Execute(string action)
         {

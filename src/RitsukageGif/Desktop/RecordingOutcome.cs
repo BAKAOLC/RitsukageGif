@@ -3,6 +3,7 @@ namespace RitsukageGif.Desktop
     internal sealed record RecordingOutcome(bool Cancelled = false, Exception? Error = null)
     {
         internal IReadOnlyList<string> Outputs { get; init; } = [];
+        internal bool OutputsAreTemporary { get; init; }
         internal bool SourceLost { get; init; }
         internal TimeSpan RecordedDuration { get; init; }
         internal long AcceptedCaptures { get; init; }

@@ -160,20 +160,6 @@ namespace RitsukageGif.Desktop
                 : right is not null && left.Id == right.Id && left.InputFormat == right.InputFormat;
         }
 
-        private PreviewFrame? ReadCamera(int slot)
-        {
-            return ReadSlot(slot).Frame;
-        }
-
-        private (PreviewFrame? Frame, RecordingCameraOptions Options, int Generation) ReadSlot(int slot)
-        {
-            lock (_sourceGate)
-            {
-                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
-                return (_sources[slot]?.Read(), Options, _generation);
-            }
-        }
-
         internal CapturedFrameSet Composite(CapturedFrameSet source, PixelRect capturePhysicalRegion,
             CancellationToken token = default)
         {
@@ -254,14 +240,26 @@ namespace RitsukageGif.Desktop
             FrameAvailable?.Invoke();
         }
 
-        internal int GetSizeLimit(int slot, int captureWidth, int captureHeight)
+        internal int GetSizeLimit(int captureWidth, int captureHeight)
         {
-            using var frame = ReadCamera(slot);
-            if (frame is null) return Math.Min(480, Math.Max(1, captureHeight));
-            var settings = slot == 0 ? Options.Primary : Options.Secondary;
-            var bounds = RecordingCameraLayout.Bounds(settings with { Size = 480 }, frame.Width, frame.Height,
-                captureWidth, captureHeight, false);
-            return (int)(settings.Rotation % 180 == 0 ? bounds.Height : bounds.Width) - settings.BorderWidth * 2;
+            lock (_sourceGate)
+            {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+                var options = Options;
+                var limit = 480;
+                for (var slot = 0; slot < _sources.Length; slot++)
+                {
+                    if (_sources[slot]?.ReadFrameSize() is not { } size) continue;
+                    var settings = slot == 0 ? options.Primary : options.Secondary;
+                    var bounds = RecordingCameraLayout.Bounds(settings with { Size = 480 }, size.Width, size.Height,
+                        captureWidth, captureHeight, false);
+                    var slotLimit = (int)(settings.Rotation % 180 == 0 ? bounds.Height : bounds.Width) -
+                                    settings.BorderWidth * 2;
+                    limit = Math.Min(limit, slotLimit);
+                }
+
+                return Math.Max(1, limit);
+            }
         }
 
         private async Task DisposeCoreAsync()

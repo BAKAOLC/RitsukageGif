@@ -45,6 +45,7 @@ namespace RitsukageGif.Desktop
             _refresh.Content = Icon(_refresh,
                 ToolbarIcon.GetDefinition("SelectionFrameRefresh"));
             _refresh.Bind(ToolTip.TipProperty, LiveText.Resource("SelectionFrameRefresh"));
+            AnchoredSelectionTooltip.Configure(_refresh);
             _refresh.Bind(AutomationProperties.NameProperty, LiveText.Resource("SelectionFrameRefresh"));
             _refresh.AddHandler(PointerPressedEvent, (_, args) =>
             {
@@ -152,6 +153,7 @@ namespace RitsukageGif.Desktop
             };
             button.Content = Icon(button, path);
             button.Bind(ToolTip.TipProperty, LiveText.Resource(label));
+            AnchoredSelectionTooltip.Configure(button);
             button.Bind(AutomationProperties.NameProperty, LiveText.Resource(label));
             button.Click += (_, _) =>
             {

@@ -9,36 +9,49 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class ScreenshotScrollingWindow
     {
+        private const int RegionBorderWidth = 3;
         private ScreenshotScrollingPreviewWindow? _imagePreviewWindow;
 
-        private bool _manualToolbarPosition;
-
-        private void MoveRegion(int position)
+        private void MoveRegion(int x, int y)
         {
-            var candidate = _axis == ScrollCaptureAxis.Vertical
-                ? _region with { Y = position }
-                : _region with { X = position };
-            var monitors = _screens.All.Select(screen => new PixelRect(screen.Bounds.X, screen.Bounds.Y,
-                screen.Bounds.Width, screen.Bounds.Height));
-            if (!new DisplayTopology(monitors).Covers(candidate)) return;
+            var candidate = _region with
+            {
+                X = !_captureStarted || _axis == ScrollCaptureAxis.Horizontal ? x : _region.X,
+                Y = !_captureStarted || _axis == ScrollCaptureAxis.Vertical ? y : _region.Y,
+            };
+            if (candidate == _region) return;
+            if (!IsAllowedRegion(candidate, !_captureStarted)) return;
+            var offsetX = candidate.X - _region.X;
+            var offsetY = candidate.Y - _region.Y;
             _region = candidate;
-            _session.Move(position);
+            _session.Move(candidate, !_captureStarted);
+            Position = new(Position.X + offsetX, Position.Y + offsetY);
             UpdateBorders();
             UpdateObstruction();
             RefreshLivePreview();
         }
 
+        private bool IsAllowedRegion(PixelRect region, bool checkWindow)
+        {
+            var monitors = _screens.All.Select(screen => new PixelRect(screen.Bounds.X, screen.Bounds.Y,
+                screen.Bounds.Width, screen.Bounds.Height));
+            return new DisplayTopology(monitors).Covers(region) &&
+                   (!checkWindow || _automaticTarget is not { } target || region.Intersect(target.Client) == region);
+        }
+
         private void UpdateBorders()
         {
-            if (OperatingSystem.IsWindows())
-            {
-                UpdateMasks();
-                return;
-            }
+            var displayRegion = _resizePreview ?? _region;
+            if (OperatingSystem.IsWindows()) UpdateMasks(displayRegion);
+            else UpdatePortableBorders(displayRegion);
+            UpdateResizeTargets();
+        }
 
-            var rectangles = _screens.All.SelectMany(screen => CreateBorderRectangles(_region,
+        private void UpdatePortableBorders(PixelRect displayRegion)
+        {
+            var rectangles = _screens.All.SelectMany(screen => CreateBorderRectangles(displayRegion,
                 [new(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height)],
-                (int)Math.Ceiling(_appearance.SelectionBorderWidth * screen.Scaling))).ToList();
+                RegionBorderWidth)).ToList();
             for (var i = 0; i < rectangles.Count; i++)
             {
                 var rectangle = rectangles[i];
@@ -70,7 +83,7 @@ namespace RitsukageGif.Desktop
                     Width = rectangle.Width / scale, Height = rectangle.Height / scale,
                     Background =
                         new SolidColorBrush(
-                            Color.FromUInt32(_appearance.SelectionBorderColor ?? _appearance.AccentColor)),
+                            Color.FromUInt32(_appearance.EffectiveSelectionBorderColor)),
                     HorizontalAlignment = HorizontalAlignment.Left,
                     VerticalAlignment = VerticalAlignment.Top,
                 };
@@ -95,15 +108,15 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private void UpdateMasks()
+        private void UpdateMasks(PixelRect displayRegion)
         {
             var toolbar = TryGetPlatformHandle() is { HandleDescriptor: "HWND" } handle ? handle.Handle : 0;
             for (var index = 0; index < _screens.All.Count; index++)
             {
                 var screen = _screens.All[index];
-                if (_maskWindows.Count <= index) _maskWindows.Add(new(_appearance));
+                if (_maskWindows.Count <= index) _maskWindows.Add(new(_appearance, RegionBorderWidth));
                 _maskWindows[index].Update(new(screen.Bounds.X, screen.Bounds.Y, screen.Bounds.Width,
-                    screen.Bounds.Height), _region, screen.Scaling, toolbar);
+                    screen.Bounds.Height), displayRegion, screen.Scaling, toolbar);
             }
 
             for (var index = _maskWindows.Count - 1; index >= _screens.All.Count; index--)
@@ -115,7 +128,7 @@ namespace RitsukageGif.Desktop
 
         private void ToolbarScreensChanged(object? sender, EventArgs args)
         {
-            if (IsVisible) Reposition();
+            if (IsVisible && _dragStart is null) Reposition();
         }
 
         private void Reposition()
@@ -125,24 +138,10 @@ namespace RitsukageGif.Desktop
             var screens = _screens.All.Select(screen =>
                 (new PixelRect(screen.WorkingArea.X, screen.WorkingArea.Y, screen.WorkingArea.Width,
                     screen.WorkingArea.Height), screen.Scaling)).ToArray();
-            var position = _manualToolbarPosition
-                ? ClampManualToolbarPosition(layoutWidth, layoutHeight, screens)
-                : FindPanelPosition(_region, layoutWidth, layoutHeight, screens, _preferredPlacementScreen);
+            var position = FindPanelPosition(_region, layoutWidth, layoutHeight, screens, _preferredPlacementScreen);
             if (Position != position) Position = position;
             UpdateObstruction();
             RefreshLivePreview();
-        }
-
-        private Avalonia.PixelPoint ClampManualToolbarPosition(double layoutWidth, double layoutHeight,
-            IReadOnlyList<(PixelRect Area, double Scale)> screens)
-        {
-            var current = new PixelRect(Position.X, Position.Y, (int)Math.Ceiling(layoutWidth * RenderScaling),
-                (int)Math.Ceiling(layoutHeight * RenderScaling));
-            var (area, scale) = FindPanelScreen(current, screens);
-            var width = (int)Math.Ceiling(layoutWidth * scale);
-            var height = (int)Math.Ceiling(layoutHeight * scale);
-            return new(Math.Clamp(Position.X, area.X, Math.Max(area.X, area.Right - width)),
-                Math.Clamp(Position.Y, area.Y, Math.Max(area.Y, area.Bottom - height)));
         }
 
         private static (PixelRect Area, double Scale) FindPanelScreen(PixelRect region,
@@ -205,6 +204,14 @@ namespace RitsukageGif.Desktop
                 obstructed |= !popupBounds.Intersect(_region).IsEmpty;
             }
 
+            if (!_windowSource && !_warningExcluded && _warningDialog is { IsVisible: true } warning)
+            {
+                var warningBounds = new PixelRect(warning.Position.X, warning.Position.Y,
+                    (int)Math.Ceiling(warning.Bounds.Width * warning.RenderScaling),
+                    (int)Math.Ceiling(warning.Bounds.Height * warning.RenderScaling));
+                obstructed |= !warningBounds.Intersect(_region).IsEmpty;
+            }
+
             _session.Obstructed = obstructed;
             _obstructed = obstructed;
             RefreshStatus();
@@ -229,8 +236,8 @@ namespace RitsukageGif.Desktop
 
         private void CloseLivePreview()
         {
-            _cropCloseTimer?.Dispose();
-            _cropCloseTimer = null;
+            _cropVisibilityTimer?.Dispose();
+            _cropVisibilityTimer = null;
             _cropPopup.IsOpen = false;
             _imagePreviewWindow?.Close();
             _imagePreviewWindow = null;

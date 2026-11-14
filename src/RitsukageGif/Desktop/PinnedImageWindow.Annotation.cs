@@ -11,9 +11,9 @@ namespace RitsukageGif.Desktop
         private ScreenshotAnnotationSession? _annotation;
         private CancellationTokenSource? _annotationCancellation;
         private ScreenshotAnnotationSession? _annotationScene;
-        private PinnedImageState? _closedState;
         private ScreenshotAnnotationSurface? _annotationSurface;
         private PinnedAnnotationToolbar? _annotationToolbar;
+        private PinnedImageState? _closedState;
         public Func<AnnotationPreferences> AnnotationPreferencesProvider { get; set; } = () => new();
         public Action<AnnotationPreferences>? AnnotationPreferencesChanged { get; set; }
 
@@ -25,6 +25,7 @@ namespace RitsukageGif.Desktop
             }, RoutingStrategies.Tunnel, true);
             AddHandler(KeyUpEvent, (_, args) =>
             {
+                if (_annotationToolbar?.HandleAnnotationMenuKey(args, false) == true) return;
                 _annotationTextInputKeys.Remove(args.Key);
                 _annotation?.ReleasePolylineArrowKey(args.Key);
                 if (_annotation?.HandleNumberCaptionKey(args.Key, args.KeyModifiers, false) == true)
@@ -203,14 +204,6 @@ namespace RitsukageGif.Desktop
             if (session.HandleNumberCaptionKey(args.Key, args.KeyModifiers, true))
             {
                 args.Handled = true;
-                return;
-            }
-
-            if (args is { Key: Key.Escape, KeyModifiers: KeyModifiers.None })
-            {
-                args.Handled = true;
-                if (session.IsDrawing) session.CancelGesture();
-                else EndAnnotation();
                 return;
             }
 

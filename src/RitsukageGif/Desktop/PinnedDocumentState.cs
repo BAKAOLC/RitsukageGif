@@ -1,7 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace RitsukageGif.Desktop
 {
     internal sealed record PinnedDocumentState(PinnedWindowState Window, PinnedDocument Document)
     {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public long ClosedAtUtcTicks { get; init; }
+
         public PinnedDocumentThumbnailState? Thumbnail { get; set; }
         public PinnedDocumentThumbnailRequest? ThumbnailRequest { get; set; }
         public bool IgnoreFormat { get; set; }
@@ -11,5 +16,8 @@ namespace RitsukageGif.Desktop
         public ScreenshotAnnotationDocument? Annotations { get; set; }
         public double AnnotationScaling { get; set; } = 1;
         public PinnedFileListMaximumSize? FileListMaximumSize { get; init; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public PinnedDocumentTranslationState? Translation { get; init; }
     }
 }

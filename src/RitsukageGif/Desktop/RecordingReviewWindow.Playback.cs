@@ -11,6 +11,8 @@ namespace RitsukageGif.Desktop
     internal sealed partial class RecordingReviewWindow
 
     {
+        private readonly Queue<Key> _navigationKeys = new();
+
         private double PlaybackStart => RecordingReviewSampling.MediaPosition(_document, _timeline.RangeStart);
 
         private double PlaybackEnd => Math.Min(_document.RecordedDuration.TotalSeconds,
@@ -249,6 +251,53 @@ namespace RitsukageGif.Desktop
                    (whole % 60).ToString("00", CultureInfo.InvariantCulture);
         }
 
+        private async Task StepFrameAsync(int direction)
+        {
+            if (_playing) await SetPlayingAsync(false);
+            var index = RecordingReviewSampling.IndexAtTime(_document, _position);
+            await SeekMediaAsync((index + direction) / (double)_document.FramesPerSecond);
+        }
+
+        private async Task JumpToBoundaryAsync(double position)
+        {
+            if (_playing) await SetPlayingAsync(false);
+            await SeekAsync(position);
+        }
+
+        private void NavigationKeyPressed(object? sender, KeyEventArgs args)
+        {
+            if (args.Handled || _export is not null || _source is null || args.KeyModifiers != KeyModifiers.None)
+                return;
+            if (args.Key is not (Key.Left or Key.Right or Key.Home or Key.End)) return;
+            args.Handled = true;
+            if (_closing) return;
+            _navigationKeys.Enqueue(args.Key);
+            if (_navigationKeys.Count == 1) _command = RunNavigationAsync(_command);
+        }
+
+        private async Task RunNavigationAsync(Task preceding)
+        {
+            await preceding;
+            try
+            {
+                while (!_closing && _export is null && _navigationKeys.TryPeek(out var key))
+                {
+                    await RunCoreAsync(() => key switch
+                    {
+                        Key.Left => StepFrameAsync(-1),
+                        Key.Right => StepFrameAsync(1),
+                        Key.Home => JumpToBoundaryAsync(_timeline.RangeStart),
+                        _ => JumpToBoundaryAsync(_timeline.RangeEnd),
+                    });
+                    _navigationKeys.Dequeue();
+                }
+            }
+            finally
+            {
+                _navigationKeys.Clear();
+            }
+        }
+
         private void KeyPressed(object? sender, KeyEventArgs args)
 
         {
@@ -275,14 +324,6 @@ namespace RitsukageGif.Desktop
                 case Key.C when args.KeyModifiers == KeyModifiers.Control: Run(CopyAsync); break;
 
                 case Key.Space: Run(() => SetPlayingAsync(!_playing)); break;
-
-                case Key.Left: Run(() => SeekMediaAsync(CurrentPosition() - 1d / _document.FramesPerSecond)); break;
-
-                case Key.Right: Run(() => SeekMediaAsync(CurrentPosition() + 1d / _document.FramesPerSecond)); break;
-
-                case Key.Home: Run(() => SeekAsync(_timeline.RangeStart)); break;
-
-                case Key.End: Run(() => SeekAsync(_timeline.RangeEnd)); break;
 
                 case Key.Escape: Close(); break;
 

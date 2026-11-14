@@ -26,7 +26,8 @@ namespace RitsukageGif.Desktop
             Dispatcher.UIThread.VerifyAccess();
             if (_disposed || !AllWindows.Contains(source)) return;
             if (Pin(content, new(contentOrigin.X, contentOrigin.Y), "", output.CaptureScaling,
-                    prepareView: prepared => prepared.PrepareConvertedView(zoom, opacity)) is not { } created) return;
+                    prepareView: prepared => prepared.PrepareConvertedView(zoom, opacity),
+                    preservePosition: true) is not { } created) return;
             created.Presentation.SetScreenCenter(center);
             CloseSelection(source, false);
             ScheduleSave();

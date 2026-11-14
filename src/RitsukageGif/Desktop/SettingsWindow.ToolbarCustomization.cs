@@ -16,17 +16,16 @@ namespace RitsukageGif.Desktop
                 button.IsEnabled = false;
                 try
                 {
-                    Window editor = tools
-                        ? new ToolbarToolsWindow(draft.Annotation.Toolbar)
-                        : new ToolbarActionsWindow(draft.Annotation.Toolbar);
-                    if (await editor.ShowDialog<ToolbarPreferences?>(this) is { } result)
+                    if (tools)
                     {
-                        draft.Annotation = draft.Annotation with
-                        {
-                            Toolbar = draft.Annotation.Toolbar.Merge(result, tools),
-                        };
-                        RequestLiveApply();
+                        await new ToolbarToolsWindow(draft.Annotation.Toolbar, result => ApplyToolbar(result, true))
+                            .ShowDialog(this);
+                        return;
                     }
+
+                    if (await new ToolbarActionsWindow(draft.Annotation.Toolbar)
+                            .ShowDialog<ToolbarPreferences?>(this) is { } actions)
+                        ApplyToolbar(actions, false);
                 }
                 finally
                 {
@@ -34,6 +33,15 @@ namespace RitsukageGif.Desktop
                 }
             };
             return button;
+
+            void ApplyToolbar(ToolbarPreferences preferences, bool applyTools)
+            {
+                draft.Annotation = draft.Annotation with
+                {
+                    Toolbar = draft.Annotation.Toolbar.Merge(preferences, applyTools),
+                };
+                RequestLiveApply();
+            }
         }
     }
 }

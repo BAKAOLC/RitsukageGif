@@ -7,13 +7,13 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
-        private bool _thumbnailRegionSelection;
         private MouseAction? _thumbnailDragAction;
-        private Point _thumbnailDragStart;
-        private Point _thumbnailDragSource;
         private Rect _thumbnailDragRegion;
         private Size _thumbnailDragSceneSize;
+        private Point _thumbnailDragSource;
+        private Point _thumbnailDragStart;
         private Border? _thumbnailRegionOutline;
+        private bool _thumbnailRegionSelection;
 
         private void SelectDocumentThumbnailRegion()
         {

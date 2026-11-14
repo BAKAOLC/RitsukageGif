@@ -35,17 +35,23 @@ namespace RitsukageGif.Desktop
         internal Task SetPolylineArrowsAsync(bool enabled)
         {
             if (!CanSetPolylineArrows || enabled == PolylineArrowsEnabled) return Task.CompletedTask;
-            if (PolylineArrowsEnabled)
-            {
-                _polylineArrowStart = Properties.StartEndpoint;
-                _polylineArrowEnd = Properties.EndEndpoint;
-            }
+            RememberPolylineEndpoints();
 
             return UpdateSelectedPropertiesAsync(Properties with
             {
                 StartEndpoint = enabled ? _polylineArrowStart : AnnotationEndpointStyle.None,
                 EndEndpoint = enabled ? _polylineArrowEnd : AnnotationEndpointStyle.None,
             });
+        }
+
+        private void RememberPolylineEndpoints(ScreenshotTool? tool = null)
+        {
+            if ((tool ?? _gesture?.Tool ?? SelectedTool ?? Tool) is not (ScreenshotTool.Polyline
+                or ScreenshotTool.Line)) return;
+            if (Properties.StartEndpoint != AnnotationEndpointStyle.None)
+                _polylineArrowStart = Properties.StartEndpoint;
+            if (Properties.EndEndpoint != AnnotationEndpointStyle.None)
+                _polylineArrowEnd = Properties.EndEndpoint;
         }
 
         internal bool HandlePolylineArrowKey(Key key)

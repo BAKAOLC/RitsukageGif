@@ -62,26 +62,35 @@ namespace RitsukageGif.Desktop
             page.Children.Add(buttons);
             Content = page;
 
+            var closed = false;
+            Closed += (_, _) => closed = true;
+
             name.TextChanged += (_, _) => Update();
             directory.TextChanged += (_, _) => Update();
             format.SelectionChanged += (_, _) => Update();
             cancel.Click += (_, _) => Close();
             save.Click += (_, _) =>
             {
-                _path = Destination();
-                Close();
+                _path = Update();
+                if (_path is not null) Close();
             };
             browse.Click += async (_, _) =>
             {
+                IReadOnlyList<IStorageFolder>? folders = null;
                 try
                 {
-                    var folders = await storage.OpenFolderPickerAsync(new()
+                    folders = await storage.OpenFolderPickerAsync(new()
                         { AllowMultiple = false, Title = UiText.Get("OutputDirectory") });
-                    if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } selected) directory.Text = selected;
+                    if (!closed && folders.Count > 0 && folders[0].TryGetLocalPath() is { } selected)
+                        directory.Text = selected;
                 }
                 catch (Exception error)
                 {
-                    status.Text = error.Message;
+                    if (!closed) status.Text = error.Message;
+                }
+                finally
+                {
+                    if (folders is not null) StoragePickerAwaiter.DisposeFolders(folders);
                 }
             };
             Update();
@@ -95,7 +104,7 @@ namespace RitsukageGif.Desktop
                 return Path.Combine(Path.GetFullPath(directory.Text ?? ""), stem + extensions[format.SelectedIndex]);
             }
 
-            void Update()
+            string? Update()
             {
                 try
                 {
@@ -113,12 +122,14 @@ namespace RitsukageGif.Desktop
                         })
                         : path;
                     save.IsEnabled = !exists || profile.ConflictPolicy != ScreenshotConflictPolicy.Fail;
+                    return save.IsEnabled ? path : null;
                 }
                 catch (Exception error) when (error is ArgumentException or NotSupportedException
                                                   or PathTooLongException)
                 {
                     status.Text = error.Message;
                     save.IsEnabled = false;
+                    return null;
                 }
             }
         }

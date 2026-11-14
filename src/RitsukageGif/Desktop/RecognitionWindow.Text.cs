@@ -10,29 +10,30 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class RecognitionWindow
     {
+        private readonly CheckBox _copyDirectly = new();
         private readonly Action? _copyDirectlyNextTime;
         private readonly Action<RecognitionDialogPreferences, RecognitionDialogPreferences>? _dialogPreferencesChanged;
-        private readonly Action<bool>? _originalImageVisibilityChanged;
-        private readonly ISpeechPlaybackService? _speechService;
-        private readonly CheckBox _copyDirectly = new();
-        private readonly ImageViewport _originalView = new() { ImageBacking = ImageTransparencyBackground.Checker };
         private readonly ImageViewport _loadingView = new() { ImageBacking = ImageTransparencyBackground.Checker };
-        private readonly Grid _textPanes = new();
+        private readonly Action<bool>? _originalImageVisibilityChanged;
+        private readonly ImageViewport _originalView = new() { ImageBacking = ImageTransparencyBackground.Checker };
+        private readonly ISpeechPlaybackService? _speechService;
         private readonly Grid _textContent = new();
-        private readonly Grid _textWorking = new();
-        private readonly GridSplitter _textSplitter = new();
-        private readonly Button _textLanguage = new();
         private readonly TextBlock _textError = new() { TextWrapping = TextWrapping.Wrap };
-        private RecognitionDialogPreferences _dialogOptions;
-        private TranslationSpeechControls? _speechControls;
-        private Bitmap? _originalBitmap;
-        private Task _originalTask = Task.CompletedTask;
-        private ImageTextSelectionSurface? _originalSurface;
-        private OcrRecognitionResult? _recognizedResult;
-        private string _recognizedPlainText;
-        private bool _copyCompleted;
+        private readonly Button _textLanguage = new();
+        private readonly Grid _textPanes = new();
+        private readonly GridSplitter _textSplitter = new();
+        private readonly Grid _textWorking = new();
         private bool _closingCopy;
+        private bool _copyCompleted;
+        private RecognitionDialogPreferences _dialogOptions;
+        private (int Width, int Height) _initialTextDialogSize;
         private bool _originalAbove;
+        private Bitmap? _originalBitmap;
+        private ImageTextSelectionSurface? _originalSurface;
+        private Task _originalTask = Task.CompletedTask;
+        private string _recognizedPlainText;
+        private OcrRecognitionResult? _recognizedResult;
+        private TranslationSpeechControls? _speechControls;
 
         private Grid BuildTextContent()
         {
@@ -118,12 +119,40 @@ namespace RitsukageGif.Desktop
                 _originalAbove = (double)dimensions.Height / dimensions.Width < 0.8;
             }
 
-            Width = _originalAbove ? 900 : 824;
-            Height = _originalAbove ? 700 : 612;
+            Width = _dialogOptions.Width > 0 ? _dialogOptions.Width : _originalAbove ? 900 : 824;
+            Height = _dialogOptions.Height > 0 ? _dialogOptions.Height : _originalAbove ? 700 : 612;
             ConfigureTextPanes();
             SetOriginalVisible(showOriginal.IsChecked == true);
             Opened += (_, _) => _originalTask = LoadTextOriginalAsync();
             return WithTextTitleBar(root);
+        }
+
+        private void FitTextDialogToScreen(Window? owner)
+        {
+            var screen = owner is { IsVisible: true } ? Screens.ScreenFromWindow(owner) : Screens.Primary;
+            if (screen is not null)
+            {
+                var availableWidth = Math.Max(1, screen.WorkingArea.Width / screen.Scaling);
+                var availableHeight = Math.Max(1, screen.WorkingArea.Height / screen.Scaling);
+                MinWidth = Math.Min(MinWidth, availableWidth);
+                MinHeight = Math.Min(MinHeight, availableHeight);
+                Width = Math.Clamp(Width, MinWidth, availableWidth);
+                Height = Math.Clamp(Height, MinHeight, availableHeight);
+            }
+
+            _initialTextDialogSize = ((int)Math.Round(Width), (int)Math.Round(Height));
+        }
+
+        private void RememberTextDialogSize()
+        {
+            if (_busy || !_textContent.IsVisible || WindowState != WindowState.Normal) return;
+            var width = (int)Math.Round(ClientSize.Width);
+            var height = (int)Math.Round(ClientSize.Height);
+            if (width <= 0 || height <= 0 || !RecognitionDialogPreferences.ValidSize(width, height) ||
+                (width, height) == _initialTextDialogSize) return;
+            var edited = _dialogOptions with { Width = width, Height = height };
+            _dialogPreferencesChanged?.Invoke(_dialogOptions, edited);
+            _dialogOptions = edited;
         }
 
         private static StackPanel TextActionContent(Button button, string label, string icon)

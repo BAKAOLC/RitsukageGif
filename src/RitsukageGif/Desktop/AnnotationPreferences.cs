@@ -27,6 +27,7 @@ namespace RitsukageGif.Desktop
         public bool RenumberOnDelete { get; set; } = true;
         public bool NumberStartsAtZero { get; set; }
         public bool GlobalNumberCounter { get; set; }
+        public bool NumberForegroundUsesDefault { get; set; } = true;
         public uint? NumberForegroundColor { get; set; }
         public AnnotationSizeLevel NumberTextSize { get; set; }
         public AnnotationSizeLevel NumberArrowSize { get; set; }
@@ -41,6 +42,8 @@ namespace RitsukageGif.Desktop
         public bool AutoSelectPrivacyMosaic { get; set; } = true;
         public bool AutoAddWatermark { get; set; }
         public ToolbarPreferences Toolbar { get; set; } = new();
+
+        internal uint? EffectiveNumberForegroundColor => NumberForegroundUsesDefault ? null : NumberForegroundColor;
 
         public AnnotationPreferences Normalize()
         {

@@ -5,10 +5,14 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedDocumentWindow
     {
-        async Task<ScreenshotResult> IPinnedWindow.CaptureSceneOutputAsync(OutputColorMode mode,
-            CancellationToken token)
+        Task<ScreenshotResult> IPinnedWindow.CaptureSceneOutputAsync(OutputColorMode mode, CancellationToken token)
         {
             if (mode == OutputColorMode.Hdr) throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable"));
+            return CaptureDocumentSceneAsync(false, token);
+        }
+
+        private async Task<ScreenshotResult> CaptureDocumentSceneAsync(bool original, CancellationToken token)
+        {
             _annotationOutputs++;
             ScreenshotAnnotationSession? session = null;
             var wasBusy = false;
@@ -18,8 +22,18 @@ namespace RitsukageGif.Desktop
                 _lifetime.Token.ThrowIfCancellationRequested();
                 session = _annotationScene;
                 wasBusy = session?.IsBusy ?? false;
-                if (session is { HasMosaicAnnotations: true }) await EnsureDocumentAnnotationSourceAsync(token);
+                var useSource = original && DisplayedTranslation is not null;
+                if (!useSource && session is { HasMosaicAnnotations: true })
+                    await EnsureDocumentAnnotationSourceAsync(token);
                 session?.SetExportState(true);
+                if (useSource)
+                {
+                    using var source = await RenderDocumentSceneBaseAsync(token, original: true);
+                    if (session is { HasAnnotations: true, AnnotationsVisible: true })
+                        await DrawOriginalDocumentAnnotationsAsync(source, session, token);
+                    return await EncodeDocumentBitmapAsync(source, token);
+                }
+
                 using var bitmap = await RenderDocumentSceneBaseAsync(token);
                 await DrawDocumentAnnotationsAsync(bitmap, default, 1, token);
                 return await EncodeDocumentBitmapAsync(bitmap, token);
@@ -30,6 +44,42 @@ namespace RitsukageGif.Desktop
                 _annotationOutputs--;
                 TryReleaseDocumentSources();
             }
+        }
+
+        private async Task DrawOriginalDocumentAnnotationsAsync(RenderTargetBitmap bitmap,
+            ScreenshotAnnotationSession active, CancellationToken token)
+        {
+            active.CommitTextEdit();
+            using var annotations = new ScreenshotAnnotationSession();
+            annotations.ApplyPinnedPreferences(AnnotationPreferencesProvider());
+            annotations.RestoreDocument(active.CaptureDocument());
+            var size = bitmap.Size;
+            var pixelWidth = (int)Math.Ceiling(size.Width * _annotationScaling);
+            var pixelHeight = (int)Math.Ceiling(size.Height * _annotationScaling);
+            var region = new PixelRect(0, 0, pixelWidth, pixelHeight);
+            annotations.NotifySelection(region);
+            if (annotations.HasMosaicAnnotations)
+            {
+                using var frame = new ImagePreviewFramebuffer(new(pixelWidth, pixelHeight));
+                if (frame.Size == bitmap.PixelSize)
+                {
+                    bitmap.CopyPixels(frame);
+                }
+                else
+                {
+                    using var sample = CreateDocumentSceneBitmap(size, _annotationScaling);
+                    using (var draw = sample.CreateDrawingContext())
+                        draw.DrawImage(bitmap, new(size));
+                    sample.CopyPixels(frame);
+                }
+
+                await annotations.SetOverlayFrameAsync(region, frame.Pixels, token);
+            }
+
+            using var context = bitmap.CreateDrawingContext(false);
+            using var scale = context.PushTransform(Matrix.CreateScale(1 / _annotationScaling,
+                1 / _annotationScaling));
+            annotations.Render(context);
         }
 
         private async Task DrawDocumentAnnotationsAsync(RenderTargetBitmap bitmap, Point sourceOrigin,

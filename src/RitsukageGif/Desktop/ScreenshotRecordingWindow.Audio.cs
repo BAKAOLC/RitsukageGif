@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 
 namespace RitsukageGif.Desktop
 {
@@ -9,64 +9,70 @@ namespace RitsukageGif.Desktop
         private Control BuildAudioSettings()
         {
             var generation = ++_audioPanelGeneration;
-            var rows = new StackPanel { Spacing = 4 };
-            AddAudioSetting(rows, true, generation);
-            AddAudioSetting(rows, false, generation);
-            return rows;
-        }
-
-        private void AddAudioSetting(StackPanel rows, bool system, long generation)
-        {
-            var check = new CheckBox
-            {
-                Content = UiText.Get(system ? "RecordingSystemAudio" : "RecordingMicrophoneAudio"),
-                IsChecked = AudioCaptureBackend.IsSupported &&
-                            (system ? _controller.SystemAudio : _controller.Microphone),
-                IsEnabled = false,
-            };
-            rows.Children.Add(check);
-            check.IsCheckedChanged += (_, _) =>
-            {
-                if (!_controller.CanConfigure || generation != _audioPanelGeneration) return;
-                if (system) _controller.SystemAudio = check.IsChecked == true;
-                else _controller.Microphone = check.IsChecked == true;
-                _controller.ConfigurationChanged();
-            };
+            var system = CreateAudioSetting(true, generation);
+            var microphone = CreateAudioSetting(false, generation);
+            var rows = new StackPanel { Spacing = 4, Children = { system, microphone } };
             if (!AudioCaptureBackend.IsSupported)
             {
-                ToolTip.SetTip(check, UiText.Get("VideoAudioUnavailable"));
-                return;
+                ToolTip.SetTip(system, UiText.Get("VideoAudioUnavailable"));
+                ToolTip.SetTip(microphone, UiText.Get("VideoAudioUnavailable"));
+                return rows;
             }
 
-            check.AttachedToVisualTree += async (_, _) =>
+            rows.AttachedToVisualTree += async (_, _) =>
             {
                 var token = _controller.Lifetime;
+                system.IsEnabled = microphone.IsEnabled = false;
                 try
                 {
-                    var available = await Task.Run(() => AudioCaptureBackend.EnumerateDevices(system), token);
+                    var audio = await _controller.ReadAudioReadinessAsync();
                     if (_closed || token.IsCancellationRequested || generation != _audioPanelGeneration ||
                         !_controller.CanConfigure) return;
-                    check.IsEnabled = available.Count > 0;
-                    if (available.Count == 0)
-                    {
-                        check.IsChecked = false;
-                        ToolTip.SetTip(check,
-                            UiText.Get(system ? "RecordingSystemAudioUnavailable" : "RecordingMicrophoneUnavailable"));
-                    }
+                    ConfigureAudioSetting(system, true, audio.System);
+                    ConfigureAudioSetting(microphone, false, audio.Microphone);
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
                 }
-                catch (Exception failure)
-                {
-                    LogHub.GetLogger("Desktop.ScreenshotRecording").ZLogWarning(failure,
-                        $"Audio device enumeration failed. SystemAudio={system}");
-                    if (_closed || token.IsCancellationRequested || generation != _audioPanelGeneration) return;
-                    check.IsChecked = false;
-                    check.IsEnabled = false;
-                    ToolTip.SetTip(check, ApplicationHost.VideoErrorMessage(failure));
-                }
             };
+            return rows;
+        }
+
+        private CheckBox CreateAudioSetting(bool system, long generation)
+        {
+            var check = new CheckBox
+            {
+                Content = UiText.Get(system ? "RecordingSystemAudio" : "RecordingMicrophoneAudio"),
+                IsEnabled = false,
+            };
+            check.IsCheckedChanged += (_, _) =>
+            {
+                if (!check.IsEnabled || !_controller.CanConfigure || generation != _audioPanelGeneration) return;
+                if (system) _controller.SystemAudio = check.IsChecked == true;
+                else _controller.Microphone = check.IsChecked == true;
+                _controller.ConfigurationChanged();
+            };
+            return check;
+        }
+
+        private void ConfigureAudioSetting(CheckBox check, bool system,
+            ScreenshotRecordingAudioDiscovery.Endpoint endpoint)
+        {
+            check.IsChecked = endpoint.Available && (system ? _controller.SystemAudio : _controller.Microphone);
+            if (endpoint.Error is { } error)
+            {
+                LogHub.GetLogger("Desktop.ScreenshotRecording").ZLogWarning(error,
+                    $"Audio device enumeration failed. SystemAudio={system}");
+                ToolTip.SetTip(check, ApplicationHost.VideoErrorMessage(error));
+            }
+            else
+            {
+                ToolTip.SetTip(check, endpoint.Available
+                    ? null
+                    : UiText.Get(system ? "RecordingSystemAudioUnavailable" : "RecordingMicrophoneUnavailable"));
+            }
+
+            check.IsEnabled = endpoint.Available;
         }
     }
 }

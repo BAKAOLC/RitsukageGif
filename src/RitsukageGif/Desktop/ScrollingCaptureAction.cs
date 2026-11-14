@@ -8,5 +8,6 @@ namespace RitsukageGif.Desktop
         QuickSave,
         Pin,
         OcrCopy,
+        Close,
     }
 }

@@ -4,9 +4,10 @@ namespace RitsukageGif.Desktop
     {
         private readonly CancellationToken _lifetime;
         private readonly Func<T, string> _targetLanguage;
-        private CancellationTokenSource? _work;
-        private long _request;
         private bool _disposed;
+        private TaskCompletionSource<Exception?>? _pending;
+        private long _request;
+        private CancellationTokenSource? _work;
 
         internal PinnedImageTranslationSession(Func<T, string> targetLanguage, CancellationToken lifetime)
         {
@@ -19,6 +20,7 @@ namespace RitsukageGif.Desktop
         internal T? Cached { get; private set; }
         internal PinnedImageTranslationStatus Status { get; private set; }
         internal T? Displayed => Enabled ? Cached : null;
+        internal Task<Exception?> Completion => _pending?.Task ?? Task.FromResult<Exception?>(null);
 
         public void Dispose()
         {
@@ -32,10 +34,13 @@ namespace RitsukageGif.Desktop
         internal void Disable()
         {
             Enabled = false;
+            var pending = _pending;
+            _pending = null;
             Changed?.Invoke();
+            pending?.TrySetResult(null);
         }
 
-        internal void Enable(string target, Func<string, CancellationToken, Task<T?>> translate)
+        internal Task<Exception?> Enable(string target, Func<string, CancellationToken, Task<T?>> translate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             if (target != TargetLanguage)
@@ -50,22 +55,26 @@ namespace RitsukageGif.Desktop
             {
                 Enabled = false;
                 Changed?.Invoke();
-                return;
+                return Task.FromResult<Exception?>(null);
             }
 
             Enabled = true;
             if (Status == PinnedImageTranslationStatus.None)
             {
                 var cancellation = _work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+                var completion = _pending = new(TaskCreationOptions.RunContinuationsAsynchronously);
                 var request = ++_request;
                 Status = PinnedImageTranslationStatus.Pending;
                 Changed?.Invoke();
                 _ = TranslateAsync(request, target, translate, cancellation);
+                return completion.Task;
             }
-            else
-            {
-                Changed?.Invoke();
-            }
+
+            var pending = Status == PinnedImageTranslationStatus.Pending
+                ? (_pending ??= new(TaskCreationOptions.RunContinuationsAsynchronously)).Task
+                : Task.FromResult<Exception?>(null);
+            Changed?.Invoke();
+            return pending;
         }
 
         internal void Restore(string target, bool enabled, T? cached, bool empty)
@@ -90,10 +99,13 @@ namespace RitsukageGif.Desktop
                 if (result is not null) TargetLanguage = _targetLanguage(result);
                 Status = result is null ? PinnedImageTranslationStatus.Empty : PinnedImageTranslationStatus.Ready;
                 if (result is null) Enabled = false;
+                var pending = _pending;
                 Changed?.Invoke();
+                pending?.TrySetResult(null);
             }
-            catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+            catch (OperationCanceledException error) when (cancellation.IsCancellationRequested)
             {
+                if (ReferenceEquals(_work, cancellation)) _pending?.TrySetResult(error);
             }
             catch (Exception error)
             {
@@ -101,12 +113,19 @@ namespace RitsukageGif.Desktop
                 Cached = null;
                 Status = PinnedImageTranslationStatus.None;
                 Enabled = false;
+                var pending = _pending;
                 Changed?.Invoke();
+                pending?.TrySetResult(error);
                 Failed?.Invoke(error);
             }
             finally
             {
-                if (ReferenceEquals(_work, cancellation)) _work = null;
+                if (ReferenceEquals(_work, cancellation))
+                {
+                    _work = null;
+                    _pending = null;
+                }
+
                 cancellation.Dispose();
             }
         }
@@ -114,8 +133,13 @@ namespace RitsukageGif.Desktop
         private void CancelWork()
         {
             _request++;
-            _work?.Cancel();
+            if (_work is not { } work) return;
             _work = null;
+            var pending = _pending;
+            _pending = null;
+            var token = work.Token;
+            pending?.TrySetResult(new OperationCanceledException(token));
+            work.Cancel();
         }
     }
 }

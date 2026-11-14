@@ -4,9 +4,15 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
-        internal Func<ScreenshotResult, CancellationToken, Task>? RecognitionOutputHandler { get; set; }
+        internal Func<ScreenshotResult, ScreenshotAutoSaveTriggers, CancellationToken, Task>? RecognitionOutputHandler
+        {
+            get;
+            set;
+        }
+
         internal Action? RecognitionCopied { get; set; }
-        internal ReadOnlyMemory<byte> TranslationRequestedPng { get; private set; }
+        internal ScreenshotRecognitionRequest? DeferredRecognition { get; private set; }
+        internal ScreenshotResult? TranslationRequested { get; private set; }
         internal RecognitionPreferences RecognitionPreferences { get; set; } = new();
         internal Func<int>? RecognitionImageSaveQuality { get; set; }
         internal TranslationPreferences TranslationPreferences { get; set; } = new();
@@ -51,16 +57,19 @@ namespace RitsukageGif.Desktop
                 if (_finished || ScreenshotOwner is not { } owner) return;
                 if (translate)
                 {
-                    if (RecognitionOutputHandler is { } handler)
-                        await ReportRecognizedScreenshotAsync(handler, png, result, annotations, work.Token);
+                    var screenshot = await CreateRecognitionScreenshotAsync(png, result, annotations, work.Token);
+                    var trigger = TranslationPreferences.Mode == TranslationMode.ImageToImage
+                        ? ScreenshotAutoSaveTriggers.Translate | ScreenshotAutoSaveTriggers.Pin
+                        : ScreenshotAutoSaveTriggers.Translate;
+                    if (!_finished && RecognitionOutputHandler is { } handler)
+                        await handler(screenshot, trigger, work.Token);
                     work.Token.ThrowIfCancellationRequested();
                     if (_finished) return;
-                    TranslationRequestedPng = png;
+                    TranslationRequested = screenshot;
                     RequestFinish(result);
                     return;
                 }
 
-                // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
                 switch (mode)
                 {
                     case RecognitionMode.Barcode when copyText:
@@ -82,49 +91,37 @@ namespace RitsukageGif.Desktop
                         work.Token.ThrowIfCancellationRequested();
                         RecognitionCopied?.Invoke();
                         if (RecognitionOutputHandler is { } codeOutput)
-                            await ReportRecognizedScreenshotAsync(codeOutput, png, result, annotations, work.Token);
+                            await ReportRecognizedScreenshotAsync(codeOutput, png, result, annotations,
+                                ScreenshotAutoSaveTriggers.Recognize, work.Token);
                         if (!_finished) Finish(result);
                         return;
                     }
-
-                    case RecognitionMode.Text when !RecognitionPreferences.ShowDialogOnRecognition:
+                    case RecognitionMode.Text or RecognitionMode.Table or RecognitionMode.Formula:
                     {
-                        var recognition = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
-                            new OcrRecognitionService(), work.Token);
-                        var resultText = RecognitionTextFormatter.Format(recognition, RecognitionPreferences);
+                        var screenshot = await CreateRecognitionScreenshotAsync(png, result, annotations, work.Token);
                         work.Token.ThrowIfCancellationRequested();
                         if (_finished) return;
-                        if (string.IsNullOrWhiteSpace(resultText))
-                        {
-                            annotations.SetExportState(false, UiText.Get("RecognitionEmpty"));
-                            return;
-                        }
-
-                        var clipboard = owner.Clipboard ??
-                                        throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-                        await clipboard.SetTextAsync(resultText);
-                        await clipboard.FlushAsync();
-                        work.Token.ThrowIfCancellationRequested();
-                        RecognitionCopied?.Invoke();
-                        if (RecognitionOutputHandler is { } handler)
-                            await ReportRecognizedScreenshotAsync(handler, png, result, annotations, work.Token);
+                        DeferredRecognition = new(screenshot, mode);
+                        Finish(result);
                         return;
                     }
+                    case RecognitionMode.Barcode:
+                        foreach (var window in _windows) window.Topmost = false;
+                        await RecognitionWindow.ShowAsync(owner, png, mode,
+                            RecognitionOutputHandler is { } output
+                                ? token => ReportRecognizedScreenshotAsync(output, png, result, annotations,
+                                    ScreenshotAutoSaveTriggers.Recognize, token)
+                                : null,
+                            RecognitionPreferences, token: work.Token, translationPreferences: TranslationPreferences,
+                            copyFormatChanged: FormulaCopyFormatChanged,
+                            originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,
+                            latexFormatChanged: FormulaLatexFormatChanged,
+                            imageSaveQuality: RecognitionImageSaveQuality,
+                            copyDirectlyNextTime: () =>
+                                DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.Screenshot),
+                            dialogPreferencesChanged: RecognitionDialogPreferencesChanged);
+                        break;
                 }
-
-                foreach (var window in _windows) window.Topmost = false;
-                await RecognitionWindow.ShowAsync(owner, png, mode,
-                    RecognitionOutputHandler is { } output
-                        ? token => ReportRecognizedScreenshotAsync(output, png, result, annotations, token)
-                        : null,
-                    RecognitionPreferences, token: work.Token, translationPreferences: TranslationPreferences,
-                    copyFormatChanged: FormulaCopyFormatChanged,
-                    originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,
-                    latexFormatChanged: FormulaLatexFormatChanged,
-                    imageSaveQuality: RecognitionImageSaveQuality,
-                    copyDirectlyNextTime: () =>
-                        DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.Screenshot),
-                    dialogPreferencesChanged: RecognitionDialogPreferencesChanged);
             }
             catch (OperationCanceledException) when (work.IsCancellationRequested)
             {
@@ -152,19 +149,26 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task ReportRecognizedScreenshotAsync(
-            Func<ScreenshotResult, CancellationToken, Task> output, byte[] png,
-            SelectionResult selection, ScreenshotAnnotationSession annotations, CancellationToken token)
+            Func<ScreenshotResult, ScreenshotAutoSaveTriggers, CancellationToken, Task> output, byte[] png,
+            SelectionResult selection, ScreenshotAnnotationSession annotations, ScreenshotAutoSaveTriggers trigger,
+            CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             if (_finished) return;
-            var (hdr, hdrReason) = await ComposeSelectedHdrScreenshotAsync(selection, annotations, token);
+            var result = await CreateRecognitionScreenshotAsync(png, selection, annotations, token);
             token.ThrowIfCancellationRequested();
-            if (!_finished)
-                await output(new(png, ScreenshotOutputAction.Copy, hdr, hdrReason)
-                {
-                    ColorMode = annotations.OutputColorMode, CaptureScaling = ScreenshotCaptureScaling,
-                    Decoration = Decoration, OutputOrigin = ScreenshotOutputOrigin, OutputRegion = selection.Region,
-                }, token);
+            if (!_finished) await output(result, trigger, token);
+        }
+
+        private async Task<ScreenshotResult> CreateRecognitionScreenshotAsync(byte[] png, SelectionResult selection,
+            ScreenshotAnnotationSession annotations, CancellationToken token)
+        {
+            var (hdr, hdrReason) = await ComposeSelectedHdrScreenshotAsync(selection, annotations, token);
+            return new(png, ScreenshotOutputAction.Copy, hdr, hdrReason)
+            {
+                ColorMode = annotations.OutputColorMode, CaptureScaling = ScreenshotCaptureScaling,
+                Decoration = Decoration, OutputOrigin = ScreenshotOutputOrigin, OutputRegion = selection.Region,
+            };
         }
 
         private async Task<byte[]> ComposeSelectedScreenshotAsync(SelectionResult result,

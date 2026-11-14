@@ -8,7 +8,8 @@ enum rgc_scroll_input_result {
     RGC_SCROLL_SENT = 0,
     RGC_SCROLL_AT_END = 1,
     RGC_SCROLL_UNAVAILABLE = 2,
-    RGC_SCROLL_FAILED = 3
+    RGC_SCROLL_FAILED = 3,
+    RGC_SCROLL_POINTER_OUTSIDE = 4
 };
 
 struct rgc_portal_pointer_observation {

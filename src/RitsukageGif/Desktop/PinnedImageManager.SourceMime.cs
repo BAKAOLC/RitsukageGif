@@ -10,12 +10,18 @@ namespace RitsukageGif.Desktop
             return CompleteSourceInput(source, Pin(content, null, "", captureScaling, windowShape: shape));
         }
 
-        private PinnedInputResult PinSourceDocument(PinnedClipboardSnapshot snapshot, PinnedDocument document)
+        private PinnedInputResult PinSourceDocument(PinnedClipboardSnapshot snapshot, PinnedDocument document,
+            bool usePlainText)
         {
             if (document is not (PinnedTextDocument or PinnedHtmlDocument))
                 return new(true, PinDocument(document));
-            var source = PinnedSourceMime.Create(snapshot.SourceText, snapshot.SourceHtml);
+            var source = DocumentSourceMime(snapshot, usePlainText);
             return CompleteSourceInput(source, PinDocument(document));
+        }
+
+        private static PinnedSourceMime? DocumentSourceMime(PinnedClipboardSnapshot snapshot, bool usePlainText)
+        {
+            return PinnedSourceMime.Create(snapshot.SourceText, usePlainText ? null : snapshot.SourceHtml);
         }
 
         private static PinnedInputResult CompleteSourceInput(PinnedSourceMime? source, IPinnedWindow? created)

@@ -129,7 +129,8 @@ __attribute__((visibility("default"))) void rg_tray_menu_reset(void *handle)
 }
 
 __attribute__((visibility("default"))) void rg_tray_menu_item(void *handle, int identifier, int parent,
-    int enabled, int toggle, int checked, int separator, const char *label, const char *key, uint32_t modifiers)
+    int enabled, int toggle, int checked, int separator, const char *label, const char *key, uint32_t modifiers,
+    const uint8_t *icon, int icon_length)
 {
     RGTray *tray = (__bridge RGTray *)handle;
     NSMenu *menu = tray.menus[@(parent)];
@@ -148,6 +149,15 @@ __attribute__((visibility("default"))) void rg_tray_menu_item(void *handle, int 
         if (modifiers & 4) flags |= NSEventModifierFlagOption;
         if (modifiers & 8) flags |= NSEventModifierFlagCommand;
         item.keyEquivalentModifierMask = flags;
+        if (icon != NULL && icon_length > 0) {
+            NSData *data = [NSData dataWithBytes:icon length:(NSUInteger)icon_length];
+            NSImage *image = [[NSImage alloc] initWithData:data];
+            if (image.size.width > 0 && image.size.height > 0) {
+                image.size = NSMakeSize(16 * image.size.width / image.size.height, 16);
+                image.template = NO;
+                item.image = image;
+            }
+        }
     }
     [menu addItem:item];
     NSMenu *submenu = [NSMenu new];

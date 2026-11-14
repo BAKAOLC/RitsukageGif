@@ -10,14 +10,17 @@ namespace RitsukageGif.Desktop
                 !Enum.IsDefined(appearance.ToolbarIconSize) || !Enum.IsDefined(appearance.ColorDialogStyle) ||
                 !Enum.IsDefined(appearance.SaveDialogStyle) || !Enum.IsDefined(appearance.SelectionAnchors))
                 throw Invalid("Appearance");
-            ValidateFiniteRange(appearance.SelectionBorderWidth, "Appearance.SelectionBorderWidth", 1, 8);
+            ValidateFiniteRange(appearance.SelectionBorderWidth, "Appearance.SelectionBorderWidth", 0,
+                AppearancePreferences.MaximumSelectionBorderWidth);
+            if (!Math.Truncate(appearance.SelectionBorderWidth).Equals(appearance.SelectionBorderWidth))
+                throw Invalid("Appearance.SelectionBorderWidth");
             ValidateFontFamily(appearance.FontFamily, "Appearance.FontFamily");
 
             var pinned = settings.PinnedImages;
             const PinnedLockRestrictions operations =
                 PinnedLockRestrictions.Move | PinnedLockRestrictions.PointerClose |
                 PinnedLockRestrictions.KeyboardClose | PinnedLockRestrictions.IncomingDrop;
-            if (!Enum.IsDefined(pinned.TitlePosition) ||
+            if (!Enum.IsDefined(pinned.TitlePosition) || !Enum.IsDefined(pinned.DisplayPosition) ||
                 !(pinned.ActiveGroup is { Length: 0 } || Guid.TryParseExact(pinned.ActiveGroup, "N", out _)) ||
                 // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
                 pinned.Groups is null || pinned.Groups.Any(group => group is not { IsValid: true }) ||
@@ -67,6 +70,8 @@ namespace RitsukageGif.Desktop
             if (settings.HotkeyPolicy.IgnoredPrograms.Any(program =>
                     !HotkeyPolicyPreferences.TryNormalizeProgram(program, out _)))
                 throw Invalid("HotkeyPolicy.IgnoredPrograms");
+            if (settings.GlobalMouseIgnoredPrograms.Any(program => !ProgramExclusionRules.TryNormalize(program, out _)))
+                throw Invalid(nameof(AppSettings.GlobalMouseIgnoredPrograms));
 
             var system = settings.System;
             if (!Enum.IsDefined(system.TraySingleClick) || !Enum.IsDefined(system.TrayDoubleClick) ||
@@ -75,6 +80,9 @@ namespace RitsukageGif.Desktop
             if (!Enum.IsDefined(settings.Recognition.Layout) || !Enum.IsDefined(settings.Recognition.Punctuation) ||
                 !Enum.IsDefined(settings.Recognition.CopyFormat) || !Enum.IsDefined(settings.Recognition.LatexFormat))
                 throw Invalid("Recognition");
+            if (!RecognitionDialogPreferences.ValidSize(settings.Recognition.Dialog.Width,
+                    settings.Recognition.Dialog.Height))
+                throw Invalid("Recognition.Dialog");
             if (!Enum.IsDefined(settings.Translation.Provider) || settings.Translation.TimeoutSeconds is < 1 or > 300)
                 throw Invalid("Translation");
             ValidateTranslationLanguage(settings.Translation.SourceLanguage, "Translation.SourceLanguage", true, false);

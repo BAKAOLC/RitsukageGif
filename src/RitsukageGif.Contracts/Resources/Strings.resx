@@ -1236,7 +1236,19 @@ X {0}, Y {1}</value>
     <value>Scrolling capture</value>
   </data>
   <data name="ScrollCaptureLimit" xml:space="preserve">
-    <value>Length or memory limit reached. Finish or undo.</value>
+    <value>Length or memory limit reached. Scroll back into the stitched area or finish.</value>
+  </data>
+  <data name="ScrollCaptureFileOnlyWarningTitle" xml:space="preserve"><value>Approaching the long screenshot output limit</value></data>
+  <data name="ScrollCaptureFileOnlyWarningMessage" xml:space="preserve"><value>Captures longer than 29,000 pixels can only be saved to a file. Stop automatic scrolling to finish at the current size, or continue capturing.</value></data>
+  <data name="ScrollCaptureMatchFailureWarningTitle" xml:space="preserve"><value>Unable to match the current view</value></data>
+  <data name="ScrollCaptureMatchFailureWarningMessage" xml:space="preserve"><value>Scroll back to the last matched view and continue more slowly.</value></data>
+  <data name="ScrollCaptureContinue" xml:space="preserve"><value>Continue</value></data>
+  <data name="ScrollCaptureStop" xml:space="preserve"><value>Stop</value></data>
+  <data name="ScrollCaptureFileOnlyWarning" xml:space="preserve">
+    <value>Captures longer than 29,000 pixels can only be saved to a file.</value>
+  </data>
+  <data name="ScrollCaptureFileOnly" xml:space="preserve">
+    <value>This capture exceeds 29,000 pixels and can only be saved to a file.</value>
   </data>
   <data name="ScrollCaptureObstructed" xml:space="preserve">
     <value>Move this panel outside the capture region to continue.</value>
@@ -1271,9 +1283,6 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureStart" xml:space="preserve">
     <value>Start</value>
   </data>
-  <data name="ScrollCaptureAnnotationsPresent" xml:space="preserve">
-    <value>Undo annotations before starting a scrolling screenshot.</value>
-  </data>
   <data name="SelectionCommandConfirm" xml:space="preserve">
     <value>Confirm</value>
   </data>
@@ -1306,9 +1315,6 @@ X {0}, Y {1}</value>
   </data>
   <data name="SelectionCommandShrink" xml:space="preserve">
     <value>Shrink selection</value>
-  </data>
-  <data name="ScreenshotScrollUndoAnnotations" xml:space="preserve">
-    <value>Undo annotations before starting a scrolling screenshot.</value>
   </data>
   <data name="ScrollCaptureAreaTooSmall" xml:space="preserve">
     <value>The region is too small to match scrolling content.</value>
@@ -1688,6 +1694,12 @@ X {0}, Y {1}</value>
   <data name="PinnedImageMouseThrough" xml:space="preserve">
     <value>Mouse passthrough</value>
   </data>
+  <data name="PinnedMouseThroughEnabled" xml:space="preserve">
+    <value>Mouse Penetration Enabled</value>
+  </data>
+  <data name="PinnedMouseThroughDisabled" xml:space="preserve">
+    <value>Mouse Penetration Disabled</value>
+  </data>
   <data name="PinnedImageGroup" xml:space="preserve">
     <value>Groups</value>
   </data>
@@ -1931,6 +1943,9 @@ X {0}, Y {1}</value>
   <data name="MouseGestureX2DoubleClick" xml:space="preserve">
     <value>Forward button double-click</value>
   </data>
+  <data name="BuiltinShortcutCapturePinContext" xml:space="preserve">
+    <value>Screenshot and pin</value>
+  </data>
   <data name="BuiltinShortcutScreenshotContext" xml:space="preserve">
     <value>Screenshot</value>
   </data>
@@ -2045,7 +2060,27 @@ X {0}, Y {1}</value>
   <data name="ScreenshotSaveQuality" xml:space="preserve"><value>Image quality</value></data>
   <data name="ScreenshotSaveQualityHint" xml:space="preserve"><value>JPEG and WebP use this quality; PNG and BMP are lossless.</value></data>
   <data name="ScreenshotNameTemplate" xml:space="preserve"><value>File name template</value></data>
-  <data name="ScreenshotNameTemplateHint" xml:space="preserve"><value>Date: $yyyy-MM-dd_HH-mm-ss$; variables: %title%, %process%, %width%, %height%, %uuid%. %process!% removes the extension; %title#40% limits length.</value></data>
+  <data name="ScreenshotSaveVariablesLink" xml:space="preserve"><value>Variable reference</value></data>
+  <data name="ScreenshotSaveVariablesTitle" xml:space="preserve"><value>Save variables</value></data>
+  <data name="ScreenshotSaveVariableDate" xml:space="preserve"><value>Save time</value></data>
+  <data name="ScreenshotSaveVariableTitle" xml:space="preserve"><value>Window title</value></data>
+  <data name="ScreenshotSaveVariableProcess" xml:space="preserve"><value>Process name</value></data>
+  <data name="ScreenshotSaveVariableWidth" xml:space="preserve"><value>Image width (px)</value></data>
+  <data name="ScreenshotSaveVariableHeight" xml:space="preserve"><value>Image height (px)</value></data>
+  <data name="ScreenshotSaveVariableOs" xml:space="preserve"><value>Operating system</value></data>
+  <data name="ScreenshotSaveVariableDocuments" xml:space="preserve"><value>Documents folder</value></data>
+  <data name="ScreenshotSaveVariableDesktop" xml:space="preserve"><value>Desktop folder</value></data>
+  <data name="ScreenshotSaveVariableOneDrive" xml:space="preserve"><value>OneDrive folder</value></data>
+  <data name="ScreenshotSaveVariableComputer" xml:space="preserve"><value>Computer name</value></data>
+  <data name="ScreenshotSaveVariableUser" xml:space="preserve"><value>User name</value></data>
+  <data name="ScreenshotSaveVariableUuid" xml:space="preserve"><value>Random UUID</value></data>
+  <data name="ScreenshotSaveVariableUuidV7" xml:space="preserve"><value>Time-ordered UUID v7</value></data>
+  <data name="ScreenshotSaveVariableSeconds" xml:space="preserve"><value>Unix timestamp in seconds</value></data>
+  <data name="ScreenshotSaveVariableMilliseconds" xml:space="preserve"><value>Unix timestamp in milliseconds</value></data>
+  <data name="ScreenshotSaveVariableModifiers" xml:space="preserve"><value>%title#10% keeps the first 10 characters. %process!% removes the file extension.</value></data>
+  <data name="ScreenshotSaveVariablePath" xml:space="preserve"><value>Example quick or automatic save path organized by year and month.</value></data>
+  <data name="ScreenshotSaveVariableInvalidName" xml:space="preserve"><value>File names cannot contain \ / : * ? " &lt; &gt; |.</value></data>
+  <data name="ScreenshotSaveVariableCopied" xml:space="preserve"><value>Copied to clipboard</value></data>
   <data name="ScreenshotTemplateUnclosed" xml:space="preserve"><value>Unclosed '{0}' in path template.</value></data>
   <data name="ScreenshotTemplateLength" xml:space="preserve"><value>Variable length must be an integer.</value></data>
   <data name="ScreenshotTemplateVariable" xml:space="preserve"><value>Unknown path variable: {0}</value></data>
@@ -2074,6 +2109,10 @@ X {0}, Y {1}</value>
   <data name="PinnedImageFineZoomStep" xml:space="preserve"><value>Fine zoom step (%)</value></data>
   <data name="PinnedImageOpacityStep" xml:space="preserve"><value>Opacity step (%)</value></data>
   <data name="PinnedImageThroughOpacity" xml:space="preserve"><value>Opacity limit while click-through (%)</value></data>
+  <data name="PinnedMouseThroughToolbar" xml:space="preserve"><value>Show toolbar when mouse penetration enabled</value></data>
+  <data name="PinnedMouseThroughExit" xml:space="preserve"><value>Exit mouse penetration</value></data>
+  <data name="PinnedMouseThroughOpacity" xml:space="preserve"><value>Mouse penetration opacity</value></data>
+  <data name="PinnedToolbarOpacity" xml:space="preserve"><value>Opacity</value></data>
   <data name="ScreenshotMore" xml:space="preserve"><value>More</value></data>
   <data name="ScreenshotScroll" xml:space="preserve"><value>Scrolling capture</value></data>
   <data name="AboutTitle" xml:space="preserve"><value>About</value></data>
@@ -2083,7 +2122,8 @@ X {0}, Y {1}</value>
   <data name="ScreenshotSaveHeading" xml:space="preserve"><value>Save</value></data>
   <data name="SettingsTransferImport" xml:space="preserve"><value>Import settings</value></data>
   <data name="SettingsTransferExport" xml:space="preserve"><value>Export settings</value></data>
-  <data name="SettingsTransferExported" xml:space="preserve"><value>Settings exported</value></data>
+  <data name="SettingsTransferExported" xml:space="preserve"><value>Export configuration successful</value></data>
+  <data name="SettingsTransferImported" xml:space="preserve"><value>Import configuration successful</value></data>
   <data name="SettingsTransferInvalid" xml:space="preserve"><value>Invalid settings</value></data>
   <data name="SettingsTransferTooLarge" xml:space="preserve"><value>Settings files must not exceed 4 MiB</value></data>
   <data name="SettingsTransferLocalFileRequired" xml:space="preserve"><value>Choose a local file</value></data>
@@ -2470,6 +2510,9 @@ X {0}, Y {1}</value>
   <data name="AppearanceModern" xml:space="preserve">
     <value>Modern</value>
   </data>
+  <data name="AppearanceClassic" xml:space="preserve">
+    <value>Classic</value>
+  </data>
   <data name="AppearanceSystem" xml:space="preserve">
     <value>System</value>
   </data>
@@ -2497,17 +2540,37 @@ X {0}, Y {1}</value>
   <data name="AppearanceOpacity" xml:space="preserve">
     <value>Opacity (%)</value>
   </data>
-  <data name="AppearanceColorDialogFailed" xml:space="preserve">
-    <value>Unable to open the system color picker.</value>
-  </data>
-  <data name="AppearanceSystemColorWindowsOnly" xml:space="preserve">
-    <value>The system color picker is available on Windows only.</value>
-  </data>
+  <data name="AppearanceSelectColor" xml:space="preserve"><value>Select Color</value></data>
+  <data name="AppearanceColorBasic" xml:space="preserve"><value>Basic colors</value></data>
+  <data name="AppearanceColorCustom" xml:space="preserve"><value>Custom colors</value></data>
+  <data name="AppearanceColorAddCustom" xml:space="preserve"><value>Add to Custom Colors</value></data>
+  <data name="AppearanceColorPickScreen" xml:space="preserve"><value>Pick Screen Color</value></data>
+  <data name="AppearanceColorHue" xml:space="preserve"><value>Hue</value></data>
+  <data name="AppearanceColorSaturation" xml:space="preserve"><value>Sat</value></data>
+  <data name="AppearanceColorValue" xml:space="preserve"><value>Val</value></data>
+  <data name="AppearanceColorRed" xml:space="preserve"><value>Red</value></data>
+  <data name="AppearanceColorGreen" xml:space="preserve"><value>Green</value></data>
+  <data name="AppearanceColorBlue" xml:space="preserve"><value>Blue</value></data>
+  <data name="AppearanceColorAlpha" xml:space="preserve"><value>Alpha</value></data>
+  <data name="AppearanceColorOpacity" xml:space="preserve"><value>Opacity</value></data>
+  <data name="AppearanceColorHtml" xml:space="preserve"><value>HTML</value></data>
   <data name="GlobalActionClearAll" xml:space="preserve">
     <value>Clear all actions</value>
   </data>
+  <data name="GlobalActionClearAllQuestion" xml:space="preserve">
+    <value>Clear all actions?</value>
+  </data>
   <data name="GlobalActionClearShortcuts" xml:space="preserve">
     <value>Clear all shortcuts</value>
+  </data>
+  <data name="GlobalActionClearShortcutsQuestion" xml:space="preserve">
+    <value>Clear all shortcuts?</value>
+  </data>
+  <data name="SettingsConfirmNo" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="SettingsConfirmYes" xml:space="preserve">
+    <value>Yes</value>
   </data>
   <data name="HotkeyIgnoredPrograms" xml:space="preserve">
     <value>Ignored programs ({0})</value>
@@ -2860,7 +2923,19 @@ X {0}, Y {1}</value>
     <value>Free-angle straight line</value>
   </data>
   <data name="AnnotationShiftSnapAngle" xml:space="preserve">
-    <value>Snapped-angle straight line</value>
+    <value>Snap to 45°</value>
+  </data>
+  <data name="AnnotationShiftSnap30Degrees" xml:space="preserve">
+    <value>Snap to 30°</value>
+  </data>
+  <data name="AnnotationShiftSnap15Degrees" xml:space="preserve">
+    <value>Snap to 15°</value>
+  </data>
+  <data name="AnnotationShiftSnap10Degrees" xml:space="preserve">
+    <value>Snap to 10°</value>
+  </data>
+  <data name="AnnotationShiftSnap5Degrees" xml:space="preserve">
+    <value>Snap to 5°</value>
   </data>
   <data name="AnnotationSmoothBrush" xml:space="preserve">
     <value>Smooth strokes</value>
@@ -2961,6 +3036,20 @@ X {0}, Y {1}</value>
   <data name="SettingsResetCurrent" xml:space="preserve">
     <value>Reset page defaults</value>
   </data>
+  <data name="SettingsResetConfirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="SettingsResetAllQuestion" xml:space="preserve">
+    <value>Are you sure to restore all default?</value>
+  </data>
+  <data name="SettingsResetCurrentQuestion" xml:space="preserve">
+    <value>Are you sure to restore current page default?</value>
+  </data>
+  <data name="PinnedDisplayPosition" xml:space="preserve"><value>Pin display position</value></data>
+  <data name="PinnedPositionScreenshot" xml:space="preserve"><value>Screenshot location</value></data>
+  <data name="PinnedPositionMouse" xml:space="preserve"><value>Mouse location</value></data>
+  <data name="PinnedPositionPrimaryCenter" xml:space="preserve"><value>Primary screen center</value></data>
+  <data name="PinnedPositionMouseScreenCenter" xml:space="preserve"><value>Mouse screen center</value></data>
   <data name="SettingsResetAllHint" xml:space="preserve">
     <value>Reset all settings and clear custom actions, shortcuts and preset links. Templates, recordings and pinned images are not deleted.</value>
   </data>
@@ -2968,7 +3057,7 @@ X {0}, Y {1}</value>
     <value>Reset this page and keep unsaved changes on other pages.</value>
   </data>
   <data name="SettingsResetActionsHint" xml:space="preserve">
-    <value>Reset basic shortcuts and hotkey policy. Custom actions and their bindings are kept.</value>
+    <value>Restores default actions and shortcut policy. Removes custom actions.</value>
   </data>
   <data name="GlobalActionScreenshotAndCopyText" xml:space="preserve">
     <value>Screenshot and copy text</value>
@@ -3135,6 +3224,9 @@ X {0}, Y {1}</value>
   <data name="ToolbarMove" xml:space="preserve">
     <value>Move toolbar</value>
   </data>
+  <data name="ToolbarMoveAutomaticHint" xml:space="preserve">
+    <value>Drag to move the toolbar</value>
+  </data>
   <data name="ToolbarMoveHint" xml:space="preserve">
     <value>Drag toolbar; double-click to restore automatic placement</value>
   </data>
@@ -3146,7 +3238,7 @@ X {0}, Y {1}</value>
     <value>Quick save</value>
   </data>
   <data name="ScrollCaptureOcrCopy" xml:space="preserve">
-    <value>Recognize text and copy</value>
+    <value>Copy recognized text</value>
   </data>
   <data name="ScrollCaptureClose" xml:space="preserve">
     <value>Close</value>
@@ -3337,11 +3429,17 @@ Diagnostic report: {1}</value></data>
   <data name="AnnotationToggleToolbar" xml:space="preserve">
     <value>Show/hide annotation toolbar</value>
   </data>
+  <data name="PinnedTextSettings" xml:space="preserve"><value>Text</value></data>
+  <data name="PinnedConfirmLongTextPaste" xml:space="preserve"><value>Confirmation is required when pin long text</value></data>
+  <data name="PinnedLongTextTitle" xml:space="preserve"><value>Long Text Pasting Confirmation</value></data>
+  <data name="PinnedLongTextQuestion" xml:space="preserve"><value>The text in the clipboard is too long ({0} characters) and may cause stuttering, are you sure you want to pin it?</value></data>
+  <data name="PinnedLongTextPin" xml:space="preserve"><value>Pin</value></data>
+  <data name="PinnedCopyColorFormat" xml:space="preserve"><value>Copy {0}</value></data>
   <data name="PinnedTextTooLarge" xml:space="preserve">
     <value>Text is too large to pin.</value>
   </data>
   <data name="PinnedFileCopy" xml:space="preserve">
-    <value>Copy this file</value>
+    <value>Copy This File</value>
   </data>
   <data name="PinnedFileCopyPath" xml:space="preserve">
     <value>Copy This File Path</value>
@@ -3528,6 +3626,12 @@ Diagnostic report: {1}</value></data>
   </data>
   <data name="Print" xml:space="preserve">
     <value>Print</value>
+  </data>
+  <data name="TablePrintSelection" xml:space="preserve">
+    <value>Print Current Selection</value>
+  </data>
+  <data name="TablePrintTitle" xml:space="preserve">
+    <value>Print Table</value>
   </data>
   <data name="PrintUnavailable" xml:space="preserve">
     <value>Printing is unavailable.</value>
@@ -4193,6 +4297,9 @@ screenshot</value>
   <data name="ScrollCaptureAutoCrop" xml:space="preserve">
     <value>Auto cropping</value>
   </data>
+  <data name="GlobalMouseClearAll" xml:space="preserve">
+    <value>Clear all</value>
+  </data>
   <data name="GlobalMouseShowMask" xml:space="preserve">
     <value>Show mask while using global mouse capture</value>
   </data>
@@ -4678,6 +4785,7 @@ screenshot</value>
     <value>Ctrl+A, ALT+B, Shift/Ctrl/Alt/Win+C, ...</value>
   </data>
   <data name="RecordingDelay" xml:space="preserve"><value>Record delay</value></data>
+  <data name="RecordingCountdown" xml:space="preserve"><value>Recording in {0}s</value></data>
   <data name="RecordingNoDelay" xml:space="preserve"><value>No delay</value></data>
   <data name="ScreenshotMagnifierLinkLine" xml:space="preserve"><value>Line</value></data>
   <data name="ScreenshotMagnifierLinkShape" xml:space="preserve"><value>Shape</value></data>
@@ -4803,6 +4911,7 @@ screenshot</value>
   <data name="PinnedTextStrike" xml:space="preserve"><value>Strikethrough</value></data>
   <data name="PinnedAnnotationDone" xml:space="preserve"><value>Done</value></data>
   <data name="PinnedProcessingOpacity" xml:space="preserve"><value>Opacity</value></data>
+  <data name="PinnedOpacityStatus" xml:space="preserve"><value>Opacity: {0}%</value></data>
   <data name="PinnedProcessingBrightness" xml:space="preserve"><value>Adjust brightness</value></data>
   <data name="PinnedProcessingIncrease10" xml:space="preserve"><value>Increased by 10%</value></data>
   <data name="PinnedProcessingDecrease10" xml:space="preserve"><value>Reduced by 10%</value></data>
@@ -4857,9 +4966,13 @@ screenshot</value>
   <data name="PinnedNoPlainTextToCopy" xml:space="preserve"><value>No plain text to copy</value></data>
   <data name="PinnedNoHtmlTextToCopy" xml:space="preserve"><value>No html text to copy</value></data>
   <data name="PinnedPlainTextCopied" xml:space="preserve"><value>Plain text copied</value></data>
+  <data name="PinnedImageCopySucceeded" xml:space="preserve"><value>Copied</value></data>
+  <data name="PinnedImageCopyFailed" xml:space="preserve"><value>Copy Failed</value></data>
   <data name="PinnedFilesTotal" xml:space="preserve"><value>...Total of {0} items</value></data>
   <data name="BuiltinShortcutPinnedPaste" xml:space="preserve"><value>Paste</value></data>
   <data name="GlobalMouseScreenshotAndEdit" xml:space="preserve"><value>Screenshot and edit</value></data>
+  <data name="GlobalMouseScreenshotAndSave" xml:space="preserve"><value>Screenshot and save</value></data>
+  <data name="GlobalMouseLongShot" xml:space="preserve"><value>Long shot</value></data>
   <data name="GlobalMouseGifShot" xml:space="preserve"><value>Gif shot</value></data>
   <data name="GlobalActionScreenshotAndRecord" xml:space="preserve"><value>Screen Recording</value></data>
   <data name="BuiltinDefaultOverridesParent" xml:space="preserve"><value>The default key in {0} takes priority over {1}.</value></data>
@@ -5027,5 +5140,8 @@ screenshot</value>
   </data>
   <data name="AnnotationTogglePolylineArrows" xml:space="preserve">
     <value>Toggle polyline arrows</value>
+  </data>
+  <data name="RecordingAnnotationUnavailable" xml:space="preserve">
+    <value>This feature is unavailable during video recording.</value>
   </data>
 </root>

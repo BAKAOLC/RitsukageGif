@@ -2,16 +2,10 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
     {
-        private FrozenCaptureResult CaptureSelectedWindows(WindowTarget[] targets,
-            PixelRect region, CancellationToken token)
+        private FrozenCaptureResult CaptureWindowScreenshot(SelectionResult selection, CancellationToken token)
         {
-            switch (targets.Length)
-            {
-                case 0:
-                    throw new CaptureSourceLostException();
-                case 1:
-                    return CaptureWindowPixels(new(region, true, targets[0]), token);
-            }
+            if (selection.Windows is not { Count: > 1 } targets) return CaptureWindowPixels(selection, token);
+            var region = selection.Region;
 
             var pixels = new byte[checked(region.Width * region.Height * 4)];
             var hdrFrames = new List<(PixelRect Region, CapturedFrame? Frame)>();

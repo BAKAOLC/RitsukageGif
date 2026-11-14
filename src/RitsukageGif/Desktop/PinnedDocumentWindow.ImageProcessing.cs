@@ -6,8 +6,15 @@ namespace RitsukageGif.Desktop
 
         private void AdjustOpacity(double step)
         {
-            if (OpacityAdjustmentRequested is not null) OpacityAdjustmentRequested(this, step);
-            else Opacity = PinnedOpacityStep.Apply(Opacity, step);
+            if (OpacityAdjustmentRequested is not null)
+            {
+                OpacityAdjustmentRequested(this, step);
+            }
+            else
+            {
+                Opacity = PinnedOpacityStep.Apply(Opacity, step);
+                Presentation.ShowOpacityMessage();
+            }
         }
     }
 }

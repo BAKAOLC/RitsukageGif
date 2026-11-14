@@ -49,6 +49,7 @@ namespace RitsukageGif.Desktop
             using var paint = new SKPaint();
             paint.IsAntialias = true;
             var isHdr = false;
+            var scale = (float)(_options.PixelDensity / _options.Divisor);
             foreach (var layer in _layers)
             {
                 token.ThrowIfCancellationRequested();
@@ -57,9 +58,8 @@ namespace RitsukageGif.Desktop
                 var hdr = RenderHdrLayer(layer, token);
                 var placement = state?.Motion?.At(_frameMotionTime) ?? state?.Placement ?? layer.Definition.Placement;
                 paint.ColorF = new(1, 1, 1, (float)Math.Clamp(state?.Opacity ?? 1, 0, 1));
-                var scale = (float)(_options.PixelDensity / _options.Divisor);
-                _hdrDrawing.DrawSampledBitmap(hdr.Bitmap, new(placement.X * scale, placement.Y * scale,
-                    placement.Right * scale, placement.Bottom * scale), paint);
+                layer.Destination = ScalePlacement(placement, scale);
+                _hdrDrawing.DrawSampledBitmap(hdr.Bitmap, layer.Destination, paint);
                 isHdr |= hdr.IsHdrSource;
             }
 

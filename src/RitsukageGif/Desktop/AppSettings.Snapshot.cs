@@ -8,6 +8,7 @@ namespace RitsukageGif.Desktop
             {
                 PresetHotkeys = [.. PresetHotkeys], PresetFiles = [.. PresetFiles],
                 GlobalMouseBindings = [.. GlobalMouseBindings.Select(binding => binding with { })],
+                GlobalMouseIgnoredPrograms = [.. GlobalMouseIgnoredPrograms],
                 GlobalActions =
                 [
                     .. GlobalActions.Select(action => action with

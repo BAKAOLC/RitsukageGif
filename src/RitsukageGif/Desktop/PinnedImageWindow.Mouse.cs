@@ -19,7 +19,6 @@ namespace RitsukageGif.Desktop
         private readonly MouseGestureTracker _mouseGesture = new();
         private readonly HashSet<MouseButton> _pressedButtons = [];
         private MouseAction? _activeDragAction;
-        private PointerPressedEventArgs? _dragTrigger;
         private bool _adjustingWindow;
         private int _dragHorizontalEdge, _dragVerticalEdge;
         private Point _dragStartImage;
@@ -27,17 +26,21 @@ namespace RitsukageGif.Desktop
         private WindowPixelPoint _dragStartScreen;
         private Size _dragStartSize;
         private double _dragStartZoom;
+        private PointerPressedEventArgs? _dragTrigger;
         private static IReadOnlyList<MouseCommandBinding> MouseBindings => MouseCommands.SnapshotBindings();
 
         private void ConfigureMouseInput(Image image, Control content, ContextMenu menu)
         {
+            Presentation.ResetFromSelection = () =>
+            {
+                if (!_busy && !IsMarkEditing && CanExecuteMouseCommand())
+                    ToggleMouseReset(Bounds.Center);
+            };
             image.PointerEntered += (_, _) => EnsureTextRecognition();
             content.AddHandler(ContextRequestedEvent, (_, args) => args.Handled = true, RoutingStrategies.Tunnel);
             image.PointerPressed += (_, args) =>
             {
                 if (_annotation is not null) return;
-                if (TryBeginTextSelection(args)) return;
-                ClearTextSelection();
                 var button = args.GetCurrentPoint(image).Properties.PointerUpdateKind switch
                 {
                     PointerUpdateKind.LeftButtonPressed => MouseButton.Left,
@@ -48,9 +51,12 @@ namespace RitsukageGif.Desktop
                     _ => MouseButton.None,
                 };
                 if (button == MouseButton.None) return;
+                var clickCount = _mouseGesture.GetClickCount(args, button, image);
+                if (TryBeginTextSelection(args, clickCount)) return;
+                ClearTextSelection();
                 _pressedButtons.Add(button);
-                _mouseClicks.Press(button, args.KeyModifiers, args.ClickCount);
-                if (!_mouseGesture.Begin(button, args.KeyModifiers, args.GetPosition(image), args.ClickCount))
+                _mouseClicks.Press(button, args.KeyModifiers, clickCount);
+                if (!_mouseGesture.Begin(button, args.KeyModifiers, args.GetPosition(image), clickCount))
                 {
                     args.Handled = true;
                     return;
@@ -209,7 +215,7 @@ namespace RitsukageGif.Desktop
                 if (IsAnnotationTextInputKey(args)) return;
                 if (BuiltinShortcuts.Resolve(BuiltinShortcuts.Snapshot(), "BuiltinShortcutPinnedContext", args) !=
                     "menu") return;
-                menu.Open(content);
+                Presentation.OpenMenu(menu, content);
                 args.Handled = true;
             };
         }
@@ -255,8 +261,19 @@ namespace RitsukageGif.Desktop
 
         private void ResetImage(Point anchor)
         {
-            ResizeAt(ZoomAnchor(anchor, CurrentPreferences.ResetZoomAnchor), 1);
-            Opacity = 1;
+            ApplyImageReset(anchor, 1, 1);
+        }
+
+        private void ToggleMouseReset(Point anchor)
+        {
+            var (zoom, opacity) = Presentation.ToggleMouseReset(CurrentPinZoom);
+            ApplyImageReset(anchor, zoom, opacity);
+        }
+
+        private void ApplyImageReset(Point anchor, double zoom, double opacity)
+        {
+            ResizeAt(ZoomAnchor(anchor, CurrentPreferences.ResetZoomAnchor), zoom);
+            Opacity = opacity;
             _viewport.Offset = default;
             RestoreToScreen();
         }
@@ -312,7 +329,11 @@ namespace RitsukageGif.Desktop
                     break;
                 case MouseAction.AdjustOpacity:
                     AdjustOpacity(amount * CurrentPreferences.OpacityStep); break;
-                case MouseAction.Reset when !IsOperationLocked(PinnedLockRestrictions.Move): ResetImage(point); break;
+                case MouseAction.Reset
+                    when !IsOperationLocked(PinnedLockRestrictions.Move):
+                    ToggleMouseReset(point);
+                    Presentation.ResetSelectedPeersRequested?.Invoke();
+                    break;
                 default: return false;
             }
 

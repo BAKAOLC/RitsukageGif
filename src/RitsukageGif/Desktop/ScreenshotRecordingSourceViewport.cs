@@ -13,6 +13,7 @@ namespace RitsukageGif.Desktop
         private readonly ImageViewport _viewport = new() { PanEnabled = false };
         private readonly Image _image = new() { Stretch = Stretch.Fill, IsHitTestVisible = false };
         private readonly Grid _content = new();
+        private readonly Border _frame = new() { BorderThickness = new(1), IsHitTestVisible = false, ZIndex = 1 };
         private readonly Lock _refreshGate = new();
         private readonly CancellationTokenSource _lifetime = new();
         private ScreenshotAnnotationSurface _surface;
@@ -36,6 +37,7 @@ namespace RitsukageGif.Desktop
             _surface = annotations.CreateHostedSurface(this, region);
             _content.Children.Add(_image);
             _content.Children.Add(_surface);
+            _content.Children.Add(_frame);
             _viewport.ImageContent = _content;
             _viewport.PixelSize = new(region.Width, region.Height);
             _viewport.ViewChanged += (_, _) => _surface.ControlScale = RenderScaling / _viewport.Zoom;
@@ -69,6 +71,11 @@ namespace RitsukageGif.Desktop
         internal event Action? CloseRequested;
         internal event Action<Exception>? Failed;
         internal event Action<RecordingCameraOptions>? CameraOptionsChanged;
+
+        internal void SetFrameBrush(IBrush brush)
+        {
+            _frame.BorderBrush = brush;
+        }
 
         internal void SetPreviewVisible(bool visible)
         {

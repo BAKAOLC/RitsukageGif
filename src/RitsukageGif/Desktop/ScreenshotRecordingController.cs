@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia.Controls;
 
 namespace RitsukageGif.Desktop
@@ -7,6 +8,7 @@ namespace RitsukageGif.Desktop
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.ScreenshotRecording");
         private readonly ApplicationHost _host;
         private readonly CancellationTokenSource _lifetime = new();
+        private readonly ScreenshotRecordingAudioDiscovery _audioDiscovery;
 
         private readonly string _workspaceRoot =
             Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar);
@@ -15,6 +17,7 @@ namespace RitsukageGif.Desktop
         private ScreenshotRecordingPreferences _preferences;
 
         private IReadOnlyList<RecordingCameraDevice> _cameraDevices = [];
+        private Task? _closeTask;
         private bool _discard;
         private bool _transition;
         private string? _workspace;
@@ -24,6 +27,7 @@ namespace RitsukageGif.Desktop
         internal ScreenshotRecordingController(ApplicationHost host, SelectionResult selection)
         {
             _host = host;
+            _audioDiscovery = new(EnumerateAudioDevices, _lifetime.Token);
             _preferences = host.Settings.ScreenshotRecording.Normalize();
             ApplyPreferences();
             Camera = ScreenshotRecordingPreferenceAdapter.RestoreCamera(_preferences.Camera, []);
@@ -94,6 +98,8 @@ namespace RitsukageGif.Desktop
         internal RecordingProgress? Progress => _operation is null ? null : _host.LatestProgress;
         internal CancellationToken Lifetime => _lifetime.Token;
         internal Func<CancellationToken, Task>? PrepareCapture { get; set; }
+        internal Func<bool, CancellationToken, Task>? CompleteCapturePreparation { get; set; }
+        internal Action<IReadOnlyList<string>, PixelRect>? PublishOutput { private get; set; }
 
         public void Dispose()
         {
@@ -103,6 +109,24 @@ namespace RitsukageGif.Desktop
             _cameraGate.Dispose();
             ReleaseSelectedSource();
             ClearWorkspace();
+        }
+
+        internal Task<ScreenshotRecordingAudioDiscovery.Snapshot> ReadAudioReadinessAsync(bool refresh = false)
+        {
+            return _audioDiscovery.ReadAsync(refresh);
+        }
+
+        private static IReadOnlyList<AudioCaptureDevice> EnumerateAudioDevices(bool system, CancellationToken token)
+        {
+            const int enoent = 2;
+            try
+            {
+                return AudioCaptureBackend.EnumerateDevices(system, token);
+            }
+            catch (Win32Exception error) when (OperatingSystem.IsLinux() && error.NativeErrorCode == enoent)
+            {
+                return [];
+            }
         }
 
         internal event Action? Changed;
@@ -171,11 +195,10 @@ namespace RitsukageGif.Desktop
             var token = _lifetime.Token;
             var quick = Quick;
             var delay = DelaySeconds;
+            var prepared = false;
+            var started = false;
             try
             {
-                var systemAudio = AudioCaptureBackend.IsSupported && SystemAudio;
-                var microphone = AudioCaptureBackend.IsSupported && Microphone;
-                var video = quick || systemAudio || microphone;
                 string? path = null;
                 if (quick)
                 {
@@ -192,7 +215,16 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
+                var systemAudio = false;
+                var microphone = false;
+                if (AudioCaptureBackend.IsSupported && (SystemAudio || Microphone))
+                {
+                    var audio = await ReadAudioReadinessAsync(true);
+                    (systemAudio, microphone) = audio.Select(SystemAudio, Microphone);
+                }
+
                 token.ThrowIfCancellationRequested();
+                var video = quick || systemAudio || microphone;
                 var colors = _host.Settings.CaptureColorMode;
                 var cursor = Cursor;
                 var capture = new RecordingOptions(Selection.Region, Fps, Divisor, Cursor,
@@ -201,6 +233,7 @@ namespace RitsukageGif.Desktop
                     _host.CreateRecordingReviewOutputContext())
                 {
                     CaptureTitle = Selection.Target?.Title, CaptureProcess = Selection.Target?.Process,
+                    PublishOutput = PublishOutput,
                     Colors = colors, FramesPerSecond = capture.Fps,
                     InputEffects = CaptureInputEffects(cursor),
                     ProgressEffects = _host.Settings.ScreenshotRecording.ProgressEffects,
@@ -212,9 +245,15 @@ namespace RitsukageGif.Desktop
                     AutoExitAfterEncodingChanged = ConfigureAutoExitAfterEncoding,
                 };
                 var control = new RecordingControl();
-                if (PrepareCapture is { } prepare) await prepare(token);
+                if (PrepareCapture is { } prepare)
+                {
+                    prepared = true;
+                    await prepare(token);
+                }
+
                 await CaptureWindowVisibility.FlushAsync(token);
                 if (!await WaitForCountdownAsync(delay, token)) return;
+                if (delay != 0) await CaptureWindowVisibility.FlushAsync(token);
                 token.ThrowIfCancellationRequested();
                 if (!quick)
                 {
@@ -242,6 +281,7 @@ namespace RitsukageGif.Desktop
                 Logger.ZLogInformation(
                     $"Screenshot recording started. Quick={quick} Video={video} Region={Selection.Region}");
                 _completion = ObserveAsync(owner, _operation, quick, reviewDocument, token);
+                started = true;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -254,6 +294,20 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
+                if (prepared && CompleteCapturePreparation is { } complete)
+                    try
+                    {
+                        await complete(!started && !token.IsCancellationRequested, token);
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested)
+                    {
+                    }
+                    catch (Exception error)
+                    {
+                        Error ??= ApplicationHost.VideoErrorMessage(error);
+                        Logger.ZLogError(error, $"Screenshot recording capture policy could not be restored.");
+                    }
+
                 _transition = false;
                 Notify();
             }
@@ -305,16 +359,46 @@ namespace RitsukageGif.Desktop
             Notify();
         }
 
-        internal async Task CloseAsync()
+        internal Task CloseAsync()
         {
-            if (IsClosed) return;
-            Logger.ZLogInformation(
-                $"Screenshot recording close requested. Recording={IsRecording} Reviewing={Reviewing}");
+            if (_closeTask is { } pending) return pending;
+            if (IsClosed) return Task.CompletedTask;
+            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _closeTask = completion.Task;
             IsClosed = true;
-            await _lifetime.CancelAsync();
-            Notify();
+            _ = CompleteCloseAsync(completion);
+            return completion.Task;
+        }
+
+        private async Task CompleteCloseAsync(TaskCompletionSource completion)
+        {
             try
             {
+                await CloseCoreAsync();
+                completion.SetResult();
+            }
+            catch (Exception error)
+            {
+                completion.SetException(error);
+            }
+        }
+
+        private async Task CloseCoreAsync()
+        {
+            try
+            {
+                Logger.ZLogInformation(
+                    $"Screenshot recording close requested. Recording={IsRecording} Reviewing={Reviewing}");
+                try
+                {
+                    await _lifetime.CancelAsync();
+                }
+                catch (Exception error)
+                {
+                    Logger.ZLogError(error, $"Screenshot recording cancellation callback failed.");
+                }
+
+                Notify();
                 await _startTask;
                 await _sourcePreparation;
                 await _host.StopOwnedVideoAsync(_operation, true);
@@ -324,8 +408,14 @@ namespace RitsukageGif.Desktop
             {
                 try
                 {
-                    await StopCameraAsync();
-                    await ReleaseRecorderExclusionAsync();
+                    try
+                    {
+                        await StopCameraAsync();
+                    }
+                    finally
+                    {
+                        await ReleaseRecorderExclusionAsync();
+                    }
                 }
                 finally
                 {
@@ -348,7 +438,8 @@ namespace RitsukageGif.Desktop
                 Logger.ZLogInformation(
                     $"Screenshot recording finished. Cancelled={result.Cancelled} Failed={result.Error is not null} Quick={quick}");
                 if (IsClosed || _discard) return;
-                if (result.SourceLost && (quick || result.Outputs.Count == 0))
+                if (result is { SourceLost: true, Error: null or CaptureSourceLostException } &&
+                    (quick || result.Outputs.Count == 0))
                 {
                     Error = UiText.Get("WindowSourceLostStopped");
                     _operation = null;
@@ -373,6 +464,10 @@ namespace RitsukageGif.Desktop
                         _operation = null;
                         return;
                     }
+                }
+                else
+                {
+                    PublishOutput?.Invoke(result.Outputs, document.CaptureRegion);
                 }
 
                 finished = true;
@@ -406,7 +501,7 @@ namespace RitsukageGif.Desktop
                 Notify();
             }
 
-            if (finished) Completed?.Invoke();
+            if (finished && _closeTask is null) Completed?.Invoke();
         }
 
         private void ConfigureReviewFormat(RecordingReviewFormat format)

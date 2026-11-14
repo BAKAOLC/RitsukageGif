@@ -1,4 +1,4 @@
-﻿using Avalonia.Platform.Storage;
+using Avalonia.Platform.Storage;
 
 namespace RitsukageGif.Desktop
 {
@@ -58,6 +58,7 @@ namespace RitsukageGif.Desktop
             }
             finally
             {
+                _document.PublishOutput?.Invoke(saved, _document.CaptureRegion);
                 if (_exitAfterExport) Close();
             }
         }
@@ -112,6 +113,7 @@ namespace RitsukageGif.Desktop
             if (!await files.PublishAsync(clipboard, StorageProvider, name,
                     (path, _) => ExportAsync(path, false), _lifetime.Token)) return;
             _exported = true;
+            _document.PublishOutput?.Invoke([], _document.CaptureRegion);
             if (_exitAfterExport) Close();
         }
 
@@ -132,17 +134,21 @@ namespace RitsukageGif.Desktop
                 };
                 _exitAfterExport = false;
                 _toolbar.IsOpen = false;
-                var result = await RecordingReviewExportWindow.ShowAsync(this, _autoExitAfterEncoding,
+                var closeAfterPublish = _document.PublishOutput is not null;
+                var result = await RecordingReviewExportWindow.ShowAsync(this,
+                    closeAfterPublish || _autoExitAfterEncoding,
                     (progress, token) =>
                         RecordingReviewExport.WriteAsync(_document, destination, options, token, progress),
-                    value =>
-                    {
-                        _autoExitAfterEncoding = value;
-                        _document.AutoExitAfterEncodingChanged?.Invoke(value);
-                    }, cancellation.Token);
+                    closeAfterPublish
+                        ? null
+                        : value =>
+                        {
+                            _autoExitAfterEncoding = value;
+                            _document.AutoExitAfterEncodingChanged?.Invoke(value);
+                        }, cancellation.Token);
                 if (result is null) return [];
-                _exitAfterExport = result.ExitRecording;
-                _autoExitAfterEncoding = result.AutoExitAfterEncoding;
+                _exitAfterExport = closeAfterPublish || result.ExitRecording;
+                if (!closeAfterPublish) _autoExitAfterEncoding = result.AutoExitAfterEncoding;
                 return result.Outputs;
             }
             finally
@@ -151,10 +157,7 @@ namespace RitsukageGif.Desktop
                 if (!_closing)
                 {
                     _toolbar.IsOpen = true;
-                    SetActionsEnabled(true);
-                    _timeline.IsEnabled = true;
                     BuildAudioControls();
-                    RefreshInputCapabilities();
                 }
             }
         }

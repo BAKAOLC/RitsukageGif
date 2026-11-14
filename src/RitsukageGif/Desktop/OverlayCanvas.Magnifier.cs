@@ -31,6 +31,8 @@ namespace RitsukageGif.Desktop
         private SelectionCommandDefinition? _magnifierFormatShortcutCommand;
         private FormattedText? _magnifierFormatShortcutText;
         private FormattedText? _magnifierShortcutText;
+        private SelectionCommandDefinition? _magnifierCoordinateShortcutCommand;
+        private FormattedText? _magnifierCoordinateShortcutText;
 
         internal SampleColorTemplate SampleColorTemplate { get; set; } = SampleColorFormats.DefaultTemplate;
         internal bool RelativeCoordinates { get; set; }
@@ -40,28 +42,57 @@ namespace RitsukageGif.Desktop
             ? new(Mouse.X - Selected.X, Mouse.Y - Selected.Y)
             : Mouse;
 
-        private void DrawMagnifiedSelection(DrawingContext context, Rect lens, double factor)
+        private bool MagnifierSelectionHandlesVisible =>
+            CapturePreferences.MagnifierSelectionHandles && Snapshot?.Phase == SelectionPhase.Selected &&
+            SelectionHandlesVisible;
+
+        private bool ShowsMagnifierCoordinateShortcut => IsScreenshot && !Selected.IsEmpty &&
+                                                         Selected != _monitor &&
+                                                         (Selected.X != 0 || Selected.Y != 0);
+
+        private void DrawMagnifiedSelection(DrawingContext context, Rect lens, double factor, PixelPoint point)
         {
             if (Selected.IsEmpty) return;
-            var region = new Rect(lens.Center.X + (Selected.X - (double)Mouse.X - .5) * factor,
-                lens.Center.Y + (Selected.Y - (double)Mouse.Y - .5) * factor,
-                Selected.Width * factor, Selected.Height * factor);
-            if (CapturePreferences.MagnifierSelectionBorder)
-                context.DrawRectangle(null, _selectedPen, region);
-            if (!CapturePreferences.MagnifierSelectionHandles || IsCandidate ||
-                _appearance?.SelectionAnchors == SelectionAnchorMode.None) return;
-            Span<Point> points =
-            [
-                region.TopLeft, new(region.Center.X, region.Top), region.TopRight,
-                new(region.Right, region.Center.Y), region.BottomRight,
-                new(region.Center.X, region.Bottom), region.BottomLeft, new(region.Left, region.Center.Y),
-            ];
-            for (var index = 0; index < points.Length; index++)
+            var border = CapturePreferences.MagnifierSelectionBorder;
+            var handles = MagnifierSelectionHandlesVisible;
+            if (!border && !handles) return;
+            var intersection = Selected.Intersect(_monitor);
+            if (intersection.IsEmpty && !IsScreenshotRectangle) return;
+            var scale = Scale * factor;
+            using var transform = context.PushTransform(new(scale, 0, 0, scale,
+                lens.Center.X - (point.X - (double)_monitor.X + .5) * factor,
+                lens.Center.Y - (point.Y - (double)_monitor.Y + .5) * factor));
+            if (border)
             {
-                if (_appearance?.SelectionAnchors == SelectionAnchorMode.Four && index % 2 != 0) continue;
-                context.DrawEllipse(_selectionBrush, HandleBorder, points[index], 4 * Scale * factor,
-                    4 * Scale * factor);
+                var local = intersection.ToLocal(_monitor, Scale);
+                DrawSelectionBorder(context, intersection, new(local.X, local.Y, local.Width, local.Height));
             }
+
+            if (handles) DrawSelectionHandles(context);
+        }
+
+        private bool MagnifierHandlesMayCover(Rect region)
+        {
+            var outline = IsScreenshotRectangle ? ConfiguredBorderWidth / 2 : 0;
+            var left = Selected.X - outline;
+            var right = Selected.Right + outline;
+            var top = Selected.Y - outline;
+            var bottom = Selected.Bottom + outline;
+            var coverage = region.Inflate(SelectionScenePadding(null, true) - outline);
+            var radius = ScreenshotMarkerRadius;
+            var size = Math.Min(right - left, bottom - top);
+            if ((!IsScreenshotRectangle || (FrameRadiusPixels == 0 && size >= 4 * radius * Scale + 10)) &&
+                (coverage.Contains(new Point(left, top)) || coverage.Contains(new Point(right, top)) ||
+                 coverage.Contains(new Point(right, bottom)) || coverage.Contains(new Point(left, bottom))))
+                return true;
+            if (_appearance?.SelectionAnchors == SelectionAnchorMode.Four ||
+                (IsScreenshotRectangle &&
+                 (size < 2 * radius * Scale || Math.Min(Selected.Width, Selected.Height) <= ConfiguredBorderWidth)))
+                return false;
+            var centerX = (left + right) / 2;
+            var centerY = (top + bottom) / 2;
+            return coverage.Contains(new Point(centerX, top)) || coverage.Contains(new Point(centerX, bottom)) ||
+                   coverage.Contains(new Point(left, centerY)) || coverage.Contains(new Point(right, centerY));
         }
 
         private void DrawMagnifier(DrawingContext context, Rect lens)
@@ -69,43 +100,27 @@ namespace RitsukageGif.Desktop
             using var clip = context.PushClip(lens);
             context.FillRectangle(Brushes.Black, lens);
             var factor = Math.Clamp(CapturePreferences.Magnification, 1, 100);
-            var source = new Rect(Mouse.X - _monitor.X + .5 - lens.Width / factor / 2,
-                Mouse.Y - _monitor.Y + .5 - lens.Height / factor / 2, lens.Width / factor, lens.Height / factor);
-            var available = source.Intersect(new(0, 0, _monitor.Width, _monitor.Height));
-            var destination = new Rect(lens.X + (available.X - source.X) * factor,
-                lens.Y + (available.Y - source.Y) * factor, available.Width * factor, available.Height * factor);
+            var source = new Rect(Mouse.X + .5 - lens.Width / factor / 2,
+                Mouse.Y + .5 - lens.Height / factor / 2, lens.Width / factor, lens.Height / factor);
+            var region = MagnifierSceneRaster.Region(new(Mouse.X, Mouse.Y), source.Size);
             using (context.PushRenderOptions(CapturePreferences.SmoothMagnifier
                        ? new() { BitmapInterpolationMode = BitmapInterpolationMode.HighQuality }
                        : MagnifierOptions))
-            {
-                context.DrawImage(_bitmap, available, destination);
-                if (WindowFrame is { } frame)
-                {
-                    var globalSource = source.Translate(new(_monitor.X, _monitor.Y));
-                    var frameBounds = new Rect(frame.Region.X, frame.Region.Y, frame.Region.Width, frame.Region.Height);
-                    var visible = globalSource.Intersect(frameBounds);
-                    if (visible is { Width: > 0, Height: > 0 })
-                        context.DrawImage(frame.Bitmap,
-                            new(visible.X - frame.Region.X, visible.Y - frame.Region.Y, visible.Width, visible.Height),
-                            new(lens.X + (visible.X - globalSource.X) * factor,
-                                lens.Y + (visible.Y - globalSource.Y) * factor, visible.Width * factor,
-                                visible.Height * factor));
-                }
-            }
-
-            if (MagnifierAnnotations is { } annotations)
-            {
-                using var transform = context.PushTransform(new(factor, 0, 0, factor,
-                    lens.Center.X - (Mouse.X + .5) * factor, lens.Center.Y - (Mouse.Y + .5) * factor));
-                if (CapturePreferences.MagnifierAnnotations) annotations.Render(context);
-                if (CapturePreferences.MagnifierAnnotationControls) annotations.RenderSelection(context, Scale);
-            }
+                if (MagnifierSceneMayCover(region))
+                    MagnifierSceneRaster.Draw(context, source, lens, region,
+                        _magnifierScenePainter ??= PaintMagnifierScene);
+                else DrawMagnifierBackground(context, source, lens, factor);
 
             var center = lens.Center;
             if (CapturePreferences.MagnifierCrosshair)
             {
-                context.FillRectangle(MagnifierAxis, new(lens.Left, center.Y - factor / 2d, lens.Width, factor));
-                context.FillRectangle(MagnifierAxis, new(center.X - factor / 2d, lens.Top, factor, lens.Height));
+                var half = factor / 2d;
+                var armWidth = lens.Width / 2 - half;
+                var armHeight = lens.Height / 2 - half;
+                context.FillRectangle(MagnifierAxis, new(lens.Left, center.Y - half, armWidth, factor));
+                context.FillRectangle(MagnifierAxis, new(center.X + half, center.Y - half, armWidth, factor));
+                context.FillRectangle(MagnifierAxis, new(center.X - half, lens.Top, factor, armHeight));
+                context.FillRectangle(MagnifierAxis, new(center.X - half, center.Y + half, factor, armHeight));
             }
 
             if (CapturePreferences.MagnifierGrid)
@@ -134,7 +149,6 @@ namespace RitsukageGif.Desktop
                     new(center.X - factor / 2d - 1, center.Y - factor / 2d - 1, factor + 2, factor + 2));
             }
 
-            DrawMagnifiedSelection(context, lens, factor);
             context.DrawRectangle(null, HintBorder, lens.Deflate(.5));
         }
 
@@ -183,22 +197,31 @@ namespace RitsukageGif.Desktop
             }
 
             if (_magnifierShortcutText is { } copyHint)
+            {
                 context.DrawText(copyHint, new(frame.Center.X - copyHint.Width / 2, y));
+                y += 20;
+            }
+
+            if (ShowsMagnifierCoordinateShortcut && _magnifierCoordinateShortcutText is { } coordinateHint)
+                context.DrawText(coordinateHint, new(frame.Center.X - coordinateHint.Width / 2, y));
         }
 
         private int UpdateMagnifierShortcuts()
         {
             var bindings = ShortcutBindings ?? SelectionCommands.SnapshotBindings();
-            SelectionCommandDefinition? copy = null, format = null;
+            SelectionCommandDefinition? copy = null, format = null, coordinates = null;
             foreach (var binding in bindings)
             {
                 if (copy is null && binding.Command == SelectionCommand.CopyColor) copy = binding;
                 if (format is null && binding.Command == SelectionCommand.CycleColorFormat) format = binding;
-                if (copy is not null && format is not null) break;
+                if (coordinates is null && binding.Command == SelectionCommand.ToggleCoordinateMode)
+                    coordinates = binding;
+                if (copy is not null && format is not null && coordinates is not null) break;
             }
 
             var culture = CultureInfo.CurrentUICulture.Name;
             if (_magnifierShortcutCommand != copy || _magnifierFormatShortcutCommand != format ||
+                _magnifierCoordinateShortcutCommand != coordinates ||
                 _magnifierShortcutCulture != culture)
             {
                 _magnifierShortcutCommand = copy;
@@ -206,9 +229,12 @@ namespace RitsukageGif.Desktop
                 _magnifierShortcutCulture = culture;
                 _magnifierShortcutText = ShortcutHint(copy);
                 _magnifierFormatShortcutText = ShortcutHint(format);
+                _magnifierCoordinateShortcutCommand = coordinates;
+                _magnifierCoordinateShortcutText = ShortcutHint(coordinates);
             }
 
-            return (_magnifierShortcutText is null ? 0 : 1) + (_magnifierFormatShortcutText is null ? 0 : 1);
+            return (_magnifierShortcutText is null ? 0 : 1) + (_magnifierFormatShortcutText is null ? 0 : 1) +
+                   (ShowsMagnifierCoordinateShortcut && _magnifierCoordinateShortcutText is not null ? 1 : 0);
 
             static FormattedText? ShortcutHint(SelectionCommandDefinition? command)
             {
@@ -219,7 +245,16 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        internal bool TryGetSampleColor(PixelPoint point, out Color color)
+        private void DrawMagnifierAnnotations(DrawingContext context, Point center, double factor, PixelPoint point)
+        {
+            if (MagnifierAnnotations is not { } annotations) return;
+            using var transform = context.PushTransform(new(factor, 0, 0, factor,
+                center.X - (point.X + .5) * factor, center.Y - (point.Y + .5) * factor));
+            if (CapturePreferences.MagnifierAnnotations) annotations.Render(context);
+            if (CapturePreferences.MagnifierAnnotationControls) annotations.RenderSelection(context, Scale);
+        }
+
+        private bool TryGetSourceSampleColor(PixelPoint point, out Color color)
         {
             var pixels = _pixels;
             var region = _monitor;

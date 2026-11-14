@@ -9,32 +9,26 @@ namespace RitsukageGif.Desktop
         public Task CompleteSelectionSaveAsync(IReadOnlyList<string> paths, ScreenshotSaveProfile profile,
             ScreenshotResult output)
         {
-            return ScreenshotSaveCompletion.RunAsync(paths, profile, Clipboard, StorageProvider, CopyRenderedImageAsync,
-                OutputNotification, _lifetime.Token);
+            return ScreenshotSaveCompletion.RunAsync(paths, profile, Clipboard, StorageProvider,
+                () => CopyDocumentImageAsync(output), OutputNotification, _lifetime.Token);
         }
 
-        private Task<ScreenshotResult> CapturePreferredOutputAsync(OutputColorMode mode, CancellationToken token)
+        private Task<ScreenshotResult> CapturePreferredOutputAsync(CancellationToken token)
         {
             if (PreferencesProvider().OutputContent == PinnedImageOutputContent.Current &&
                 (_isThumbnail || !DocumentSceneViewScale.Equals(1d)))
-            {
-                if (mode == OutputColorMode.Hdr) throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable"));
                 return CaptureCurrentDocumentViewAsync(token);
-            }
 
-            var pending = ((IPinnedWindow)this).CaptureSceneOutputAsync(mode, token);
-            if (PreferencesProvider().OutputContent == PinnedImageOutputContent.Original) return pending;
-            return PinnedViewportOutput.ProjectAsync(pending, new(Matrix.Identity, default,
+            if (PreferencesProvider().OutputContent == PinnedImageOutputContent.Original)
+                return CaptureDocumentSceneAsync(true, token);
+            return PinnedViewportOutput.ProjectAsync(CaptureDocumentSceneAsync(false, token), new(Matrix.Identity,
+                default,
                 false, Opacity, PreferencesProvider().SmoothScaling, RenderScaling), token);
         }
 
         private Task CopyAsync()
         {
-            if (_textView is { SelectedText.Length: > 0 } text)
-                return text.SelectedHtml is { } selectionHtml
-                    ? CopyHtmlAsync(text.SelectedText, selectionHtml,
-                        (Document as PinnedHtmlDocument)?.SourceUrl)
-                    : CopyTextAsync(text.SelectedText);
+            if (_textView is { SelectedText.Length: > 0 } text) return CopySelectedDocumentTextAsync(text);
             if (Document is PinnedFilesDocument files) return CopySourceFilesAsync(files.Paths);
             if (Presentation.SourceMime is not null)
                 return Presentation.CopySourceMimeAsync(PinnedSourceMimeFormat.Typed);
@@ -69,6 +63,13 @@ namespace RitsukageGif.Desktop
                 await clipboard.SetDataAsync(transfer);
                 await clipboard.FlushAsync();
             }
+        }
+
+        private Task CopySelectedDocumentTextAsync(IPinnedDocumentTextView text)
+        {
+            return text.SelectedHtml is { } selectionHtml
+                ? CopyHtmlAsync(text.SelectedText, selectionHtml, (Document as PinnedHtmlDocument)?.SourceUrl)
+                : CopyTextAsync(text.SelectedText);
         }
 
         private async Task CopyTextAsync(string text)
@@ -152,9 +153,25 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async Task CopyRenderedImageAsync()
+        private Task<ScreenshotResult> CaptureDocumentOutputAsync(bool original, CancellationToken token)
         {
-            var output = await CapturePreferredOutputAsync(OutputColorMode.Sdr, _lifetime.Token);
+            return original
+                ? CaptureDocumentSceneAsync(true, token)
+                : CapturePreferredOutputAsync(token);
+        }
+
+        private Task CopyRenderedImageAsync()
+        {
+            return CopyRenderedImageAsync(false);
+        }
+
+        private async Task CopyRenderedImageAsync(bool original)
+        {
+            await CopyDocumentImageAsync(await CaptureDocumentOutputAsync(original, _lifetime.Token));
+        }
+
+        private async Task CopyDocumentImageAsync(ScreenshotResult output)
+        {
             var clipboard = Clipboard ?? throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
             await ClipboardImage.CopyAsync(clipboard, output, ClipboardPreferencesProvider().Normalize(),
                 StorageProvider,
@@ -162,10 +179,15 @@ namespace RitsukageGif.Desktop
             await SaveDocumentAutomaticallyAsync(ScreenshotAutoSaveTriggers.Copy, output);
         }
 
-        private async Task SaveRenderedImageAsync()
+        private Task SaveRenderedImageAsync()
+        {
+            return SaveRenderedImageAsync(false);
+        }
+
+        private async Task SaveRenderedImageAsync(bool original)
         {
             var token = _lifetime.Token;
-            var output = await CapturePreferredOutputAsync(OutputColorMode.Sdr, token);
+            var output = await CaptureDocumentOutputAsync(original, token);
             var profile = SavePreferencesProvider().Normalize().ManualProfile();
             var path = await ScreenshotOutputStorage.PickPathAsync(this, StorageProvider, profile,
                 OutputDirectoryProvider(), "PinnedImage", OutputColorMode.Sdr, DialogStyleProvider(),

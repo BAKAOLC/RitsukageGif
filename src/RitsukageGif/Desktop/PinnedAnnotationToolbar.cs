@@ -1,25 +1,30 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using WindowPixelPoint = Avalonia.PixelPoint;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed class PinnedAnnotationToolbar : Window, IDisposable
     {
+        private static readonly Cursor MoveCursor = new(StandardCursorType.SizeAll);
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.Pins.Toolbar");
-        private readonly ScreenshotAnnotationSession _session;
+        private readonly Button _done;
+        private readonly Button _moveHandle;
         private readonly Window _owner;
-        private readonly AnnotationToolsStrip _tools;
         private readonly AnnotationPropertyPresenter _properties;
         private readonly Border _propertyFrame;
-        private readonly Button _undo;
         private readonly Button _save;
-        private readonly Button _done;
+        private readonly ScreenshotAnnotationSession _session;
         private readonly Func<IReadOnlyList<SelectionCommandDefinition>> _shortcuts;
-        private object? _preferences;
+        private readonly AnnotationToolsStrip _tools;
+        private readonly Button _undo;
         private bool _disposed;
         private bool _manualPosition;
+        private object? _preferences;
         private bool _refreshing;
 
         internal PinnedAnnotationToolbar(Window owner, ScreenshotAnnotationSession session,
@@ -37,31 +42,8 @@ namespace RitsukageGif.Desktop
             Background = Brushes.Transparent;
             TransparencyLevelHint = [WindowTransparencyLevel.Transparent];
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
-            var handle = ScreenshotToolbar.SmallButton("ToolbarMove", () => { });
-            handle.Width = 14;
-            handle.Padding = new(2, 0);
-            if (handle.Content is Control icon)
-            {
-                icon.Width = 8;
-                icon.Height = 14;
-            }
-
-            handle.AddHandler(PointerPressedEvent, (_, args) =>
-            {
-                if (!args.GetCurrentPoint(handle).Properties.IsLeftButtonPressed) return;
-                args.Handled = true;
-                if (args.ClickCount == 2)
-                {
-                    _manualPosition = false;
-                    Place();
-                }
-                else
-                {
-                    _manualPosition = true;
-                    BeginMoveDrag(args);
-                }
-            }, RoutingStrategies.Tunnel, true);
-            row.Children.Add(handle);
+            _moveHandle = BuildMoveHandle();
+            row.Children.Add(_moveHandle);
             _tools = new(session, () => _ = AdjustToolsAsync());
             row.Children.Add(_tools);
             _undo = ScreenshotToolbar.SmallButton("AnimationUndo", session.Undo);
@@ -87,8 +69,14 @@ namespace RitsukageGif.Desktop
             _owner.ScalingChanged += OwnerScalingChanged;
             ScalingChanged += OwnerScalingChanged;
             SizeChanged += OwnerSizeChanged;
-            KeyDown += (_, args) => _owner.RaiseEvent(args);
-            KeyUp += (_, args) => _owner.RaiseEvent(args);
+            KeyDown += (_, args) =>
+            {
+                if (!HandleAnnotationMenuKey(args, true)) _owner.RaiseEvent(args);
+            };
+            KeyUp += (_, args) =>
+            {
+                if (!HandleAnnotationMenuKey(args, false)) _owner.RaiseEvent(args);
+            };
             Refresh();
             RefreshHints();
         }
@@ -111,6 +99,66 @@ namespace RitsukageGif.Desktop
             Close();
         }
 
+        internal bool HandleAnnotationMenuKey(KeyEventArgs args, bool down)
+        {
+            return _tools.HandleMenuKey(args, down);
+        }
+
+        private Button BuildMoveHandle()
+        {
+            var handle = ScreenshotToolbar.SmallButton("ToolbarMove", () => { });
+            handle.Width = 14;
+            handle.Padding = new(2, 0);
+            handle.Cursor = MoveCursor;
+            if (handle.Content is Control icon)
+            {
+                icon.Width = 8;
+                icon.Height = 14;
+            }
+
+            PointerPressedEventArgs? press = null;
+            var pressPosition = default(WindowPixelPoint);
+            handle.AddHandler(PointerPressedEvent, (_, args) =>
+            {
+                if (!args.GetCurrentPoint(handle).Properties.IsLeftButtonPressed) return;
+                args.Handled = true;
+                if (args.ClickCount == 2)
+                {
+                    _manualPosition = false;
+                    RefreshMoveHint();
+                    Place();
+                    return;
+                }
+
+                press = args;
+                pressPosition = this.PointToScreen(args.GetPosition(this));
+                args.Pointer.Capture(handle);
+            }, RoutingStrategies.Tunnel, true);
+            handle.AddHandler(PointerMovedEvent, (_, args) =>
+            {
+                if (press is not { } start || !ReferenceEquals(start.Pointer, args.Pointer) ||
+                    !args.GetCurrentPoint(handle).Properties.IsLeftButtonPressed ||
+                    this.PointToScreen(args.GetPosition(this)) == pressPosition) return;
+
+                press = null;
+                _manualPosition = true;
+                RefreshMoveHint();
+                args.Handled = true;
+                BeginMoveDrag(start);
+            }, RoutingStrategies.Tunnel, true);
+            handle.AddHandler(PointerReleasedEvent, (_, args) =>
+            {
+                if (press is not { } start || !ReferenceEquals(start.Pointer, args.Pointer) ||
+                    args.InitialPressMouseButton != MouseButton.Left) return;
+
+                press = null;
+                args.Pointer.Capture(null);
+                args.Handled = true;
+            }, RoutingStrategies.Tunnel, true);
+            handle.PointerCaptureLost += (_, _) => press = null;
+            return handle;
+        }
+
         private static Border Frame(Control content)
         {
             return new()
@@ -131,9 +179,7 @@ namespace RitsukageGif.Desktop
                 if (!ReferenceEquals(preferences, _preferences))
                 {
                     _preferences = preferences;
-                    _tools.Rebuild([
-                        .. _session.ToolbarPreferences.Columns.Select(IReadOnlyList<ScreenshotTool> (column) => column),
-                    ]);
+                    _tools.Rebuild(_session.ToolbarPreferences);
                 }
 
                 _properties.Refresh(_session.Tool);
@@ -150,11 +196,17 @@ namespace RitsukageGif.Desktop
         private void RefreshHints()
         {
             if (_disposed) return;
+            RefreshMoveHint();
             var bindings = _shortcuts();
             _tools.RefreshShortcuts(bindings);
             ScreenshotToolbar.SetShortcutTip(_undo, SelectionCommand.Undo, bindings);
             ScreenshotToolbar.SetShortcutTip(_save, SelectionCommand.Save, bindings);
             ScreenshotToolbar.SetShortcutTip(_done, SelectionCommand.Confirm, bindings);
+        }
+
+        private void RefreshMoveHint()
+        {
+            ToolTip.SetTip(_moveHandle, UiText.Get(_manualPosition ? "ToolbarMoveHint" : "ToolbarMoveAutomaticHint"));
         }
 
         private void EditComment()
@@ -197,9 +249,11 @@ namespace RitsukageGif.Desktop
             {
                 _tools.HideFlyouts();
                 _properties.HideFlyouts();
-                if (await new ToolbarToolsWindow(_session.ToolbarPreferences).ShowDialog<ToolbarPreferences?>(_owner) is
-                        { } result && !_disposed)
-                    _session.UpdateToolbarPreferences(result, true);
+                var editor = new ToolbarToolsWindow(_session.ToolbarPreferences, result =>
+                {
+                    if (!_disposed) _session.UpdateToolbarPreferences(result, true);
+                });
+                await editor.ShowDialog(_owner);
             }
             catch (Exception error)
             {

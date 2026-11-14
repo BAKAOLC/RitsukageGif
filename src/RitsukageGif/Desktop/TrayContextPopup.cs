@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -24,6 +25,7 @@ namespace RitsukageGif.Desktop
             };
             var menu = new ContextMenu { Placement = PlacementMode.Bottom, PlacementTarget = target };
             var byParent = entries.ToLookup(entry => entry.Parent);
+            var icons = new List<Bitmap>();
             foreach (var entry in byParent[0]) menu.Items.Add(Create(entry));
             target.ContextMenu = menu;
             menu.Opened += (_, _) => model.Open(0);
@@ -37,6 +39,7 @@ namespace RitsukageGif.Desktop
             };
             anchor.Closed += (_, _) =>
             {
+                foreach (var icon in icons) icon.Dispose();
                 if (!ReferenceEquals(_anchor, anchor)) return;
                 _anchor = null;
                 _model = null;
@@ -55,6 +58,14 @@ namespace RitsukageGif.Desktop
                     Header = entry.Label, IsEnabled = entry.Enabled, IsChecked = entry.Checked,
                     ToggleType = (MenuItemToggleType)entry.Toggle, InputGesture = entry.Gesture,
                 };
+                if (entry.IconPng is { } png)
+                {
+                    using var stream = new MemoryStream(png, false);
+                    var icon = new Bitmap(stream);
+                    icons.Add(icon);
+                    item.Icon = new Image { Source = icon, Width = 16, Height = 16 };
+                }
+
                 foreach (var child in byParent[entry.Id]) item.Items.Add(Create(child));
                 item.Click += (_, args) =>
                 {

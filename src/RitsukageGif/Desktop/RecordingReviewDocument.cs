@@ -26,5 +26,6 @@ namespace RitsukageGif.Desktop
         internal int FramesPerSecond { get; init; } = 24;
         internal string? CaptureTitle { get; init; }
         internal string? CaptureProcess { get; init; }
+        internal Action<IReadOnlyList<string>, PixelRect>? PublishOutput { get; init; }
     }
 }

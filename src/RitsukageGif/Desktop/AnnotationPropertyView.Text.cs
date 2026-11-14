@@ -104,6 +104,7 @@ namespace RitsukageGif.Desktop
                             _session.Properties with { TextPadding = value })));
                 }
 
+                content.Children.Add(new Border { Height = 1, Background = AppTheme.Outline });
                 content.Children.Add(Palette(key,
                     () => outline ? _session.Properties.TextOutline : _session.Properties.TextBackground,
                     color => _session.UpdateSelectedPropertiesAsync(outline

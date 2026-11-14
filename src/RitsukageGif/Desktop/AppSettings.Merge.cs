@@ -14,6 +14,7 @@ namespace RitsukageGif.Desktop
             result.Annotation.Toolbar = merged.Annotation.Toolbar with
             {
                 Columns = [.. merged.Annotation.Toolbar.Columns.Select(column => new List<ScreenshotTool>(column))],
+                ColumnValues = new(merged.Annotation.Toolbar.ColumnValues, StringComparer.Ordinal),
                 Actions = [.. merged.Annotation.Toolbar.Actions.Select(action => action with { })],
             };
             return result;
@@ -86,6 +87,11 @@ namespace RitsukageGif.Desktop
                 SameSequence(baseline.GlobalMouseBindings, edited.GlobalMouseBindings, static (a, b) => Same(a, b))
                     ? current.GlobalMouseBindings
                     : edited.GlobalMouseBindings,
+                GlobalMouseIgnoredPrograms =
+                SameSequence(baseline.GlobalMouseIgnoredPrograms, edited.GlobalMouseIgnoredPrograms,
+                    ProgramExclusionRules.Same)
+                    ? current.GlobalMouseIgnoredPrograms
+                    : edited.GlobalMouseIgnoredPrograms,
                 VideoRecording = Merge(current.VideoRecording, baseline.VideoRecording, edited.VideoRecording),
                 ScreenshotRecording = MergeRecordingPreferences(current.ScreenshotRecording,
                     baseline.ScreenshotRecording, edited.ScreenshotRecording),
@@ -227,6 +233,11 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<double>.Default.Equals(baseline.SelectionBorderWidth, edited.SelectionBorderWidth)
                     ? current.SelectionBorderWidth
                     : edited.SelectionBorderWidth,
+                SelectionBorderFollowsTheme =
+                EqualityComparer<bool>.Default.Equals(baseline.SelectionBorderFollowsTheme,
+                    edited.SelectionBorderFollowsTheme)
+                    ? current.SelectionBorderFollowsTheme
+                    : edited.SelectionBorderFollowsTheme,
                 SelectionBorderColor =
                 EqualityComparer<uint?>.Default.Equals(baseline.SelectionBorderColor, edited.SelectionBorderColor)
                     ? current.SelectionBorderColor
@@ -441,6 +452,9 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<AnnotationSizeLevel>.Default.Equals(baseline.NumberTextSize, edited.NumberTextSize)
                     ? current.NumberTextSize
                     : edited.NumberTextSize,
+                NumberForegroundUsesDefault = baseline.NumberForegroundUsesDefault == edited.NumberForegroundUsesDefault
+                    ? current.NumberForegroundUsesDefault
+                    : edited.NumberForegroundUsesDefault,
                 NumberForegroundColor =
                 EqualityComparer<uint?>.Default.Equals(baseline.NumberForegroundColor, edited.NumberForegroundColor)
                     ? current.NumberForegroundColor
@@ -504,6 +518,9 @@ namespace RitsukageGif.Desktop
                 TitlePosition = baseline.TitlePosition == edited.TitlePosition
                     ? current.TitlePosition
                     : edited.TitlePosition,
+                DisplayPosition = baseline.DisplayPosition == edited.DisplayPosition
+                    ? current.DisplayPosition
+                    : edited.DisplayPosition,
                 ActiveGroup = baseline.ActiveGroup == edited.ActiveGroup ? current.ActiveGroup : edited.ActiveGroup,
                 HideOthersOnShake = baseline.HideOthersOnShake == edited.HideOthersOnShake
                     ? current.HideOthersOnShake
@@ -564,12 +581,18 @@ namespace RitsukageGif.Desktop
                 EqualityComparer<double>.Default.Equals(baseline.MouseThroughOpacity, edited.MouseThroughOpacity)
                     ? current.MouseThroughOpacity
                     : edited.MouseThroughOpacity,
+                ShowMouseThroughToolbar = baseline.ShowMouseThroughToolbar == edited.ShowMouseThroughToolbar
+                    ? current.ShowMouseThroughToolbar
+                    : edited.ShowMouseThroughToolbar,
                 SelectableText = EqualityComparer<bool>.Default.Equals(baseline.SelectableText, edited.SelectableText)
                     ? current.SelectableText
                     : edited.SelectableText,
                 ShowTextPopupMenu = baseline.ShowTextPopupMenu == edited.ShowTextPopupMenu
                     ? current.ShowTextPopupMenu
                     : edited.ShowTextPopupMenu,
+                ConfirmLongTextPaste = baseline.ConfirmLongTextPaste == edited.ConfirmLongTextPaste
+                    ? current.ConfirmLongTextPaste
+                    : edited.ConfirmLongTextPaste,
                 TextHighlightColors = SameSequence(baseline.TextHighlightColors, edited.TextHighlightColors, SameColor)
                     ? current.TextHighlightColors
                     : edited.TextHighlightColors,
@@ -649,6 +672,12 @@ namespace RitsukageGif.Desktop
                 SkipClearConfirmation = baseline.SkipClearConfirmation == edited.SkipClearConfirmation
                     ? current.SkipClearConfirmation
                     : edited.SkipClearConfirmation,
+                SkipFileOnlyWarning = baseline.SkipFileOnlyWarning == edited.SkipFileOnlyWarning
+                    ? current.SkipFileOnlyWarning
+                    : edited.SkipFileOnlyWarning,
+                SkipMatchFailureWarning = baseline.SkipMatchFailureWarning == edited.SkipMatchFailureWarning
+                    ? current.SkipMatchFailureWarning
+                    : edited.SkipMatchFailureWarning,
                 RespondShortcuts =
                 EqualityComparer<bool>.Default.Equals(baseline.RespondShortcuts, edited.RespondShortcuts)
                     ? current.RespondShortcuts
@@ -1055,6 +1084,8 @@ namespace RitsukageGif.Desktop
                         static (a, b) => EqualityComparer<ScreenshotTool>.Default.Equals(a, b)))
                     ? current.Columns
                     : edited.Columns,
+                ColumnValues = MergeSettingDictionary(current.ColumnValues, baseline.ColumnValues, edited.ColumnValues,
+                    static (a, b) => a == b, static (_, _, value) => value),
                 Actions = SameSequence(baseline.Actions, edited.Actions, static (a, b) => Same(a, b))
                     ? current.Actions
                     : edited.Actions,

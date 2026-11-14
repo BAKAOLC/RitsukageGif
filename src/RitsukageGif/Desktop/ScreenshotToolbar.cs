@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -17,6 +18,7 @@ namespace RitsukageGif.Desktop
         private readonly StackPanel _body = new() { Spacing = 3 };
         private readonly Button? _cancel;
         private readonly WrapPanel _commandRow;
+        private readonly ScrollViewer _commandScroll;
         private readonly Border _contextFrame;
         private readonly Button _copy;
         private readonly Button _delete;
@@ -24,7 +26,7 @@ namespace RitsukageGif.Desktop
         private readonly TextBlock _error = new() { Foreground = Brushes.OrangeRed, TextWrapping = TextWrapping.Wrap };
         private readonly PixelRect _monitor;
         private readonly Button _more;
-        private readonly Flyout _moreCommands = new() { OverlayDismissEventPassThrough = true };
+        private readonly HoverPropertyPanel _moreCommands;
         private readonly Button _moveHandle;
         private readonly Button _outputButton;
         private readonly ComboBox _outputColor;
@@ -48,7 +50,6 @@ namespace RitsukageGif.Desktop
         private Size _placedSize;
         private PixelPoint _placementMouse;
         private bool _refreshing;
-        private string? _scrollTip;
         private IReadOnlyList<SelectionCommandDefinition> _shortcutBindings;
 
         public ScreenshotToolbar(ScreenshotAnnotationSession session, PixelRect monitor, double scale,
@@ -71,6 +72,12 @@ namespace RitsukageGif.Desktop
             Padding = new(0);
             Child = new ThemeVariantScope { Child = _body };
             _commandRow = new() { Orientation = Orientation.Horizontal };
+            _commandScroll = new()
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = _commandRow,
+            };
             _annotationTools = new(session, () => _ = EditToolbarAsync(true));
             _toolStrip.Children.Add(_annotationTools);
             _undo = RegisterAction(ToolbarActionId.Undo, session.Undo);
@@ -125,17 +132,18 @@ namespace RitsukageGif.Desktop
                 Child = new StackPanel { Spacing = 8, Children = { outputLabel, _outputColor } },
             };
             _outputButton = RegisterAction(ToolbarActionId.OutputColor, () => _outputProperties.ShowAt(_outputButton!));
-            _more = SmallButton("ScreenshotMore", ShowMoreMenu);
-            InitializeCustomizationMenu();
+            _more = SmallButton("ScreenshotMore");
+            _moreCommands = CreateMoreMenu();
             _moveHandle = CreateMoveHandle();
             _commandRow.Children.Add(_moveHandle);
             _commandRow.Children.Add(_toolStrip);
+            _commandRow.Children.Add(Group(_undo));
             _commandRow.Children.Add(Group(_functionStrip));
             _commandRow.Children.Add(_more);
             _propertyPresenter = new(session, dialogScopeProvider);
             _contextFrame = Frame(_propertyPresenter, 3);
             _contextFrame.IsVisible = false;
-            _body.Children.Add(Frame(_commandRow, 3));
+            _body.Children.Add(Frame(_commandScroll, 3));
             _body.Children.Add(_contextFrame);
             _body.Children.Add(_error);
             _session.Changed += SessionChanged;
@@ -156,13 +164,16 @@ namespace RitsukageGif.Desktop
             {
                 field = value;
                 _moveHandle.IsVisible = !value;
+                _commandScroll.HorizontalScrollBarVisibility = value
+                    ? ScrollBarVisibility.Disabled
+                    : ScrollBarVisibility.Auto;
             }
         }
 
         public Rect OccupiedBounds => IsVisible && Opacity > 0
-            ? new Rect(Margin.Left, Margin.Top,
-                !IsDocked && _placedSize.Width > 0 ? _placedSize.Width : Bounds.Width,
-                !IsDocked && _placedSize.Height > 0 ? _placedSize.Height : Bounds.Height)
+            ? new Rect(_desktopPlacement is null ? new(Margin.Left, Margin.Top) : _displayedPosition,
+                new Size((!IsDocked && _placedSize.Width > 0 ? _placedSize.Width : Bounds.Width) * _displayedScale,
+                    (!IsDocked && _placedSize.Height > 0 ? _placedSize.Height : Bounds.Height) * _displayedScale))
             : default;
 
         public void Dispose()
@@ -174,7 +185,7 @@ namespace RitsukageGif.Desktop
             _annotationTools.Dispose();
             HideToolGroups();
             _outputProperties.Hide();
-            _moreCommands.Hide();
+            _moreCommands.Dispose();
             _session.Changed -= SessionChanged;
             _session.ArrowCommentRequested -= ArrowCommentRequested;
             UiText.LanguageChanged -= RefreshHints;
@@ -200,7 +211,7 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        internal static Button SmallButton(string key, Action action, IconDefinition? geometry = null)
+        internal static Button SmallButton(string key, Action? action = null, IconDefinition? geometry = null)
         {
             var extent = AppTheme.CurrentAppearance.ToolbarIconSize switch
             {
@@ -222,7 +233,7 @@ namespace RitsukageGif.Desktop
             button.Content = icon;
             button.SetValue(TooltipBindingProperty, button.Bind(ToolTip.TipProperty, LiveText.Resource(key)));
             button.Bind(AutomationProperties.NameProperty, LiveText.Resource(key));
-            button.Click += (_, _) => action();
+            if (action is not null) button.Click += (_, _) => action();
             return button;
         }
 
@@ -298,8 +309,8 @@ namespace RitsukageGif.Desktop
             }
 
             _propertyPresenter.Reset();
+            RefreshMoveHandleTip(_moveHandle);
             _lastHdrAvailable = null;
-            _scrollTip = null;
             SessionChanged();
             RefreshShortcutHints();
         }
@@ -327,7 +338,11 @@ namespace RitsukageGif.Desktop
             if (_actionButtons.TryGetValue(ToolbarActionId.Print, out var printAction))
                 SetShortcutTip(printAction, SelectionCommand.Print,
                     detailKey: ScreenshotPrintService.IsAvailable ? null : "PrintUnavailable");
+            if (_cancel is not null) SetShortcutTip(_cancel, SelectionCommand.Cancel);
+            if (_actionButtons.TryGetValue(ToolbarActionId.WindowPin, out var windowPin))
+                SetShortcutTip(windowPin, SelectionCommand.WindowPin);
             if (_record is not null) SetShortcutTip(_record, SelectionCommand.Record);
+            if (_scroll is not null) SetShortcutTip(_scroll, SelectionCommand.ScrollVertical);
             SetShortcutTip(_undo, SelectionCommand.Undo);
             SetShortcutTip(_redo, SelectionCommand.Redo);
             SetShortcutTip(_recognitionButtons[0], SelectionCommand.RecognizeTextAndCopy);
@@ -345,8 +360,17 @@ namespace RitsukageGif.Desktop
                 IsDrawing: true, IsDrawingPolyline: false, IsBusy: false,
                 IsPrivacyDetectionActive: false,
             };
-            Opacity = drawing ? 0 : 1;
-            IsHitTestVisible = !drawing;
+            _hideWhileDrawing = drawing;
+            if (_desktopPlacement is null)
+            {
+                Opacity = drawing ? 0 : 1;
+                IsHitTestVisible = !drawing;
+            }
+            else
+            {
+                UpdateDesktopVisibility();
+            }
+
             if (_session.IsBusy)
             {
                 _outputProperties.Hide();
@@ -371,17 +395,7 @@ namespace RitsukageGif.Desktop
             if (_actionButtons.TryGetValue(ToolbarActionId.WindowPin, out var windowPin))
                 windowPin.IsEnabled = _session.CanPinWindow;
             _cancel?.IsEnabled = true;
-            if (_scroll is not null)
-            {
-                _scroll.IsEnabled = _session.CanStartScrolling;
-                var tip = _session.HasAnnotations ? "ScreenshotScrollUndoAnnotations" : "ScreenshotScroll";
-                if (_scrollTip != tip)
-                {
-                    _scrollTip = tip;
-                    SetShortcutTip(_scroll, SelectionCommand.ScrollVertical,
-                        detailKey: tip == "ScreenshotScroll" ? null : tip);
-                }
-            }
+            _scroll?.IsEnabled = _session.CanStartScrolling;
 
             _refreshing = true;
             try
@@ -413,14 +427,22 @@ namespace RitsukageGif.Desktop
 
             _error.Text = _session.Error;
             _error.IsVisible = !string.IsNullOrEmpty(_session.Error);
-            if (_ownsToolbar && !_placedRegion.IsEmpty) Refresh(_placedRegion, _placementMouse, true);
+            if ((_ownsToolbar || (IsVisible && _desktopPlacement is not null)) && !_placedRegion.IsEmpty)
+                Refresh(_placedRegion, _placementMouse, _ownsToolbar);
         }
 
         public void Refresh(PixelRect selected, PixelPoint mouse, bool ownsToolbar)
         {
+            var desktopPlacement = _desktopPlacement;
+            if (desktopPlacement is not null && _desktopOverlay is { } overlay)
+                ownsToolbar = desktopPlacement.OwnsDesktopScreenshotToolbar(overlay, selected);
+
             _ownsToolbar = ownsToolbar;
             _placementMouse = mouse;
-            IsVisible = ownsToolbar && !selected.IsEmpty && _session.ToolbarVisible;
+            var manual = desktopPlacement?.ManualScreenshotToolbar;
+            var visible = !selected.IsEmpty && _session.ToolbarVisible;
+            IsVisible = visible &&
+                        (ownsToolbar || (manual is not null && desktopPlacement!.DesktopScreenshotToolbarVisible));
             if (!IsVisible)
             {
                 _placedSize = default;
@@ -432,6 +454,8 @@ namespace RitsukageGif.Desktop
 
             if (IsDocked)
             {
+                ArrangeFloatingLayers(false);
+                _moreCommands.SetPlacement(PlacementMode.Bottom);
                 Margin = default;
                 Width = double.NaN;
                 MaxWidth = double.PositiveInfinity;
@@ -440,31 +464,69 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            if (!IsVisible) return;
-            var available = new Size(Math.Max(1, Math.Min(600, _monitor.Width / Scale - 16)),
-                Math.Max(1, _monitor.Height / Scale - 16));
+            if (!IsVisible)
+            {
+                _desktopPrimary = false;
+                return;
+            }
+
+            var viewport = new Size(_monitor.Width / Scale, _monitor.Height / Scale);
+            var referenceViewport = manual?.Viewport ?? viewport;
+            var referenceScale = manual?.Scale ?? Scale;
+            var available = new Size(Math.Max(1, referenceViewport.Width - 16),
+                Math.Max(1, referenceViewport.Height - 16));
             MaxWidth = available.Width;
             MaxHeight = available.Height;
             var horizontalChrome = Padding.Left + Padding.Right + BorderThickness.Left + BorderThickness.Right;
             _body.Measure(available);
-            Width = Math.Min(Math.Ceiling((_body.DesiredSize.Width + horizontalChrome) * Scale) / Scale + 2,
+            Width = Math.Min(Math.Ceiling((_body.DesiredSize.Width + horizontalChrome) * referenceScale) /
+                referenceScale + 2,
                 available.Width);
             var verticalChrome = Padding.Top + Padding.Bottom + BorderThickness.Top + BorderThickness.Bottom;
             _body.Measure(new(Math.Max(1, Width - horizontalChrome), Math.Max(1, available.Height - verticalChrome)));
             var width = Width;
             var height = Math.Min(_body.DesiredSize.Height + verticalChrome, available.Height);
             var measured = new Size(width, height);
+            if (manual is not null)
+            {
+                _placedRegion = selected;
+                _placedSize = measured;
+                _placedScale = 0;
+                UpdateDesktopDragPosition();
+                return;
+            }
+
             if (_placedRegion == selected && _placedSize == measured && _placedScale.Equals(Scale)) return;
             _placedRegion = selected;
             _placedSize = measured;
             _placedScale = Scale;
             var selection = new Rect((selected.X - _monitor.X) / Scale, (selected.Y - _monitor.Y) / Scale,
                 selected.Width / Scale, selected.Height / Scale);
-            var viewport = new Size(_monitor.Width / Scale, _monitor.Height / Scale);
-            var position = TryGetManualPosition(viewport, measured, out var manual)
-                ? manual
-                : ScreenshotToolbarLayout.Place(viewport, selection, measured);
-            Margin = new(position.X, position.Y, 0, 0);
+            if (!TryGetManualPosition(viewport, measured, out var position))
+            {
+                var placement = ScreenshotToolbarLayout.PlaceFloatingCapture(viewport, selection, measured);
+                position = placement.Position;
+                DesktopAbove = placement.Above;
+                _moreCommands.SetPlacement(placement.Above ? PlacementMode.Top : PlacementMode.Bottom);
+                ArrangeFloatingLayers(placement.Above);
+            }
+
+            if (desktopPlacement is null)
+            {
+                Margin = new(position.X, position.Y, 0, 0);
+            }
+            else
+            {
+                PlaceDesktop(position, 1);
+                SetDesktopInteraction(true, true, true);
+            }
+        }
+
+        private void ArrangeFloatingLayers(bool above)
+        {
+            var target = above ? 0 : 1;
+            var current = _body.Children.IndexOf(_contextFrame);
+            if (current != target) _body.Children.Move(current, target);
         }
     }
 }

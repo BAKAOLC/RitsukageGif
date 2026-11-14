@@ -18,7 +18,9 @@ namespace RitsukageGif.Desktop
 
         internal void RequestWindowPin()
         {
-            if (CanPinWindow) WindowPinRequested?.Invoke();
+            if (!CanPinWindow) return;
+            CommitTextEdit();
+            WindowPinRequested?.Invoke();
         }
     }
 }

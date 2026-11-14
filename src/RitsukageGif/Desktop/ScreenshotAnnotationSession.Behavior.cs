@@ -51,7 +51,7 @@ namespace RitsukageGif.Desktop
             return captured with
             {
                 LastTool = preferences.LastTool, RememberLastTool = preferences.RememberLastTool,
-                PinnedLastTool = preferences.RememberPinnedTool ? Tool.ToString() : preferences.PinnedLastTool,
+                PinnedLastTool = preferences.RememberPinnedTool ? captured.LastTool : preferences.PinnedLastTool,
             };
         }
 
@@ -61,7 +61,7 @@ namespace RitsukageGif.Desktop
             Move(point);
         }
 
-        private Task AdjustToolWheelAsync(int delta)
+        private Task AdjustToolWheelAsync(int delta, KeyModifiers modifiers)
         {
             if (_behavior.DisableWheelToolAdjustment || delta == 0 || IsBusy || IsDrawing) return Task.CompletedTask;
             if (_hoverPoint is { } pointer && FindAnnotation(pointer) is { Tool: ScreenshotTool.Magnifier } hovered)
@@ -87,6 +87,12 @@ namespace RitsukageGif.Desktop
             return tool switch
             {
                 ScreenshotTool.Select => Task.CompletedTask,
+                ScreenshotTool.Spotlight => modifiers == KeyModifiers.None
+                    ? UpdateSelectedPropertiesAsync(Properties with
+                    {
+                        Opacity = Math.Clamp(Properties.Opacity + step * .05, .01, 1),
+                    })
+                    : Task.CompletedTask,
                 ScreenshotTool.Text =>
                     UpdateSelectedStyleAsync(fontSize: Math.Clamp(FontSize + step * 2, 1, 1024)),
                 ScreenshotTool.Watermark =>
@@ -121,7 +127,7 @@ namespace RitsukageGif.Desktop
                     (byte)Math.Round(alpha * 255 / 100, MidpointRounding.AwayFromZero), Color.R, Color.G, Color.B));
             }
 
-            return AdjustToolWheelAsync(delta);
+            return AdjustToolWheelAsync(delta, modifiers);
         }
 
         public void NotifyHover(PixelPoint? point)

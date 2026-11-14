@@ -9,13 +9,13 @@ namespace RitsukageGif.Desktop
     // ReSharper disable once ClassCannotBeInstantiated
     internal sealed partial class RecognitionWindow
     {
-        private readonly List<RecognitionTextRange> _textWordRanges = [];
         private readonly List<Rect> _textHighlightBounds = [];
-        private ImageTextSelectionDocument _originalTextDocument = ImageTextSelectionDocument.Empty;
+        private readonly List<RecognitionTextRange> _textWordRanges = [];
+        private Task _closingCopyTask = Task.CompletedTask;
+        private Task _copyTask = Task.CompletedTask;
         private OcrRecognitionResult? _documentResult;
         private bool _documentRightToLeft;
-        private Task _copyTask = Task.CompletedTask;
-        private Task _closingCopyTask = Task.CompletedTask;
+        private ImageTextSelectionDocument _originalTextDocument = ImageTextSelectionDocument.Empty;
         private char[] _textRangeBuffer = [];
 
         private RecognitionPreferences TextFormattingPreferences => _preferences with
@@ -137,11 +137,16 @@ namespace RitsukageGif.Desktop
 
         private void ClosingTextRecognition(object? sender, WindowClosingEventArgs args)
         {
-            if (_closingCopy || _copyCompleted || !_dialogOptions.CopyTextOnClose ||
-                _lifetime.IsCancellationRequested || string.IsNullOrEmpty(_text.Text)) return;
-            args.Cancel = true;
-            _closingCopy = true;
-            _closingCopyTask = CopyAndCloseTextAsync();
+            if (!_closingCopy && !_copyCompleted && _dialogOptions.CopyTextOnClose &&
+                !_lifetime.IsCancellationRequested && !string.IsNullOrEmpty(_text.Text))
+            {
+                args.Cancel = true;
+                _closingCopy = true;
+                _closingCopyTask = CopyAndCloseTextAsync();
+                return;
+            }
+
+            if (!_lifetime.IsCancellationRequested) RememberTextDialogSize();
         }
 
         private async Task CopyAndCloseTextAsync()

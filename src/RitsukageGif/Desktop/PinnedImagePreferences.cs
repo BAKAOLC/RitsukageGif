@@ -7,6 +7,7 @@ namespace RitsukageGif.Desktop
         public bool Topmost { get; set; } = true;
         public bool ShowWindowShadow { get; set; } = true;
         public PinnedTitlePosition TitlePosition { get; set; }
+        public PinnedDisplayPosition DisplayPosition { get; set; }
         public bool HideOthersOnShake { get; set; }
         public bool KeepOthersHiddenOnNewPin { get; set; }
         public bool SkipNegativeSpacingConfirmation { get; set; }
@@ -29,9 +30,11 @@ namespace RitsukageGif.Desktop
         public double FineZoomStep { get; set; } = 0.01;
         public double OpacityStep { get; set; } = 0.05;
         public double MouseThroughOpacity { get; set; } = 0.5;
+        public bool ShowMouseThroughToolbar { get; set; }
         public bool SelectableText { get; set; } = true;
         public bool ThumbnailSelectableText { get; set; }
         public bool ShowTextPopupMenu { get; set; } = true;
+        public bool ConfirmLongTextPaste { get; set; } = true;
 
         // ReSharper disable once TypeWithSuspiciousEqualityIsUsedInRecord.Global
         public List<string> TextHighlightColors { get; set; } =
@@ -76,6 +79,9 @@ namespace RitsukageGif.Desktop
                 QuickThumbnailWidth = QuickThumbnailWidth is { } width ? Math.Max(1, width) : null,
                 QuickThumbnailHeight = QuickThumbnailHeight is { } height ? Math.Max(1, height) : null,
                 TitlePosition = Enum.IsDefined(TitlePosition) ? TitlePosition : PinnedTitlePosition.BottomCenter,
+                DisplayPosition = Enum.IsDefined(DisplayPosition)
+                    ? DisplayPosition
+                    : PinnedDisplayPosition.ScreenshotLocation,
                 ActiveGroup = ActiveGroup is { Length: 0 } || groups.Any(group => group.Id == ActiveGroup)
                     ? ActiveGroup
                     : "",

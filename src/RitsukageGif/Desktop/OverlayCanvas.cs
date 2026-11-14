@@ -13,11 +13,17 @@ namespace RitsukageGif.Desktop
         private readonly PixelRect _monitor;
         private readonly int _radius, _threshold;
         private IImage _bitmap;
-        private IPen _candidatePen = new Pen(new SolidColorBrush(Color.FromRgb(255, 203, 97)), 1.5, DashStyle.Dash);
+
+        private Pen _candidatePen = new(new SolidColorBrush(Color.FromRgb(255, 203, 97)),
+            AppearancePreferences.DefaultSelectionBorderWidth, DashStyle.Dash);
+
         private IBrush _dimBrush = new SolidColorBrush(Color.FromArgb(110, 0, 0, 0));
         private SelectionEdgeDetector _edges;
         private byte[] _pixels;
-        private IPen _selectedPen = new Pen(new SolidColorBrush(Color.FromRgb(48, 137, 255)));
+
+        private IPen _selectedPen = new Pen(new SolidColorBrush(Color.FromRgb(48, 137, 255)),
+            AppearancePreferences.DefaultSelectionBorderWidth);
+
         private IBrush _selectionBrush = new SolidColorBrush(Color.FromRgb(48, 137, 255));
 
         public OverlayCanvas(PixelRect monitor, byte[] pixels, int radius = 12, int threshold = 150, bool tiled = false)
@@ -52,12 +58,24 @@ namespace RitsukageGif.Desktop
         public PixelRect Selected { get; set; }
         public PixelPoint Mouse { get; set; }
         public int Mode { get; set; }
-        public double Scale { get; set; } = 1;
+
+        public double Scale
+        {
+            get;
+            set
+            {
+                if (field.Equals(value)) return;
+                field = value;
+                UpdateSelectionPens();
+            }
+        } = 1;
 
         public void Dispose()
         {
             _selectionAnimationTick?.Dispose();
             _selectionAnimationTick = null;
+            _magnifierSample?.Dispose();
+            _magnifierSamplePixels?.Dispose();
             ((IDisposable)_bitmap).Dispose();
         }
 
@@ -133,46 +151,39 @@ namespace RitsukageGif.Desktop
                     }
                 }
 
-                var pen = IsCandidate ? _candidatePen : _selectedPen;
-                using var borderOpacity = context.PushOpacity(SelectionBorderOpacity());
-                if (SelectionGeometry() is { } shapeBorder)
-                {
-                    context.DrawGeometry(null, pen, shapeBorder);
-                }
-                else
-                {
-                    // Only draw actual selection edges, never artificial seams between monitors.
-                    if (intersection.X == Selected.X)
-                        context.DrawLine(pen, destination.TopLeft, destination.BottomLeft);
-                    if (intersection.Right == Selected.Right)
-                        context.DrawLine(pen, destination.TopRight, destination.BottomRight);
-                    if (intersection.Y == Selected.Y) context.DrawLine(pen, destination.TopLeft, destination.TopRight);
-                    if (intersection.Bottom == Selected.Bottom)
-                        context.DrawLine(pen, destination.BottomLeft, destination.BottomRight);
-                }
+                DrawSelectionBorder(context, intersection, destination);
+            }
+            else if (IsScreenshotRectangle)
+            {
+                DrawSelectionBorder(context, intersection, default);
             }
 
             // The scrollable screenshot preview has its own fixed toolbar; screen HUD coordinates do not apply to the full image.
             DrawFrameDecoration(context);
             if (_bitmap is ScreenshotTiledImage) return;
-            if (Snapshot?.Phase == SelectionPhase.Selected || Manipulating) DrawSelectionHandles(context);
+            DrawSelectionHandles(context);
             if (!ExternalHintsSurface) RenderHints(context);
         }
 
         internal void RenderHints(DrawingContext context)
         {
             if (_bitmap is ScreenshotTiledImage) return;
-            _hintStatusBounds = _hintActionsBounds = _hintMagnifierBounds = default;
-            if (_monitor.Contains(Mouse))
-                DrawHint(context, new((Mouse.X - _monitor.X) / Scale, (Mouse.Y - _monitor.Y) / Scale), true);
-            DrawAuxiliaryLines(context, new((Mouse.X - _monitor.X) / Scale, (Mouse.Y - _monitor.Y) / Scale));
+            var mouse = new Point((Mouse.X - _monitor.X) / Scale, (Mouse.Y - _monitor.Y) / Scale);
+            var ownsHints = _monitor.Contains(Mouse);
+            var pointer = MagnifierPointer ?? Mouse;
+            var sampleCanvas = MagnifierSampleCanvas ?? (ownsHints ? this : null);
+            _hintStatusBounds = _hintActionsBounds = default;
+            _hintMagnifierBounds = sampleCanvas is not null && _monitor.Contains(pointer)
+                ? GetMagnifierFrame(new((pointer.X - _monitor.X) / Scale, (pointer.Y - _monitor.Y) / Scale))
+                : default;
 
-            if (_monitor.Contains(Mouse))
-            {
-                var x = (Mouse.X - _monitor.X) / Scale;
-                var y = (Mouse.Y - _monitor.Y) / Scale;
-                DrawHint(context, new(x, y));
-            }
+            if (ownsHints) DrawHint(context, mouse, true);
+            DrawAuxiliaryLines(context, mouse);
+            if (ownsHints) DrawHint(context, mouse);
+            if (sampleCanvas is null || _hintMagnifierBounds is not { Width: > 0, Height: > 0 } lens) return;
+            context.DrawRectangle(HintBackground, HintBorder, lens, 6, 6);
+            sampleCanvas.DrawMagnifier(context, new(lens.X, lens.Y, MagnifierWidth, MagnifierHeight));
+            sampleCanvas.DrawMagnifierDetails(context, lens);
         }
     }
 }

@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
 using Avalonia.Threading;
+using RitsukageGif.DragPreview;
 
 namespace RitsukageGif.Desktop
 {
@@ -12,14 +13,14 @@ namespace RitsukageGif.Desktop
     {
         private static readonly IBrush TextSelectionBrush = AppTheme.Accent;
         private static readonly ITextRecognitionService DefaultTextRecognition = new OcrRecognitionService();
-        private OcrRecognitionResult? _recognizedText;
-        private ImageTextSelection _textSelection = new(ImageTextSelectionDocument.Empty);
         private bool _pendingTextDrag;
-        private PointerPressedEventArgs? _textSelectionDragTrigger;
+        private OcrRecognitionResult? _recognizedText;
         private bool _selectingText;
         private bool _textRecognitionAttempted;
-        private bool _textRecognitionInitialized;
         private CancellationTokenSource? _textRecognitionCancellation;
+        private bool _textRecognitionInitialized;
+        private ImageTextSelection _textSelection = new(ImageTextSelectionDocument.Empty);
+        private PointerPressedEventArgs? _textSelectionDragTrigger;
         private PinnedTextSelectionSurface? _textSelectionSurface;
         public Func<ITextRecognitionService>? TextRecognitionServiceProvider { get; set; }
         public Func<RecognitionPreferences> RecognitionPreferencesProvider { get; set; } = () => new();
@@ -122,9 +123,9 @@ namespace RitsukageGif.Desktop
             return ActiveTextSelection.Hit(TextImagePoint(point));
         }
 
-        private static bool IgnoreRecognizedText(PointerPressedEventArgs args)
+        private static bool IgnoreRecognizedText(PointerPressedEventArgs args, int clickCount)
         {
-            var kind = args.ClickCount >= 2 ? MouseGestureKind.LeftDoubleClick : MouseGestureKind.LeftClick;
+            var kind = clickCount >= 2 ? MouseGestureKind.LeftDoubleClick : MouseGestureKind.LeftClick;
             foreach (var binding in MouseBindings)
             {
                 if (binding.Gesture.Modifiers != args.KeyModifiers) continue;
@@ -139,17 +140,17 @@ namespace RitsukageGif.Desktop
             return false;
         }
 
-        private bool TryBeginTextSelection(PointerPressedEventArgs args)
+        private bool TryBeginTextSelection(PointerPressedEventArgs args, int clickCount)
         {
             if (_regionSelectionMode || !CanSelectImageText ||
                 (_activeTranslatedRaster is null && _recognizedText is null) ||
                 args.GetCurrentPoint(_image).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonPressed ||
-                IgnoreRecognizedText(args)) return false;
+                IgnoreRecognizedText(args, clickCount)) return false;
             var edges = GetResizeEdges(args.GetPosition(this));
             if (edges.Horizontal != 0 || edges.Vertical != 0) return false;
             _textSelectionMenu?.IsOpen = false;
             var point = TextImagePoint(args.GetPosition(_image));
-            if (args.ClickCount == 2 && ActiveTextSelection.SelectLine(point))
+            if (clickCount == 2 && ActiveTextSelection.SelectLine(point))
             {
                 _textSelectionMarkPreview = false;
                 ShowTextSelection();
@@ -199,10 +200,20 @@ namespace RitsukageGif.Desktop
             if (_pendingTextDrag && _textSelectionDragTrigger is { } trigger)
             {
                 var text = ActiveTextSelection.SelectedText;
+                if (_activeTranslatedRaster is null)
+                {
+                    var separator = RecognitionPreferencesProvider().Layout == RecognitionTextLayout.SingleLine
+                        ? " "
+                        : "\n";
+                    text = text.ReplaceLineEndings(separator);
+                }
+
                 _pendingTextDrag = false;
                 _selectingText = false;
                 _textSelectionDragTrigger = null;
-                _ = RunAsync(() => DragSelectedTextAsync(trigger, text));
+                var point = this.PointToScreen(args.GetPosition(this));
+                var scale = (Screens.ScreenFromPoint(point) ?? Screens.Primary)?.Scaling ?? RenderScaling;
+                _ = RunAsync(() => DragSelectedTextAsync(trigger, text, scale));
             }
             else if (ActiveTextSelection.Extend(TextImagePoint(args.GetPosition(_image))))
             {
@@ -284,7 +295,7 @@ namespace RitsukageGif.Desktop
             return ActiveTextSelection.SelectedText;
         }
 
-        private async Task DragSelectedTextAsync(PointerPressedEventArgs args, string text)
+        private async Task DragSelectedTextAsync(PointerPressedEventArgs args, string text, double scale)
         {
             var transfer = new DataTransfer();
             var item = new DataTransferItem();
@@ -293,7 +304,19 @@ namespace RitsukageGif.Desktop
             _mouseGesture.Reset();
             _pressedButtons.Clear();
             args.Pointer.Capture(null);
-            await DragDrop.DoDragDropAsync(args, transfer, DragDropEffects.Copy | DragDropEffects.Move);
+            IDataTransfer data = transfer;
+            try
+            {
+                if (PinnedTextDragPreview.Create(text, new(FontFamily), scale) is { } preview)
+                    data = new PreviewDataTransfer(transfer, preview.Bitmap, preview.HotSpot, scale);
+            }
+            catch (Exception error) when (error is ArgumentException or InvalidOperationException
+                                              or NotSupportedException)
+            {
+                PinLogger.ZLogDebug(error, $"Selected text drag preview could not be rendered.");
+            }
+
+            await DragDrop.DoDragDropAsync(args, data, DragDropEffects.Copy | DragDropEffects.Move);
         }
 
         private async Task CopySelectedTextAsync()

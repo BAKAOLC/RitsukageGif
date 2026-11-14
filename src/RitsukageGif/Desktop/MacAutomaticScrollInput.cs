@@ -20,12 +20,13 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             UnavailableReason = null;
             if (!ValidateRegion(region)) return AutomaticScrollInputResult.Unavailable;
-            if (!Native.TryGetPointer(out var pointer) || pointer.X < region.X || pointer.Y < region.Y ||
-                pointer.X >= region.Right || pointer.Y >= region.Bottom)
-                return Unavailable("Move the pointer inside the capture region to use automatic scrolling.");
-            if (!Native.ReadWindows(target.Handle, pointer, out var owner, out var front) || owner != process ||
-                front != target.Handle)
-                return Unavailable("The pointer is no longer over the selected window.");
+            if (!Native.TryGetPointer(out var pointer) || !double.IsFinite(pointer.X) || !double.IsFinite(pointer.Y))
+                return Unavailable("The current pointer position is unavailable.");
+            if (!Native.ReadWindows(target.Handle, pointer, out var owner, out var front) || owner != process)
+                return Unavailable("The selected capture window is no longer available.");
+            if (pointer.X < region.X || pointer.Y < region.Y || pointer.X >= region.Right || pointer.Y >= region.Bottom)
+                return AutomaticScrollInputResult.PointerOutside;
+            if (front != target.Handle) return Unavailable("The pointer is no longer over the selected window.");
             token.ThrowIfCancellationRequested();
             if (Native.PostScroll(process, axis, pointer)) return AutomaticScrollInputResult.Sent;
             UnavailableReason = "The pointer scroll event could not be created.";

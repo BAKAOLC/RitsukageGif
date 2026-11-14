@@ -10,58 +10,75 @@ namespace RitsukageGif.Desktop
         private static readonly ILogger DocumentOutputLogger = LogHub.GetLogger("Desktop.RecognitionOutput");
         private readonly RecognitionDocumentOutput _documentOutput;
         private readonly Button _formulaOpenWord = new();
+        private bool _tablePrintAvailable;
         private bool _tablePrintCapabilityPending;
+        private MenuItem? _tablePrintMenuItem;
 
         private void AddTablePrintItem(ContextMenu menu)
         {
             var item = new MenuItem();
             ToolTip.SetShowOnDisabled(item, true);
-            item.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("Print"));
+            item.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("TablePrintSelection"));
             item.Icon = ToolbarIcon.Create(item, ToolbarIcon.GetDefinition("Print"));
-            item.Click += (_, _) => _operation = PrintTableAsync();
+            item.Click += (_, _) => _operation = PrintTableAsync(true);
+            _tablePrintMenuItem = item;
             menu.Opening += (_, _) =>
             {
-                item.IsEnabled = !_busy && !_lifetime.IsCancellationRequested && _table.Document is not null &&
-                                 _documentOutput.CanPrint;
-                ToolTip.SetTip(item, _documentOutput.CanPrint ? null : UiText.Get("PrintUnavailable"));
-                _ = RefreshTablePrintCapabilitiesAsync(item);
+                UpdateTablePrintState();
+                _ = RefreshTablePrintCapabilitiesAsync();
             };
             menu.Items.Add(item);
         }
 
-        private async Task RefreshTablePrintCapabilitiesAsync(MenuItem item)
+        private void UpdateTablePrintState()
+        {
+            var ready = !_busy && !_lifetime.IsCancellationRequested && _table.Document is not null;
+            _tablePrint.IsEnabled = ready && _tablePrintAvailable;
+            var unavailableTip = _tablePrintAvailable || _tablePrintCapabilityPending
+                ? null
+                : UiText.Get("PrintUnavailable");
+            ToolTip.SetTip(_tablePrint, unavailableTip);
+            if (_tablePrintMenuItem is not { } item) return;
+            item.IsEnabled = _tablePrint.IsEnabled && _table.HasSelection;
+            ToolTip.SetTip(item, unavailableTip);
+        }
+
+        private async Task RefreshTablePrintCapabilitiesAsync()
         {
             if (_tablePrintCapabilityPending || _lifetime.IsCancellationRequested) return;
             _tablePrintCapabilityPending = true;
+            UpdateTablePrintState();
             using var work = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
             work.CancelAfter(TimeSpan.FromSeconds(6));
             try
             {
                 var capabilities = await _documentOutput.GetPrintCapabilitiesAsync(work.Token);
                 if (_lifetime.IsCancellationRequested) return;
-                item.IsEnabled = !_busy && _table.Document is not null && capabilities.Available;
-                ToolTip.SetTip(item, capabilities.Available ? null : UiText.Get("PrintUnavailable"));
+                _tablePrintAvailable = capabilities.Available;
                 if (!capabilities.Available)
                     DocumentOutputLogger.ZLogDebug(
                         $"Native table printing unavailable. Detail={capabilities.FailureReason}");
             }
             catch (OperationCanceledException) when (work.IsCancellationRequested)
             {
+                _tablePrintAvailable = false;
             }
             catch (Exception error)
             {
+                _tablePrintAvailable = false;
                 DocumentOutputLogger.ZLogDebug(error, $"Native table print availability query failed.");
             }
             finally
             {
                 _tablePrintCapabilityPending = false;
+                if (!_lifetime.IsCancellationRequested) UpdateTablePrintState();
             }
         }
 
-        private Task PrintTableAsync()
+        private Task PrintTableAsync(bool selectionOnly)
         {
-            if (_busy || _lifetime.IsCancellationRequested ||
-                TableForOutput() is not { } table)
+            if (!_tablePrint.IsEnabled || (selectionOnly && !_table.HasSelection) ||
+                TableForOutput(selectionOnly) is not { } table)
                 return Task.CompletedTask;
             var owner = TryGetPlatformHandle()?.Handle ?? 0;
             return RunDocumentOutputAsync(async token =>
@@ -69,13 +86,17 @@ namespace RitsukageGif.Desktop
                 try
                 {
                     var printed = await _documentOutput.PrintTableAsync(owner, table, TablePrintRenderer.DefaultOptions,
-                        UiText.Get("TableRecognition"), token);
+                        UiText.Get("TablePrintTitle"), token);
                     if (!printed && !_lifetime.IsCancellationRequested)
                         _status.Text = UiText.Get("RecognitionCancelled");
                 }
                 catch (PlatformNotSupportedException)
                 {
-                    if (!_lifetime.IsCancellationRequested) _status.Text = UiText.Get("PrintUnavailable");
+                    if (!_lifetime.IsCancellationRequested)
+                    {
+                        _tablePrintAvailable = false;
+                        _status.Text = UiText.Get("PrintUnavailable");
+                    }
                 }
             });
         }
@@ -115,9 +136,9 @@ namespace RitsukageGif.Desktop
             });
         }
 
-        private Task OpenTableExcelAsync()
+        private Task OpenTableExcelAsync(bool selectionOnly)
         {
-            if (_busy || _lifetime.IsCancellationRequested || TableForOutput() is not { } table)
+            if (_busy || _lifetime.IsCancellationRequested || TableForOutput(selectionOnly) is not { } table)
                 return Task.CompletedTask;
             return RunDocumentOutputAsync(async token =>
             {

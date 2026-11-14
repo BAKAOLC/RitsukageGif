@@ -21,16 +21,23 @@ namespace RitsukageGif.Desktop
             root.AddHandler(InputElement.PointerEnteredEvent, RememberPointer, RoutingStrategies.Tunnel, true);
         }
 
+        internal Point? PointerPosition =>
+            _source is { } source && IsPointerCurrent(source) ? _position : null;
+
         internal bool Raise(int direction)
         {
-            if (_source is not { } source || _pointer is not { } pointer || !_root.IsPointerOver ||
-                source.GetPresentationSource() != _root.GetPresentationSource()) return false;
+            if (_source is not { } source || _pointer is not { } pointer || !IsPointerCurrent(source)) return false;
 #pragma warning disable CS0618
             var wheel = new PointerWheelEventArgs(source, pointer, _root, _position, _timestamp,
                 new(), KeyModifiers.None, new(0, direction));
 #pragma warning restore CS0618
             source.RaiseEvent(wheel);
             return wheel.Handled;
+        }
+
+        private bool IsPointerCurrent(InputElement source)
+        {
+            return _root.IsPointerOver && source.GetPresentationSource() == _root.GetPresentationSource();
         }
 
         private void RememberPointer(object? sender, PointerEventArgs args)

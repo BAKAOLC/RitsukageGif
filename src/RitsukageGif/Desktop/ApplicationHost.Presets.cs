@@ -113,21 +113,24 @@ namespace RitsukageGif.Desktop
         internal async Task StopScriptAsync(PresetDebugger? debugger)
         {
             if (debugger is null || !ReferenceEquals(debugger, _presets.Debugger)) return;
-            var operation = _operation;
-            var abort = _abort;
-            var stop = _stop;
-            var abortCancellation = abort?.CancelAsync() ?? Task.CompletedTask;
-            var stopCancellation = stop?.CancelAsync() ?? Task.CompletedTask;
+            var operation = _presets.CaptureRun().RecordingOperation;
+            var cancellation = OwnsActiveRecording(operation) && _abort is { } abort
+                ? abort.CancelAsync()
+                : Task.CompletedTask;
             DeactivatePreset();
-            Volatile.Write(ref _captureRegion, null);
             try
             {
-                await Task.WhenAll(abortCancellation, stopCancellation);
+                await cancellation;
             }
             finally
             {
                 if (operation is not null) await operation;
             }
+        }
+
+        private bool OwnsActiveRecording(Task<RecordingOutcome>? operation)
+        {
+            return operation is { IsCompleted: false } && ReferenceEquals(operation, _operation);
         }
 
         private void SetRegion(PixelRect region, bool requireMonitor = true)
@@ -137,9 +140,9 @@ namespace RitsukageGif.Desktop
             Notify();
         }
 
-        private void ValidateRegion(PixelRect region, bool requireMonitor)
+        private void ValidateRegion(PixelRect region, bool requireMonitor, int? divisor = null)
         {
-            new RecordingOptions(region, Divisor: Settings.Divisor).Validate();
+            new RecordingOptions(region, Divisor: divisor ?? Settings.Divisor).Validate();
             if (requireMonitor && Screens.All.All(s =>
                     region.Intersect(new(s.Bounds.X, s.Bounds.Y, s.Bounds.Width, s.Bounds.Height)).IsEmpty))
                 throw new ArgumentException(UiText.Get("NoMonitor"));
@@ -153,10 +156,18 @@ namespace RitsukageGif.Desktop
         private async Task ApplyPresetActionAsync(PresetAction action, PixelRect? region, bool waitForOutput)
         {
             if (IsClosing) return;
+            var owner = waitForOutput && _presets.ActivePreset is not null ? _presets.CaptureRun() : null;
             switch (action.Kind)
             {
                 case "startMany":
-                    StartMultiple(action.Outputs ?? throw new ArgumentException(UiText.Get("InvalidRecording")));
+                    var multiple = StartMultiple(action.Outputs ??
+                                                 throw new ArgumentException(UiText.Get("InvalidRecording")));
+                    if (owner is not null)
+                    {
+                        owner.RecordingOperation = multiple;
+                        owner.RecordingExplicitlyCancelled = false;
+                    }
+
                     return;
                 case "select":
                 case "follow":
@@ -184,25 +195,52 @@ namespace RitsukageGif.Desktop
                     await CopyAsync();
                     return;
                 case "start":
-                    _startOverrides = action.Settings;
-                    break;
+                    if (!CanToggleRecording || IsRecording || Region is not { } recordingRegion)
+                        throw new InvalidOperationException(UiText.Get("CommandNotReady"));
+                    View?.SaveCommon();
+                    var started = StartAnimationRecordingCore(recordingRegion, action.Settings);
+                    if (owner is not null)
+                    {
+                        owner.RecordingOperation = started;
+                        owner.RecordingExplicitlyCancelled = false;
+                    }
+
+                    if (started.IsCompleted) (await started).EnsureCompleted();
+                    return;
             }
 
-            var reply = await ExecuteCommandAsync([action.Kind == "finish" ? "stop" : action.Kind]);
-            if (!reply.Success)
+            switch (action.Kind)
             {
-                _startOverrides = null;
-                throw new InvalidOperationException(reply.Message);
+                case "finish" or "stop" or "cancel" when owner is not null:
+                    await CompletePresetRecordingAsync(owner, action.Kind);
+                    return;
+                default:
+                    var reply = await ExecuteCommandAsync([action.Kind == "finish" ? "stop" : action.Kind]);
+                    if (!reply.Success) throw new InvalidOperationException(reply.Message);
+                    return;
+            }
+        }
+
+        private async Task CompletePresetRecordingAsync(PresetControllerRun owner, string action)
+        {
+            if (owner.RecordingOperation is not { } operation) return;
+            if (OwnsActiveRecording(operation))
+            {
+                if (action == "cancel")
+                {
+                    owner.RecordingExplicitlyCancelled = true;
+                    if (_abort is { } abort) await abort.CancelAsync();
+                }
+                else if (IsRecording)
+                {
+                    await ToggleRecordingAsync();
+                }
             }
 
-            if (waitForOutput && action.Kind is "stop" or "cancel" && _presets.ActivePreset?.Program is not null &&
-                _operation is { } operation)
-            {
-                // Cancellation also must drain the operation before a subsequent script action may run.
-                // ReSharper disable once InlineTemporaryVariable
-                var outcome = await operation;
-                if (action.Kind == "stop") outcome.EnsureCompleted();
-            }
+            if (action != "finish" && owner.Preset.Program is null) return;
+            var outcome = await operation;
+            if (action == "stop" || (action == "finish" && (!outcome.Cancelled || !owner.RecordingExplicitlyCancelled)))
+                outcome.EnsureCompleted();
         }
 
         private sealed record CaptureRegion(PixelRect Region, nint Handle, WindowPreset? Preset)

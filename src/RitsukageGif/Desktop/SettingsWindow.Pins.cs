@@ -7,6 +7,29 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SettingsWindow
     {
+        internal Action<bool>? LongTextConfirmationBaselineChanged { private get; init; }
+        private event Action<bool>? LongTextConfirmationChanged;
+
+        internal void SynchronizeLongTextConfirmation(bool enabled)
+        {
+            LongTextConfirmationBaselineChanged?.Invoke(enabled);
+            _draft?.PinnedImages.ConfirmLongTextPaste = enabled;
+            _appliedSettings?.PinnedImages.ConfirmLongTextPaste = enabled;
+
+            var wasApplying = _applyingLiveSettings;
+            _applyingLiveSettings = true;
+            try
+            {
+                LongTextConfirmationChanged?.Invoke(enabled);
+            }
+            finally
+            {
+                _applyingLiveSettings = wasApplying;
+            }
+
+            RefreshDefaultPresentation();
+        }
+
         private StackPanel PinsPage(PinnedImagePreferences preferences,
             out Func<PinnedImagePreferences> read)
         {
@@ -54,6 +77,9 @@ namespace RitsukageGif.Desktop
             Setting(supported, static settings => settings.PinnedImages.SupportedContentKinds);
             page.Children.Add(MouseSettingsCard(supportedRow));
             var display = Group("PinnedImageDisplay");
+            var displayPosition = Setting(Choice(display, "PinnedDisplayPosition", (int)preferences.DisplayPosition,
+                "PinnedPositionScreenshot", "PinnedPositionMouse", "PinnedPositionPrimaryCenter",
+                "PinnedPositionMouseScreenCenter"), static settings => settings.PinnedImages.DisplayPosition);
             var shadow = Setting(Check(display, "PinnedImageWindowShadow", preferences.ShowWindowShadow),
                 static settings => settings.PinnedImages.ShowWindowShadow);
             var topmost = Setting(Check(display, "PinnedImageDefaultTopmost", preferences.Topmost),
@@ -165,6 +191,8 @@ namespace RitsukageGif.Desktop
             var through =
                 Setting(Number(zooming, "PinnedImageThroughOpacity", preferences.MouseThroughOpacity * 100, 15, 100),
                     static settings => settings.PinnedImages.MouseThroughOpacity);
+            var throughToolbar = Setting(Check(zooming, "PinnedMouseThroughToolbar",
+                preferences.ShowMouseThroughToolbar), static settings => settings.PinnedImages.ShowMouseThroughToolbar);
             var wheelAnchor = Setting(Choice(zooming, "PinnedImageWheelAnchor", (int)preferences.WheelZoomAnchor,
                     "PinnedImageAnchorTopLeft", "PinnedImageAnchorPointer", "PinnedImageAnchorCenter"),
                 static settings => settings.PinnedImages.WheelZoomAnchor);
@@ -197,14 +225,23 @@ namespace RitsukageGif.Desktop
             var textColors = PinnedTextColors(highlightColors);
             Row(imageText, "PinnedTextHighlightColors", textColors);
             Setting(textColors, static settings => settings.PinnedImages.TextHighlightColors, SettingsField.SameColors);
+            var textSettings = Group("PinnedTextSettings");
+            var confirmLongText = Setting(Check(textSettings, "PinnedConfirmLongTextPaste",
+                preferences.ConfirmLongTextPaste), static settings => settings.PinnedImages.ConfirmLongTextPaste);
+            confirmLongText.Name = "PinnedConfirmLongTextPaste";
+            LongTextConfirmationChanged += SynchronizeLongTextCheckBox;
+            RegisterContentCleanup(() => LongTextConfirmationChanged -= SynchronizeLongTextCheckBox);
+
             read = () => (preferences with
             {
                 SupportedContentKinds = supportedKinds,
                 SmoothScaling = smoothScaling.IsChecked == true,
                 TransparentLayer = (PinnedTransparentLayerMode)transparentLayer.SelectedIndex,
                 ShowTextPopupMenu = textMenu.IsChecked == true,
+                ConfirmLongTextPaste = confirmLongText.IsChecked == true,
                 TextHighlightColors = [.. highlightColors],
                 ShowWindowShadow = shadow.IsChecked == true,
+                DisplayPosition = (PinnedDisplayPosition)displayPosition.SelectedIndex,
                 TitlePosition = (PinnedTitlePosition)titlePosition.SelectedIndex,
                 HideOthersOnShake = shake.IsChecked == true,
                 KeepOthersHiddenOnNewPin = keepOthers.IsChecked == true,
@@ -237,6 +274,7 @@ namespace RitsukageGif.Desktop
                 FineZoomStep = (double)ReadSettingsNumber(fine) / 100,
                 OpacityStep = (double)ReadSettingsNumber(opacityStep) / 100,
                 MouseThroughOpacity = (double)ReadSettingsNumber(through) / 100,
+                ShowMouseThroughToolbar = throughToolbar.IsChecked == true,
                 WheelZoomAnchor = (PinnedZoomAnchor)Math.Max(0, wheelAnchor.SelectedIndex),
                 ResetZoomAnchor = (PinnedZoomAnchor)Math.Max(0, resetAnchor.SelectedIndex),
                 HistoryLimit = decimal.ToInt32(ReadSettingsNumber(count)),
@@ -280,6 +318,11 @@ namespace RitsukageGif.Desktop
                 checkbox.Bind(ContentProperty, LiveText.Resource(key));
                 lockedOptions.Children.Add(checkbox);
                 return checkbox;
+            }
+
+            void SynchronizeLongTextCheckBox(bool enabled)
+            {
+                confirmLongText.IsChecked = enabled;
             }
 
             StackPanel Group(string key)

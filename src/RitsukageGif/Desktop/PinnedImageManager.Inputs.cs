@@ -8,7 +8,7 @@ namespace RitsukageGif.Desktop
     {
         private readonly SemaphoreSlim _inputGate = new(2);
 
-        public async Task PinHdrAsync(byte[] sdrPng, CapturedFrame hdr, double captureScaling = 1,
+        public async Task<PinnedImageWindow?> PinHdrAsync(byte[] sdrPng, CapturedFrame hdr, double captureScaling = 1,
             PixelPoint? position = null, PixelPoint contentOffset = default, CaptureWindowShape? windowShape = null,
             CancellationToken token = default)
         {
@@ -24,10 +24,10 @@ namespace RitsukageGif.Desktop
                 var content = await Task.Run(() =>
                         PinnedImageContent.FromHdr(png, PinnedImageContent.Decode(sdrPng, token), hdr), token)
                     .ConfigureAwait(false);
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                return await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     token.ThrowIfCancellationRequested();
-                    Pin(content, position, "", captureScaling, contentOffset, windowShape);
+                    return Pin(content, position, "", captureScaling, contentOffset, windowShape);
                 }, DispatcherPriority.Normal, token);
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        public async Task PinAsync(ReadOnlyMemory<byte> encoded, double captureScaling = 1,
+        public async Task<PinnedImageWindow?> PinAsync(ReadOnlyMemory<byte> encoded, double captureScaling = 1,
             PixelPoint? position = null, PixelPoint contentOffset = default, CaptureWindowShape? windowShape = null,
             CancellationToken token = default)
         {
@@ -58,7 +58,7 @@ namespace RitsukageGif.Desktop
             await _inputGate.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                await DecodeAndPinAsync(encoded, position, "", captureScaling, contentOffset, windowShape, token)
+                return await DecodeAndPinAsync(encoded, position, "", captureScaling, contentOffset, windowShape, token)
                     .ConfigureAwait(false);
             }
             finally
@@ -67,7 +67,7 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private async Task DecodeAndPinAsync(ReadOnlyMemory<byte> encoded, PixelPoint? position,
+        private async Task<PinnedImageWindow?> DecodeAndPinAsync(ReadOnlyMemory<byte> encoded, PixelPoint? position,
             string group, double captureScaling = 1, PixelPoint contentOffset = default,
             CaptureWindowShape? windowShape = null, CancellationToken token = default)
         {
@@ -77,12 +77,13 @@ namespace RitsukageGif.Desktop
             {
                 var content = await Task.Run(() => PinnedImageContent.Decode(encoded, token), token)
                     .ConfigureAwait(false);
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                var window = await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     token.ThrowIfCancellationRequested();
-                    Pin(content, position, group, captureScaling, contentOffset, windowShape);
+                    return Pin(content, position, group, captureScaling, contentOffset, windowShape);
                 }, DispatcherPriority.Normal, token);
                 PinLogger.ZLogDebug($"Pinned image decoding completed.");
+                return window;
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
@@ -101,23 +102,27 @@ namespace RitsukageGif.Desktop
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
+            var result = await PrepareClipboardPinAsync(clipboard, token);
+            return (await ConfirmClipboardPinAsync(result, null, token)).Handled;
+        }
+
+        private async Task<PinnedInputResult> PrepareClipboardPinAsync(IClipboard clipboard, CancellationToken token)
+        {
             using var transfer = await ReadClipboardCandidateAsync(clipboard.TryGetDataAsync, token);
-            if (transfer is null) return false;
+            if (transfer is null) return default;
             var kinds = Preferences.SupportedContentKinds;
-            if (kinds == PinnedContentKinds.None) return false;
+            if (kinds == PinnedContentKinds.None) return default;
             var snapshot = await PinnedClipboardSnapshot.ReadEnabledAsync(transfer, kinds, token);
-            var result = await PinInputSnapshotAsync(snapshot, kinds,
+            return await PinInputSnapshotAsync(snapshot, kinds,
                 () => PinnedClipboardSnapshot.ReadBitmapAsync(transfer, token), false, token);
-            return result.Handled;
         }
 
         private async Task<PinnedInputResult> PinInputSnapshotAsync(PinnedClipboardSnapshot snapshot,
-            PinnedContentKinds kinds, Func<Task<PinnedBitmapInput?>> bitmapFallback, bool preferFileImage,
+            PinnedContentKinds kinds, Func<Task<PinnedBitmapInput?>> bitmapFallback, bool isDrop,
             CancellationToken token)
         {
             Dispatcher.UIThread.VerifyAccess();
             token.ThrowIfCancellationRequested();
-            PrepareNewPinInput();
             if ((kinds & PinnedContentKinds.Images) != 0)
             {
                 foreach (var animationOnly in new[] { true, false })
@@ -133,12 +138,12 @@ namespace RitsukageGif.Desktop
                         return PinSourceImage(snapshot, content, snapshot.ShapeForImage(imageIndex));
                     }
 
-                if (preferFileImage && await TryPrepareFileImageAsync(snapshot.Files, token) is { } originalImage)
+                if (isDrop && await TryPrepareFileImageAsync(snapshot.Files, token) is { } originalImage)
                     return PinSourceImage(snapshot, originalImage, snapshot.ShapeForFile(snapshot.Files[0]));
 
                 var bitmap = snapshot.Bitmap is { } bitmapPng
                     ? new(bitmapPng, snapshot.BitmapWindowShape, snapshot.BitmapCaptureScaling)
-                    : preferFileImage || snapshot.Images.Count > 0
+                    : isDrop || snapshot.Images.Count > 0
                         ? await ReadClipboardCandidateAsync(bitmapFallback, token)
                         : null;
                 if (bitmap is not null)
@@ -150,25 +155,31 @@ namespace RitsukageGif.Desktop
                         return PinSourceImage(snapshot, content, (bitmap.WindowShape, bitmap.CaptureScaling));
                 }
 
-                if (!preferFileImage && await TryPrepareFileImageAsync(snapshot.Files, token) is { } fileImage)
+                if (!isDrop && await TryPrepareFileImageAsync(snapshot.Files, token) is { } fileImage)
                     return PinSourceImage(snapshot, fileImage, snapshot.ShapeForFile(snapshot.Files[0]));
             }
 
             try
             {
-                if (PinnedContentRegistry.Create(snapshot, kinds) is not { } document) return default;
+                var usePlainText = (kinds & PinnedContentKinds.Text) != 0 && snapshot.HasPowerPointGenerator;
+                if (PinnedContentRegistry.Create(snapshot, kinds, usePlainText) is not { } document) return default;
                 token.ThrowIfCancellationRequested();
-                return PinSourceDocument(snapshot, document);
+                return CommitOrDeferText(snapshot, document, usePlainText);
             }
             catch (PinnedHtmlFormatException error)
             {
                 var fallback = (kinds & PinnedContentKinds.Text) != 0 && !string.IsNullOrEmpty(snapshot.Text);
-                PinLogger.ZLogWarning(
-                    $"Pinned input HTML formatting was rejected. MaximumNestingDepth={PinnedRichParser.MaximumNestingDepth}; PlainTextFallback={fallback}; ErrorType={error.GetType().Name} Code={error.HResult}");
+                LogClipboardHtmlFallback(error, fallback);
                 if (!fallback) throw;
                 token.ThrowIfCancellationRequested();
-                return PinSourceDocument(snapshot, new PinnedTextDocument(snapshot.Text!));
+                return CommitOrDeferText(snapshot, new PinnedTextDocument(snapshot.Text!), false);
             }
+        }
+
+        private static void LogClipboardHtmlFallback(PinnedHtmlFormatException error, bool fallback)
+        {
+            PinLogger.ZLogWarning(
+                $"Pinned input HTML formatting was rejected. MaximumNestingDepth={PinnedRichParser.MaximumNestingDepth}; PlainTextFallback={fallback}; ErrorType={error.GetType().Name} Code={error.HResult}");
         }
 
         private async Task<PinnedImageContent?> TryPrepareClipboardAsync(Func<Task<PinnedImageContent?>> prepare,

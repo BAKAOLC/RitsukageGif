@@ -1,6 +1,8 @@
 using System.Collections.Specialized;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -8,6 +10,7 @@ namespace RitsukageGif.Desktop
     internal sealed class PortableTrayMenu(Action changed) : IDisposable
     {
         private readonly Dictionary<NativeMenuItemBase, int> _identities = new(ReferenceEqualityComparer.Instance);
+        private readonly ConditionalWeakTable<Bitmap, byte[]> _icons = new();
         private readonly Dictionary<int, NativeMenuItem> _items = [];
         private readonly Dictionary<int, NativeMenu> _menus = [];
         private readonly List<NativeMenuItemBase> _watchedItems = [];
@@ -57,17 +60,25 @@ namespace RitsukageGif.Desktop
                     if (!_identities.TryGetValue(item, out var id)) _identities.Add(item, id = ++_nextId);
                     if (item is NativeMenuItemSeparator)
                     {
-                        entries.Add(new(id, parent, true, 0, false, true, "", null));
+                        entries.Add(new(id, parent, true, 0, false, true, "", null, null));
                         continue;
                     }
 
                     if (item is not NativeMenuItem { IsVisible: true } action) continue;
                     _items[id] = action;
+                    var icon = action.Icon is { } bitmap ? _icons.GetValue(bitmap, EncodeIcon) : null;
                     entries.Add(new(id, parent, action.IsEnabled, (int)action.ToggleType, action.IsChecked, false,
-                        action.Header ?? "", action.Gesture));
+                        action.Header ?? "", action.Gesture, icon));
                     if (action.Menu is { } submenu) Add(submenu, id);
                 }
             }
+        }
+
+        private static byte[] EncodeIcon(Bitmap bitmap)
+        {
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, PngBitmapEncoderOptions.Default);
+            return stream.ToArray();
         }
 
         internal void RequestUpdate(int id)

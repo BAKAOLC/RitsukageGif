@@ -21,7 +21,7 @@ namespace RitsukageGif.Desktop
         internal static WindowTarget? RefreshCandidate(WindowTarget target)
         {
             if (!OperatingSystem.IsWindows()) return target;
-            if (!IsCandidate(target)) return null;
+            if (!IsCandidate(target) || IsFullyTransparentCandidate(target.Handle)) return null;
             var previous = SetCandidateDpiContext(-4);
             try
             {
@@ -46,11 +46,22 @@ namespace RitsukageGif.Desktop
                      handle != 0 && seen.Add(handle);
                      handle = NativeMethods.GetWindow(handle, 2))
                 {
-                    var candidate = candidates.FirstOrDefault(target => target.Handle == handle);
-                    var current =
-                        RefreshCandidate(candidate ?? new(handle, string.Empty, string.Empty, default, default));
-                    if (current is null || !current.Bounds.Contains(point)) continue;
-                    if (candidate is not null) return current;
+                    if (!TryGetCandidateProcess(handle, out var process) || !TryGetFrame(handle, out var frame))
+                        continue;
+                    var bounds = frame.Pixels;
+                    if (bounds.IsEmpty || !bounds.Contains(point) || IsFullyTransparentCandidate(handle)) continue;
+                    WindowTarget? candidate = null;
+                    // ReSharper disable once ForCanBeConvertedToForeach
+                    for (var index = 0; index < candidates.Count; index++)
+                    {
+                        if (candidates[index].Handle != handle) continue;
+                        candidate = candidates[index];
+                        break;
+                    }
+
+                    if (candidate is not null && !MatchesCandidateProcess(candidate, process)) continue;
+                    if (!TryGetClient(handle, out var client)) continue;
+                    if (candidate is not null) return candidate with { Bounds = bounds, Client = client };
                     // A newly shown window must not expose a stale candidate underneath it while inventory loads.
                     if (HasCandidateTitle(handle)) return null;
                 }
@@ -71,14 +82,42 @@ namespace RitsukageGif.Desktop
 
         private static bool IsCandidate(WindowTarget target)
         {
-            if (NativeMethods.IsWindowVisible(target.Handle) == 0 || NativeMethods.IsIconic(target.Handle) != 0 ||
-                GetWindowThreadProcessId(target.Handle, out var process) == 0 || process == Environment.ProcessId ||
-                (target.ProcessId != 0 && process != target.ProcessId)) return false;
-            return GetCandidateCloak(target.Handle, 14, out var cloaked, sizeof(int)) != 0 || cloaked == 0;
+            return TryGetCandidateProcess(target.Handle, out var process) && MatchesCandidateProcess(target, process);
+        }
+
+        private static bool MatchesCandidateProcess(WindowTarget target, uint process)
+        {
+            return target.ProcessId == 0 || target.ProcessId == process;
+        }
+
+        private static bool IsFullyTransparentCandidate(nint handle)
+        {
+            const int extendedStyle = -20;
+            const int layered = 0x80000;
+            const uint alphaFlag = 2;
+            return (GetCandidateWindowLong(handle, extendedStyle) & layered) != 0 &&
+                   GetLayeredWindowAttributes(handle, out _, out var alpha, out var flags) &&
+                   (flags & alphaFlag) != 0 && alpha == 0;
+        }
+
+        private static bool TryGetCandidateProcess(nint handle, out uint process)
+        {
+            process = 0;
+            if (NativeMethods.IsWindowVisible(handle) == 0 || NativeMethods.IsIconic(handle) != 0 ||
+                GetWindowThreadProcessId(handle, out process) == 0 || process == Environment.ProcessId) return false;
+            return GetCandidateCloak(handle, 14, out var cloaked, sizeof(int)) != 0 || cloaked == 0;
         }
 
         [LibraryImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
         private static partial int GetCandidateCloak(nint window, uint attribute, out int value, int size);
+
+        [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW")]
+        private static partial int GetCandidateWindowLong(nint window, int index);
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetLayeredWindowAttributes(nint window, out uint color, out byte alpha,
+            out uint flags);
 
         [LibraryImport("user32.dll", EntryPoint = "SetThreadDpiAwarenessContext")]
         private static partial nint SetCandidateDpiContext(nint context);

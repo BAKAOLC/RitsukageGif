@@ -4,6 +4,14 @@ namespace RitsukageGif.Desktop
     {
         private bool _viewportMatched;
 
+        internal int OutputAxisLength
+        {
+            get
+            {
+                lock (_sync) return _axis == ScrollCaptureAxis.Vertical ? _stitching.Height : _stitching.Width;
+            }
+        }
+
         internal PixelPoint? OutputOrigin
         {
             get

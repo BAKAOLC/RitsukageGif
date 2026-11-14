@@ -27,7 +27,8 @@ namespace RitsukageGif.Desktop
                     PointerUpdateKind.MiddleButtonPressed => MouseButton.Middle,
                     _ => MouseButton.None,
                 };
-                _mouseClicks.Press(button, args.KeyModifiers, args.ClickCount);
+                var clickCount = _mouseGesture.GetClickCount(args, button, _canvas);
+                _mouseClicks.Press(button, args.KeyModifiers, clickCount);
                 if (_mouseGesture.IsActive)
                 {
                     if (button == MouseButton.Right) CancelChord(args);
@@ -37,7 +38,7 @@ namespace RitsukageGif.Desktop
                 }
 
                 if (_mouseChordCancelled ||
-                    !_mouseGesture.Begin(button, args.KeyModifiers, args.GetPosition(this), args.ClickCount))
+                    !_mouseGesture.Begin(button, args.KeyModifiers, args.GetPosition(this), clickCount))
                 {
                     args.Handled = true;
                     return;
@@ -46,6 +47,14 @@ namespace RitsukageGif.Desktop
                 _mouseStart = sourcePoint(args);
                 _mouseModifiers = args.KeyModifiers;
                 Capture(args.Pointer);
+                if (button == MouseButton.Left && args.Pointer.Type == PointerType.Mouse && clickCount == 1 &&
+                    _coordinator.ScreenshotMode &&
+                    Resolve(new(MouseGestureKind.LeftDrag, _mouseModifiers), out var drag) &&
+                    drag!.Action == MouseAction.Select &&
+                    (!Resolve(new(MouseGestureKind.LeftClick, _mouseModifiers), out var click) ||
+                     click!.Action == MouseAction.Select))
+                    _mouseSelecting = _coordinator.BeginScreenshotManipulation(this, _mouseStart,
+                        _mouseModifiers.HasFlag(KeyModifiers.Shift));
                 args.Handled = true;
             };
             _canvas.PointerReleased += (_, args) =>
@@ -75,7 +84,9 @@ namespace RitsukageGif.Desktop
                     if (wasSelecting)
                     {
                         _coordinator.PointerInput(sourcePoint(args), false, false,
-                            _mouseModifiers.HasFlag(KeyModifiers.Shift));
+                            (_coordinator is { ScreenshotMode: true, SelectionManipulating: true }
+                                ? args.KeyModifiers
+                                : _mouseModifiers).HasFlag(KeyModifiers.Shift));
                     }
                     else if (click && _coordinator.ScreenshotMode &&
                              gesture is
@@ -146,7 +157,7 @@ namespace RitsukageGif.Desktop
                     CancelChord(args);
                 if (_mouseChordCancelled) return;
                 if (_mouseGesture.Move(args.GetPosition(this), 4, out var gesture) &&
-                    Resolve(gesture, out var binding) &&
+                    !_mouseSelecting && Resolve(gesture, out var binding) &&
                     binding!.Action == MouseAction.Select)
                 {
                     _mouseSelecting = true;
@@ -160,8 +171,14 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                _coordinator.PointerInput(sourcePoint(args), _mouseSelecting, false,
-                    (_mouseGesture.IsActive ? _mouseModifiers : args.KeyModifiers).HasFlag(KeyModifiers.Shift));
+                _coordinator.PointerInput(sourcePoint(args), _mouseSelecting, false, SelectionShift(args.KeyModifiers));
+            }
+
+            bool SelectionShift(KeyModifiers current)
+            {
+                return (!_mouseGesture.IsActive || _coordinator is { ScreenshotMode: true, SelectionManipulating: true }
+                    ? current
+                    : _mouseModifiers).HasFlag(KeyModifiers.Shift);
             }
 
             void CancelChord(PointerEventArgs args)

@@ -27,9 +27,14 @@ namespace RitsukageGif.Desktop
         {
             return new()
             {
-                Id = "builtin." + kind.ToString().ToLowerInvariant(),
+                Id = DefaultActionId(kind),
                 Kind = kind, Shortcut = shortcut,
             };
+        }
+
+        internal static string DefaultActionId(GlobalActionKind kind)
+        {
+            return "builtin." + kind.ToString().ToLowerInvariant();
         }
     }
 }

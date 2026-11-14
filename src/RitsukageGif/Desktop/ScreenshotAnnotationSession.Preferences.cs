@@ -31,6 +31,9 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private string RememberedToolName =>
+            (Tool == ScreenshotTool.Watermark ? _toolBeforeWatermark : Tool).ToString();
+
         public event Action<ToolbarPreferences, bool?>? ToolbarPreferencesChanged;
 
         public void UpdateToolbarPreferences(ToolbarPreferences preferences, bool? tools = null)
@@ -42,6 +45,23 @@ namespace RitsukageGif.Desktop
             ToolbarRevision++;
             ToolbarPreferencesChanged?.Invoke(toolbar.Normalize(), tools);
             Changed?.Invoke();
+        }
+
+        internal void RememberToolbarColumn(ScreenshotTool first, ScreenshotTool selected)
+        {
+            var preferences = ToolbarPreferences;
+            var key = first.ToString();
+            if (selected == first)
+            {
+                if (!preferences.ColumnValues.Remove(key)) return;
+            }
+            else
+            {
+                if (preferences.ColumnValues.TryGetValue(key, out var current) && current == selected) return;
+                preferences.ColumnValues[key] = selected;
+            }
+
+            UpdateToolbarPreferences(preferences, true);
         }
 
         private AnnotationToolStyle StyleFor(ScreenshotTool tool)
@@ -83,6 +103,7 @@ namespace RitsukageGif.Desktop
                 : style.Properties;
             if (tool == ScreenshotTool.AutoMosaic && Properties.MosaicMode == AnnotationMosaicMode.SmartErase)
                 Properties = Properties with { MosaicMode = AnnotationMosaicMode.Mosaic };
+            RememberPolylineEndpoints(tool);
             RestoreWatermarkStyle(tool);
         }
 
@@ -91,6 +112,7 @@ namespace RitsukageGif.Desktop
             StoreToolStyle(_styleTool);
             _styleTool = AnnotationTool(annotation);
             Properties = annotation.Properties;
+            RememberPolylineEndpoints(_styleTool);
             Color = annotation.Color;
             Thickness = annotation.Thickness;
             FontSize = annotation.FontSize;
@@ -126,7 +148,8 @@ namespace RitsukageGif.Desktop
             }
 
             _tool = value.RememberLastTool ? Enum.Parse<ScreenshotTool>(value.LastTool) : ScreenshotTool.Select;
-            if (!CanUseDrawingTool(_tool)) _tool = ScreenshotTool.Select;
+            if (_tool == ScreenshotTool.Watermark || !CanUseDrawingTool(_tool)) _tool = ScreenshotTool.Select;
+            _toolBeforeWatermark = _tool;
             RestoreToolStyle(_tool);
             _nextNumber = StyleFor(ScreenshotTool.Number).Properties.Number;
             Changed?.Invoke();
@@ -138,7 +161,7 @@ namespace RitsukageGif.Desktop
             StoreToolStyle(_styleTool);
             return value with
             {
-                LastTool = value.RememberLastTool ? Tool.ToString() : value.LastTool,
+                LastTool = value.RememberLastTool ? RememberedToolName : value.LastTool,
                 Color = _masterColor.ToString(), ToolStyles = new(_toolStyles),
             };
         }

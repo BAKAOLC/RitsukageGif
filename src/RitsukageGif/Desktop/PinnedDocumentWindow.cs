@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
@@ -30,6 +31,7 @@ namespace RitsukageGif.Desktop
         private nint _inputStyle;
         private bool _locked;
         private bool _mouseThrough;
+        private Avalonia.PixelPoint? _newPinCenter;
         private double? _opacityBeforeThrough;
         private bool _selected;
         private IPinnedDocumentTextView? _textView;
@@ -108,10 +110,11 @@ namespace RitsukageGif.Desktop
                 LayoutUpdated -= DocumentAnnotationLayoutUpdated;
                 Loaded -= DocumentAnnotationLayoutUpdated;
                 ReleaseDocumentAnnotationUi();
+                _inlineTranslation?.Dispose();
                 _lifetime.Cancel();
                 TryReleaseDocumentSources();
             };
-            Opened += (_, _) => RestoreToScreen();
+            Opened += (_, _) => ApplyInitialPlacement();
             PositionChanged += (_, _) => StateChanged?.Invoke(this, EventArgs.Empty);
             SizeChanged += (_, _) => StateChanged?.Invoke(this, EventArgs.Empty);
             _viewport.ScrollChanged += (_, _) =>
@@ -121,17 +124,14 @@ namespace RitsukageGif.Desktop
             };
             PropertyChanged += (_, args) =>
             {
+                if (args.Property == ClientSizeProperty && _waitingForFormulaSize) CompleteFormulaPlacement();
                 if (args.Property == OpacityProperty ||
                     args.Property == IsVisibleProperty || args.Property == TopmostProperty)
                     StateChanged?.Invoke(this, EventArgs.Empty);
             };
         }
 
-        public PinnedWindowPresentation Presentation { get; }
-
         public PinnedDocument Document { get; }
-        public string Id { get; private set; } = Guid.NewGuid().ToString("N");
-        public string Group { get; private set; } = "";
         private bool IgnoreFormat { get; set; }
         private bool Selectable { get; set; }
         public bool WasDestroyed { get; private set; }
@@ -146,15 +146,18 @@ namespace RitsukageGif.Desktop
         public Action<IPinnedWindow>? SelectionRequested { get; init; }
         public Action<IPinnedWindow, Avalonia.PixelPoint>? MoveSelectionRequested { get; init; }
         public Action<IPinnedWindow, bool>? CloseRequested { get; init; }
-        public Func<IPinnedWindow, PinnedImageArrangement, bool>? CanArrangeSelectionProvider { get; init; }
+        public Func<IPinnedWindow, PinnedImageArrangement, Task>? ArrangeSelectionRequested { get; init; }
+        public Func<IPinnedWindow, Task>? SaveSelectionRequested { get; init; }
+        public Action<string>? SavedPathChanged { get; init; }
 
         public void Dispose()
         {
             if (!_closed) Close();
         }
-        public Func<IPinnedWindow, PinnedImageArrangement, Task>? ArrangeSelectionRequested { get; init; }
-        public Func<IPinnedWindow, Task>? SaveSelectionRequested { get; init; }
-        public Action<string>? SavedPathChanged { get; init; }
+
+        public PinnedWindowPresentation Presentation { get; }
+        public string Id { get; private set; } = Guid.NewGuid().ToString("N");
+        public string Group { get; private set; } = "";
 
         public bool IsCloseLocked => PinnedInputContext.IsCloseBlocked(_locked, PreferencesProvider().LockRestrictions);
         public bool IsInteractionLocked => IsOperationLocked(PinnedLockRestrictions.Move);
@@ -259,6 +262,7 @@ namespace RitsukageGif.Desktop
             Presentation.RefreshShade(_locked, _mouseThrough, _isThumbnail, Group, GroupsProvider());
             _textView?.SetSelectable(Selectable && (!_isThumbnail || preferences.ThumbnailSelectableText));
             RefreshDocumentAnnotationAppearance();
+            Presentation.RefreshMouseThroughToolbar();
         }
 
         private void SetMouseThrough(bool value)
@@ -270,8 +274,13 @@ namespace RitsukageGif.Desktop
                     throw new InvalidOperationException(UiText.Get("PinnedImageRestoreRequired"));
                 case true:
                     EndDocumentMark();
-                    _opacityBeforeThrough = Opacity;
-                    Opacity = Math.Min(Opacity, PreferencesProvider().MouseThroughOpacity);
+                    var limit = PreferencesProvider().MouseThroughOpacity;
+                    if (Opacity > limit)
+                    {
+                        _opacityBeforeThrough = Opacity;
+                        Opacity = limit;
+                    }
+
                     break;
             }
 
@@ -297,7 +306,40 @@ namespace RitsukageGif.Desktop
                 _opacityBeforeThrough = null;
             }
 
+            Presentation.ShowMouseThroughMessage(value);
+            Presentation.RefreshMouseThroughToolbar();
             StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        internal void SetNewPinPlacement(PinnedDisplayPosition placement)
+        {
+            _newPinCenter = PinnedWindowPresentation.ResolveNewPinCenter(placement, Screens, PinnedGroupPointer.Read);
+            if (_newPinCenter is { } center) Position = center;
+        }
+
+        private void ApplyInitialPlacement()
+        {
+            if (_newPinCenter is not { } center)
+            {
+                RestoreToScreen();
+                return;
+            }
+
+            _newPinCenter = null;
+            Presentation.SetScreenCenter(center);
+            if (_formulaPngTask is { IsCompleted: false }) _pendingFormulaPlacement = (center, Position);
+        }
+
+        private void CompleteFormulaPlacement()
+        {
+            _waitingForFormulaSize = false;
+            if (_pendingFormulaPlacement is not { } placement) return;
+            _pendingFormulaPlacement = null;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!_closed && Position == placement.Position)
+                    Presentation.SetScreenCenter(placement.Center);
+            }, DispatcherPriority.Loaded);
         }
 
         private void RestoreToScreen()
@@ -312,7 +354,9 @@ namespace RitsukageGif.Desktop
         {
             switch (Document)
             {
-                case PinnedColorDocument:
+                case PinnedColorDocument when _surface.Child is PinnedColorScene color:
+                    Width = color.Extent.Width + PinnedWindowPresentation.ShadeInset * 2;
+                    Height = color.Extent.Height + PinnedWindowPresentation.ShadeInset * 2;
                     return;
                 case PinnedFilesDocument:
                 {

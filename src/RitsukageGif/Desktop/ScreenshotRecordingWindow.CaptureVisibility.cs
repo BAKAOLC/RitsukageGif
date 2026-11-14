@@ -5,6 +5,7 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotRecordingWindow
     {
         private string? _toolbarCaptureTitle;
+        private (bool Excluded, LinuxCaptureExclusionLease? Lease)? _toolbarCaptureBeforeStart;
 
         private void ResetToolbarCaptureTitle()
         {
@@ -35,6 +36,7 @@ namespace RitsukageGif.Desktop
                         : RecordingToolbarCaptureMode.Show);
             }
 
+            _toolbarCaptureBeforeStart = (_captureExcluded, _recorderExclusion);
             _controller.ConfigureIncludedCaptureWindowTitle(null);
             if (!hide)
             {
@@ -60,7 +62,8 @@ namespace RitsukageGif.Desktop
             }
             else
             {
-                if (OperatingSystem.IsWindows()) _captureExcluded = RecordingRegionOverlay.Exclude(this);
+                if (OperatingSystem.IsWindows() && !_captureExcluded)
+                    _captureExcluded = RecordingRegionOverlay.Exclude(this);
                 if (_captureProof is { Source: LinuxCaptureExclusionSource.KWinPortal } proof)
                     await PrepareRecorderExclusionAsync(proof, token);
                 _captureHidden = !_captureExcluded && !SourceExcludesRecorder &&
@@ -70,6 +73,41 @@ namespace RitsukageGif.Desktop
 
             LogHub.GetLogger("Desktop.ScreenshotRecording").ZLogInformation(
                 $"Recording toolbar capture configured. HiddenFromCapture={hide} WindowExcluded={_captureExcluded} ControlHidden={_captureHidden}");
+        }
+
+        private async Task CompleteToolbarCapturePreparationAsync(bool restore, CancellationToken token)
+        {
+            var previous = _toolbarCaptureBeforeStart;
+            _toolbarCaptureBeforeStart = null;
+            if (!restore || previous is not { } policy) return;
+            if (OperatingSystem.IsWindows() && _captureExcluded != policy.Excluded)
+            {
+                if (!RecordingRegionOverlay.Exclude(this, policy.Excluded))
+                    throw new IOException(UiText.Get("RecordingToolbarCaptureUnavailable"));
+                _captureExcluded = policy.Excluded;
+            }
+
+            if (!ReferenceEquals(policy.Lease, _recorderExclusion))
+            {
+                if (_recorderExclusion is { } lease)
+                {
+                    _recorderExclusion = null;
+                    _captureExcluded = false;
+                    await lease.DisposeAsync();
+                    if (lease.ReleaseFailure != LinuxCaptureExclusionFailure.None)
+                        throw new IOException(UiText.Get("RecordingToolbarCaptureUnavailable"));
+                }
+
+                if (policy.Lease is not null && _captureProof is { } proof)
+                {
+                    await PrepareRecorderExclusionAsync(proof, token);
+                    if (!_captureExcluded)
+                        throw new IOException(UiText.Get("RecordingToolbarCaptureUnavailable"));
+                }
+            }
+
+            ResetToolbarCaptureTitle();
+            _controller.ConfigureIncludedCaptureWindowTitle(null);
         }
     }
 }

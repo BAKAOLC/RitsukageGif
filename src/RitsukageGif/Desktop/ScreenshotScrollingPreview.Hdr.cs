@@ -77,22 +77,26 @@ namespace RitsukageGif.Desktop
                     hdr.Width - 1);
                 var bottom = Math.Clamp((int)((long)Viewport.Bottom * hdr.Height / ImageSize.Height) - 1, top,
                     hdr.Height - 1);
-                var scale = Math.Min(_presentedSize.Width / ImageSize.Width, _presentedSize.Height / ImageSize.Height);
+                var scale = ImageRectangle(_presentedSize).Width / ImageSize.Width;
                 var thickness =
-                    scale > 0 ? Math.Max(1, (int)Math.Ceiling(2 * hdr.Width / (ImageSize.Width * scale))) : 2;
-                thickness = Math.Min(thickness, Math.Max(1, Math.Min((right - left + 1) / 2, (bottom - top + 1) / 2)));
+                    scale > 0
+                        ? Math.Max(1, (int)Math.Ceiling(PreviewBorder * hdr.Width / (ImageSize.Width * scale)))
+                        : 4;
+                var red = Linear(ViewportColor.R, white);
+                var green = Linear(ViewportColor.G, white);
+                var blue = Linear(ViewportColor.B, white);
                 for (var edge = 0; edge < thickness; edge++)
                 {
-                    for (var x = left; x <= right; x++)
+                    for (var x = Math.Max(0, left - thickness); x <= Math.Min(hdr.Width - 1, right + thickness); x++)
                     {
-                        Green(x, top + edge);
-                        Green(x, bottom - edge);
+                        Paint(x, top - 1 - edge, red, green, blue);
+                        Paint(x, bottom + 1 + edge, red, green, blue);
                     }
 
                     for (var y = top; y <= bottom; y++)
                     {
-                        Green(left + edge, y);
-                        Green(right - edge, y);
+                        Paint(left - 1 - edge, y, red, green, blue);
+                        Paint(right + 1 + edge, y, red, green, blue);
                     }
                 }
             }
@@ -103,23 +107,27 @@ namespace RitsukageGif.Desktop
             InvalidateArrange();
             return;
 
-            void Green(int x, int y)
+            void Paint(int x, int y, Half red, Half green, Half blue)
             {
+                if ((uint)x >= (uint)hdr.Width || (uint)y >= (uint)hdr.Height) return;
                 var offset = (y * hdr.Width + x) * 8;
-                BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset), (Half)(0.03f * white));
-                BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 2), (Half)(0.75f * white));
-                BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 4), (Half)(0.03f * white));
+                BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset), red);
+                BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 2), green);
+                BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 4), blue);
                 BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 6), (Half)1);
             }
+        }
+
+        private static Half Linear(byte component, float white)
+        {
+            var value = component / 255f;
+            return (Half)((value <= .04045f ? value / 12.92f : MathF.Pow((value + .055f) / 1.055f, 2.4f)) * white);
         }
 
         protected override Size ArrangeOverride(Size finalSize)
         {
             if (_hdrPreview is null || ImageSize.Width <= 0 || ImageSize.Height <= 0) return finalSize;
-            var scale = Math.Min(finalSize.Width / ImageSize.Width, finalSize.Height / ImageSize.Height);
-            var width = ImageSize.Width * scale;
-            var height = ImageSize.Height * scale;
-            _hdrPreview.Arrange(new((finalSize.Width - width) / 2, (finalSize.Height - height) / 2, width, height));
+            _hdrPreview.Arrange(ImageRectangle(finalSize));
             if (_presentedSize != finalSize)
             {
                 _presentedSize = finalSize;

@@ -32,11 +32,13 @@ namespace RitsukageGif.Desktop
                     Content = UiText.Get(quick ? "RecordingQuickMode" : "RecordingNormalMode"),
                     GroupName = "RecordingMode", IsChecked = _controller.Quick == quick,
                 };
-                option.IsCheckedChanged += (_, _) =>
+                option.IsCheckedChanged += async (_, _) =>
                 {
                     if (option.IsChecked != true || !_controller.CanConfigure) return;
+                    HideRecorderPanels();
                     _controller.Quick = quick;
                     _controller.ConfigurationChanged();
+                    await GuardAsync(() => _controller.StartAsync(this));
                 };
                 content.Children.Add(option);
             }

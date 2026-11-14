@@ -65,8 +65,15 @@ namespace RitsukageGif.Desktop
 
             if (run.Token.IsCancellationRequested)
                 return new(false, "cancelled", "The preset run was replaced or stopped.");
-            return ScriptCommandReply(debugger, run.Script?.LastResult, debugger.Snapshot.ErrorDiagnostic,
+            var reply = ScriptCommandReply(debugger, run.Script?.LastResult, debugger.Snapshot.ErrorDiagnostic,
                 run.Failure ?? run.ScriptFailure?.Message ?? run.Script?.LastError ?? run.Machine.LastError);
+            if (reply is not { Success: true } ||
+                run.RecordingOperation is not { IsCompletedSuccessfully: true } recording)
+                return reply;
+            var outcome = await recording;
+            return outcome is { Cancelled: false, Error: null, Outputs: [var first, ..] }
+                ? reply with { Output = first, Outputs = outcome.Outputs }
+                : reply;
         }
     }
 }

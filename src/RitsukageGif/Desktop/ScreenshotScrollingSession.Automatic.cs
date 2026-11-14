@@ -3,7 +3,11 @@ namespace RitsukageGif.Desktop
     internal sealed partial class ScreenshotScrollingSession
     {
         private AutomaticScrollController? _automatic;
+        private bool _automaticDragging;
         private bool _automaticEnabled;
+        private bool _automaticHeld;
+        private int _fileOnlyWarningLength;
+        private bool _fileOnlyWarningResolved;
 
         // ReSharper disable once UnusedAutoPropertyAccessor.Global
         internal Func<PixelRect, CancellationToken, byte[]>? CaptureFrame { get; set; }
@@ -46,13 +50,44 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private void ObserveAutomatic(ScrollCaptureResult result, ReadOnlySpan<byte> pixels, PixelRect region,
+        internal void SetAutomaticDragging(bool dragging)
+        {
+            lock (_sync) _automaticDragging = dragging;
+        }
+
+        internal void SetAutomaticHold(bool held)
+        {
+            lock (_sync)
+            {
+                _automaticHeld = held;
+                _automatic?.ResetViewport();
+            }
+        }
+
+        internal void ConfigureFileOnlyWarning(int length)
+        {
+            lock (_sync) _fileOnlyWarningLength = length;
+        }
+
+        internal void ResolveFileOnlyWarning(int generation)
+        {
+            lock (_sync)
+            {
+                if (generation != _generation) return;
+                _fileOnlyWarningResolved = true;
+            }
+        }
+
+        private void ObserveAutomatic(ScrollCaptureResult result, PixelRect region,
             CancellationToken token)
         {
-            if (!_automaticEnabled || _automatic is null) return;
+            if (_automaticDragging || _automaticHeld || !_automaticEnabled || _automatic is null) return;
+            var length = _axis == ScrollCaptureAxis.Vertical ? result.Height : result.Width;
+            if (_fileOnlyWarningLength > 0 && length > _fileOnlyWarningLength &&
+                !_fileOnlyWarningResolved) return;
             var previous = _automatic.State;
-            _automatic.Observe(result, pixels, _axis, region, Environment.TickCount64, token);
-            if (_automatic.State != AutomaticScrollState.Running) _automaticEnabled = false;
+            _automatic.Observe(result, _axis, region, Environment.TickCount64, token);
+            if (!_automatic.WantsObservation) _automaticEnabled = false;
             if (_automatic.State != previous) NotifyAutomaticState();
         }
 

@@ -55,6 +55,9 @@ namespace RitsukageGif.Scripting
             pins.Function("files", Wrap(async (args, token) =>
                     (await Host().FilesAsync((string)args[0]!, token)).Cast<object?>().ToList()),
                 [new("id", "string")], "Result<string[],ServiceError>");
+            pins.Function("translation", Wrap(async (args, token) =>
+                    await Host().TranslationAsync((string)args[0]!, args[1] as bool?, token)),
+                [new("id", "string"), new("enabled", "boolean?", true)], "Result<boolean,ServiceError>");
             pins.Function("text", Wrap(async (args, token) => await Host().TextAsync((string)args[0]!, token)),
                 [new("id", "string")], "Result<string?,ServiceError>");
             pins.Function("html", Wrap(async (args, token) => await Host().HtmlAsync((string)args[0]!, token)),

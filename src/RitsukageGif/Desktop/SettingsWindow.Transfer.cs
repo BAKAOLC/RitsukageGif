@@ -1,12 +1,16 @@
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class SettingsWindow
     {
+        private Action<string>? _showTransferFeedback;
+
         private StackPanel TransferPage(Func<AppSettings> snapshot)
         {
             var page = Page();
@@ -22,8 +26,20 @@ namespace RitsukageGif.Desktop
             actions.Children.Add(import);
             actions.Children.Add(export);
             page.Children.Add(actions);
-            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
+            var status = new TextBlock
+            {
+                IsVisible = false, TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted,
+            };
             page.Children.Add(status);
+            IDisposable? feedbackTimer = null;
+            BindingExpressionBase? feedbackBinding = null;
+            _showTransferFeedback = ShowFeedback;
+            RegisterContentCleanup(() =>
+            {
+                _showTransferFeedback = null;
+                feedbackTimer?.Dispose();
+                feedbackBinding?.Dispose();
+            });
             var normalWeight = Setting(new CheckBox
             {
                 Name = "NonDefaultConfigItemsFontNotBold",
@@ -58,6 +74,7 @@ namespace RitsukageGif.Desktop
                     var loaded = await SettingsTransfer.ImportAsync(stream, token);
                     token.ThrowIfCancellationRequested();
                     await ReplaceLiveSettingsAsync(loaded);
+                    _showTransferFeedback?.Invoke("SettingsTransferImported");
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
@@ -87,7 +104,7 @@ namespace RitsukageGif.Desktop
                     var path = selected.TryGetLocalPath() ??
                                throw new NotSupportedException(UiText.Get("SettingsTransferLocalFileRequired"));
                     await SettingsTransfer.ExportAsync(path, values, token);
-                    status.Bind(TextBlock.TextProperty, LiveText.Resource("SettingsTransferExported"));
+                    ShowFeedback("SettingsTransferExported");
                 }
                 catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
@@ -102,6 +119,20 @@ namespace RitsukageGif.Desktop
                 }
             };
             return page;
+
+            void ShowFeedback(string key)
+            {
+                feedbackTimer?.Dispose();
+                feedbackBinding?.Dispose();
+                feedbackBinding = status.Bind(TextBlock.TextProperty, LiveText.Resource(key));
+                status.IsVisible = true;
+                feedbackTimer = DispatcherTimer.RunOnce(() =>
+                {
+                    status.IsVisible = false;
+                    feedbackBinding?.Dispose();
+                    feedbackBinding = null;
+                }, TimeSpan.FromSeconds(2));
+            }
         }
     }
 }

@@ -110,7 +110,7 @@ namespace RitsukageGif.Desktop
                     }
 
                     if (options.Primary.Device is null) options = options with { Enabled = false };
-                    _ = GuardAsync(() => _controller.ConfigureCameraAsync(options, true));
+                    _ = GuardAsync(() => ApplyOptionsAsync(options, true));
                     RefreshFields();
                 };
                 choices.Children.Add(check);
@@ -147,7 +147,7 @@ namespace RitsukageGif.Desktop
             enabled.IsCheckedChanged += (_, _) =>
             {
                 if (refreshing) return;
-                _ = GuardAsync(() => _controller.ConfigureCameraAsync(_controller.Camera with
+                _ = GuardAsync(() => ApplyOptionsAsync(_controller.Camera with
                 {
                     Enabled = enabled.IsChecked == true,
                 }));
@@ -186,7 +186,12 @@ namespace RitsukageGif.Desktop
                 var next = editingSlot == 0
                     ? options with { Primary = change(options.Primary) }
                     : options with { Secondary = change(options.Secondary) };
-                _ = GuardAsync(() => _controller.ConfigureCameraAsync(next));
+                _ = GuardAsync(() => ApplyOptionsAsync(next));
+            }
+
+            async Task ApplyOptionsAsync(RecordingCameraOptions options, bool devicesEdited = false)
+            {
+                await _controller.ConfigureCameraAsync(options, devicesEdited);
                 RefreshFields();
             }
 
@@ -218,7 +223,8 @@ namespace RitsukageGif.Desktop
                 mirror.Foreground = slot.Mirrored ? Brushes.White : AppTheme.Ink;
                 rectangle.IsChecked = slot.Shape == RecordingCameraShape.Rectangle;
                 circle.IsChecked = slot.Shape == RecordingCameraShape.Circle;
-                var limit = _cameraPreview?.GetSizeLimit(editingSlot) ?? 480;
+                var region = _controller.Selection.Region;
+                var limit = _controller.CameraSession?.GetSizeLimit(region.Width, region.Height) ?? 480;
                 size.Minimum = Math.Min(Math.Min(120, slot.Size), limit);
                 size.Maximum = limit;
                 size.Value = slot.Size;

@@ -320,7 +320,8 @@ static gboolean control_line(const char *line, struct rgc_portal_video *video, G
             written = (!prepare || result != RGC_SCROLL_SENT || rgc_portal_video_cursor(video, 0)) &&
                       rgc_portal_video_reply(video, request_id,
                                              result == RGC_SCROLL_SENT          ? (prepare ? "prepared" : "sent")
-                                             : result == RGC_SCROLL_UNAVAILABLE ? "unavailable"
+                                             : result == RGC_SCROLL_POINTER_OUTSIDE ? "pointer-outside"
+                                             : result == RGC_SCROLL_UNAVAILABLE     ? "unavailable"
                                                                                 : "failed",
                                              error ? error->message : NULL);
             g_clear_error(&error);

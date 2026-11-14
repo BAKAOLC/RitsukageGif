@@ -4,7 +4,7 @@ namespace RitsukageGif.Desktop
     {
         internal RecordingReviewOutputContext CreateRecordingReviewOutputContext()
         {
-            return new(() => Settings.ScreenshotSave, () => Settings.OutputDirectory,
+            return new(() => ScreenshotSaveForOutput, () => Settings.OutputDirectory,
                 CopyFilesAsync, ShowOutputNotification);
         }
     }

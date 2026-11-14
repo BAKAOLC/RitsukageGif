@@ -172,7 +172,7 @@ namespace RitsukageGif.Desktop
                 ValidateRegion(target.Client, preset.Source == CaptureSourceKind.Screen);
                 DeactivatePreset();
                 SetRegion(target.Client, preset.Source == CaptureSourceKind.Screen);
-                _manualPreset = preset;
+                _manualPreset = preset with { FixedHandle = target.Handle };
             });
         }
     }

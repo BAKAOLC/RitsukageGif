@@ -22,6 +22,9 @@ namespace RitsukageGif.Desktop
                     case nameof(ToolbarPreferences.SchemaRevision): break;
                     case "Columns": ValidateToolbarColumns(property.Value, name); break;
                     case "Actions": ValidateToolbarActions(property.Value, name); break;
+                    case nameof(ToolbarPreferences.ColumnValues):
+                        ValidateToolbarColumnValues(toolbar, property.Value, name);
+                        break;
                     default: throw Invalid(name);
                 }
             }
@@ -42,6 +45,34 @@ namespace RitsukageGif.Desktop
                             definition.Tool != (ScreenshotTool)tool.GetInt32()) ||
                         !tools.Add((ScreenshotTool)tool.GetInt32()) || tools.Count > toolCount) throw Invalid(path);
                 }
+            }
+        }
+
+        private static void ValidateToolbarColumnValues(JsonElement toolbar, JsonElement values, string path)
+        {
+            if (values.ValueKind != JsonValueKind.Object) throw Invalid(path);
+            var entries = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in values.EnumerateObject())
+            {
+                var name = path + "." + entry.Name;
+                if (!entries.Add(entry.Name) || !Enum.TryParse<ScreenshotTool>(entry.Name, out var first) ||
+                    first.ToString() != entry.Name || !ScreenshotToolCatalog.IsRegistered(first))
+                    throw Invalid(name);
+                ValidateEnum<ScreenshotTool>(entry.Value, name);
+                var selected = (ScreenshotTool)entry.Value.GetInt32();
+                if (first == selected || !ScreenshotToolCatalog.IsRegistered(selected) ||
+                    !toolbar.TryGetProperty(nameof(ToolbarPreferences.Columns), out var columns) ||
+                    columns.ValueKind != JsonValueKind.Array ||
+                    !columns.EnumerateArray().Any(column => column.ValueKind == JsonValueKind.Array &&
+                                                            column.GetArrayLength() > 1 &&
+                                                            column[0].ValueKind == JsonValueKind.Number &&
+                                                            column[0].TryGetInt32(out var anchor) &&
+                                                            anchor == (int)first &&
+                                                            column.EnumerateArray().Any(tool =>
+                                                                tool.ValueKind == JsonValueKind.Number &&
+                                                                tool.TryGetInt32(out var candidate) &&
+                                                                candidate == (int)selected)))
+                    throw Invalid(name);
             }
         }
 

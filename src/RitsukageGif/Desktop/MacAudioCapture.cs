@@ -15,10 +15,10 @@ namespace RitsukageGif.Desktop
                 [systemAudio ? "system" : "microphone", deviceId ?? ""]));
         }
 
-        public static IReadOnlyList<AudioCaptureDevice> EnumerateDevices(bool systemAudio)
+        public static IReadOnlyList<AudioCaptureDevice> EnumerateDevices(bool systemAudio, CancellationToken token)
         {
             EnsureHelper();
-            using var document = JsonDocument.Parse(ProcessAudioCapture.Query(Executable,
+            using var document = JsonDocument.Parse(ProcessAudioCapture.Query(Executable, token, false,
                 systemAudio ? "list-system" : "list-microphones"));
             return
             [

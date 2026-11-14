@@ -1,12 +1,13 @@
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class AnnotationEditableCombo : AutoCompleteBox
+    internal sealed partial class AnnotationEditableCombo : AutoCompleteBox
     {
         private readonly string[] _items;
         private bool _explicitDropDown;
@@ -14,6 +15,7 @@ namespace RitsukageGif.Desktop
         public AnnotationEditableCombo(IEnumerable<string> items)
         {
             _items = [.. items];
+            AddHandler(PointerWheelChangedEvent, ChoiceWheel, RoutingStrategies.Tunnel);
             ItemsSource = _items;
             FilterMode = AutoCompleteFilterMode.None;
             MinimumPrefixLength = 0;

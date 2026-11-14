@@ -22,7 +22,8 @@ namespace RitsukageGif.Desktop
             await StartAnimationRecordingCore(region);
         }
 
-        private Task<RecordingOutcome> StartAnimationRecordingCore(PixelRect region)
+        private Task<RecordingOutcome> StartAnimationRecordingCore(PixelRect region,
+            PresetRecordingSettings? overrides = null)
         {
             if (_screenshotRecordingPreparing)
                 throw new InvalidOperationException(UiText.Get("CommandNotReady"));
@@ -37,8 +38,6 @@ namespace RitsukageGif.Desktop
             Notify();
             _stop = new();
             _abort = new();
-            var overrides = _startOverrides;
-            _startOverrides = null;
             _operation = RecordAsync(region, _presets.ActivePreset ?? _manualPreset,
                 overrides, _stop.Token, _abort.Token);
             return _operation;
@@ -219,7 +218,7 @@ namespace RitsukageGif.Desktop
                 SetStatusKey("RecordingComplete");
                 try
                 {
-                    if (effective.Copy ?? true) await CopyAsync();
+                    if (effective.Copy ?? !IsTaskHost) await CopyAsync();
                 }
                 catch (Exception ex)
                 {
@@ -239,7 +238,7 @@ namespace RitsukageGif.Desktop
                 HostLogger.ZLogInformation(
                     $"Recording outputs completed. OperationId={operationId} OutputCount={outputs.Count} ElapsedSeconds={_recordClock.Elapsed.TotalSeconds}");
                 _presets.Signal("saved");
-                return new();
+                return new() { Outputs = [.. outputs] };
             }
             catch (OperationCanceledException)
             {

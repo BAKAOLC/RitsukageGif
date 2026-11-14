@@ -5,6 +5,22 @@ namespace RitsukageGif.Desktop
     {
         private PixelPoint _captureContentOffset;
         private PixelPoint? _capturePlacement;
+        private bool _hasCenteredCaptureOrigin;
+        private Avalonia.PixelPoint? _newPinCenter;
+
+        internal void SetNewPinPlacement(PinnedDisplayPosition placement, PixelPoint? captureOrigin,
+            PixelPoint contentOffset, Func<Avalonia.PixelPoint?> readPointer)
+        {
+            if (placement == PinnedDisplayPosition.ScreenshotLocation && captureOrigin is { } origin)
+            {
+                SetCapturePlacement(origin, contentOffset);
+                return;
+            }
+
+            _hasCenteredCaptureOrigin = captureOrigin is not null;
+            _newPinCenter = PinnedWindowPresentation.ResolveNewPinCenter(placement, Screens, readPointer);
+            if (_newPinCenter is { } center) Position = center;
+        }
 
         internal void SetCapturePlacement(PixelPoint outputOrigin, PixelPoint contentOffset)
         {
@@ -19,6 +35,14 @@ namespace RitsukageGif.Desktop
 
         private void RestoreCapturePlacement()
         {
+            _hasCenteredCaptureOrigin = false;
+            if (_newPinCenter is { } center)
+            {
+                _newPinCenter = null;
+                Presentation.SetScreenCenter(center);
+                return;
+            }
+
             if (_capturePlacement is not { } origin)
             {
                 RestoreToScreen();

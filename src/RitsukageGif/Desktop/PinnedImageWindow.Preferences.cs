@@ -20,6 +20,7 @@ namespace RitsukageGif.Desktop
         {
             Presentation.Title.Refresh();
             Presentation.Attention.Refresh();
+            Presentation.RefreshMouseThroughToolbar();
             RefreshWindowShadow();
             PinnedBitmapSampling.Apply(_image, CurrentPreferences.SmoothScaling);
             if (_hdrPreview is { } hdrPreview) hdrPreview.SmoothScaling = CurrentPreferences.SmoothScaling;

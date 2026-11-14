@@ -12,13 +12,8 @@ namespace RitsukageGif.Desktop
             {
                 Dispatcher.UIThread.VerifyAccess();
                 if (_disposed || !AllWindows.Contains(source) || source.Window.Clipboard is not { } clipboard) return;
-                using var transfer = await ReadClipboardCandidateAsync(clipboard.TryGetDataAsync, token);
-                if (transfer is null) return;
-                var kinds = Preferences.SupportedContentKinds;
-                if (kinds == PinnedContentKinds.None) return;
-                var snapshot = await PinnedClipboardSnapshot.ReadEnabledAsync(transfer, kinds, token);
-                var result = await PinInputSnapshotAsync(snapshot, kinds,
-                    () => PinnedClipboardSnapshot.ReadBitmapAsync(transfer, token), false, token);
+                var prepared = await PrepareClipboardPinAsync(clipboard, token);
+                var result = await ConfirmClipboardPinAsync(prepared, source.Window, token);
                 if (result.Created is not { } created) return;
                 CompleteInputReplacement(source, created);
                 PinLogger.ZLogInformation(

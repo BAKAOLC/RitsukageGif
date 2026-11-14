@@ -6,7 +6,7 @@ namespace RitsukageGif.Desktop
     internal sealed class ScreenshotScrollingMaskSurface : Control
     {
         private readonly IBrush _border;
-        private readonly double _borderWidth;
+        private readonly int _borderWidth;
         private readonly IBrush _shade;
         private List<PixelRect> _borders = [];
         private PixelRect _capture;
@@ -14,11 +14,11 @@ namespace RitsukageGif.Desktop
         private PixelRect _monitor;
         private double _scale;
 
-        public ScreenshotScrollingMaskSurface(AppearancePreferences appearance)
+        public ScreenshotScrollingMaskSurface(AppearancePreferences appearance, int borderWidth)
         {
             _shade = new SolidColorBrush(Color.FromUInt32(appearance.SelectionMaskColor));
-            _border = new SolidColorBrush(Color.FromUInt32(appearance.SelectionBorderColor ?? appearance.AccentColor));
-            _borderWidth = appearance.SelectionBorderWidth;
+            _border = new SolidColorBrush(Color.FromUInt32(appearance.EffectiveSelectionBorderColor));
+            _borderWidth = borderWidth;
             IsHitTestVisible = false;
         }
 
@@ -28,8 +28,7 @@ namespace RitsukageGif.Desktop
             _capture = capture;
             _scale = scale;
             _excluded = excluded;
-            _borders = ScreenshotScrollingWindow.CreateBorderRectangles(capture, [monitor],
-                (int)Math.Ceiling(_borderWidth * scale));
+            _borders = ScreenshotScrollingWindow.CreateBorderRectangles(capture, [monitor], _borderWidth);
             InvalidateVisual();
         }
 

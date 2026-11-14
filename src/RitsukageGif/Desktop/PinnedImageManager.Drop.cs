@@ -24,8 +24,9 @@ namespace RitsukageGif.Desktop
                     Dispatcher.UIThread.VerifyAccess();
                     if (!CanDrop()) return;
                     var snapshot = await input.ReadEnabledAsync(token);
-                    var result = await PinInputSnapshotAsync(snapshot, kinds, () => input.ReadBitmapAsync(token), true,
-                        token);
+                    var prepared = await PinInputSnapshotAsync(snapshot, kinds, () => input.ReadBitmapAsync(token),
+                        true, token);
+                    var result = await ConfirmClipboardPinAsync(prepared, source.Window, token);
                     if (result.Created is not { } created) return;
                     CompleteInputReplacement(source, created);
                     PinLogger.ZLogInformation($"Pinned input drop completed. Replaced={Preferences.ReplacementAction}");

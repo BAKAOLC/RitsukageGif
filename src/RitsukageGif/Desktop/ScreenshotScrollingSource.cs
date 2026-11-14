@@ -2,7 +2,8 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotScrollingSource : IDisposable
     {
-        private readonly DesktopCapture? _desktop;
+        private DesktopCapture? _desktop;
+        private readonly PixelRect[] _monitors;
         private readonly WindowTarget? _target;
         private readonly NativeCaptureSession? _nativeSource;
         private readonly HdrToneMapMode _toneMap;
@@ -16,6 +17,7 @@ namespace RitsukageGif.Desktop
             NativeCaptureSession? nativeSource = null)
         {
             _toneMap = toneMap;
+            _monitors = monitors;
             _density = pixelDensity;
             _target = target;
             _nativeSource = nativeSource;
@@ -41,16 +43,11 @@ namespace RitsukageGif.Desktop
         {
             if (_desktop is not null)
             {
-                if (_current != region)
-                {
-                    _desktop.Move(region);
-                    _current = region;
-                }
-
+                var desktop = ConfigureDesktopRegion(region);
                 if (!_colorUnavailable && _toneMap != HdrToneMapMode.HighlightCompression)
                     try
                     {
-                        return ReadSdr(_desktop.CaptureFrames(token), token);
+                        return ReadSdr(desktop.CaptureFrames(token), token);
                     }
                     catch (Exception error) when (SelectionCoordinator.IsOptionalHdrUnsupported(error))
                     {
@@ -58,7 +55,7 @@ namespace RitsukageGif.Desktop
                         _colorUnavailable = true;
                     }
 
-                return _desktop.Capture(token);
+                return desktop.Capture(token);
             }
 
             var target = RefreshTarget(_target!) ?? throw new CaptureSourceLostException();
@@ -90,6 +87,25 @@ namespace RitsukageGif.Desktop
                 throw new CaptureSourceLostException();
             return Crop(pixels, _window.Width, _window.Height, _window.CoordinateBounds ?? bounds, region, _density,
                 token);
+        }
+
+        private DesktopCapture ConfigureDesktopRegion(PixelRect region)
+        {
+            var desktop = _desktop!;
+            if (_current == region) return desktop;
+            if (_current.Width != region.Width || _current.Height != region.Height)
+            {
+                var replacement = new DesktopCapture(new(region, Divisor: 1) { PixelDensity = _density }, _monitors,
+                    nativeSource: _nativeSource);
+                _desktop = replacement;
+                _current = region;
+                desktop.Dispose();
+                return replacement;
+            }
+
+            desktop.Move(region);
+            _current = region;
+            return desktop;
         }
 
         private byte[] ReadSdr(CapturedFrameSet frames, CancellationToken token)

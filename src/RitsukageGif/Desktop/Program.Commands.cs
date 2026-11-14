@@ -84,33 +84,39 @@ namespace RitsukageGif.Desktop
                         existingMutex?.Dispose();
                     }
 
-                    if (task && (!reuseCore || !hasResident))
+                    switch (task)
                     {
-                        preserveTask = keepAlive;
-                        createdSession = Guid.NewGuid().ToString("N");
-                        endpoint = CommandPipe.SessionName(createdSession);
-                        var start = CreateSelfStartInfo();
-                        start.ArgumentList.Add("--task-host");
-                        start.ArgumentList.Add(createdSession);
-                        if (keepAlive) start.ArgumentList.Add("--keep-alive");
-                        start.ArgumentList.Add("--parent");
-                        start.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
-                        start.UseShellExecute = false;
-                        start.CreateNoWindow = true;
-                        BackgroundStandardStreams.StartBackground(start)?.Dispose();
-                        args = ["task", "execute", .. args];
-                    }
-                    else if (session is null)
-                    {
-                        var running = Mutex.TryOpenExisting(CommandPipe.MutexName, out var mutex);
-                        mutex?.Dispose();
-                        if (!running)
+                        case true when !hasResident:
                         {
+                            preserveTask = keepAlive;
+                            createdSession = Guid.NewGuid().ToString("N");
+                            endpoint = CommandPipe.SessionName(createdSession);
                             var start = CreateSelfStartInfo();
-                            start.ArgumentList.Add("--serve");
+                            start.ArgumentList.Add("--task-host");
+                            start.ArgumentList.Add(createdSession);
+                            if (keepAlive) start.ArgumentList.Add("--keep-alive");
+                            start.ArgumentList.Add("--parent");
+                            start.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
                             start.UseShellExecute = false;
                             start.CreateNoWindow = true;
                             BackgroundStandardStreams.StartBackground(start)?.Dispose();
+                            args = ["task", "execute", .. args];
+                            break;
+                        }
+                        case false when session is null:
+                        {
+                            var running = Mutex.TryOpenExisting(CommandPipe.MutexName, out var mutex);
+                            mutex?.Dispose();
+                            if (!running)
+                            {
+                                var start = CreateSelfStartInfo();
+                                start.ArgumentList.Add("--serve");
+                                start.UseShellExecute = false;
+                                start.CreateNoWindow = true;
+                                BackgroundStandardStreams.StartBackground(start)?.Dispose();
+                            }
+
+                            break;
                         }
                     }
 

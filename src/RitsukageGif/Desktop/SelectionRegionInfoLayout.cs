@@ -5,15 +5,15 @@ namespace RitsukageGif.Desktop
     internal static class SelectionRegionInfoLayout
     {
         internal static Rect Place(Size viewport, Rect selected, Size size, Rect toolbar, Rect options, Rect side,
-            Rect modes)
+            Rect modes, double nearOffset, double farOffset)
         {
-            const double gap = 14;
+            const double obstacleGap = 14;
             Span<Point> anchors =
             [
-                new(selected.Left, selected.Top - size.Height - gap),
-                new(selected.Left - size.Width - gap, selected.Top),
-                new(selected.Right + gap, selected.Top),
-                new(selected.Left, selected.Bottom + gap),
+                new(selected.Left, selected.Top - size.Height - nearOffset),
+                new(selected.Left - size.Width - nearOffset, selected.Top),
+                new(selected.Right + farOffset, selected.Top),
+                new(selected.Left, selected.Bottom + farOffset),
                 selected.TopLeft,
                 new(selected.Right - size.Width, selected.Top),
                 new(selected.Left, selected.Bottom - size.Height),
@@ -55,10 +55,10 @@ namespace RitsukageGif.Desktop
             foreach (var obstacle in obstacles)
             {
                 if (obstacle.Width <= 0 || obstacle.Height <= 0) continue;
-                horizontal[count] = obstacle.Left - size.Width - gap;
-                vertical[count++] = obstacle.Top - size.Height - gap;
-                horizontal[count] = obstacle.Right + gap;
-                vertical[count++] = obstacle.Bottom + gap;
+                horizontal[count] = obstacle.Left - size.Width - obstacleGap;
+                vertical[count++] = obstacle.Top - size.Height - obstacleGap;
+                horizontal[count] = obstacle.Right + obstacleGap;
+                vertical[count++] = obstacle.Bottom + obstacleGap;
             }
 
             foreach (var x in horizontal[..count])

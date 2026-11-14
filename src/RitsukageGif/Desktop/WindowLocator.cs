@@ -16,15 +16,24 @@ namespace RitsukageGif.Desktop
                                                         window.NativeSourceIdentity == target.NativeSourceIdentity));
             var handle = target.Handle;
             if (NativeMethods.IsWindowVisible(handle) == 0 || NativeMethods.IsIconic(handle) != 0) return null;
-            if (NativeMethods.DwmGetWindowAttribute(handle, 9, out var bounds, 16) != 0 &&
-                NativeMethods.GetWindowRect(handle, out bounds) == 0) return null;
-            if (GetClientRect(handle, out var client) == 0) return null;
+            if (!TryGetFrame(handle, out var bounds) || !TryGetClient(handle, out var client)) return null;
+            return target with { Bounds = bounds.Pixels, Client = client };
+        }
+
+        private static bool TryGetFrame(nint handle, out NativeMethods.Rect bounds)
+        {
+            return NativeMethods.DwmGetWindowAttribute(handle, 9, out bounds, 16) == 0 ||
+                   NativeMethods.GetWindowRect(handle, out bounds) != 0;
+        }
+
+        private static bool TryGetClient(nint handle, out PixelRect client)
+        {
+            client = default;
+            if (GetClientRect(handle, out var rectangle) == 0) return false;
             var origin = new NativeMethods.Point();
-            if (ClientToScreen(handle, ref origin) == 0) return null;
-            return target with
-            {
-                Bounds = bounds.Pixels, Client = new(origin.X, origin.Y, client.Right, client.Bottom),
-            };
+            if (ClientToScreen(handle, ref origin) == 0) return false;
+            client = new(origin.X, origin.Y, rectangle.Right, rectangle.Bottom);
+            return true;
         }
 
         [LibraryImport("user32.dll", EntryPoint = "IsWindow")]

@@ -5,6 +5,10 @@ namespace RitsukageGif.Desktop
         private IReadOnlyList<WindowControlTarget> _controlHierarchy = [];
         private int _controlRevision;
 
+        private bool CanDetectHoverControl => Controls && !UsesLocalSource &&
+                                              DetectionMode != CaptureDetectionMode.None &&
+                                              ShapeMode == SelectionShapeMode.Rectangle;
+
         private WindowTarget? CurrentControlTarget => WindowSource
             ? ObserveDetectionTarget((_selectedTarget ?? _hoveredTarget) is { } target
                 ? WindowLocator.RefreshCandidate(target)
@@ -74,6 +78,7 @@ namespace RitsukageGif.Desktop
         {
             _controlRevision++;
             _controlBounds = default;
+            _controlPoint = null;
             _controlHierarchy = [];
             _candidateHierarchy = null;
         }

@@ -34,6 +34,31 @@ namespace RitsukageGif.Desktop
                 Add(new(x, bottom ? region.Bottom : reference.Y), new(x, bottom ? reference.Bottom : region.Y),
                     bottom ? reference.Bottom - region.Bottom : region.Y - reference.Y);
             }
+            else if (region.Intersect(reference) == reference)
+            {
+                var leftGap = reference.X - region.X;
+                var rightGap = region.Right - reference.Right;
+                var topGap = reference.Y - region.Y;
+                var bottomGap = region.Bottom - reference.Bottom;
+                var horizontal = Math.Min(leftGap, rightGap);
+                var vertical = Math.Min(topGap, bottomGap);
+                if (horizontal <= vertical)
+                {
+                    var y = reference.Y + reference.Height / 2;
+                    if (rightGap < leftGap || (rightGap == leftGap && right))
+                        Add(new(reference.Right, y), new(region.Right, y), horizontal);
+                    else
+                        Add(new(region.X, y), new(reference.X, y), horizontal);
+                }
+                else
+                {
+                    var x = reference.X + reference.Width / 2;
+                    if (bottomGap < topGap || (bottomGap == topGap && bottom))
+                        Add(new(x, reference.Bottom), new(x, region.Bottom), vertical);
+                    else
+                        Add(new(x, region.Y), new(x, reference.Y), vertical);
+                }
+            }
             else
             {
                 // The closest segment to the hovered target, including a diagonal when both axes are disjoint.

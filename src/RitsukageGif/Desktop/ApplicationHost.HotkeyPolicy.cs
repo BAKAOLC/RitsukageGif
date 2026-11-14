@@ -43,6 +43,7 @@ namespace RitsukageGif.Desktop
         private void SetForegroundPolicyStatus(ForegroundHotkeyContext context)
         {
             var needsProgram = Settings.HotkeyPolicy.IgnoredPrograms.Count != 0 ||
+                               Settings.GlobalMouseIgnoredPrograms.Count != 0 ||
                                Settings.GlobalActions.Any(action =>
                                    action.Enabled && action.IgnoredPrograms.Count != 0);
             if ((needsProgram && !context.ProgramAvailable) ||
@@ -102,6 +103,7 @@ namespace RitsukageGif.Desktop
         {
             var needed = Settings.HotkeyPolicy.DisableInFullscreen ||
                          Settings.HotkeyPolicy.IgnoredPrograms.Count != 0 ||
+                         Settings.GlobalMouseIgnoredPrograms.Count != 0 ||
                          Settings.GlobalActions.Any(action => action.Enabled && action.IgnoredPrograms.Count != 0);
             if (!_startServices || IsClosing || !needed)
             {
@@ -168,29 +170,23 @@ namespace RitsukageGif.Desktop
         }
 
         private string? GlobalInputDisabledReason(GlobalActionBinding? action, ForegroundHotkeyContext context,
-            bool resumeShortcut = false)
+            bool resumeShortcut = false, List<string>? ignoredPrograms = null)
         {
             if (IsClosing || IsConfiguring || GlobalInputCapture.Active) return "HotkeyCapturingInput";
             if (action is not null && GlobalActionUnavailableReasonKey(action.Kind) is { } unavailable)
                 return unavailable;
             if (_globalShortcutsSuspended && !resumeShortcut) return "HotkeyManuallySuspended";
-            var needsProgram = Settings.HotkeyPolicy.IgnoredPrograms.Count != 0 ||
-                               action?.IgnoredPrograms.Count > 0;
+            ignoredPrograms ??= Settings.HotkeyPolicy.IgnoredPrograms;
+            var needsProgram = ignoredPrograms.Count != 0 || action?.IgnoredPrograms.Count > 0;
             if ((needsProgram && !context.ProgramAvailable) ||
                 (Settings.HotkeyPolicy.DisableInFullscreen && !context.FullscreenAvailable))
                 return context.UnavailableReason ?? "HotkeyPolicyObserverUnavailable";
             if (Settings.HotkeyPolicy.DisableInFullscreen && context.Fullscreen) return "HotkeyFullscreenDisabled";
-            if (Settings.HotkeyPolicy.Ignores(context.Program) ||
+            if (ProgramExclusionRules.Matches(ignoredPrograms, context.Program) ||
                 (action is not null && ProgramExclusionRules.Matches(action.IgnoredPrograms, context.Program)))
                 return "HotkeyExcludedProgram";
 
             return null;
-        }
-
-        private bool AllowsGlobalActionInput(GlobalActionBinding action)
-        {
-            return GlobalInputDisabledReason(action, ReadGlobalInputContext(),
-                action.Kind == GlobalActionKind.ToggleGlobalShortcuts) is null;
         }
 
         private void GlobalInputCaptureChanged()

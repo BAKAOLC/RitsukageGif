@@ -12,6 +12,7 @@ namespace RitsukageGif.Desktop
         private readonly GlobalMouseHookCallback _callback;
         private readonly Action<string> _error;
         private readonly Func<string, PixelRect?, Task> _execute;
+        private readonly List<string>? _pointerExclusions;
         private readonly Action<string?, PixelRect?>? _preview;
         private readonly Lock _previewGate = new();
         private readonly Action _registered;
@@ -20,13 +21,16 @@ namespace RitsukageGif.Desktop
         private readonly Thread? _thread;
         private readonly GlobalMouseGestureTracker _tracker;
         private int _disposed;
+        private string? _pointerProgram;
+        private nint _pointerWindow;
         private string? _previewAction;
         private bool _previewQueued;
         private PixelRect? _previewRegion;
 
         internal GlobalMouseService(IReadOnlyList<GlobalMouseBinding> bindings,
             IReadOnlyList<GlobalActionBinding> actions, Func<string, PixelRect?, Task> execute, Action<string> error,
-            Action<string> registrationError, Action registered, Action<string?, PixelRect?>? preview = null)
+            Action<string> registrationError, Action registered, Action<string?, PixelRect?>? preview = null,
+            List<string>? pointerExclusions = null)
         {
             var failures = Validate(bindings, actions);
             if (failures.Count > 0) throw new ArgumentException(string.Join(Environment.NewLine, failures));
@@ -45,9 +49,12 @@ namespace RitsukageGif.Desktop
             _registrationError = registrationError;
             _registered = registered;
             _preview = preview;
+            _pointerExclusions = pointerExclusions is { Count: > 0 } && OperatingSystem.IsWindows()
+                ? pointerExclusions
+                : null;
             _callback = OnMouse;
-            _tracker = new(active, OperatingSystem.IsWindows() ? Math.Max(1, NativeMethods.GetSystemMetrics(68)) : 4,
-                OperatingSystem.IsWindows() ? Math.Max(1, NativeMethods.GetSystemMetrics(69)) : 4);
+            var dragThreshold = OperatingSystem.IsWindows() ? 0 : 4;
+            _tracker = new(active, dragThreshold, dragThreshold);
             if (active.Count == 0)
             {
                 _registered();
@@ -121,9 +128,20 @@ namespace RitsukageGif.Desktop
                 if (hook == 0) throw new Win32Exception(Marshal.GetLastPInvokeError());
                 ReportRegistered();
                 var handle = _stop.Token.WaitHandle.SafeWaitHandle.DangerousGetHandle();
+                var modifierCheckAt = 0L;
                 while (!_stop.IsCancellationRequested)
                 {
-                    var result = NativeMethods.MsgWaitForMultipleObjectsEx(1, &handle, uint.MaxValue, 0x04FF, 4);
+                    var now = Environment.TickCount64;
+                    if (now >= modifierCheckAt)
+                    {
+                        modifierCheckAt = now + 100;
+                        var modifiers = ReadModifiers();
+                        if (NativeMethods.GetCursorPos(out var point) != 0)
+                            UpdateWindowsModifiers(now, modifiers, new() { X = point.X, Y = point.Y });
+                    }
+
+                    var wait = (uint)Math.Clamp(modifierCheckAt - Environment.TickCount64, 0, 100);
+                    var result = NativeMethods.MsgWaitForMultipleObjectsEx(1, &handle, wait, 0x04FF, 4);
                     switch (result)
                     {
                         case 0: return;
@@ -161,10 +179,18 @@ namespace RitsukageGif.Desktop
             if (code >= 0 && !_stop.IsCancellationRequested)
                 try
                 {
-                    var modifiers = message is 0x0201 or 0x0204 or 0x0207 or 0x020B
-                        ? ReadModifiers()
-                        : KeyModifiers.None;
-                    ProcessNativeInput((uint)message, *(GlobalMouseHookData*)pointer, modifiers);
+                    var data = *(GlobalMouseHookData*)pointer;
+                    var modifiers = KeyModifiers.None;
+                    if ((data.Flags & 3) == 0 && IsButtonDown((uint)message))
+                    {
+                        modifiers = ReadModifiers();
+                        UpdateWindowsModifiers(Environment.TickCount64, modifiers, data);
+                        if (!_tracker.WindowsGestureArmed) modifiers = KeyModifiers.None;
+                    }
+
+                    var hadCandidate = _tracker.HasCandidate;
+                    ProcessNativeInput((uint)message, data, modifiers);
+                    if (hadCandidate && !_tracker.HasCandidate) _tracker.CloseWindowsModifierWindow();
                 }
                 catch (Exception exception)
                 {
@@ -175,6 +201,23 @@ namespace RitsukageGif.Desktop
                 }
 
             return NativeMethods.CallNextHookEx(0, code, message, pointer);
+        }
+
+        private void UpdateWindowsModifiers(long now, KeyModifiers modifiers, GlobalMouseHookData data)
+        {
+            var wasArmed = _tracker.WindowsGestureArmed;
+            if (_tracker.ObserveWindowsModifiers(now, modifiers))
+            {
+                ProcessNativeInput(GlobalMouseGestureTracker.ModifiersChanged, data, KeyModifiers.None);
+                return;
+            }
+
+            if (!wasArmed && _tracker.WindowsGestureArmed && _pointerExclusions is not null &&
+                IsPointerProgramExcluded(data, _pointerExclusions))
+            {
+                _tracker.IgnorePointerProgram();
+                _tracker.CloseWindowsModifierWindow();
+            }
         }
 
         private void RunPortable()
@@ -220,13 +263,52 @@ namespace RitsukageGif.Desktop
         private void ProcessNativeInput(uint message, GlobalMouseHookData data, KeyModifiers modifiers)
         {
             if (_stop.IsCancellationRequested) return;
+            if (_pointerExclusions is not null && (data.Flags & 3) == 0 &&
+                (_tracker.HasCandidate || (IsButtonDown(message) && _tracker.HasBoundModifiers(modifiers))) &&
+                IsMouseEvent(message) &&
+                IsPointerProgramExcluded(data, _pointerExclusions))
+            {
+                _tracker.IgnorePointerProgram();
+                _tracker.CloseWindowsModifierWindow();
+            }
+
             var action = _tracker.Process(message, data, modifiers, out var region);
+            if (!_tracker.HasCandidate)
+            {
+                _pointerWindow = 0;
+                _pointerProgram = null;
+            }
+
             QueuePreview();
             if (action is not null)
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (!_stop.IsCancellationRequested) _ = ExecuteAsync(action, region);
                 });
+        }
+
+        private bool IsPointerProgramExcluded(GlobalMouseHookData data, List<string> rules)
+        {
+            var window = WindowLocator.GlobalMouseWindowAtPoint(new(data.X, data.Y));
+            if (window != _pointerWindow)
+            {
+                _pointerWindow = window;
+                _pointerProgram = window == 0 ? null : ForegroundHotkeyContext.ReadProgram(window);
+            }
+
+            return ProgramExclusionRules.Matches(rules,
+                _pointerProgram ?? ForegroundHotkeyContext.Read(false, true).Program);
+        }
+
+        private static bool IsButtonDown(uint message)
+        {
+            return message is 0x0201 or 0x0204 or 0x0207 or 0x020B;
+        }
+
+        private static bool IsMouseEvent(uint message)
+        {
+            return message is 0x0200 or 0x0201 or 0x0202 or 0x0204 or 0x0205 or 0x0207 or 0x0208 or 0x020A or 0x020B
+                or 0x020C;
         }
 
         private void QueuePreview()

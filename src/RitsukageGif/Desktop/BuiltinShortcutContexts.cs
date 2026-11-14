@@ -2,6 +2,7 @@ namespace RitsukageGif.Desktop
 {
     internal static class BuiltinShortcutContexts
     {
+        internal const string CapturePin = "BuiltinShortcutCapturePinContext";
         internal const string Pinned = "BuiltinShortcutPinnedContext";
         internal const string PinnedImage = "BuiltinShortcutPinnedImageContext";
         internal const string PinnedDynamicImage = "BuiltinShortcutPinnedDynamicImageContext";
@@ -10,7 +11,7 @@ namespace RitsukageGif.Desktop
 
         internal static IReadOnlyList<string> Keys { get; } =
         [
-            "BuiltinShortcutSelectionContext", "BuiltinShortcutScreenshotContext", Pinned, PinnedImage,
+            CapturePin, "BuiltinShortcutSelectionContext", "BuiltinShortcutScreenshotContext", Pinned, PinnedImage,
             PinnedText, PinnedDynamicImage, PinnedWindowRoi, "BuiltinShortcutLongshotContext",
         ];
 

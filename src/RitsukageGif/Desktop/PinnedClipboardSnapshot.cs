@@ -31,6 +31,9 @@ namespace RitsukageGif.Desktop
         public string? SourceHtml { get; private init; } = Html;
         public string? SourceText { get; private init; } = Text;
 
+        internal bool HasPowerPointGenerator => Html?.Contains(
+            """<meta name=Generator content="Microsoft PowerPoint""", StringComparison.Ordinal) == true;
+
         internal (CaptureWindowShape? Shape, double CaptureScaling) ShapeForFile(string path)
         {
             return FileShapes is not null && FileShapes.TryGetValue(path, out var shape) ? shape : (null, 1);

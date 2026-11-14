@@ -49,22 +49,27 @@ namespace RitsukageGif.Desktop
                 _saveTimerConfigured = true;
             }
 
-            if (restore) return await RestoreSessionAsync(token);
+            if (restore) return await RestoreSessionCoreAsync(null, token, true);
             await _sessionGate.WaitAsync(token);
             try
             {
                 var saved = await ReadStatesAsync(token);
-                foreach (var entry in saved.States) _unrestoredStates.TryAdd(entry.Id, entry);
+                foreach (var entry in saved.States)
+                    if (entry.ClosedAtUtcTicks == 0)
+                        _unrestoredStates.TryAdd(entry.Id, entry);
 
                 PinLogger.ZLogDebug(
                     $"Pinned image session configuration completed. DeferredCount={_unrestoredStates.Count} RejectedCount={saved.Rejected}");
-                var rejected = saved.Rejected + await ReadDocumentsAsync(false, token);
+                var rejected = saved.Rejected + await ReadClosedImagesAsync(saved.States, token);
+                rejected += await ReadDocumentsAsync(false, token, loadClosed: true);
+                TrimClosedHistory();
                 if (rejected > 0) ScheduleSave();
                 return rejected;
             }
             finally
             {
                 _sessionGate.Release();
+                Changed?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -87,7 +92,8 @@ namespace RitsukageGif.Desktop
                         var state = element.Deserialize(PinnedImageJsonContext.Default.PinnedImageState);
                         if (state?.Annotations is { } annotations)
                             ScreenshotAnnotationSession.ValidateDocument(annotations);
-                        if (state is null || !ValidState(state))
+                        if (state is null || state.ClosedAtUtcTicks < 0 ||
+                            state.ClosedAtUtcTicks > DateTime.MaxValue.Ticks || !ValidState(state))
                         {
                             RejectSessionRecord("session.json", element);
                             rejected++;
@@ -152,7 +158,7 @@ namespace RitsukageGif.Desktop
             return RestoreSessionCoreAsync(null, token);
         }
 
-        private async Task<int> RestoreSessionCoreAsync(string? group, CancellationToken token)
+        private async Task<int> RestoreSessionCoreAsync(string? group, CancellationToken token, bool loadClosed = false)
         {
             Dispatcher.UIThread.VerifyAccess();
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -164,12 +170,14 @@ namespace RitsukageGif.Desktop
             {
                 var (entries, rejectedCount) = await ReadStatesAsync(token);
                 rejected = rejectedCount;
+                if (loadClosed) rejected += await ReadClosedImagesAsync(entries, token);
                 var knownIds = _windows.Select(window => window.Id)
-                    .Concat(_pendingRestore.Values.Select(state => state.Id)).ToHashSet(StringComparer.Ordinal);
+                    .Concat(_pendingRestore.Values.Select(state => state.Id))
+                    .Concat(_closedImages.Select(entry => entry.State.Id)).ToHashSet(StringComparer.Ordinal);
                 var restoredCount = 0;
                 foreach (var state in entries)
                 {
-                    if (group is not null && state.Group != group) continue;
+                    if (state.ClosedAtUtcTicks != 0 || (group is not null && state.Group != group)) continue;
                     token.ThrowIfCancellationRequested();
                     ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -243,7 +251,13 @@ namespace RitsukageGif.Desktop
                 }
 
                 _restoring = true;
-                rejected += await ReadDocumentsAsync(true, token, group);
+                rejected += await ReadDocumentsAsync(true, token, group, loadClosed);
+                if (loadClosed)
+                {
+                    _restoring = false;
+                    TrimClosedHistory();
+                }
+
                 if (restoredCount > 0 || rejected > 0)
                     PinLogger.ZLogInformation(
                         $"Pinned image session restore completed. RestoredCount={restoredCount} RejectedCount={rejected}");
@@ -298,9 +312,18 @@ namespace RitsukageGif.Desktop
                     CaptureMaskVisibility(window, state);
                     return (
                         State: state,
-                        Png: window.CurrentPng, Original: window.OriginalContent, window.AnimationActive,
-                        Live: live);
-                }).ToArray();
+                        Png: window.CurrentPng, Original: live is null ? window.OriginalContent : null,
+                        window.AnimationActive, Live: live);
+                }).Concat(_closedImages.Select(entry =>
+                {
+                    var live = (entry as PinnedClosedLiveImage)?.Snapshot.Retain();
+                    if (live is not null) liveSnapshots.Add(live);
+                    var state = entry.State.Copy();
+                    state.ClosedAtUtcTicks = entry.ClosedAt;
+                    var original = entry as PinnedClosedStaticImage;
+                    return (State: state, Png: original?.Png ?? default, original?.Original,
+                        AnimationActive: original?.AnimationActive ?? false, Live: live);
+                })).ToArray();
                 Directory.CreateDirectory(directory);
                 await WriteVisibilityMaskAsync(directory, token);
                 var savedImages =
@@ -310,7 +333,7 @@ namespace RitsukageGif.Desktop
                 {
                     await WriteAnnotationImagesAsync(state.Annotations, createdImages, token);
                     await WriteTranslationImageAsync(state.Translation, createdImages, token);
-                    if (live is null && _sessionImageReferences.TryGetValue(state.Id, out var saved) &&
+                    if (original is not null && _sessionImageReferences.TryGetValue(state.Id, out var saved) &&
                         saved.Png.Equals(originalPng) && saved.Original == original)
                     {
                         state.ImageId = saved.ImageId;
@@ -331,20 +354,21 @@ namespace RitsukageGif.Desktop
                     }
 
                     state.ImageId = Guid.NewGuid().ToString("N");
-                    state.HasOriginalImage = live is null && !png.Equals((ReadOnlyMemory<byte>)original.Png);
-                    state.HasOriginalSdrImage = live is null && original.Hdr is not null && original.SdrPng is not null;
-                    state.HasOriginalEncoded = live is null && original.Encoded is not null;
-                    state.AnimationActive = live is null && animationActive;
+                    state.HasOriginalImage = original is not null && !png.Equals((ReadOnlyMemory<byte>)original.Png);
+                    state.HasOriginalSdrImage = original is { Hdr: not null, SdrPng: not null };
+                    state.HasOriginalEncoded = original?.Encoded is not null;
+                    state.AnimationActive = animationActive;
                     var target = ImagePath(state.ImageId);
                     await WriteSessionImageAsync(target, png, createdImages, token);
+                    if (original is null) continue;
                     if (state.HasOriginalImage)
                         await WriteSessionImageAsync(OriginalPath(state.ImageId, false), original.Png, createdImages,
                             token);
                     if (state.HasOriginalSdrImage && original.SdrPng is { } sdr)
                         await WriteSessionImageAsync(OriginalPath(state.ImageId, true), sdr, createdImages, token);
-                    if (state.HasOriginalEncoded && original.Encoded is { } media)
+                    if (original.Encoded is { } media)
                         await WriteSessionImageAsync(OriginalEncodedPath(state.ImageId), media, createdImages, token);
-                    if (live is null) savedImages.Add(state.Id, (originalPng, original, state.ImageId));
+                    savedImages.Add(state.Id, (originalPng, original, state.ImageId));
                 }
 
                 var states = images.Select(image => image.State).Concat(_unrestoredStates.Values).ToArray();

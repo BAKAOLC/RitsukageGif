@@ -32,6 +32,8 @@ namespace RitsukageGif.Desktop
         public bool Polling { get; set; }
         public PresetScriptSession? Script { get; set; }
         public Task? ScriptTask { get; set; }
+        internal Task<RecordingOutcome>? RecordingOperation { get; set; }
+        internal bool RecordingExplicitlyCancelled { get; set; }
         internal TaskCompletionSource Completion { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public string? Failure { get; set; }
         public Exception? ScriptFailure { get; set; }

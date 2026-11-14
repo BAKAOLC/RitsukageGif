@@ -1,3 +1,5 @@
+using ImageMagick;
+
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class PinnedImageManager
@@ -33,20 +35,61 @@ namespace RitsukageGif.Desktop
             TrimClosedHistory();
         }
 
+        private async Task<int> ReadClosedImagesAsync(PinnedImageState[] states, CancellationToken token)
+        {
+            var rejected = 0;
+            var history = states.Where(state => state.ClosedAtUtcTicks > 0).OrderBy(state => state.ClosedAtUtcTicks)
+                .TakeLast(Preferences.HistoryLimit).ToArray();
+            if (states.Count(state => state.ClosedAtUtcTicks > 0) != history.Length) ScheduleSave();
+            foreach (var state in history)
+                try
+                {
+                    var png = await ReadOriginalBytesAsync(ImagePath(state.ImageId), token);
+                    var content = await Task.Run(() => PinnedImageContent.Decode(png, token), token);
+                    var original = await ReadOriginalAsync(state, content, token);
+                    state.Annotations = await ReadAnnotationImagesAsync(state.Annotations, token);
+                    state.Translation = await ReadTranslationImageAsync(state.Translation, content.Png, token);
+                    token.ThrowIfCancellationRequested();
+                    ObjectDisposedException.ThrowIf(_disposed, this);
+                    var entry = new PinnedClosedStaticImage(state, content.Png, content.ContentHash, original,
+                        state.AnimationActive, state.ClosedAtUtcTicks);
+                    if (entry.EstimatedBytes > 128L * 1024 * 1024)
+                    {
+                        rejected++;
+                        continue;
+                    }
+
+                    _closedImages.Add(entry);
+                    _sessionImageReferences[state.Id] = (entry.Png, original, state.ImageId);
+                    TrimClosedHistory();
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or
+                                                  MagickException or ArgumentException)
+                {
+                    PinLogger.ZLogWarning(error, $"Closed pinned image could not be loaded.");
+                    rejected++;
+                }
+
+            return rejected;
+        }
+
         private void DropClosedImage(int index)
         {
             var entry = _closedImages[index];
             _closedImages.RemoveAt(index);
+            _sessionImageReferences.Remove(entry.State.Id);
             entry.Dispose();
         }
 
         private void TrimClosedHistory()
         {
+            var count = _closedImages.Count + _closedDocuments.Count;
             while (_closedImages.Count > Preferences.HistoryLimit ||
                    _closedImages.Sum(entry => entry.EstimatedBytes) >
                    128L * 1024 * 1024)
                 DropClosedImage(0);
             TrimMixedHistory();
+            if (count != _closedImages.Count + _closedDocuments.Count) ScheduleSave();
         }
 
         private async Task<bool> RestoreLastClosedCoreAsync(CancellationToken token)
@@ -99,9 +142,9 @@ namespace RitsukageGif.Desktop
                 var index = -1;
                 for (var candidate = 0; candidate < _closedImages.Count; candidate++)
                 {
-                    if (_closedImages[candidate] is not PinnedClosedLiveImage image ||
-                        image.State.Group != Preferences.ActiveGroup ||
-                        !image.Snapshot.Descriptor.MatchesSource(descriptor)) continue;
+                    var image = _closedImages[candidate];
+                    if (image.State.Group != Preferences.ActiveGroup ||
+                        image.State.LiveSource?.MatchesSource(descriptor) != true) continue;
                     if (index < 0 || Preferences.RestoreOrder == PinnedRestoreOrder.ClosedTime ||
                         image.State.CreatedAtUtcTicks > _closedImages[index].State.CreatedAtUtcTicks)
                         index = candidate;
@@ -150,24 +193,28 @@ namespace RitsukageGif.Desktop
                     AnimationActive = image.AnimationActive,
                 };
             var window = PinnedImageWindow.CreatePrepared(content, () => CanRestoreHidden(), Preferences);
-            if (entry is PinnedClosedStaticImage original) window.RestoreOriginal(original.Original);
+            if (entry is PinnedClosedStaticImage original)
+                window.RestoreOriginal(original.Original, !entry.State.HasOriginalImage &&
+                                                          original.Png.Equals(
+                                                              (ReadOnlyMemory<byte>)original.Original.Png));
+            var state = entry.State.Copy();
+            state.ClosedAtUtcTicks = 0;
+            state.Visible = true;
             AttachWindow(window);
             try
             {
                 if (AllPinsHidden)
                 {
-                    entry.State.Visible = true;
-                    entry.State.VisibleInGroup = true;
-                    MaskRestoredWindow(window, entry.State);
-                    window.RestoreHiddenState(entry.State);
-                    _pendingRestore.Add(window, entry.State);
+                    state.VisibleInGroup = true;
+                    MaskRestoredWindow(window, state);
+                    window.RestoreHiddenState(state);
+                    _pendingRestore.Add(window, state);
                     window.InitializeTextRecognition();
                 }
                 else
                 {
                     window.Show();
-                    entry.State.Visible = true;
-                    window.RestoreState(entry.State);
+                    window.RestoreState(state);
                     window.RevealImage();
                 }
             }

@@ -6,6 +6,12 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class OverlayWindow
     {
+        internal void SetMagnifierPlacement(PixelPoint pointer, OverlayWindow? sampleWindow)
+        {
+            _canvas.MagnifierPointer = pointer;
+            _canvas.MagnifierSampleCanvas = sampleWindow?._canvas;
+        }
+
         private void UpdatePointerCursorScope(PointerEventArgs args)
         {
             var overControls = true;

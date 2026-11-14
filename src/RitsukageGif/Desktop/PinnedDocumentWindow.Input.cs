@@ -17,14 +17,18 @@ namespace RitsukageGif.Desktop
         private readonly MouseGestureTracker _gesture = new();
         private readonly MouseClickDispatcher _mouseClicks = new();
         private string? _dragFile;
-        private PointerPressedEventArgs? _dragTrigger;
         private Avalonia.PixelPoint _dragPoint;
+        private PointerPressedEventArgs? _dragTrigger;
         private bool _dragging;
         private bool _nativeItemInteraction;
 
         private void ConfigureInput(ContextMenu menu)
         {
-            _content.AddHandler(PointerPressedEvent, (_, args) =>
+            Presentation.ResetFromSelection = () =>
+            {
+                if (!_closed && !_busy && !IsMarkEditing && !_gesture.IsActive) ToggleMouseReset();
+            };
+            _content.AddHandler(PointerPressedEvent, (sender, args) =>
             {
                 if (IsMarkEditing) return;
                 if (BeginDocumentThumbnailPointer(args)) return;
@@ -44,7 +48,10 @@ namespace RitsukageGif.Desktop
                                 HasPlainTextCopy(button, args.KeyModifiers, MouseCommands.SnapshotBindings());
                 var itemButton = args.Source as Button ?? (args.Source as Visual)?.GetVisualAncestors()
                     .OfType<Button>().FirstOrDefault();
-                _nativeItemInteraction = Document is PinnedFilesDocument && itemButton is not null &&
+                var fileRow = itemButton as PinnedFileRowButton;
+                var clickCount = _gesture.GetClickCount(args, button, (Visual?)fileRow ?? _content);
+                _nativeItemInteraction = button == MouseButton.Left && Document is PinnedFilesDocument &&
+                                         itemButton is not null &&
                                          !args.KeyModifiers.HasFlag(KeyModifiers.Alt) && !copyPlain;
                 _dragFile = _nativeItemInteraction ? itemButton?.Tag as string : null;
                 // ReSharper disable once ConvertIfStatementToSwitchStatement
@@ -60,8 +67,11 @@ namespace RitsukageGif.Desktop
                      (_textView is PinnedRichView && args.KeyModifiers.HasFlag(KeyModifiers.Control))) &&
                     _textView?.Control.IsPointerOver == true &&
                     !args.KeyModifiers.HasFlag(KeyModifiers.Alt) && !copyPlain) return;
-                _mouseClicks.Press(button, args.KeyModifiers, args.ClickCount);
-                if (_gesture.Begin(button, args.KeyModifiers, args.GetPosition(this), args.ClickCount))
+                if (args.Pointer.Type != PointerType.Touch && _nativeItemInteraction &&
+                    clickCount == 2 && _dragFile is { } file)
+                    _ = RunAsync(() => OpenFileAsync(file));
+                _mouseClicks.Press(button, args.KeyModifiers, clickCount);
+                if (_gesture.Begin(button, args.KeyModifiers, args.GetPosition(this), clickCount))
                 {
                     _dragTrigger = args;
                     _dragPoint = this.PointToScreen(args.GetPosition(this));
@@ -135,7 +145,10 @@ namespace RitsukageGif.Desktop
                 if (click && !_nativeItemInteraction &&
                     MouseCommands.TryResolve(MouseGestureContext.Pinned, gesture, bindings, out var binding))
                 {
-                    _mouseClicks.Dispatch(binding!, bindings, () => ExecuteMouse(gesture, menu, 1),
+                    Point? menuPoint = binding!.Action == MouseAction.ContextMenu && Document is PinnedFilesDocument
+                        ? args.GetPosition(_content)
+                        : null;
+                    _mouseClicks.Dispatch(binding, bindings, () => ExecuteMouse(gesture, menu, 1, menuPoint),
                         Application.Current?.PlatformSettings?.GetDoubleTapTime(PointerType.Mouse) ??
                         TimeSpan.FromMilliseconds(500),
                         () => !_closed && !_gesture.IsActive);
@@ -189,12 +202,13 @@ namespace RitsukageGif.Desktop
                 {
                     case "wheel-up": _simulatedWheel.Raise(1); break;
                     case "wheel-down": _simulatedWheel.Raise(-1); break;
-                    case "thumbnail": ToggleDocumentThumbnail(); break;
+                    case "thumbnail": ToggleDocumentThumbnail(true); break;
                     case "select-roi": SelectDocumentThumbnailRegion(); break;
                     case "text-selection": SetSelectable(!Selectable); break;
                     case "text-ignore-format"
                         when Document is PinnedHtmlDocument: SetIgnoreFormat(!IgnoreFormat); break;
                     case "text-select-all" when Selectable: _textView?.SelectAll(); break;
+                    case "annotate-toolbar":
                     case "annotate": _ = RunAsync(() => SetMarkEditingAsync(true)); break;
                     case "hide-mark": SetMarkHidden(!IsMarkHidden); break;
                     case "copy-plain-text":
@@ -205,6 +219,7 @@ namespace RitsukageGif.Desktop
                         break;
                     case "copy": _ = RunAsync(CopyAsync); break;
                     case "save": _ = RunAsync(SaveRenderedImageAsync); break;
+                    case "quick-save": _ = RunAsync(QuickSaveRenderedImageAsync); break;
                     case "copy-file": _ = RunAsync(CopyAsFileAsync); break;
                     case "copy-all-text": _ = RunAsync(() => CopyTextAsync(Document.PlainText)); break;
                     case "hide": HideImage(); break;
@@ -244,7 +259,7 @@ namespace RitsukageGif.Desktop
             }, RoutingStrategies.Tunnel);
         }
 
-        private bool ExecuteMouse(InputMouseGesture gesture, ContextMenu menu, double amount)
+        private bool ExecuteMouse(InputMouseGesture gesture, ContextMenu menu, double amount, Point? menuPoint = null)
         {
             using var input = PinnedInputContext.Use(PinnedInputContext.Current | PinnedInputOrigin.Pointer);
             if (!MouseCommands.TryResolve(MouseGestureContext.Pinned, gesture, MouseCommands.SnapshotBindings(),
@@ -264,10 +279,22 @@ namespace RitsukageGif.Desktop
                         CloseRequested?.Invoke(this, false);
                     }); break;
                 case MouseAction.Save: _ = RunAsync(SaveRenderedImageAsync); break;
+                case MouseAction.ToggleAnnotationToolbar: _ = RunAsync(() => SetMarkEditingAsync(true)); break;
                 case MouseAction.Hide: HideImage(); break;
                 case MouseAction.Close: CloseRequested?.Invoke(this, false); break;
                 case MouseAction.Destroy: CloseRequested?.Invoke(this, true); break;
-                case MouseAction.ContextMenu: Presentation.OpenMenu(menu, _content); break;
+                case MouseAction.ContextMenu:
+                    _fileMenuPoint = menuPoint;
+                    try
+                    {
+                        Presentation.OpenMenu(menu, _content);
+                    }
+                    finally
+                    {
+                        _fileMenuPoint = null;
+                    }
+
+                    break;
                 case MouseAction.ToggleSelection: SelectionRequested?.Invoke(this); break;
                 case MouseAction.Zoom when !IsOperationLocked(PinnedLockRestrictions.Move):
                     SetZoom(_zoom * Math.Pow(1 + preferences.ZoomStep, amount)); break;
@@ -277,9 +304,8 @@ namespace RitsukageGif.Desktop
                     AdjustOpacity(amount * preferences.OpacityStep); break;
                 case MouseAction.ActualSize when !IsOperationLocked(PinnedLockRestrictions.Move): SetZoom(1); break;
                 case MouseAction.Reset when !IsOperationLocked(PinnedLockRestrictions.Move):
-                    SetZoom(1);
-                    Opacity = 1;
-                    SetContentScrollOffset(default);
+                    ToggleMouseReset();
+                    Presentation.ResetSelectedPeersRequested?.Invoke();
                     break;
                 default: return false;
             }
@@ -296,6 +322,14 @@ namespace RitsukageGif.Desktop
                    (MouseCommands.TryResolve(MouseGestureContext.Pinned,
                         MouseGestureTracker.ClickGesture(button, modifiers, 2), bindings, out var twice) &&
                     twice!.Action == MouseAction.CopyRecognizedText);
+        }
+
+        private void ToggleMouseReset()
+        {
+            var (zoom, opacity) = Presentation.ToggleMouseReset(_zoom);
+            SetZoom(zoom);
+            Opacity = opacity;
+            SetContentScrollOffset(default);
         }
 
         private void SetZoom(double value)

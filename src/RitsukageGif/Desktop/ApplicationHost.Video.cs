@@ -147,11 +147,12 @@ namespace RitsukageGif.Desktop
                     published = await Task.Run(() => new VideoRecordingSession(CreateSource, CreateAudio)
                         .RunAsync(options, path, progress, stop, cancel, _recordingControl), cancel);
                 if (!published) throw new OperationCanceledException(stop);
+                var outputs = options.GetOutputPaths(path).ToArray();
                 LastPath = path;
-                LastOutputs = [.. options.GetOutputPaths(path)];
-                if (retainOutput) QueueCleanup(LastOutputs);
+                LastOutputs = outputs;
+                if (retainOutput) QueueCleanup(outputs);
                 SetStatus(UiText.Format("VideoSaved", path));
-                return new();
+                return new() { Outputs = outputs };
 
                 IFrameSource CreateSource(RecordingOptions capture)
                 {

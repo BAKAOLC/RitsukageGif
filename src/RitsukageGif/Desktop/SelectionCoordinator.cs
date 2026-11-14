@@ -27,10 +27,9 @@ namespace RitsukageGif.Desktop
         private Key? _confirmationKey, _cancellationKey;
         private PixelRect _controlBounds;
         private bool _controlPending;
-        private PixelPoint _controlPoint;
+        private PixelPoint? _controlPoint;
         private nint _controlWindow;
         private bool _cursor;
-        private bool _portalSeparateCursor;
         private PixelRect _hovered;
         private WindowTarget? _hoveredTarget, _selectedTarget;
         private SelectionSnapshot? _lastSnapshot;
@@ -38,6 +37,7 @@ namespace RitsukageGif.Desktop
         private PixelPoint _mouse, _pointer;
         private bool _pendingFinish, _releasingCapture, _selectionIsWholeTarget;
         private SelectionResult? _pendingResult;
+        private bool _portalSeparateCursor;
         private PixelRect _pressRegion;
         private bool _rightConfirm;
         private long _shiftDown;
@@ -62,6 +62,7 @@ namespace RitsukageGif.Desktop
             _radius = radius;
             _threshold = threshold;
             ScreenshotMode = retainScreenshot;
+            if (!ScreenshotMode) ShortcutBindings = [.. ShortcutBindings.Where(binding => !binding.ScreenshotOnly)];
             _retainHdr = retainScreenshot && retainHdr;
             InitializeAnnotations();
             if (Annotations is { } annotations) annotations.OutputColorMode = screenshotColorMode;
@@ -408,7 +409,7 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                if (pressed && left && !_left)
+                if (pressed && left && !_left && !IgnoreOutsideScreenshotPress(point))
                 {
                     _selectionShape = null;
                     PrepareOutsideExpansion();
@@ -587,7 +588,7 @@ namespace RitsukageGif.Desktop
                 _hovered = _hoveredTarget is { } target
                     ? WindowSource ? target.Client : target.Bounds
                     : default;
-                if (Controls && ShapeMode != SelectionShapeMode.MultiWindow && _hoveredTarget is { } controlTarget)
+                if (CanDetectHoverControl && _hoveredTarget is { } controlTarget)
                 {
                     if (TryHierarchyCandidate(controlTarget, out var candidate)) _hovered = candidate;
                     else if (_controlWindow == controlTarget.Handle && _controlPoint == _pointer &&
@@ -597,7 +598,10 @@ namespace RitsukageGif.Desktop
                 }
 
                 _hovered = DetectionMode == CaptureDetectionMode.None ? default : ApplyDetectionMargin(_hovered);
+                if (WindowSource && ShapeMode == SelectionShapeMode.MultiWindow && _hoveredTarget is { } windowTarget)
+                    _hovered = _hovered.Intersect(windowTarget.Client);
                 if (ShapeMode is SelectionShapeMode.Free or SelectionShapeMode.Polygon) _hovered = default;
+                _hovered = ApplyMultiWindowCandidateWheel(_hovered);
             }
 
             if (AuxiliaryVisible && CapturePreferences.GuideMeasurements && Controls && !UsesLocalSource &&
@@ -632,7 +636,8 @@ namespace RitsukageGif.Desktop
                                   0)
                     ? result.Bounds
                     : default;
-                if (Controls && _state is { Dragging: false, Selected.IsEmpty: true } && _pointer == point &&
+                if (CanDetectHoverControl && _state is { Dragging: false, Selected.IsEmpty: true } &&
+                    _pointer == point &&
                     _hoveredTarget?.Handle == target.Handle &&
                     !_controlBounds.IsEmpty)
                 {
@@ -658,7 +663,8 @@ namespace RitsukageGif.Desktop
             {
                 _controlPending = false;
                 if (!_finished && Controls &&
-                    (_state is { Dragging: false, Selected.IsEmpty: true } || ScreenshotDrawing ||
+                    ((CanDetectHoverControl && _state is { Dragging: false, Selected.IsEmpty: true }) ||
+                     ScreenshotDrawing ||
                      (AuxiliaryVisible && CapturePreferences.GuideMeasurements)) &&
                     CurrentControlTarget is { } current &&
                     (revision != _controlRevision || windowSource != WindowSource ||
@@ -669,9 +675,7 @@ namespace RitsukageGif.Desktop
 
         private PixelRect ResolveClickTarget(WindowTarget? target)
         {
-            if (ShapeMode == SelectionShapeMode.MultiWindow && target is not null)
-                return WindowSource ? target.Client : target.Bounds;
-            if (!Controls || target is null) return _hovered;
+            if (!CanDetectHoverControl || target is null) return _hovered;
             if (TryHierarchyCandidate(target, out var candidate)) return ApplyDetectionMargin(candidate);
             var basis = WindowSource ? target.Client : target.Bounds;
             if (_controlPoint == _pointer && _controlWindow == target.Handle && !_controlBounds.IsEmpty)
@@ -701,8 +705,7 @@ namespace RitsukageGif.Desktop
             if (ShapeMode == SelectionShapeMode.MultiWindow && _regionEditBase is null && !_state.Selected.IsEmpty)
             {
                 _selectionShape = CurrentSelectionShape();
-                if (_selectedTarget is { } selected && _selectionWindows.All(item => item.Handle != selected.Handle))
-                    _selectionWindows.Add(selected);
+                if (_selectedTarget is { } selected) AddSelectionWindow(selected);
             }
 
             if (_regionEditBase is not null)
@@ -722,7 +725,6 @@ namespace RitsukageGif.Desktop
         {
             CommitSelectionManipulation();
             if (_state.Dragging) EndSelection();
-            if (_state.Selected.IsEmpty) _hovered = ResolveClickTarget(_hoveredTarget);
             var snapshot = Snapshot;
             var result =
                 SelectionResult.Create(snapshot.Region, WindowSource, snapshot.Target, UsesLocalSource, _cursor,
@@ -756,7 +758,20 @@ namespace RitsukageGif.Desktop
 
             UpdateFrameDecorationPreview();
             UpdateCodeDetection();
-            foreach (var window in _windows) window.Refresh(snapshot.Region, _mouse, Mode);
+            OverlayWindow? magnifierSource = null;
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+            foreach (var window in _windows)
+            {
+                if (!window.Region.Contains(_mouse)) continue;
+                magnifierSource = window;
+                break;
+            }
+
+            foreach (var window in _windows)
+            {
+                window.SetMagnifierPlacement(_pointer, magnifierSource);
+                window.Refresh(snapshot.Region, _mouse, Mode);
+            }
         }
 
         private void ReleaseCaptures()
@@ -808,6 +823,13 @@ namespace RitsukageGif.Desktop
                 error ??= cancellationError;
             }
 
+            error = CloseOverlays(error);
+            if (error is not null) _completion.TrySetException(error);
+            else _completion.TrySetResult(result);
+        }
+
+        private Exception? CloseOverlays(Exception? error = null)
+        {
             foreach (var window in _windows)
                 try
                 {
@@ -831,8 +853,7 @@ namespace RitsukageGif.Desktop
                 }
 
             _windows.Clear();
-            if (error is not null) _completion.TrySetException(error);
-            else _completion.TrySetResult(result);
+            return error;
         }
     }
 }

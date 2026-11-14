@@ -30,6 +30,10 @@ namespace RitsukageGif.Desktop
                     case "TextWrapMode": ValidateEnum<AnnotationTextWrapMode>(property.Value, path); break;
                     case "NumberTextSize":
                     case "NumberArrowSize": ValidateEnum<AnnotationSizeLevel>(property.Value, path); break;
+                    case "NumberForegroundUsesDefault":
+                        if (property.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                            throw Invalid(path);
+                        break;
                     case "NumberForegroundColor":
                         if (property.Value.ValueKind != JsonValueKind.Null &&
                             (property.Value.ValueKind != JsonValueKind.Number || !property.Value.TryGetUInt32(out _)))

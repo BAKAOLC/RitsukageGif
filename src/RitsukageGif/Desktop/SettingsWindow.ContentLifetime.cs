@@ -39,11 +39,15 @@
         private async Task ResetCurrentSettingsAsync()
         {
             if (_draft is null || _readDraft is null || !SettingsDefaults.CanResetPage(_currentPage)) return;
+            var token = ContentCancellationToken;
+            var page = _currentPage;
             try
             {
+                if (!await ConfirmSettingsChangeAsync("SettingsResetConfirm", "SettingsResetCurrentQuestion") ||
+                    token.IsCancellationRequested) return;
                 ApplyLiveSettings();
                 await ReplaceLiveSettingsAsync(SettingsDefaults.ResetPage(CloneDraft(_appliedSettings ?? _draft),
-                    _currentPage));
+                    page));
             }
             catch (Exception error)
             {
@@ -53,8 +57,11 @@
 
         private async Task ResetAllSettingsAsync()
         {
+            var token = ContentCancellationToken;
             try
             {
+                if (!await ConfirmSettingsChangeAsync("SettingsResetConfirm", "SettingsResetAllQuestion") ||
+                    token.IsCancellationRequested) return;
                 await ReplaceLiveSettingsAsync(new());
             }
             catch (Exception error)

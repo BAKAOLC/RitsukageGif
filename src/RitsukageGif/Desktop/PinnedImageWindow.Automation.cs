@@ -102,7 +102,7 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             if (_closed || _busy || _annotation is not null || IsMouseThrough || IsInteractionLocked)
                 throw new InvalidOperationException("The pin cannot be reset in its current state.");
-            await RunAutomationAsync(ResetImageProcessingAsync);
+            await RunAutomationAsync(ResetImageProcessingCoreAsync);
         }
 
         internal void SetAutomationAnnotationsVisible(bool value)

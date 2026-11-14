@@ -105,7 +105,8 @@ namespace RitsukageGif.Desktop
 
         private async Task<ScreenshotInvocation?> ExecuteActionCoreAsync(GlobalActionBinding action,
             CancellationToken token,
-            bool propagateScreenshotErrors = false, bool waitForPreset = false)
+            bool propagateScreenshotErrors = false, bool waitForPreset = false,
+            Action<CommandReply>? complete = null)
         {
             switch (action.Kind)
             {
@@ -114,10 +115,24 @@ namespace RitsukageGif.Desktop
                     break;
                 case GlobalActionKind.ToggleRecording:
                 case GlobalActionKind.StartRecording:
-                    await RunRecordingCommandAsync(token);
+                    var recorded = await RunRecordingCommandAsync(token);
+                    complete?.Invoke(new(true, CurrentState,
+                        Output: recorded.Outputs.Count == 0 ? null : recorded.Outputs[0],
+                        Region: Region, Outputs: recorded.Outputs));
                     break;
                 case GlobalActionKind.StopRecording:
+                    var stopping = IsRecording ? _operation : null;
                     await StopActiveRecordingAsync();
+                    if (complete is not null && stopping is not null)
+                    {
+                        var stopped = await stopping.WaitAsync(token);
+                        stopped.EnsureCompleted();
+                        if (!stopped.OutputsAreTemporary)
+                            complete(new(true, CurrentState,
+                                Output: stopped.Outputs.Count == 0 ? null : stopped.Outputs[0],
+                                Region: Region, Outputs: stopped.Outputs));
+                    }
+
                     break;
                 case GlobalActionKind.Screenshot:
                 case GlobalActionKind.ScreenshotAndCopy:
@@ -161,6 +176,7 @@ namespace RitsukageGif.Desktop
                             throw new ScriptExecutionException(presetDiagnostic.Line, presetDiagnostic.Column,
                                 presetDiagnostic.Message, sourceFile: presetDiagnostic.Source);
                         if (!reply.Success) throw new InvalidOperationException(reply.Message);
+                        complete?.Invoke(reply);
                     }
                     else
                     {

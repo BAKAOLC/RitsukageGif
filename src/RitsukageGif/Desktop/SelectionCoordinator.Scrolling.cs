@@ -12,6 +12,8 @@ namespace RitsukageGif.Desktop
         internal ScrollCapturePreferences ScrollCapturePreferences { get; set; } = new();
         internal Action<bool>? ScrollAutoCropChanged { get; set; }
         internal Action<bool>? ScrollClearConfirmationChanged { get; set; }
+        internal Action<ScrollCaptureWarningKind>? ScrollWarningSuppressed { get; set; }
+        internal Func<ScreenshotResult, CancellationToken, Task>? ScrollingCloseOutputHandler { get; set; }
         internal bool ScreenshotPreview { get; private set; }
         internal bool WasScrollingScreenshot { get; private set; }
         private bool UsesLocalSource => ScreenshotPreview || DesktopCapture.UsesSourceSelection;
@@ -28,6 +30,12 @@ namespace RitsukageGif.Desktop
             ScrollClearConfirmationChanged?.Invoke(skip);
         }
 
+        private void SuppressScrollWarning(ScrollCaptureWarningKind kind)
+        {
+            ScrollCapturePreferences = ScrollCapturePreferences.SuppressWarning(kind);
+            ScrollWarningSuppressed?.Invoke(kind);
+        }
+
         internal void OverlayClosed()
         {
             if (!_replacingOverlays) Cancel();
@@ -40,12 +48,7 @@ namespace RitsukageGif.Desktop
             var initialAction = ScrollCapturePreferences.InitialAction;
             var vertical = requestedVertical ?? initialAction != ScrollCaptureInitialAction.Horizontal;
             if (_finished || _scrolling || _screenshotCompleting || ScreenshotPreview ||
-                Annotations is not { IsBusy: false, IsDrawing: false } annotations || Snapshot.Region.IsEmpty) return;
-            if (annotations.HasAnnotations)
-            {
-                annotations.SetExportState(false, UiText.Get("ScrollCaptureAnnotationsPresent"));
-                return;
-            }
+                Annotations is not { CanStartScrolling: true } annotations) return;
 
             var colorMode = annotations.OutputColorMode;
             var selected = Snapshot.Region;
@@ -95,7 +98,8 @@ namespace RitsukageGif.Desktop
                             ? null
                             : (owner as ScreenshotScrollingWindow)?.CaptureOutputOrigin ?? outputOrigin, token),
                     ScrollCapturePreferences.AutoCropOnReverse, SetScrollAutoCrop, colorMode, initialAction,
-                    ScrollCapturePreferences.SkipClearConfirmation, SetScrollClearConfirmation);
+                    ScrollCapturePreferences.SkipClearConfirmation, SetScrollClearConfirmation,
+                    ScrollingCloseOutputHandler is not null, ScrollCapturePreferences, SuppressScrollWarning);
                 SelectionLogger.ZLogInformation(
                     $"Scrolling capture returned. SelectionId={_selectionId} Finished={_finished} HasFrame={captured is not null} Action={captured?.Action.ToString()}");
                 if (_finished) return;
@@ -105,15 +109,7 @@ namespace RitsukageGif.Desktop
                     return;
                 }
 
-                if (captured.Action != ScrollingCaptureAction.Edit)
-                {
-                    Finish(SelectionResult.Create(region, WindowSource, Snapshot.Target, UsesLocalSource, _cursor));
-                    return;
-                }
-
-                ReplaceScreenshotPreview(captured.Image, captureScaling,
-                    DesktopCapture.UsesSourceSelection ? null : captured.OutputOrigin ?? outputOrigin, colorMode);
-                WasScrollingScreenshot = true;
+                Finish(SelectionResult.Create(region, WindowSource, Snapshot.Target, UsesLocalSource, _cursor));
             }
             catch (OperationCanceledException) when (_finished || _cancel.IsCancellationRequested)
             {
@@ -153,52 +149,69 @@ namespace RitsukageGif.Desktop
                     : throw new NotSupportedException(UiText.Get("HdrCaptureUnavailable"));
             token.ThrowIfCancellationRequested();
             WasScrollingScreenshot = true;
-            if (action == ScrollingCaptureAction.OcrCopy)
+            ScreenshotOutputAction outputAction;
+            switch (action)
             {
-                var recognition = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
-                    new OcrRecognitionService(), token);
-                var text = RecognitionTextFormatter.Format(recognition, RecognitionPreferences);
-                token.ThrowIfCancellationRequested();
-                if (string.IsNullOrWhiteSpace(text))
-                    throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
-                if (RecognitionPreferences.ShowDialogOnRecognition)
-                {
-                    await RecognitionWindow.ShowAsync(owner, png, RecognitionMode.Text,
-                        preferences: RecognitionPreferences, initialResult: recognition, token: token,
-                        translationPreferences: TranslationPreferences,
-                        originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,
-                        copyDirectlyNextTime: () =>
-                            DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.Screenshot),
-                        dialogPreferencesChanged: RecognitionDialogPreferencesChanged);
-                }
-                else
-                {
-                    var clipboard = owner.Clipboard ??
-                                    throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
-                    await clipboard.SetTextAsync(text);
-                    await clipboard.FlushAsync();
-                }
-
-                if (RecognitionOutputHandler is { } recognized)
-                    await recognized(new(png, ScreenshotOutputAction.Copy)
+                case ScrollingCaptureAction.Close:
+                    if (ScrollingCloseOutputHandler is { } closeOutput)
+                        await closeOutput(new(png, ScreenshotOutputAction.Edit, hdr)
+                        {
+                            ColorMode = colorMode, CaptureScaling = captureScaling,
+                            OutputOrigin = outputOrigin, Decoration = Decoration, OutputRegion = bounds,
+                        }, token);
+                    return true;
+                case ScrollingCaptureAction.OcrCopy:
+                    var recognition = await RecognitionOutput.RecognizeAsync(png, RecognitionPreferences,
+                        new OcrRecognitionService(), token);
+                    var text = RecognitionTextFormatter.Format(recognition, RecognitionPreferences);
+                    token.ThrowIfCancellationRequested();
+                    if (string.IsNullOrWhiteSpace(text))
+                        throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
+                    if (RecognitionPreferences.ShowDialogOnRecognition)
                     {
-                        ColorMode = OutputColorMode.Sdr, CaptureScaling = captureScaling,
-                        OutputOrigin = outputOrigin, Decoration = Decoration,
-                        OutputRegion = bounds,
-                    }, token);
-                return true;
+                        await RecognitionWindow.ShowAsync(owner, png, RecognitionMode.Text,
+                            preferences: RecognitionPreferences, initialResult: recognition, token: token,
+                            translationPreferences: TranslationPreferences,
+                            originalImageVisibilityChanged: RecognitionOriginalImageVisibilityChanged,
+                            copyDirectlyNextTime: () =>
+                                DirectRecognitionCopyRequested?.Invoke(RecognitionConfirmationKind.Screenshot),
+                            dialogPreferencesChanged: RecognitionDialogPreferencesChanged);
+                    }
+                    else
+                    {
+                        var clipboard = owner.Clipboard ??
+                                        throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
+                        await clipboard.SetTextAsync(text);
+                        await clipboard.FlushAsync();
+                    }
+
+                    if (RecognitionOutputHandler is { } recognized)
+                        await recognized(new(png, ScreenshotOutputAction.Copy)
+                        {
+                            ColorMode = OutputColorMode.Sdr, CaptureScaling = captureScaling,
+                            OutputOrigin = outputOrigin, Decoration = Decoration,
+                            OutputRegion = bounds,
+                        }, ScreenshotAutoSaveTriggers.Scrolling, token);
+                    return true;
+                case ScrollingCaptureAction.Copy:
+                    outputAction = ScreenshotOutputAction.Copy;
+                    break;
+                case ScrollingCaptureAction.Save:
+                    outputAction = ScreenshotOutputAction.Save;
+                    break;
+                case ScrollingCaptureAction.QuickSave:
+                    outputAction = ScreenshotOutputAction.QuickSave;
+                    break;
+                case ScrollingCaptureAction.Pin:
+                    outputAction = ScreenshotOutputAction.Pin;
+                    break;
+                case ScrollingCaptureAction.Edit:
+                    outputAction = ScreenshotOutputAction.Edit;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(action));
             }
 
-            var outputAction = action switch
-            {
-                ScrollingCaptureAction.Copy => ScreenshotOutputAction.Copy,
-                ScrollingCaptureAction.Save => ScreenshotOutputAction.Save,
-                ScrollingCaptureAction.QuickSave => ScreenshotOutputAction.QuickSave,
-                ScrollingCaptureAction.Pin => ScreenshotOutputAction.Pin,
-                ScrollingCaptureAction.Edit or ScrollingCaptureAction.OcrCopy =>
-                    throw new InvalidOperationException("This scrolling action does not produce an image output."),
-                _ => throw new ArgumentOutOfRangeException(nameof(action)),
-            };
             var result = new ScreenshotResult(png, outputAction, hdr)
             {
                 ColorMode = colorMode, CaptureScaling = captureScaling,

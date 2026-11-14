@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
             speeds.PointerReleased += (_, _) => speedPanel.Hide();
             _actions.Children.Add(_speed);
             ConfigureIcon(_audioButton, "SpeechSpeak", "RecordingReviewAudio");
-            _audioButton.IsEnabled = false;
+            _audioButton.IsVisible = false;
             _actions.Children.Add(_audioButton);
             AddInputControls(_actions);
             ConfigureIcon(_format, _outputFormat == "mp4" ? "ScreenshotRecord" : "AnimationAddImage",
@@ -147,6 +147,9 @@ namespace RitsukageGif.Desktop
         {
             foreach (var control in _actions.Children)
                 control.IsEnabled = enabled || ReferenceEquals(control, _closeButton);
+            _timeline.IsEnabled = enabled;
+            foreach (var panel in _propertyPanels) panel.IsEnabled = enabled;
+            if (enabled) RefreshInputCapabilities();
         }
 
         private Button IconButton(string icon, string key, Func<Task> action, string? gesture = null)

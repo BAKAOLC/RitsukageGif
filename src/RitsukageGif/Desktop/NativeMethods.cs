@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
         internal static partial int GdiFlush();
 
         [LibraryImport("user32.dll")]
-        private static partial int GetCursorPos(out Point point);
+        internal static partial int GetCursorPos(out Point point);
 
         [LibraryImport("user32.dll")]
         internal static partial int GetCursorInfo(ref CursorInfo info);

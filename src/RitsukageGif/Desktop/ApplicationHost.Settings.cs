@@ -29,6 +29,10 @@ namespace RitsukageGif.Desktop
                     RunActionScript = RunActionScriptAsync,
                     CurrentSettingsSnapshot = () => Settings.Snapshot(),
                     AutomationBaselineChanged = settings => baseline = settings.Snapshot(),
+                    LongTextConfirmationBaselineChanged = enabled =>
+                        baseline.PinnedImages.ConfirmLongTextPaste = enabled,
+                    FullscreenShortcutPolicyBaselineChanged = disabled => baseline.HotkeyPolicy =
+                        baseline.HotkeyPolicy with { DisableInFullscreen = disabled },
                     StartupStatus = _startServices && StartupRegistrationFactory.Supported
                         ? () => StartupRegistrationFactory.Create()
                             .GetStatus(Environment.ProcessPath ?? throw new InvalidOperationException())

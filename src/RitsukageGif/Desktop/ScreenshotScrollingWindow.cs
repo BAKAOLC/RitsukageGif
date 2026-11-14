@@ -18,6 +18,7 @@ namespace RitsukageGif.Desktop
 
         private readonly Action<bool>? _autoCropChanged;
         private readonly List<Window> _borders = [];
+        private readonly Action<bool>? _clearConfirmationChanged;
 
         private readonly TaskCompletionSource<bool>
             _completed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -27,14 +28,13 @@ namespace RitsukageGif.Desktop
 
         private readonly Button _finish = new() { IsEnabled = false };
         private readonly List<ScreenshotScrollingMaskWindow> _maskWindows = [];
-        private readonly Button _startStop = new();
         private readonly PixelRect? _preferredPlacementScreen;
         private readonly ScreenshotScrollingPreview _preview = new() { Height = 100 };
         private readonly Screens _screens;
         private readonly ScreenshotScrollingSession _session;
-        private readonly bool _startAutomatically;
-        private readonly Action<bool>? _clearConfirmationChanged;
         private readonly TextBlock _size = new();
+        private readonly bool _startAutomatically;
+        private readonly Button _startStop = new();
         private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
         private readonly bool _windowSource;
         private ScrollCaptureAxis _axis;
@@ -42,17 +42,19 @@ namespace RitsukageGif.Desktop
         private string? _captureFailure;
         private bool _captureInitialized;
         private bool _captureStarted;
-        private bool _skipClearConfirmation;
         private ScreenshotScrollingClearDialog? _clearDialog;
         private bool _closed;
 
-        private int _dragPosition;
+        private PixelRect _dragRegion;
+        private bool _dragStartedWhileCapturing;
         private Avalonia.PixelPoint? _dragStart;
         private bool _excluded;
         private ScrollCaptureStatus? _lastCaptureStatus;
         private bool _obstructed;
         private PixelRect _region;
+        private bool _skipClearConfirmation;
         private string? _statusNoticeKey;
+        private string? _boundStatusKey;
         private bool _updatingDirection;
 
         private ScreenshotScrollingWindow(Screens screens, PixelRect region, ScrollCaptureAxis axis,
@@ -61,11 +63,15 @@ namespace RitsukageGif.Desktop
             bool autoCropOnReverse = false, Action<bool>? autoCropChanged = null,
             OutputColorMode colorMode = OutputColorMode.Sdr,
             ScrollCaptureInitialAction initialAction = ScrollCaptureInitialAction.DoNotStartAutomatically,
-            bool skipClearConfirmation = false, Action<bool>? clearConfirmationChanged = null)
+            bool skipClearConfirmation = false, Action<bool>? clearConfirmationChanged = null,
+            ScrollCapturePreferences? warningPreferences = null,
+            Action<ScrollCaptureWarningKind>? warningSuppressed = null)
         {
             _autoCropChanged = autoCropChanged;
             _clearConfirmationChanged = clearConfirmationChanged;
             _skipClearConfirmation = skipClearConfirmation;
+            _warningPreferences = warningPreferences ?? new();
+            _warningSuppressed = warningSuppressed;
             _screens = screens;
             _appearance = (appearance ?? new AppearancePreferences()).Normalize();
             _preferredPlacementScreen = preferredPlacementScreen;
@@ -78,6 +84,8 @@ namespace RitsukageGif.Desktop
                 .. screens.All.Select(screen => new PixelRect(screen.Bounds.X,
                     screen.Bounds.Y, screen.Bounds.Width, screen.Bounds.Height)),
             ], target, toneMap, cursor, autoCropOnReverse, colorMode != OutputColorMode.Sdr);
+            if (!_warningPreferences.IsWarningSuppressed(ScrollCaptureWarningKind.FileOnly))
+                _session.ConfigureFileOnlyWarning(FileOnlyWarningLength);
             Bind(TitleProperty, LiveText.Resource("ScrollCaptureTitle"));
             var panelScreen = FindPanelScreen(region, [
                 .. screens.All.Select(screen => (new PixelRect(screen.WorkingArea.X, screen.WorkingArea.Y,
@@ -93,11 +101,12 @@ namespace RitsukageGif.Desktop
             Foreground = AppTheme.Ink;
             FontSize = 13;
             WindowStartupLocation = WindowStartupLocation.Manual;
+            InitializeShortcutHandling(respondShortcuts);
             Content = BuildControls(target, respondShortcuts);
             _direction.SelectionChanged += (_, _) =>
             {
                 if (_updatingDirection || _direction.SelectedIndex < 0) return;
-                if (_outputting)
+                if (_outputting || _resizePointer is not null)
                 {
                     RefreshDirection();
                     return;
@@ -131,14 +140,15 @@ namespace RitsukageGif.Desktop
                 RefreshStatus();
             };
             PositionChanged += (_, _) => UpdateObstruction();
-            InitializeShortcutHandling(respondShortcuts);
             Closed += (_, _) =>
             {
                 _closed = true;
                 _clearDialog?.Close(false);
+                _warningDialog?.Close(false);
                 DisposeShortcutScope();
                 _cropPopup.IsOpen = false;
                 CloseLivePreview();
+                CloseResizeTargets();
                 _session.AutomaticEnabled = false;
                 _session.AutomaticChanged -= AutomaticChanged;
                 UiText.LanguageChanged -= RefreshDirection;
@@ -188,10 +198,9 @@ namespace RitsukageGif.Desktop
 
             void RefreshHint()
             {
-                var binding = BuiltinShortcuts.Snapshot().FirstOrDefault(item =>
-                    item.ContextKey == "BuiltinShortcutLongshotContext" && item.Action == action);
-                hint.Text = binding is null ? "" : KeyGestureDisplay.Format(binding.Gesture);
-                hint.IsVisible = !string.IsNullOrEmpty(hint.Text);
+                var gesture = _longshotBindings.FirstOrDefault(item => item.Action == action).Gesture;
+                hint.Text = gesture is null ? "" : KeyGestureDisplay.Format(gesture);
+                hint.IsVisible = gesture is not null;
             }
         }
 
@@ -231,7 +240,9 @@ namespace RitsukageGif.Desktop
                 null, bool autoCropOnReverse = false, Action<bool>? autoCropChanged = null,
             OutputColorMode colorMode = OutputColorMode.Sdr,
             ScrollCaptureInitialAction initialAction = ScrollCaptureInitialAction.DoNotStartAutomatically,
-            bool skipClearConfirmation = false, Action<bool>? clearConfirmationChanged = null)
+            bool skipClearConfirmation = false, Action<bool>? clearConfirmationChanged = null,
+            bool saveOnUserClose = false, ScrollCapturePreferences? warningPreferences = null,
+            Action<ScrollCaptureWarningKind>? warningSuppressed = null)
         {
             Dispatcher.UIThread.VerifyAccess();
             token.ThrowIfCancellationRequested();
@@ -242,10 +253,11 @@ namespace RitsukageGif.Desktop
             var window =
                 new ScreenshotScrollingWindow(screens, region, axis, target, toneMap, cursor, respondShortcuts,
                     preferredPlacementScreen, appearance, autoCropOnReverse, autoCropChanged, colorMode, initialAction,
-                    skipClearConfirmation, clearConfirmationChanged);
+                    skipClearConfirmation, clearConfirmationChanged, warningPreferences, warningSuppressed);
             using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
             var captureToken = cancellation.Token;
             window._outputToken = captureToken;
+            window._saveOnUserClose = saveOnUserClose;
             window._outputHandler = outputHandler;
             await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));
             Task? running = null;
@@ -305,7 +317,14 @@ namespace RitsukageGif.Desktop
                     }
                     finally
                     {
-                        if (window._outputTask is { } outputTask) await outputTask;
+                        try
+                        {
+                            if (window._outputTask is { } outputTask) await outputTask;
+                        }
+                        finally
+                        {
+                            if (window._warningTask is { } warningTask) await warningTask;
+                        }
                     }
                 }
                 finally
@@ -357,6 +376,7 @@ namespace RitsukageGif.Desktop
                 SetOutputActionsEnabled(!_outputting && result is { Width: > 0, Height: > 0 });
                 _size.Text = $"{result.Width} × {result.Height}";
                 _lastCaptureStatus = result.Status;
+                ObserveCaptureWarnings(result.Status);
                 if (result.Status is ScrollCaptureStatus.Started or ScrollCaptureStatus.Appended
                     or ScrollCaptureStatus.AlreadyCovered)
                     _captureFailure = null;
@@ -391,20 +411,34 @@ namespace RitsukageGif.Desktop
         {
             if (!_obstructed && _captureFailure is { } failure)
             {
-                _status.Text = failure;
+                if (_boundStatusKey is not null || _status.Text != failure)
+                    _status.Text = failure;
+                _boundStatusKey = null;
+                _status.IsVisible = true;
                 return;
             }
 
-            var key = _obstructed
+            var notice = _obstructed
                 ? "ScrollCaptureObstructed"
                 : _statusNoticeKey ?? (_lastCaptureStatus == ScrollCaptureStatus.LimitReached
                     ? "ScrollCaptureLimit"
-                    : _session.Paused
-                        ? _captureStarted ? "ScrollCapturePaused" : "Ready"
-                        : _lastCaptureStatus is ScrollCaptureStatus.Unmatched or ScrollCaptureStatus.Ambiguous
-                            ? "ScrollCaptureUnmatched"
-                            : AutomaticStatusKey(_session.AutomaticState) ?? "ScrollCaptureCollecting");
-            _status.Bind(TextBlock.TextProperty, LiveText.Resource(key));
+                    : _session.OutputAxisLength > MaximumNonFileOutputLength
+                        ? "ScrollCaptureFileOnly"
+                        : _session.OutputAxisLength > FileOnlyWarningLength
+                            ? "ScrollCaptureFileOnlyWarning"
+                            : null);
+            var key = notice ?? (_session.Paused
+                ? _captureStarted ? "ScrollCapturePaused" : "Ready"
+                : _lastCaptureStatus is ScrollCaptureStatus.Unmatched or ScrollCaptureStatus.Ambiguous
+                    ? "ScrollCaptureUnmatched"
+                    : AutomaticStatusKey(_session.AutomaticState) ?? "ScrollCaptureCollecting");
+            if (_boundStatusKey != key)
+            {
+                _boundStatusKey = key;
+                _status.Bind(TextBlock.TextProperty, LiveText.Resource(key));
+            }
+
+            _status.IsVisible = notice is not null;
         }
     }
 }

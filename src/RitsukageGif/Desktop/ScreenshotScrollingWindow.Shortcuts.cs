@@ -12,27 +12,35 @@ namespace RitsukageGif.Desktop
     {
         private readonly List<Action> _shortcutHintRefreshers = [];
         private readonly HashSet<Key> _shortcutKeys = [];
-        private IReadOnlyList<BuiltinShortcutBinding> _longshotBindings = [];
+        private IReadOnlyList<(string Action, KeyGesture Gesture)> _longshotBindings = [];
         private bool _respondShortcuts;
         private SessionShortcutScope? _shortcutScope;
 
         private void InitializeShortcutHandling(bool respondShortcuts)
         {
             _respondShortcuts = respondShortcuts;
-            _longshotBindings = BuiltinShortcuts.Snapshot();
+            RefreshShortcutBindings();
             SelectionCommands.BindingsChanged += ShortcutBindingsChanged;
             // ReSharper disable once AsyncVoidLambda
             AddHandler(KeyDownEvent, async (_, args) =>
             {
-                if (_closed || _completed.Task.IsCompleted || _clearDialog is not null ||
+                if (_closed || _completed.Task.IsCompleted || HasCaptureDialog ||
                     _direction.IsDropDownOpen) return;
                 if (args.Source is Visual source &&
                     (!ReferenceEquals(GetTopLevel(source), this) || ReferenceEquals(source, _direction) ||
                      _direction.IsVisualAncestorOf(source))) return;
-                var action = BuiltinShortcuts.Resolve(_longshotBindings, "BuiltinShortcutLongshotContext",
-                    args);
-                if (action is null || (!_respondShortcuts && action != "cancel")) return;
-                if (_outputting && action != "cancel") return;
+                if (!_respondShortcuts || args.Handled || BuiltinShortcutTextInput.OwnsKey(args)) return;
+                string? action = null;
+                foreach (var binding in _longshotBindings)
+                    if (binding.Gesture.KeyModifiers == args.KeyModifiers &&
+                        BuiltinKeys.Matches(binding.Gesture.Key, args.Key))
+                    {
+                        action = binding.Action;
+                        break;
+                    }
+
+                if (action is null) return;
+                if (_outputting && action is not ("cancel" or "close-alternate")) return;
                 args.Handled = true;
                 if (_shortcutKeys.Add(args.Key)) await ExecuteShortcut(action);
             }, RoutingStrategies.Tunnel);
@@ -51,7 +59,7 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            _longshotBindings = BuiltinShortcuts.Snapshot();
+            RefreshShortcutBindings();
             _shortcutKeys.Clear();
             foreach (var refresh in _shortcutHintRefreshers) refresh();
             if (_shortcutScope is not { } previous) return;
@@ -60,24 +68,53 @@ namespace RitsukageGif.Desktop
             EnsureShortcutScope();
         }
 
+        private void RefreshShortcutBindings()
+        {
+            var catalog = BuiltinShortcuts.Snapshot();
+            var bindings = new List<(string Action, KeyGesture Gesture)>();
+            foreach (var binding in catalog)
+                if (binding.ContextKey == "BuiltinShortcutLongshotContext")
+                    bindings.Add((binding.Action, binding.Gesture));
+            foreach (var binding in SelectionCommands.SnapshotBindings())
+            {
+                // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
+                var action = binding.Command switch
+                {
+                    SelectionCommand.Confirm => "confirm-copy",
+                    SelectionCommand.Copy => "copy",
+                    SelectionCommand.Save => "save",
+                    SelectionCommand.QuickSave => "quick-save",
+                    SelectionCommand.Pin => "pin",
+                    SelectionCommand.RecognizeTextAndCopy => "ocr-copy",
+                    _ => null,
+                };
+                if (action is not null) bindings.Add((action, new(binding.Key, binding.Modifiers)));
+            }
+
+            foreach (var binding in catalog)
+                switch (binding.DefinitionId)
+                {
+                    case "builtin.selection.cancel.0": bindings.Add(("cancel", binding.Gesture)); break;
+                    case "builtin.selection.cancel.1": bindings.Add(("close-alternate", binding.Gesture)); break;
+                }
+
+            _longshotBindings = bindings;
+        }
+
         private void EnsureShortcutScope()
         {
-            if (_shortcutScope is not null) return;
+            if (_shortcutScope is not null || !_respondShortcuts) return;
             var bindings = new List<(string Shortcut, Func<Task> Action)>();
-            foreach (var (contextKey, action, gesture) in _longshotBindings)
-            {
-                if (contextKey != "BuiltinShortcutLongshotContext" ||
-                    (!_respondShortcuts && action != "cancel")) continue;
+            foreach (var (action, gesture) in _longshotBindings)
                 bindings.Add((gesture.ToString(), () =>
                 {
                     if (_shortcutScope is { NativeEnabled: true } && !_closed && !_completed.Task.IsCompleted)
                         return ExecuteShortcut(action);
                     return Task.CompletedTask;
                 }));
-            }
 
             _shortcutScope = new(bindings,
-                !_outputting && _clearDialog is null && !IsActive && !_direction.IsDropDownOpen, true);
+                !_outputting && !HasCaptureDialog && !IsActive && !_direction.IsDropDownOpen, true);
         }
 
         private void ShortcutActivationChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
@@ -94,7 +131,7 @@ namespace RitsukageGif.Desktop
         private void RefreshShortcutNativeState()
         {
             if (_shortcutScope is { } scope)
-                scope.NativeEnabled = !_outputting && _clearDialog is null && !IsActive && !_direction.IsDropDownOpen;
+                scope.NativeEnabled = !_outputting && !HasCaptureDialog && !IsActive && !_direction.IsDropDownOpen;
         }
 
         private void ShortcutsDeactivated(object? sender, EventArgs args)
@@ -117,10 +154,11 @@ namespace RitsukageGif.Desktop
 
         private async Task ExecuteShortcut(string action)
         {
-            if (_clearDialog is not null || (_outputting && action != "cancel")) return;
+            if (HasCaptureDialog || (_outputting && action is not ("cancel" or "close-alternate"))) return;
             switch (action)
             {
-                case "cancel": Close(); break;
+                case "cancel":
+                case "close-alternate": await CloseByUserAsync(); break;
                 case "start-stop" when _startStop.IsEnabled:
                     await ToggleCaptureAsync();
                     break;
@@ -130,10 +168,13 @@ namespace RitsukageGif.Desktop
                 case "toggleaxis" when _direction.IsEnabled:
                     _direction.SelectedIndex = _direction.SelectedIndex == 0 ? 1 : 0;
                     break;
-                case "finish" when _finish.IsEnabled:
-                    await CompleteCapture(ScrollingCaptureAction.Copy);
-                    break;
-                case "edit" when _finish.IsEnabled:
+                case "copy":
+                case "confirm-copy": await CompleteCapture(ScrollingCaptureAction.Copy); break;
+                case "save": await CompleteCapture(ScrollingCaptureAction.Save); break;
+                case "quick-save": await CompleteCapture(ScrollingCaptureAction.QuickSave); break;
+                case "pin": await CompleteCapture(ScrollingCaptureAction.Pin); break;
+                case "ocr-copy": await CompleteCapture(ScrollingCaptureAction.OcrCopy); break;
+                case "edit":
                     await CompleteCapture(ScrollingCaptureAction.Edit);
                     break;
                 case "crop-leading" when _cropLeading.IsEnabled: Crop(true); break;

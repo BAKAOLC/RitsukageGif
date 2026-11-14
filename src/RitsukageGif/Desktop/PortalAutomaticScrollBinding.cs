@@ -3,7 +3,6 @@ namespace RitsukageGif.Desktop
     internal sealed record PortalPointerObservation(
         long Generation,
         uint StreamId,
-        PixelPoint Position,
         bool Valid);
 
     internal sealed record PortalAutomaticScrollBinding(

@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Avalonia.Threading;
 
 namespace RitsukageGif.Desktop
@@ -6,6 +7,7 @@ namespace RitsukageGif.Desktop
     internal sealed partial class PinnedImageWindow
     {
         private PinnedImageTranslationSession<PinnedImageTranslationCache>? _inlineTranslation;
+        private Task<Exception?> _translationPresentation = Task.FromResult<Exception?>(null);
         private long _translationRasterRevision;
 
         private PinnedImageTranslationSession<PinnedImageTranslationCache> InlineTranslation
@@ -28,20 +30,78 @@ namespace RitsukageGif.Desktop
             var session = InlineTranslation;
             if (session.Enabled) session.Disable();
             else
-                StartInlineTranslation(session.TargetLanguage.Length == 0
-                    ? TranslationPreferencesProvider().Normalize().TargetLanguage
-                    : session.TargetLanguage);
+                _ = StartInlineTranslation(DefaultInlineTranslationTarget(session));
             return Task.CompletedTask;
         }
 
-        private void StartInlineTranslation(string target)
+        internal void StartScreenshotTranslation()
+        {
+            if (_closed || !CanUseInlineTranslation) return;
+            if (!HasInlineTranslationBackend)
+            {
+                Presentation.ShowMessage(UiText.Get("TranslationConfigureService"));
+                return;
+            }
+
+            var session = InlineTranslation;
+            _ = StartInlineTranslation(DefaultInlineTranslationTarget(session));
+        }
+
+        internal async Task<bool> TranslationAutomationAsync(bool? enabled, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_closed, this);
+            if (!CanUseInlineTranslation)
+                throw new NotSupportedException("This pin does not support inline translation.");
+            if (enabled is null) return _activeTranslatedRaster is not null;
+
+            var session = InlineTranslation;
+            if (enabled.Value)
+            {
+                if (!session.Enabled && !HasInlineTranslationBackend && session.Cached is null)
+                    throw new InvalidOperationException(UiText.Get("TranslationConfigureService"));
+                var pending = session.Enabled
+                    ? session.Completion
+                    : StartInlineTranslation(DefaultInlineTranslationTarget(session));
+                if (await pending.WaitAsync(token) is { } error)
+                    ExceptionDispatchInfo.Throw(error);
+                ObjectDisposedException.ThrowIf(_closed, this);
+            }
+            else if (session.Enabled)
+            {
+                session.Disable();
+            }
+
+            while (true)
+            {
+                var presentation = _translationPresentation;
+                var failure = await presentation.WaitAsync(token);
+                ObjectDisposedException.ThrowIf(_closed, this);
+                if (!ReferenceEquals(presentation, _translationPresentation)) continue;
+                if (failure is not null) ExceptionDispatchInfo.Throw(failure);
+                break;
+            }
+
+            if (!CanUseInlineTranslation) throw new OperationCanceledException(token);
+            return _activeTranslatedRaster is not null;
+        }
+
+        private string DefaultInlineTranslationTarget(
+            PinnedImageTranslationSession<PinnedImageTranslationCache> session)
+        {
+            return session.TargetLanguage.Length == 0
+                ? TranslationPreferencesProvider().Normalize().TargetLanguage
+                : session.TargetLanguage;
+        }
+
+        private Task<Exception?> StartInlineTranslation(string target)
         {
             var sourcePng = _png;
             var sourceHdr = _hdrSource;
             var preferences = TranslationPreferencesProvider().Normalize() with { TargetLanguage = target };
             var recognition = RecognitionPreferencesProvider();
             var ocr = TextRecognitionServiceProvider?.Invoke() ?? DefaultTextRecognition;
-            InlineTranslation.Enable(target, async (_, token) =>
+            return InlineTranslation.Enable(target, async (_, token) =>
             {
                 var key = preferences.UseApiKey
                     ? await CredentialVault.ReadAsync(preferences.CredentialKey, token) ?? ""
@@ -68,10 +128,11 @@ namespace RitsukageGif.Desktop
             _status.IsVisible = session is { Enabled: true, Status: PinnedImageTranslationStatus.Pending };
             if (_status.IsVisible) _status.Text = UiText.Get("TranslationWorking");
             StateChanged?.Invoke(this, EventArgs.Empty);
-            _ = ApplyInlineTranslationRasterAsync(revision, raster);
+            _translationPresentation = ApplyInlineTranslationRasterAsync(revision, raster);
         }
 
-        private async Task ApplyInlineTranslationRasterAsync(long revision, PinnedImageTranslationRaster? raster)
+        private async Task<Exception?> ApplyInlineTranslationRasterAsync(long revision,
+            PinnedImageTranslationRaster? raster)
         {
             try
             {
@@ -82,13 +143,17 @@ namespace RitsukageGif.Desktop
                     await RebuildRasterCoreAsync(_colorMatrixState, raster, _lifetime.Token);
                 });
             }
-            catch (OperationCanceledException) when (_closed || _lifetime.IsCancellationRequested)
+            catch (OperationCanceledException error) when (_closed || _lifetime.IsCancellationRequested)
             {
+                return error;
             }
             catch (Exception error)
             {
                 ReportInlineTranslationError(error);
+                return error;
             }
+
+            return null;
         }
 
         private void ReportInlineTranslationError(Exception error)

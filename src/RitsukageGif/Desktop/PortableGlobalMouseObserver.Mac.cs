@@ -22,7 +22,7 @@ namespace RitsukageGif.Desktop
             try
             {
                 const ulong events = (1UL << 1) | (1UL << 2) | (1UL << 3) | (1UL << 4) | (1UL << 5) |
-                                     (1UL << 6) | (1UL << 7) | (1UL << 25) | (1UL << 26) | (1UL << 27);
+                                     (1UL << 6) | (1UL << 7) | (1UL << 12) | (1UL << 25) | (1UL << 26) | (1UL << 27);
                 state.Tap = CGEventTapCreate(1, 0, 1, events, &OnMacMouse, GCHandle.ToIntPtr(handle));
                 if (state.Tap == 0)
                     throw new UnauthorizedAccessException(
@@ -95,7 +95,12 @@ namespace RitsukageGif.Desktop
                     },
                     _ => 0,
                 };
-                var message = type is 5 or 6 or 7 or 27 ? 0x0200u : MouseMessage(button, type is 1 or 3 or 25);
+                var message = type switch
+                {
+                    5 or 6 or 7 or 27 => 0x0200u,
+                    12 => GlobalMouseGestureTracker.ModifiersChanged,
+                    _ => MouseMessage(button, type is 1 or 3 or 25),
+                };
                 if (message == 0) return input;
                 if (!double.IsFinite(position.X) || !double.IsFinite(position.Y) ||
                     position.X is < int.MinValue or > int.MaxValue || position.Y is < int.MinValue or > int.MaxValue)

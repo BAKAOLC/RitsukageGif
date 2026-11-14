@@ -30,7 +30,9 @@ namespace RitsukageGif.Desktop
                          or nameof(AppSettings.NonDefaultConfigItemsFontNotBold) &&
                      value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) ||
                     (parent == nameof(AppSettings.PinnedImages) &&
-                     property.Name == nameof(PinnedImagePreferences.SmoothScaling) &&
+                     property.Name is nameof(PinnedImagePreferences.SmoothScaling)
+                         or nameof(PinnedImagePreferences.ShowMouseThroughToolbar)
+                         or nameof(PinnedImagePreferences.ConfirmLongTextPaste) &&
                      value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) ||
                     (parent == "GlobalActions" && property.Name == "Script" && value.ValueKind != JsonValueKind.String))
                     throw Invalid(path);

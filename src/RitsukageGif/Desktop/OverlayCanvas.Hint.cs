@@ -56,11 +56,12 @@ namespace RitsukageGif.Desktop
         internal bool InteractiveInformationVisible { get; set; }
         internal bool PointerOverCaptureControls { get; set; }
         internal bool CodePopupVisible { get; set; }
+        internal PixelPoint? MagnifierPointer { get; set; }
+        internal OverlayCanvas? MagnifierSampleCanvas { get; set; }
         private bool Measuring => AuxiliaryVisible && CapturePreferences.GuideMeasurements && !Selected.IsEmpty;
 
         private void DrawHint(DrawingContext context, Point mouse, bool layoutOnly = false)
         {
-            _hintStatusBounds = _hintActionsBounds = _hintMagnifierBounds = default;
             var width = Math.Min(280, Bounds.Width - HintMargin * 2);
             var maximumHeight = Bounds.Height - HintMargin * 2;
             if (width < 72 || maximumHeight < 40) return;
@@ -70,7 +71,7 @@ namespace RitsukageGif.Desktop
 
             var local = Selected.ToLocal(_monitor, Scale);
             var selected = Selected.IsEmpty ? default : new Rect(local.X, local.Y, local.Width, local.Height);
-            var magnifier = GetMagnifierFrame(mouse);
+            var magnifier = _hintMagnifierBounds;
             var actions = default(Rect);
             if (CapturePreferences.ShowShortcutHints && HintMode != SelectionHintMode.Hidden && _actionChips.Count > 0)
             {
@@ -143,13 +144,6 @@ namespace RitsukageGif.Desktop
                     }
                 }
             }
-
-            if (magnifier is { Width: <= 0 } or { Height: <= 0 }) return;
-            _hintMagnifierBounds = magnifier;
-            if (layoutOnly) return;
-            context.DrawRectangle(HintBackground, HintBorder, magnifier, 6, 6);
-            DrawMagnifier(context, new(magnifier.X, magnifier.Y, MagnifierWidth, MagnifierHeight));
-            DrawMagnifierDetails(context, magnifier);
         }
 
         private Rect GetMagnifierFrame(Point mouse)
@@ -168,7 +162,7 @@ namespace RitsukageGif.Desktop
                                                         : 0));
             return Bounds.Height - HintMargin * 2 < lensSize.Height || Bounds.Width < lensSize.Width + HintMargin * 2
                 ? default
-                : SelectionMagnifierPlacement.Place(Bounds.Size, lensSize, mouse);
+                : SelectionMagnifierPlacement.Place(Bounds.Size, lensSize, mouse, Scale);
         }
 
         private void DrawActionChips(DrawingContext context, Rect frame)

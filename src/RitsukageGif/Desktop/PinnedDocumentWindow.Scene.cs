@@ -9,18 +9,19 @@ namespace RitsukageGif.Desktop
     internal sealed partial class PinnedDocumentWindow
     {
         private async Task<RenderTargetBitmap> RenderDocumentSceneBaseAsync(CancellationToken token,
-            double? scaling = null)
+            double? scaling = null, bool original = false)
         {
             token.ThrowIfCancellationRequested();
             EnsureDocumentSceneLayout();
             var scale = scaling ?? RenderScaling;
             switch (Document)
             {
-                case PinnedHtmlDocument html when !IgnoreFormat:
+                case PinnedHtmlDocument html when !IgnoreFormat && (original || DisplayedTranslation is null):
+                    var rich = _textView as PinnedRichView;
                     return await PinnedRichRender.RenderAsync(PinnedHtmlView.Parse(html),
                         _htmlResources ??= PinnedHtmlView.CreateResources(),
-                        ((PinnedRichView)_textView!).FormattedWidth, scale, AppTheme.Surface, AppTheme.Ink, token,
-                        ((PinnedRichView)_textView).SceneImageSizes);
+                        rich?.FormattedWidth ?? Math.Max(32, _textView!.Control.Bounds.Width),
+                        scale, AppTheme.Surface, AppTheme.Ink, token, rich?.SceneImageSizes);
                 case PinnedFilesDocument:
                     return await RenderFileSceneAsync(scale, token);
                 case PinnedFormulaDocument:
@@ -43,13 +44,13 @@ namespace RitsukageGif.Desktop
                     return output;
                 }
                 default:
-                    return RenderTextScene(scale, token);
+                    return RenderTextScene(scale, original, token);
             }
         }
 
-        private RenderTargetBitmap RenderTextScene(double scale, CancellationToken token)
+        private RenderTargetBitmap RenderTextScene(double scale, bool original, CancellationToken token)
         {
-            var view = CreateDocumentSceneTextView(out var width);
+            var view = CreateDocumentSceneTextView(out var width, original);
             try
             {
                 var textView = view.TextArea.TextView;
@@ -85,15 +86,16 @@ namespace RitsukageGif.Desktop
             }
         }
 
-        private PinnedTextView CreateDocumentSceneTextView(out double width)
+        private PinnedTextView CreateDocumentSceneTextView(out double width, bool original = false)
         {
-            var original = (PinnedTextView)_textView!;
-            width = Math.Max(1, original.TextArea.TextView.Bounds.Width);
-            var view = new PinnedTextView(Document.PlainText)
+            var displayed = (PinnedTextView)_textView!;
+            width = Math.Max(1, displayed.TextArea.TextView.Bounds.Width);
+            var text = original ? Document.PlainText : DisplayedTranslation?.Text ?? Document.PlainText;
+            var view = new PinnedTextView(text)
             {
-                FontFamily = original.FontFamily, FontSize = original.FontSize,
-                FontStyle = original.FontStyle, FontWeight = original.FontWeight,
-                Foreground = original.Foreground ?? AppTheme.Ink,
+                FontFamily = displayed.FontFamily, FontSize = displayed.FontSize,
+                FontStyle = displayed.FontStyle, FontWeight = displayed.FontWeight,
+                Foreground = displayed.Foreground ?? AppTheme.Ink,
             };
             view.TextArea.Foreground = view.Foreground;
             view.Measure(new(width, 720));

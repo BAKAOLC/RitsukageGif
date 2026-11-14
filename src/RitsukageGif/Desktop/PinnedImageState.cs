@@ -1,8 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace RitsukageGif.Desktop
 {
     internal sealed class PinnedImageState : PinnedWindowState
     {
         public string ImageId { get; set; } = "";
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public long ClosedAtUtcTicks { get; set; }
+
         public WindowRoiPinDescriptor? LiveSource { get; set; }
         public bool Thumbnail { get; set; }
         public bool ThumbnailManualRegion { get; set; }

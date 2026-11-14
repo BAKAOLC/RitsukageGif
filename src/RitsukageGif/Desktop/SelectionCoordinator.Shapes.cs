@@ -256,12 +256,12 @@ namespace RitsukageGif.Desktop
                         using var intersection = new SKPath();
                         return selected.Op(rectangle, SKPathOp.Intersect, intersection) && intersection.Bounds.IsEmpty;
                     });
-                    if (_selectionWindows.All(window => window.Handle != target.Handle))
+                    if (_selectionWindows.All(window => !IsSameSelectionWindow(window, target)))
                         _selectedTarget = _selectionWindows.FirstOrDefault();
                 }
-                else if (_selectionWindows.All(item => item.Handle != target.Handle))
+                else
                 {
-                    _selectionWindows.Add(target);
+                    AddSelectionWindow(target);
                 }
 
                 _windowShapeRevision++;
@@ -323,22 +323,61 @@ namespace RitsukageGif.Desktop
             _selectionShape = new(destination, path.ToSvgPathData(), shape.EvenOdd);
         }
 
+        private void AddSelectionWindow(WindowTarget target)
+        {
+            if (_selectionWindows.Any(window => IsSameSelectionWindow(window, target))) return;
+            _selectionWindows.Add(target);
+
+            var index = 0;
+            foreach (var candidate in _targets)
+            {
+                if (index == _selectionWindows.Count) break;
+                for (var selected = index; selected < _selectionWindows.Count; selected++)
+                {
+                    var committed = _selectionWindows[selected];
+                    if (!IsSameSelectionWindow(committed, candidate)) continue;
+                    if (selected != index)
+                    {
+                        _selectionWindows.RemoveAt(selected);
+                        _selectionWindows.Insert(index, committed);
+                    }
+
+                    index++;
+                    break;
+                }
+            }
+        }
+
+        private static bool IsSameSelectionWindow(WindowTarget left, WindowTarget right)
+        {
+            return left.Handle == right.Handle && left.ProcessId == right.ProcessId &&
+                   left.NativeSourceIdentity == right.NativeSourceIdentity;
+        }
+
         private WindowTarget[] SelectedShapeWindows()
         {
-            return
-            [
-                .. _targets.Where(candidate => _selectionWindows.Any(selected => selected.Handle == candidate.Handle)),
-            ];
+            return [.. _selectionWindows];
         }
 
         internal bool OwnsRegionInformation(OverlayWindow window)
         {
             var region = Snapshot.Region;
             if (region.IsEmpty) return false;
-            var center = new PixelPoint(region.X + region.Width / 2, region.Y + region.Height / 2);
+            var center = ScreenshotMode && !UsesLocalSource
+                ? new PixelPoint((int)(((long)region.X + region.Right - 1) / 2),
+                    (int)(((long)region.Y + region.Bottom - 1) / 2))
+                : new PixelPoint(region.X + region.Width / 2, region.Y + region.Height / 2);
             var owner = _windows.FirstOrDefault(candidate => candidate.Region.Contains(center)) ??
                         _windows.FirstOrDefault(candidate => !candidate.Region.Intersect(region).IsEmpty);
             return ReferenceEquals(owner, window);
+        }
+
+        internal (double Near, double Far) RegionInformationOffsets(PixelRect region, double scale)
+        {
+            if (!ScreenshotMode || UsesLocalSource) return (14, 14);
+            var pixels = Math.Truncate(AppearancePreferences.SelectionBorderWidth * 1.5 +
+                                       SelectionMarkerScale(region) * 4);
+            return (pixels / scale, (pixels - 1) / scale);
         }
     }
 }

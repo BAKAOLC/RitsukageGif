@@ -4,16 +4,16 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotScrollingSession
     {
-        private readonly PixelRect[] _monitors;
-        private readonly WindowTarget? _target;
-        private readonly HdrToneMapMode _toneMap;
-        private readonly FrozenScreenshotCursor? _cursor;
-        private readonly bool _retainHdr;
-        private readonly double _density;
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.ScrollCapture");
         private static long _sessionSequence;
+        private readonly FrozenScreenshotCursor? _cursor;
+        private readonly double _density;
         private readonly long _logSessionId = Interlocked.Increment(ref _sessionSequence);
+        private readonly PixelRect[] _monitors;
+        private readonly bool _retainHdr;
         private readonly Lock _sync = new();
+        private readonly WindowTarget? _target;
+        private readonly HdrToneMapMode _toneMap;
         private ScrollCaptureAxis _axis;
         private int _captureEpoch;
         private bool _configured;
@@ -109,6 +109,7 @@ namespace RitsukageGif.Desktop
                     new() { Axis = _axis, AutoCropOnReverse = AutoCropOnReverse, RetainHdr = _retainHdr });
                 _firstRegion = null;
                 _configured = false;
+                _fileOnlyWarningResolved = false;
                 _leadingInset = _trailingInset = 0;
                 _lastResult = null;
                 _viewportMatched = false;
@@ -146,15 +147,31 @@ namespace RitsukageGif.Desktop
         public event Action<ScrollCaptureResult, ScrollCaptureImage?, bool, int>? Updated;
         public event Action<string>? Failed;
 
-        public void Move(int position)
+        internal bool SupportsStoppedResize(PixelRect region)
+        {
+            if (region.Width < 16 || region.Height < 16) return false;
+            lock (_sync)
+            {
+                var width = PhysicalSize(region.Width);
+                var height = PhysicalSize(region.Height);
+                var length = _axis == ScrollCaptureAxis.Vertical ? height : width;
+                var pixels = (long)width * height;
+                return Paused && length <= 32768 && pixels <= 64 * 1024 * 1024 &&
+                       pixels * (_retainHdr ? 33 : 17) + length * sizeof(double) <= 256L * 1024 * 1024;
+            }
+        }
+
+        internal void Move(PixelRect region, bool rebase)
         {
             lock (_sync)
             {
-                if (_position != position)
+                var position = _axis == ScrollCaptureAxis.Vertical ? region.Y : region.X;
+                if (rebase) _initialRegion = region;
+                if (rebase || _position != position)
                 {
                     _captureEpoch++;
                     _viewportMatched = false;
-                    AutomaticEnabled = false;
+                    _automatic?.ResetViewport();
                 }
 
                 Volatile.Write(ref _position, position);
@@ -286,17 +303,20 @@ namespace RitsukageGif.Desktop
                                             _firstRegion = region;
                                             break;
                                         case ScrollCaptureStatus.LimitReached:
-                                            Logger.ZLogWarning(
-                                                $"Scroll capture output limit reached. SessionId={_logSessionId} Width={result.Width} Height={result.Height}");
-                                            AutomaticEnabled = false;
-                                            Paused = true;
+                                            if (_lastResult is not { Status: ScrollCaptureStatus.LimitReached })
+                                                Logger.ZLogWarning(
+                                                    $"Scroll capture output limit reached. SessionId={_logSessionId} Width={result.Width} Height={result.Height}");
+                                            if (AutomaticEnabled) AutomaticEnabled = false;
                                             break;
                                     }
 
-                                    ObserveAutomatic(result, pixels, region, token);
-                                    Publish(result, previousSize != (_stitching.Width, _stitching.Height) ||
-                                                    result.Status is ScrollCaptureStatus.Started
-                                                        or ScrollCaptureStatus.Appended);
+                                    ObserveAutomatic(result, region, token);
+                                    if ((_previewDirty && Environment.TickCount64 - _lastPreview >= 500) ||
+                                        result.Status != ScrollCaptureStatus.LimitReached ||
+                                        _lastResult is not { Status: ScrollCaptureStatus.LimitReached })
+                                        Publish(result, previousSize != (_stitching.Width, _stitching.Height) ||
+                                                        result.Status is ScrollCaptureStatus.Started
+                                                            or ScrollCaptureStatus.Appended);
                                 }
                         }
                     }

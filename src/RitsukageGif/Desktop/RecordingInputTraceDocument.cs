@@ -1,5 +1,6 @@
 using System.Text;
 using Avalonia.Input;
+using SkiaSharp;
 
 namespace RitsukageGif.Desktop
 {
@@ -18,7 +19,7 @@ namespace RitsukageGif.Desktop
             _frames = Open(path);
             try
             {
-                if (_frames.ReadInt32() != 0x31544752 ||
+                if (_frames.ReadInt32() != RecordingInputTraceWriter.Magic ||
                     _frames.ReadInt32() != RecordingInputTraceWriter.FrameSize) throw Invalid();
                 TimestampFrequency = _frames.ReadInt64();
                 var flags = _frames.ReadInt32();
@@ -170,7 +171,8 @@ namespace RitsukageGif.Desktop
             for (var i = 0; i < count; i++)
             {
                 var region = ReadRect(_geometry);
-                var destination = ReadRect(_geometry);
+                var destination = new SKRect(_geometry.ReadSingle(), _geometry.ReadSingle(),
+                    _geometry.ReadSingle(), _geometry.ReadSingle());
                 var owns = _geometry.ReadBoolean();
                 var evenOdd = _geometry.ReadBoolean();
                 var bytes = _geometry.Read7BitEncodedInt();

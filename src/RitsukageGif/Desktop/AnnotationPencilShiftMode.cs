@@ -4,5 +4,9 @@ namespace RitsukageGif.Desktop
     {
         FreeAngleLine,
         SnapAngleLine,
+        Snap30DegreeLine,
+        Snap15DegreeLine,
+        Snap10DegreeLine,
+        Snap5DegreeLine,
     }
 }

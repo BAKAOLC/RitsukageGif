@@ -80,17 +80,17 @@ namespace RitsukageGif.Desktop
                 (int)Math.Clamp((long)_pointer.Y + dy, bounds.Y, (long)bounds.Bottom - 1));
             var window = _windows.FirstOrDefault(item => item.Region.Contains(point));
             if (window is null) return;
-            var physical = point;
-            if (UsesLocalSource)
-            {
-                var mapped = window.PointToScreen(new(
-                    (point.X - window.Region.X) * window.ClientSize.Width / window.Region.Width,
-                    (point.Y - window.Region.Y) * window.ClientSize.Height / window.Region.Height));
-                physical = new(mapped.X, mapped.Y);
-            }
-
-            if (!MoveCapturePointer(physical)) return;
+            if (!MoveCapturePointer(CapturePointerScreenPoint(window, point))) return;
             PointerInput(point, _left, _right, _shift);
+        }
+
+        private PixelPoint CapturePointerScreenPoint(OverlayWindow window, PixelPoint point)
+        {
+            if (!UsesLocalSource) return point;
+            var mapped = window.PointToScreen(new(
+                (point.X - window.Region.X) * window.ClientSize.Width / window.Region.Width,
+                (point.Y - window.Region.Y) * window.ClientSize.Height / window.Region.Height));
+            return new(mapped.X, mapped.Y);
         }
 
         private void BrowseRegionHistory(bool previous)

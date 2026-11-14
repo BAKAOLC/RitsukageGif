@@ -6,28 +6,29 @@ namespace RitsukageGif.Desktop
     {
         public const int MaximumTextCharacters = 2 * 1024 * 1024;
 
-        private static readonly (PinnedContentKinds Kind, Func<PinnedClipboardSnapshot, PinnedDocument?> Create)[]
+        private static readonly (PinnedContentKinds Kind, Func<PinnedClipboardSnapshot, bool, PinnedDocument?> Create)[]
             Handlers =
             [
                 (PinnedContentKinds.Files,
-                    snapshot => snapshot.Files.Length > 0 ? new PinnedFilesDocument(snapshot.Files) : null),
-                (PinnedContentKinds.Color, snapshot => TryColor(snapshot.Text, out var color)
+                    (snapshot, _) => snapshot.Files.Length > 0 ? new PinnedFilesDocument(snapshot.Files) : null),
+                (PinnedContentKinds.Color, (snapshot, _) => TryColor(snapshot.Text, out var color)
                     ? new PinnedColorDocument(color, snapshot.Text!,
                         snapshot is { Html: { } html, HtmlSelection: { } selection }
                             ? selection.Extract(html)
                             : snapshot.Html ?? "")
                     : null),
                 (PinnedContentKinds.Formula,
-                    snapshot => string.IsNullOrWhiteSpace(snapshot.FormulaSource)
+                    (snapshot, _) => string.IsNullOrWhiteSpace(snapshot.FormulaSource)
                         ? PinnedFormulaInput.TryCreate(snapshot.Text)
                         : new([snapshot.FormulaSource])),
-                (PinnedContentKinds.Text, snapshot => !HasHtml(snapshot, out var html)
+                (PinnedContentKinds.Text, (snapshot, usePlainText) => usePlainText || !HasHtml(snapshot, out var html)
                     ? null
                     : new PinnedHtmlDocument(html,
                             snapshot.Text ?? PinnedHtmlView.PlainText(html, snapshot.HtmlSelection))
                         { SourceUrl = snapshot.HtmlSourceUrl, Selection = snapshot.HtmlSelection }),
                 (PinnedContentKinds.Text,
-                    snapshot => string.IsNullOrEmpty(snapshot.Text) ? null : new PinnedTextDocument(snapshot.Text)),
+                    (snapshot, _) =>
+                        string.IsNullOrEmpty(snapshot.Text) ? null : new PinnedTextDocument(snapshot.Text)),
             ];
 
         private static bool HasHtml(PinnedClipboardSnapshot snapshot, [NotNullWhen(true)] out string? html)
@@ -39,7 +40,7 @@ namespace RitsukageGif.Desktop
         }
 
         public static PinnedDocument? Create(PinnedClipboardSnapshot snapshot,
-            PinnedContentKinds kinds = PinnedContentKinds.All)
+            PinnedContentKinds kinds = PinnedContentKinds.All, bool usePlainText = false)
         {
             foreach (var handler in Handlers)
             {
@@ -48,7 +49,7 @@ namespace RitsukageGif.Desktop
                     (snapshot.Text?.Length > MaximumTextCharacters || snapshot.Html?.Length > MaximumTextCharacters ||
                      snapshot.FormulaSource?.Length > MaximumTextCharacters))
                     throw new InvalidDataException(UiText.Get("PinnedTextTooLarge"));
-                if (handler.Create(snapshot) is { } document) return document;
+                if (handler.Create(snapshot, usePlainText) is { } document) return document;
             }
 
             return null;

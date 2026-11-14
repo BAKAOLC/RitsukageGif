@@ -10,7 +10,7 @@ namespace RitsukageGif.Desktop
         // ReSharper disable once UnusedMethodReturnValue.Global
         internal bool CycleCandidate(PixelPoint point, bool parent)
         {
-            if (_finished || _screenshotCompleting || !Controls || _state.Dragging ||
+            if (_finished || _screenshotCompleting || !CanDetectHoverControl || _state.Dragging ||
                 !_state.Selected.IsEmpty || ScreenshotDrawing) return false;
             _pointer = point;
             UpdatePoint(true);

@@ -39,9 +39,8 @@ namespace RitsukageGif.Desktop
         {
             lock (_gate)
             {
-                if (!IsPointerCurrent(geometry) || _pointer is not { Valid: true, Visible: true } pointer) return null;
-                return new(geometry.Generation, stream, new((int)Math.Round(pointer.X), (int)Math.Round(pointer.Y)),
-                    true);
+                if (!IsPointerCurrent(geometry) || _pointer is not { Valid: true, Visible: true }) return null;
+                return new(geometry.Generation, stream, true);
             }
         }
 
@@ -56,6 +55,7 @@ namespace RitsukageGif.Desktop
                 return reply.Result switch
                 {
                     "sent" when command == "scroll" => AutomaticScrollInputResult.Sent,
+                    "pointer-outside" when command == "scroll" => AutomaticScrollInputResult.PointerOutside,
                     "prepared" when command == "prepare-pointer" => AutomaticScrollInputResult.Sent,
                     "unavailable" => AutomaticScrollInputResult.Unavailable,
                     _ => AutomaticScrollInputResult.Failed,

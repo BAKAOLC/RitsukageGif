@@ -22,6 +22,8 @@ namespace RitsukageGif.Desktop
             {
                 if (IsClosing && args is not ["status"])
                     return new(false, CurrentState, UiText.Get("CommandNotReady"));
+                var useOperationOutputs = false;
+                IReadOnlyList<string>? operationOutputs = null;
                 switch (args)
                 {
                     case ["task", "execute", .. var taskArguments]:
@@ -122,19 +124,30 @@ namespace RitsukageGif.Desktop
                             propagateErrors: true, token: token);
                         return ScreenshotReply(sourceScreenshot);
                     case ["stop"]:
+                        useOperationOutputs = true;
+                        var stopping = IsRecording ? _operation : null;
                         await StopActiveRecordingAsync();
+                        if (stopping is
+                            {
+                                IsCompletedSuccessfully: true,
+                                Result: { Cancelled: false, Error: null, OutputsAreTemporary: false } stopped,
+                            })
+                            operationOutputs = stopped.Outputs;
                         break;
                     case ["cancel"] when IsTakingScreenshot:
+                        useOperationOutputs = true;
                         CancelScreenshot();
                         break;
                     case ["cancel"]:
+                        useOperationOutputs = true;
                         CancelSelection();
                         if (_abort is { } abort) await abort.CancelAsync();
                         break;
                     case ["start"]:
                         if (!CanToggleRecording || IsRecording)
                             return new(false, CurrentState, UiText.Get("CommandNotReady"));
-                        await RunRecordingCommandAsync(token);
+                        useOperationOutputs = true;
+                        operationOutputs = (await RunRecordingCommandAsync(token)).Outputs;
                         break;
                     case ["select"]:
                         if (!CanEditRecordingSettings || IsSelecting || IsConfiguring)
@@ -179,7 +192,9 @@ namespace RitsukageGif.Desktop
                         _presets.UpdateParameters(session, ScriptParameters.Parse(assignments));
                         break;
                     case ["preset", "stop"]:
-                        if (_presets.ActivePreset is not null && IsRecording) await ToggleRecordingAsync();
+                        if (_presets.ActivePreset is not null && IsRecording &&
+                            OwnsActiveRecording(_presets.CaptureRun().RecordingOperation))
+                            await ToggleRecordingAsync();
                         DeactivatePreset();
                         Volatile.Write(ref _captureRegion, null);
                         break;
@@ -199,9 +214,14 @@ namespace RitsukageGif.Desktop
                 }
 
                 Notify();
-                return new(true, CurrentState, Output: LastPath, Region: Region, Preset: _presets.Name,
+                return new(true, CurrentState,
+                    Output: useOperationOutputs
+                        ? operationOutputs is { Count: > 0 } ? operationOutputs[0] : null
+                        : LastPath,
+                    Region: Region, Preset: _presets.Name,
                     Captured: LatestProgress?.Captured ?? 0, Encoded: LatestProgress?.Encoded ?? 0,
-                    PresetState: _presets.State, Outputs: LastOutputs, PresetError: _presets.LastError,
+                    PresetState: _presets.State, Outputs: useOperationOutputs ? operationOutputs : LastOutputs,
+                    PresetError: _presets.LastError,
                     Debug: _presets.Debugger?.Snapshot, CapturedFps: LatestProgress?.CapturedFps ?? 0,
                     ElapsedSeconds: LatestProgress?.ElapsedSeconds ?? 0, ParameterSession: _presets.ParameterSession,
                     Streams: Volatile.Read(ref _streams));

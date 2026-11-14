@@ -57,25 +57,6 @@ namespace RitsukageGif.Desktop
             };
         }
 
-        public ToolbarDragHandle(Window window, Action started, Action completed)
-        {
-            InitializeAppearance();
-            PointerPressed += (_, args) =>
-            {
-                if (!args.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
-                args.Handled = true;
-                started();
-                try
-                {
-                    window.BeginMoveDrag(args);
-                }
-                finally
-                {
-                    completed();
-                }
-            };
-        }
-
         private void InitializeAppearance()
         {
             Background = Brushes.Transparent;

@@ -78,11 +78,7 @@ namespace RitsukageGif.Desktop
                     CleanupEnabled = defaults.CleanupEnabled, CleanupMaxAgeDays = defaults.CleanupMaxAgeDays,
                     CleanupMaxFiles = defaults.CleanupMaxFiles, CleanupMaxSizeMiB = defaults.CleanupMaxSizeMiB,
                 },
-                "GlobalActionsHeading" => value with
-                {
-                    GlobalActions = defaults.GlobalActions,
-                    GlobalMouseBindings = [], HotkeyPolicy = defaults.HotkeyPolicy,
-                },
+                "GlobalActionsHeading" => ResetGlobalActions(value, defaults),
                 "SettingsLocalInput" => value with
                 {
                     SelectionShortcuts = new(StringComparer.Ordinal),
@@ -91,14 +87,37 @@ namespace RitsukageGif.Desktop
                 "MouseShortcutsHeading" => value with { MouseShortcuts = defaults.MouseShortcuts },
                 "GlobalMouseHeading" => value with
                 {
+                    GlobalActions =
+                    [.. value.GlobalActions.Where(action => !GlobalMouseActionCatalog.IsMouseOnly(action))],
                     GlobalMouseBindings = defaults.GlobalMouseBindings,
                     GlobalMouseShowMask = defaults.GlobalMouseShowMask,
+                    GlobalMouseIgnoredPrograms = defaults.GlobalMouseIgnoredPrograms,
                 },
                 "SettingsTransferHeading" => value with
                 {
                     NonDefaultConfigItemsFontNotBold = defaults.NonDefaultConfigItemsFontNotBold,
                 },
                 _ => value,
+            };
+        }
+
+        private static AppSettings ResetGlobalActions(AppSettings value, AppSettings defaults)
+        {
+            var actions = defaults.GlobalActions;
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
+            foreach (var action in value.GlobalActions)
+                if (GlobalMouseActionCatalog.IsMouseOnly(action) && value.GlobalMouseBindings.Any(binding =>
+                        binding.ActionId == action.Id))
+                    actions.Add(action);
+
+            return value with
+            {
+                GlobalActions = actions,
+                GlobalMouseBindings =
+                [
+                    .. value.GlobalMouseBindings.Where(binding => actions.Any(action => action.Id == binding.ActionId)),
+                ],
+                HotkeyPolicy = defaults.HotkeyPolicy,
             };
         }
 
@@ -117,6 +136,7 @@ namespace RitsukageGif.Desktop
                 DisableWheelToolAdjustment = defaults.DisableWheelToolAdjustment,
                 ControlPointVisibility = defaults.ControlPointVisibility, RenumberOnDelete = defaults.RenumberOnDelete,
                 NumberStartsAtZero = defaults.NumberStartsAtZero, GlobalNumberCounter = defaults.GlobalNumberCounter,
+                NumberForegroundUsesDefault = defaults.NumberForegroundUsesDefault,
                 NumberForegroundColor = defaults.NumberForegroundColor, NumberTextSize = defaults.NumberTextSize,
                 NumberArrowSize = defaults.NumberArrowSize,
                 SmoothBrush = defaults.SmoothBrush, PencilShiftMode = defaults.PencilShiftMode,
@@ -126,7 +146,7 @@ namespace RitsukageGif.Desktop
                 EraserSecondaryEditingEnabled = defaults.EraserSecondaryEditingEnabled,
                 AutoSelectPrivacyMosaic = defaults.AutoSelectPrivacyMosaic,
                 AutoAddWatermark = defaults.AutoAddWatermark,
-                Toolbar = value.Toolbar with { Columns = defaults.Toolbar.Columns },
+                Toolbar = value.Toolbar.Merge(defaults.Toolbar, true),
             };
         }
     }

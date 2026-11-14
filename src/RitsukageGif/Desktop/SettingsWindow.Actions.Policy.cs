@@ -8,6 +8,29 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class SettingsWindow
     {
+        internal Action<bool>? FullscreenShortcutPolicyBaselineChanged { private get; init; }
+        private event Action<bool>? FullscreenShortcutPolicyChanged;
+
+        internal void SynchronizeFullscreenShortcutPolicy(bool disabled)
+        {
+            FullscreenShortcutPolicyBaselineChanged?.Invoke(disabled);
+            _draft?.HotkeyPolicy = _draft.HotkeyPolicy with { DisableInFullscreen = disabled };
+            _appliedSettings?.HotkeyPolicy = _appliedSettings.HotkeyPolicy with { DisableInFullscreen = disabled };
+
+            var wasApplying = _applyingLiveSettings;
+            _applyingLiveSettings = true;
+            try
+            {
+                FullscreenShortcutPolicyChanged?.Invoke(disabled);
+            }
+            finally
+            {
+                _applyingLiveSettings = wasApplying;
+            }
+
+            RefreshDefaultPresentation();
+        }
+
         private void AddHotkeyPolicyControls(AppSettings draft, StackPanel footer, Button ignored)
         {
             var fullscreen = new CheckBox
@@ -28,6 +51,8 @@ namespace RitsukageGif.Desktop
                 DisableInFullscreen = fullscreen.IsChecked == true,
             };
             footer.Children.Add(Setting(fullscreen, static settings => settings.HotkeyPolicy.DisableInFullscreen));
+            FullscreenShortcutPolicyChanged += Synchronize;
+            RegisterContentCleanup(() => FullscreenShortcutPolicyChanged -= Synchronize);
             ignored.Click += async (_, _) =>
             {
                 var programs = await EditIgnoredProgramsAsync(draft.HotkeyPolicy.IgnoredPrograms);
@@ -39,6 +64,11 @@ namespace RitsukageGif.Desktop
             SubscribeContentLanguage(Refresh);
             Refresh();
             return;
+
+            void Synchronize(bool disabled)
+            {
+                fullscreen.IsChecked = disabled;
+            }
 
             void Refresh()
             {

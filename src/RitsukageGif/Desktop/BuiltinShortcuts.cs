@@ -38,14 +38,15 @@ namespace RitsukageGif.Desktop
             return definition.DefaultGesture;
         }
 
-        internal static List<string> SelectionGestures(string id, IReadOnlyList<string> defaults,
+        internal static List<(string Gesture, int Slot)> SelectionGestures(string id, IReadOnlyList<string> defaults,
             Dictionary<string, string[]>? settings)
         {
-            var result = new List<string>();
+            var result = new List<(string Gesture, int Slot)>();
             for (var index = 0; index < defaults.Count; index++)
                 if (ReadSetting(settings, SelectionSlotId(id, index), out var slot))
-                    result.AddRange(slot ?? []);
-                else if (defaults[index].Length > 0) result.Add(defaults[index]);
+                    foreach (var gesture in slot ?? [])
+                        result.Add((gesture, index));
+                else if (defaults[index].Length > 0) result.Add((defaults[index], index));
             return result;
         }
 
@@ -196,9 +197,7 @@ namespace RitsukageGif.Desktop
                 new("builtin.longshot.automatic", "BuiltinShortcutLongshotContext", "ScreenshotAutoScrolling", "Alt+1",
                     "automatic"),
                 new("builtin.pinned.hide", "BuiltinShortcutPinnedContext", "PinnedImageHide", "", "hide"),
-                new("builtin.pinned.copy", "BuiltinShortcutPinnedContext", "ScreenshotCopy", "Ctrl+C", "copy"),
                 new("builtin.pinned.print", "BuiltinShortcutPinnedContext", "Print", "Ctrl+P", "print"),
-                new("builtin.pinned.save", "BuiltinShortcutPinnedContext", "ScreenshotSave", "Ctrl+S", "save"),
                 new("builtin.pinned.annotate", "BuiltinShortcutPinnedContext", "PinnedImageAnnotate", "Ctrl+E",
                     "annotate"),
                 new("builtin.pinned.hide-mark", "BuiltinShortcutPinnedContext", "PinnedMenuHideMark", "H", "hide-mark"),
@@ -207,14 +206,10 @@ namespace RitsukageGif.Desktop
                     "copy-plain-text"),
                 new("builtin.pinned.copy-html", "BuiltinShortcutPinnedContext", "PinnedCopyWithHtml", "Ctrl+Alt+C",
                     "copy-html"),
-                new("builtin.pinned.close", "BuiltinShortcutPinnedContext", "Close", "Ctrl+W", "close"),
-                new("builtin.pinned.close-alternate", "BuiltinShortcutPinnedContext", "Close", "Escape", "close"),
                 new("builtin.pinned.destroy", "BuiltinShortcutPinnedContext", "PinnedImageDestroy", "Ctrl+D",
                     "destroy"),
                 new("builtin.pinned.destroy-alternate", "BuiltinShortcutPinnedContext", "PinnedImageDestroy",
                     "Shift+Escape", "destroy"),
-                new("builtin.pinned.copy-all-text", "BuiltinShortcutPinnedContext", "PinnedImageCopyText", "Shift+C",
-                    "copy-all-text"),
                 new("builtin.pinned.copy-file", "BuiltinShortcutPinnedContext", "PinnedImageCopyFile", "", "copy-file"),
                 new("builtin.pinned.annotate-toolbar", "BuiltinShortcutPinnedContext", "PinnedImageAnnotationToolbar",
                     "Space", "annotate-toolbar"),
@@ -251,9 +246,6 @@ namespace RitsukageGif.Desktop
                 new("builtin.pinned.menu", "BuiltinShortcutPinnedContext", "MouseActionMenu", "Apps", "menu"),
                 new("builtin.pinned.menu-alternate", "BuiltinShortcutPinnedContext", "MouseActionMenu", "Shift+F10",
                     "menu"),
-                new("builtin.longshot.cancel", "BuiltinShortcutLongshotContext", "Cancel", "Escape", "cancel"),
-                new("builtin.longshot.finish", "BuiltinShortcutLongshotContext", "ScreenshotCopy", "Enter",
-                    "finish"),
                 new("builtin.longshot.crop-leading", "BuiltinShortcutLongshotContext", "ScrollCaptureCropTop", "Alt+2",
                     "crop-leading"),
                 new("builtin.longshot.crop-trailing", "BuiltinShortcutLongshotContext", "ScrollCaptureCropBottom",
@@ -286,7 +278,8 @@ namespace RitsukageGif.Desktop
 
             var result = new List<BuiltinShortcutBinding>();
             var used = new Dictionary<(Key Key, KeyModifiers Modifiers), List<BuiltinShortcutDefinition>>();
-            foreach (var definition in Catalog.Where(definition => definition.SelectionId is null))
+            foreach (var definition in Catalog.Where(definition =>
+                         definition.SelectionId is null || definition.ContextKey == BuiltinShortcutContexts.CapturePin))
             {
                 var value = GetGesture(definition, settings);
                 if (value.Length == 0) continue;
@@ -308,12 +301,18 @@ namespace RitsukageGif.Desktop
                     continue;
                 }
 
+                var context = definition.ContextKey == BuiltinShortcutContexts.CapturePin
+                    ? BuiltinShortcutContexts.Pinned
+                    : definition.ContextKey;
                 var key = BuiltinKeys.Normalize(gesture.Key, mixing);
                 if (!used.TryGetValue((key, gesture.KeyModifiers), out var matches))
                     used.Add((key, gesture.KeyModifiers), matches = []);
                 var conflict = false;
                 foreach (var existing in matches.Where(existing =>
-                             BuiltinShortcutContexts.Overlap(existing.ContextKey, definition.ContextKey)))
+                             BuiltinShortcutContexts.Overlap(
+                                 existing.ContextKey == BuiltinShortcutContexts.CapturePin
+                                     ? BuiltinShortcutContexts.Pinned
+                                     : existing.ContextKey, context)))
                 {
                     if (NativeDefaultShadow(existing, definition, key, gesture.KeyModifiers, mixing))
                     {
@@ -331,7 +330,10 @@ namespace RitsukageGif.Desktop
 
                 if (conflict) continue;
                 matches.Add(definition);
-                result.Add(new(definition.ContextKey, definition.Action, gesture));
+                var action = definition.ContextKey == BuiltinShortcutContexts.CapturePin
+                    ? SelectionCommands.PinnedAction(Enum.Parse<SelectionCommand>(definition.Action, true))!
+                    : definition.Action;
+                result.Add(new(context, action, gesture) { DefinitionId = definition.Id });
             }
 
             return result.AsReadOnly();

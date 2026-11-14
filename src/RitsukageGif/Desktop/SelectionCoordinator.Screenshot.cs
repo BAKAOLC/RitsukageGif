@@ -69,6 +69,7 @@ namespace RitsukageGif.Desktop
             CancellationToken token, bool allowHdr = true)
         {
             var target = selection.Target ?? throw new CaptureSourceLostException();
+            ValidateScreenshotTarget(target);
             using var capture = new WindowContentCapture(target.Handle, false);
             CapturedFrameSet? frames = null;
             if (_retainHdr && allowHdr)
@@ -91,9 +92,7 @@ namespace RitsukageGif.Desktop
             }
 
             var bounds = OperatingSystem.IsLinux() ? target.Client : target.Bounds;
-            var refreshed = WindowLocator.Refresh(target) ?? throw new CaptureSourceLostException();
-            if (bounds != (OperatingSystem.IsLinux() ? refreshed.Client : refreshed.Bounds))
-                throw new CaptureSourceLostException();
+            ValidateScreenshotTarget(target);
             var region = selection.Region.Intersect(bounds);
             if (region.IsEmpty) throw new CaptureSourceLostException();
             var sources = new[] { (bounds, frames) };
@@ -104,6 +103,16 @@ namespace RitsukageGif.Desktop
                 : 1;
             var native = density > 1 ? NativeFrameComposition.Compose(sources, region, density, token) : null;
             return new(PackScreenshotFrame(logical, token), logical.Hdr, native);
+        }
+
+        private static void ValidateScreenshotTarget(WindowTarget target)
+        {
+            var refreshed = OperatingSystem.IsWindows()
+                ? WindowLocator.RefreshCandidate(target)
+                : WindowLocator.Refresh(target);
+            if (refreshed is null || !IsSameSelectionWindow(target, refreshed) ||
+                refreshed.Client != target.Client || (!OperatingSystem.IsLinux() && refreshed.Bounds != target.Bounds))
+                throw new CaptureSourceLostException();
         }
     }
 }

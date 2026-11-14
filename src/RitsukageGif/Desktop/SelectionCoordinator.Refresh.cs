@@ -27,7 +27,7 @@ namespace RitsukageGif.Desktop
 
             return await Task.Run(() =>
             {
-                if (selection.WindowSource) return CaptureWindowPixels(selection, token);
+                if (selection.WindowSource) return CaptureWindowScreenshot(selection, token);
                 var options = new RecordingOptions(selection.Region, Divisor: 1, Cursor: false)
                     { PixelDensity = NativeDisplayCatalog.Density(selection.Region) };
                 using var capture = new DesktopCapture(options);
@@ -88,13 +88,15 @@ namespace RitsukageGif.Desktop
                 if (WindowSource && !UsesLocalSource)
                 {
                     var target = Snapshot.Target ?? throw new CaptureSourceLostException();
-                    var frame = await CaptureRefreshFrameAsync(new(target.Client, true, target), work.Token);
+                    var selection = CreateWindowScreenshotSelection(target);
+                    var revision = _windowShapeRevision;
+                    var frame = await CaptureRefreshFrameAsync(selection, work.Token);
                     work.Token.ThrowIfCancellationRequested();
-                    var replacement = new FrozenWindowScreenshot(target, target.Client, frame.Pixels, frame.Hdr,
+                    var replacement = new FrozenWindowScreenshot(target, selection.Region, frame.Pixels, frame.Hdr,
                         frame.NativeFrames);
                     try
                     {
-                        await annotations.SetOverlayFrameAsync(target.Client, frame.Pixels, work.Token);
+                        await annotations.SetOverlayFrameAsync(selection.Region, frame.Pixels, work.Token);
                     }
                     catch
                     {
@@ -105,6 +107,7 @@ namespace RitsukageGif.Desktop
                     if (refreshedCursor is not null) ScreenshotCursor = refreshedCursor;
                     _frozenWindow?.Dispose();
                     _frozenWindow = replacement;
+                    _frozenShapeRevision = revision;
                 }
                 else
                 {

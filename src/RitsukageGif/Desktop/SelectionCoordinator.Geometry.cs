@@ -110,15 +110,17 @@ namespace RitsukageGif.Desktop
                 Math.Clamp(region.Y, limits.Y, limits.Bottom - height), width, height);
         }
 
-        private PixelRect ConstrainGeometryResize(PixelRect region, PixelRect limits, int handle)
+        private PixelRect ConstrainGeometryResize(PixelRect region, PixelRect limits, int handle, long dx, long dy)
         {
             if (_geometryRatio is not { } ratio || handle == MoveSelection) return region;
             var width = (double)region.Width;
             var height = (double)region.Height;
-            if ((handle & 5) == 0) width = height * ratio;
-            else height = width / ratio;
             var horizontal = (handle & 5) != 0;
             var vertical = (handle & 10) != 0;
+            if (!horizontal || (vertical && Math.Abs((double)dx) <= Math.Abs((double)dy) * ratio))
+                width = height * ratio;
+            else
+                height = width / ratio;
             var anchorX = (handle & 1) != 0 ? region.Right :
                 horizontal ? region.X :
                 _manipulationOriginal.X + _manipulationOriginal.Width / 2d;

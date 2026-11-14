@@ -64,6 +64,12 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        internal (int Width, int Height)? ReadFrameSize()
+        {
+            lock (_gate)
+                return Failure is null && _latest is { } frame ? (frame.Width, frame.Height) : null;
+        }
+
         internal PreviewFrame? Read()
         {
             lock (_gate)

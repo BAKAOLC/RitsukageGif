@@ -35,8 +35,8 @@ namespace RitsukageGif.Desktop
 
         private bool _busy;
         private bool _closed;
-        private bool _initialized;
         private bool _hasRestoredState;
+        private bool _initialized;
         private byte[] _pixels;
         private byte[] _png;
 
@@ -84,8 +84,8 @@ namespace RitsukageGif.Desktop
             Presentation.WindowShadowChanged += () => StateChanged?.Invoke(this, EventArgs.Empty);
             var menu = new ContextMenu();
             Presentation.ConnectMenu(menu);
-            menu.Items.Add(Command("PinnedCopyImage", CopyAsync));
-            var copyOriginal = Command("PinnedCopyOriginalImage", CopyOriginalImageAsync);
+            menu.Items.Add(Command("PinnedCopyImage", () => CopyMenuImageAsync(false)));
+            var copyOriginal = Command("PinnedCopyOriginalImage", () => CopyMenuImageAsync(true));
             menu.Items.Add(copyOriginal);
             menu.Items.Add(Command("PinnedImageCopyFile", CopyFileAsync));
             menu.Items.Add(Command("PinnedSaveImage", SaveAsync));
@@ -106,7 +106,6 @@ namespace RitsukageGif.Desktop
             });
             hideMark.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(hideMark);
-            menu.Items.Add(Command("PinnedImageAnnotationToolbar", ToggleAnnotationToolbarAsync));
             menu.Opened += (_, _) =>
             {
                 annotate.IsEnabled = !_busy && !IsMouseThrough;
@@ -123,7 +122,7 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(actualSize);
             var thumbnailMode = Command("PinnedMenuThumbnail", () =>
             {
-                ToggleThumbnail();
+                ToggleThumbnail(new(0, 0));
                 return Task.CompletedTask;
             });
             thumbnailMode.ToggleType = MenuItemToggleType.CheckBox;
@@ -152,7 +151,6 @@ namespace RitsukageGif.Desktop
             };
             menu.Opened += (_, _) =>
                 actualSize.IsEnabled = !IsOperationLocked(PinnedLockRestrictions.Move) && _annotation is null;
-            AddMultiSelectionMenu(menu);
             AddInteractionMenu(menu);
             AddRecognitionMenu(menu);
             menu.Items.Add(new Separator());
@@ -202,7 +200,8 @@ namespace RitsukageGif.Desktop
                 _screens = Screens;
                 _screens.Changed += ScreensChanged;
                 var screen = Screens.ScreenFromPoint(Position) ?? Screens.Primary;
-                if (screen is not null && preferences.AutoFit && !_hasRestoredState && _capturePlacement is null)
+                if (screen is not null && preferences.AutoFit && !_hasRestoredState &&
+                    _capturePlacement is null && !_hasCenteredCaptureOrigin)
                     CurrentPinZoom = Math.Min(1,
                         Math.Min(screen.WorkingArea.Width * 0.8 / _bitmap.Size.Width,
                             _bitmap.Size.Height > _bitmap.Size.Width * 4
@@ -217,10 +216,9 @@ namespace RitsukageGif.Desktop
             UpdateSize();
         }
 
-        public PinnedWindowPresentation Presentation { get; }
-
         public Func<PinnedImagePreferences>? PreferencesProvider { get; set; }
         private PinnedImagePreferences CurrentPreferences => PreferencesProvider?.Invoke() ?? field;
+        public string ContentHash { get; private set; } = "";
 
         public void Dispose()
         {
@@ -234,7 +232,8 @@ namespace RitsukageGif.Desktop
                 ReleaseResources();
             }
         }
-        public string ContentHash { get; private set; } = "";
+
+        public PinnedWindowPresentation Presentation { get; }
 
         public void HideImage()
         {
@@ -328,7 +327,7 @@ namespace RitsukageGif.Desktop
             if (!_busy) _lifetime.Dispose();
         }
 
-        public void RestoreToScreen()
+        private void RestoreToScreen()
         {
             var screen = Screens.ScreenFromPoint(Position) ?? Screens.Primary;
             if (screen is null) return;
@@ -480,6 +479,7 @@ namespace RitsukageGif.Desktop
 
         private void OnKeyDown(object? sender, KeyEventArgs args)
         {
+            if (_annotationToolbar?.HandleAnnotationMenuKey(args, true) == true) return;
             if (args.Handled || BuiltinShortcutTextInput.OwnsKey(args) || IsAnnotationTextInputKey(args)) return;
             if (HasTextSelection && args is { Key: Key.Escape, KeyModifiers: KeyModifiers.None })
             {
@@ -533,6 +533,7 @@ namespace RitsukageGif.Desktop
                     break;
                 case "copy": _ = RunAsync(HasTextSelection ? CopySelectedTextAsync : CopyAsync); break;
                 case "save": _ = RunAsync(SaveAsync); break;
+                case "quick-save": _ = RunAsync(QuickSaveAsync); break;
                 case "print" when ScreenshotPrintService.IsSupported: _ = RunAsync(PrintDocumentAsync); break;
                 case "annotate": _ = RunAsync(BeginAnnotationAsync); break;
                 case "hide-mark": SetMarkHidden(!IsMarkHidden); break;

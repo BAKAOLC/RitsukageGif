@@ -1,3 +1,5 @@
+using System.Runtime.ExceptionServices;
+
 namespace RitsukageGif.Desktop
 {
     internal sealed partial class SelectionCoordinator
@@ -8,28 +10,19 @@ namespace RitsukageGif.Desktop
             set;
         }
 
-        private WindowTarget? LivePinTarget
-        {
-            get
-            {
-                var region = Snapshot.Region;
-                if (UsesLocalSource || ScreenshotPreview || region.IsEmpty || ShapeMode != SelectionShapeMode.Rectangle)
-                    return null;
-                var center = new PixelPoint(region.X + region.Width / 2, region.Y + region.Height / 2);
-                var target = Snapshot.Target ?? _targets.FirstOrDefault(candidate => candidate.Bounds.Contains(center));
-                var bounds = target is null ? default : OperatingSystem.IsLinux() ? target.Client : target.Bounds;
-                return target is not null && !region.Intersect(bounds).IsEmpty ? target : null;
-            }
-        }
+        private bool CanSelectLivePinSource => !UsesLocalSource && !ScreenshotPreview &&
+                                               ShapeMode == SelectionShapeMode.Rectangle;
 
         private void RequestWindowPin()
         {
-            if (_finished || _screenshotCompleting || WindowPinOutputHandler is null ||
-                Annotations is not { CanPinWindow: true } || LivePinTarget is not { } target) return;
-            _screenshotTask = CompleteWindowPinAsync(target, Snapshot.Region, Snapshot.Cursor);
+            if (_finished || _screenshotCompleting || WindowPinOutputHandler is null || !CanSelectLivePinSource ||
+                Annotations is not { CanPinWindow: true }) return;
+            var snapshot = Snapshot;
+            if (snapshot.Region.IsEmpty) return;
+            _screenshotTask = CompleteWindowPinAsync(snapshot.Region, snapshot.Cursor);
         }
 
-        private async Task CompleteWindowPinAsync(WindowTarget target, PixelRect region, bool cursor)
+        private async Task CompleteWindowPinAsync(PixelRect region, bool cursor)
         {
             using var work = CancellationTokenSource.CreateLinkedTokenSource(_cancel.Token);
             _screenshotWork = work;
@@ -39,29 +32,56 @@ namespace RitsukageGif.Desktop
             Refresh();
             try
             {
-                foreach (var window in _windows) window.Topmost = false;
-                await WindowPinOutputHandler!(target, region, cursor, ScreenshotCaptureScaling, work.Token);
+                _showing = true;
+                ReleaseCaptures();
+                _replacingOverlays = true;
+                try
+                {
+                    if (CloseOverlays() is { } closeError)
+                        ExceptionDispatchInfo.Throw(closeError);
+                }
+                finally
+                {
+                    _replacingOverlays = false;
+                }
+
+                await CaptureWindowVisibility.FlushAsync(work.Token);
+                var center = new PixelPoint((int)((2L * region.X + region.Width - 1) / 2),
+                    (int)((2L * region.Y + region.Height - 1) / 2));
+                var target = await Task.Run(() => WindowLocator.FindLivePinAtPoint(center), work.Token) ??
+                             throw new CaptureSourceLostException();
                 work.Token.ThrowIfCancellationRequested();
-                if (!_finished) Finish(new(region, true, target, cursor));
+                var bounds = OperatingSystem.IsLinux() ? target.Client : target.Bounds;
+                var clipped = region.Intersect(bounds);
+                if (clipped.IsEmpty) throw new CaptureSourceLostException();
+                await WindowPinOutputHandler!(target, clipped, cursor, ScreenshotCaptureScaling, work.Token);
+                work.Token.ThrowIfCancellationRequested();
+                if (!_finished) Finish(new(clipped, true, target, cursor));
             }
             catch (OperationCanceledException) when (_finished || work.IsCancellationRequested)
             {
             }
             catch (Exception error)
             {
-                if (!_finished) annotations.SetExportState(false, error.Message);
+                if (_finished) return;
+                if (PropagateOutputErrors)
+                {
+                    Finish(null, error);
+                }
+                else
+                {
+                    SelectionLogger.ZLogWarning(error,
+                        $"Window pin failed after screenshot handoff. SelectionId={_selectionId}");
+                    CompletionNotice = error.Message;
+                    Finish(null);
+                }
             }
             finally
             {
                 _screenshotCompleting = false;
                 if (ReferenceEquals(_screenshotWork, work)) _screenshotWork = null;
-                if (!_finished)
-                {
-                    if (annotations.IsBusy) annotations.SetExportState(false);
-                    foreach (var window in _windows) window.Topmost = true;
-                    ScreenshotOwner?.Activate();
-                    Refresh();
-                }
+
+                _showing = false;
             }
         }
     }

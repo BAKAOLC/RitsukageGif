@@ -52,7 +52,8 @@ namespace RitsukageGif.Desktop
             };
             var soundTiming = Contents(soundValues, "CaptureSoundStart", "CaptureSoundPin", "CaptureSoundCopy",
                 "CaptureSoundSaved", "CaptureSoundQuickSave");
-            var cursor = Choice((int)value.CursorPolicy, "CaptureCursorHidden", "CaptureCursorVisible");
+            var cursor = Choice(value.CursorPolicy == CaptureCursorPolicy.Visible ? 0 : 1,
+                "CaptureCursorVisible", "CaptureCursorHidden");
             var auxiliary = Choice((int)value.AuxiliaryPolicy, "CaptureAuxiliaryHidden", "CaptureAuxiliaryAlt",
                 "CaptureAuxiliaryAlways");
             var guideValues = new[]
@@ -230,7 +231,7 @@ namespace RitsukageGif.Desktop
                                   (soundValues[2] ? ScreenshotSoundTiming.Copy : ScreenshotSoundTiming.None) |
                                   (soundValues[3] ? ScreenshotSoundTiming.Save : ScreenshotSoundTiming.None) |
                                   (soundValues[4] ? ScreenshotSoundTiming.QuickSave : ScreenshotSoundTiming.None),
-                    CursorPolicy = (CaptureCursorPolicy)cursor.SelectedIndex,
+                    CursorPolicy = cursor.SelectedIndex == 0 ? CaptureCursorPolicy.Visible : CaptureCursorPolicy.Hidden,
                     AuxiliaryPolicy = (CaptureAuxiliaryPolicy)auxiliary.SelectedIndex,
                     GuideCursor = guideValues[0], GuideSelectionCenter = guideValues[1],
                     GuideSelectionBorder = guideValues[2], GuideMagnifier = guideValues[3],
@@ -269,7 +270,7 @@ namespace RitsukageGif.Desktop
                     definition.DefaultGestures, draft.SelectionShortcuts);
                 cursorLabel.Text = gestures.Count > 0
                     ? string.Format(CultureInfo.CurrentCulture, UiText.Get("CaptureCursorToggleLabel"),
-                        string.Join(" / ", gestures.Select(KeyGestureDisplay.Format)))
+                        string.Join(" / ", gestures.Select(gesture => KeyGestureDisplay.Format(gesture.Gesture))))
                     : UiText.Get("CaptureCursor");
             }
 

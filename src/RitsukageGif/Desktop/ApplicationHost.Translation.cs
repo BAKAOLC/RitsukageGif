@@ -34,6 +34,27 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        private async Task PinScreenshotTranslationAsync(ScreenshotResult result, ScreenshotInvocation invocation)
+        {
+            using var work = CancellationTokenSource.CreateLinkedTokenSource(_hostCancellation.Token,
+                invocation.CommandToken);
+            try
+            {
+                if (result.ColorMode != OutputColorMode.Sdr && result.Hdr is not { ColorInfo.IsHdrSource: true })
+                    throw new NotSupportedException(result.HdrUnavailableReason ?? UiText.Get("HdrCaptureUnavailable"));
+                result = await ScreenshotOutputDecoration.PrepareAsync(result, work.Token);
+                var pin = await PinScreenshotAsync(result, work.Token);
+                work.Token.ThrowIfCancellationRequested();
+                pin?.StartScreenshotTranslation();
+            }
+            catch (Exception error) when (!invocation.PropagateErrors &&
+                                          (error is not OperationCanceledException || !work.IsCancellationRequested))
+            {
+                HostLogger.ZLogWarning(error, $"Screenshot translation pin failed.");
+                if (!IsClosing) SetStatus(error.Message);
+            }
+        }
+
         private Task ShowImageTranslationAsync(Window owner, ReadOnlyMemory<byte> png, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();

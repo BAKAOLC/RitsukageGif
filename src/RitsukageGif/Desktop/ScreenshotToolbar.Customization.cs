@@ -8,7 +8,9 @@ namespace RitsukageGif.Desktop
     {
         private readonly Dictionary<ToolbarActionId, Button> _actionButtons = [];
         private readonly WrapPanel _functionStrip = new() { Orientation = Orientation.Horizontal };
-        private readonly WrapPanel _moreActions = new() { Orientation = Orientation.Horizontal };
+
+        private readonly WrapPanel _moreActions = new()
+            { Orientation = Orientation.Horizontal, ItemSpacing = 4, LineSpacing = 4 };
 
         private readonly ScrollViewer _moreScroll = new()
             { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -25,6 +27,13 @@ namespace RitsukageGif.Desktop
                 _moreCommands.Hide();
                 action();
             }, ActionGeometry(definition));
+            if (definition.Configurable)
+            {
+                ToolTip.SetShowDelay(button, 1000);
+                ToolTip.SetBetweenShowDelay(button, -1);
+                ToolTip.SetShowOnDisabled(button, true);
+            }
+
             _actionButtons.Add(id, button);
             return button;
         }
@@ -34,35 +43,40 @@ namespace RitsukageGif.Desktop
             return ToolbarIcon.FindDefinition(definition.IconKey) ?? ToolbarIcon.GetDefinition("AnimationEffects");
         }
 
-        private static void SetToolButtonContent(Button button, string key)
+        private static void SetToolButtonContent(Button button, string key, bool inMoreMenu = false)
         {
-            button.Height = AppTheme.CurrentAppearance.ToolbarIconSize switch
+            var iconSize = AppTheme.CurrentAppearance.ToolbarIconSize switch
             {
-                ToolbarIconSize.Small => 24, ToolbarIconSize.Large => 36, _ => 28,
+                ToolbarIconSize.Small => 12, ToolbarIconSize.Large => 24, _ => 16,
             };
+            if (inMoreMenu) iconSize += 5;
+            button.Height = iconSize + (inMoreMenu ? 10 : 12);
             var icon = ToolbarIcon.Create(button,
                 ToolbarIcon.FindDefinition(key) ?? ToolbarIcon.GetDefinition("AnimationEffects"));
-            icon.Width = icon.Height = Math.Max(12, button.Height - 12);
+            icon.Width = icon.Height = iconSize;
             button.Content = icon;
             button.Width = button.Height;
             button.Padding = new(5);
-            button.Margin = new(0);
+            button.Margin = inMoreMenu ? new(0, 2) : new(0);
             button.HorizontalAlignment = HorizontalAlignment.Left;
             button.HorizontalContentAlignment = HorizontalAlignment.Center;
+            AnchoredSelectionTooltip.Configure(button, inMoreMenu);
         }
 
-        private void InitializeCustomizationMenu()
+        private HoverPropertyPanel CreateMoreMenu()
         {
-            var rows = new StackPanel { Spacing = 2, HorizontalAlignment = HorizontalAlignment.Stretch };
-            rows.Children.Add(_moreActions);
-            _moreScroll.Content = rows;
-            var content = new StackPanel { Spacing = 2 };
-            content.Children.Add(_moreScroll);
-            content.Children.Add(new Border
-                { Height = 1, Background = AppTheme.Outline, Margin = new(0, 4) });
-            content.Children.Add(AdjustmentButton(false));
-            _moreCommands.Content = new ThemeVariantScope
-                { Child = content };
+            return new(_more, CreateContent, _ => PrepareMoreMenu(), true);
+
+            Control CreateContent()
+            {
+                var rows = new StackPanel { HorizontalAlignment = HorizontalAlignment.Stretch };
+                rows.Children.Add(_moreActions);
+                _moreScroll.Content = rows;
+                var content = new StackPanel { Spacing = 4 };
+                content.Children.Add(_moreScroll);
+                content.Children.Add(AdjustmentButton(false));
+                return new ThemeVariantScope { Child = content };
+            }
         }
 
         private Button AdjustmentButton(bool tools)
@@ -74,7 +88,7 @@ namespace RitsukageGif.Desktop
             return button;
         }
 
-        private void ShowMoreMenu()
+        private void PrepareMoreMenu()
         {
             var available = IsDocked ? double.PositiveInfinity : _monitor.Height / Scale;
             if (TopLevel.GetTopLevel(this) is Window owner)
@@ -86,7 +100,7 @@ namespace RitsukageGif.Desktop
 
             if (!double.IsFinite(available)) available = 720;
             _moreScroll.MaxHeight = Math.Max(48, Math.Min(420, available - 144));
-            _moreCommands.ShowAt(_more);
+            _ = RefreshPrintCapabilitiesAsync();
         }
 
         private void RefreshToolbarPreferences()
@@ -99,8 +113,7 @@ namespace RitsukageGif.Desktop
             RebuildToolColumns(preferences);
             _functionStrip.Children.Clear();
             _moreActions.Children.Clear();
-            _moreActions.MaxWidth = (_more.Height + 4) * 5;
-            _functionStrip.Children.Add(_undo);
+            _moreActions.MaxWidth = (_more.Height + 3) * 5 + 4 * _moreActions.ItemSpacing;
             foreach (var item in preferences.Actions)
             {
                 if (!ToolbarActionCatalog.Get(item.Id).Configurable) continue;
@@ -114,8 +127,7 @@ namespace RitsukageGif.Desktop
                         _functionStrip.Children.Add(button);
                         break;
                     case ToolbarButtonVisibility.MoreMenu:
-                        SetToolButtonContent(button, definition.IconKey);
-                        button.Margin = new(2);
+                        SetToolButtonContent(button, definition.IconKey, true);
                         var command = ActionCommand(item.Id);
                         if (command is { } value) SetShortcutTip(button, value);
                         _moreActions.Children.Add(button);
@@ -142,11 +154,19 @@ namespace RitsukageGif.Desktop
                 _moreCommands.Hide();
                 HideToolGroups();
                 using var scope = _dialogScopeProvider?.Invoke();
-                Window editor = tools
-                    ? new ToolbarToolsWindow(_session.ToolbarPreferences)
-                    : new ToolbarActionsWindow(_session.ToolbarPreferences);
-                if (await editor.ShowDialog<ToolbarPreferences?>(owner) is { } result && !_disposed)
-                    _session.UpdateToolbarPreferences(result, tools);
+                if (tools)
+                {
+                    var editor = new ToolbarToolsWindow(_session.ToolbarPreferences, result =>
+                    {
+                        if (!_disposed) _session.UpdateToolbarPreferences(result, true);
+                    });
+                    await editor.ShowDialog(owner);
+                    return;
+                }
+
+                if (await new ToolbarActionsWindow(_session.ToolbarPreferences)
+                        .ShowDialog<ToolbarPreferences?>(owner) is { } actions && !_disposed)
+                    _session.UpdateToolbarPreferences(actions, false);
             }
             catch (Exception error)
             {

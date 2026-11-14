@@ -23,14 +23,15 @@ int rgc_portal_scroll_input_send(GDBusConnection *bus, const char *session, uint
         return RGC_SCROLL_UNAVAILABLE;
     }
     gint64 age = g_get_monotonic_time() - observation->observed_monotonic_us;
-    if (!observation->cursor_valid || observation->observed_monotonic_us == 0 || age < 0 || age > 250000 ||
-        observation->cursor_x < region_x || observation->cursor_y < region_y ||
-        (int64_t)observation->cursor_x >= (int64_t)region_x + region_width ||
-        (int64_t)observation->cursor_y >= (int64_t)region_y + region_height) {
+    if (!observation->cursor_valid || observation->observed_monotonic_us == 0 || age < 0 || age > 250000) {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
-                            "There is no current pointer observation inside the authorized capture region.");
+                            "There is no current pointer observation for the authorized capture source.");
         return RGC_SCROLL_UNAVAILABLE;
     }
+    if (observation->cursor_x < region_x || observation->cursor_y < region_y ||
+        (int64_t)observation->cursor_x >= (int64_t)region_x + region_width ||
+        (int64_t)observation->cursor_y >= (int64_t)region_y + region_height)
+        return RGC_SCROLL_POINTER_OUTSIDE;
     GVariantBuilder options;
     g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
     GVariant *reply =

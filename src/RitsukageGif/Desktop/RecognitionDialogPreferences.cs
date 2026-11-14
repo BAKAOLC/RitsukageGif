@@ -13,6 +13,13 @@ namespace RitsukageGif.Desktop
         public bool CloseAfterCopyAll { get; set; } = true;
         public bool CloseAfterCopySelected { get; set; }
         public bool Topmost { get; set; } = true;
+        public int Width { get; init; }
+        public int Height { get; init; }
+
+        internal static bool ValidSize(int width, int height)
+        {
+            return (width == 0 && height == 0) || (width is > 0 and <= 32768 && height is > 0 and <= 32768);
+        }
 
         internal RecognitionDialogPreferences Normalize()
         {
@@ -24,6 +31,8 @@ namespace RitsukageGif.Desktop
                 Table = (Table ?? TableOutputStyle.Default).Normalize(),
                 Layout = Layout is { } layout && !Enum.IsDefined(layout) ? null : Layout,
                 Punctuation = Punctuation is { } punctuation && !Enum.IsDefined(punctuation) ? null : Punctuation,
+                Width = ValidSize(Width, Height) ? Width : 0,
+                Height = ValidSize(Width, Height) ? Height : 0,
             };
         }
 
@@ -53,6 +62,8 @@ namespace RitsukageGif.Desktop
                     ? CloseAfterCopySelected
                     : edited.CloseAfterCopySelected,
                 Topmost = baseline.Topmost == edited.Topmost ? Topmost : edited.Topmost,
+                Width = baseline.Width == edited.Width && baseline.Height == edited.Height ? Width : edited.Width,
+                Height = baseline.Width == edited.Width && baseline.Height == edited.Height ? Height : edited.Height,
             };
         }
     }

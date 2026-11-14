@@ -15,8 +15,10 @@ namespace RitsukageGif.Desktop
         private CombinedGeometry? _frameOutside;
         internal SelectionDecorationPreview? FrameShadowPreview { get; set; }
 
-        private double FrameRadius => Math.Min(_frameDecoration.CornerRadius,
-            Math.Min(Selected.Width, Selected.Height) / 2.0) / Scale;
+        private double FrameRadiusPixels => Math.Min(_frameDecoration.CornerRadius,
+            Math.Min(Selected.Width, Selected.Height) / 2.0);
+
+        private double FrameRadius => FrameRadiusPixels / Scale;
 
         internal void SetFrameDecoration(CaptureDecoration decoration)
         {

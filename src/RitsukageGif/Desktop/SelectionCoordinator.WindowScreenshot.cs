@@ -29,11 +29,18 @@ namespace RitsukageGif.Desktop
             if (Annotations is { } annotations)
             {
                 annotations.RecordingEnabled = AllowRecording && !ScreenshotPreview;
-                annotations.WindowPinEnabled = WindowPinOutputHandler is not null && LivePinTarget is not null;
+                annotations.WindowPinEnabled = WindowPinOutputHandler is not null && CanSelectLivePinSource;
                 annotations.CanAnnotate = !NeedsWindowScreenshot;
                 if (!annotations.CanAnnotate && annotations.Tool != ScreenshotTool.Select)
                     annotations.Tool = ScreenshotTool.Select;
             }
+        }
+
+        private SelectionResult CreateWindowScreenshotSelection(WindowTarget target)
+        {
+            return ShapeMode == SelectionShapeMode.MultiWindow && _selectionWindows.Count > 1
+                ? new(_state.Selected, true, target, Windows: SelectedShapeWindows())
+                : new(target.Client, true, target);
         }
 
         private async Task FreezeWindowScreenshotAsync(WindowTarget target)
@@ -45,12 +52,10 @@ namespace RitsukageGif.Desktop
             Refresh();
             try
             {
-                var targets = ShapeMode == SelectionShapeMode.MultiWindow && _selectionWindows.Count > 1
-                    ? SelectedShapeWindows()
-                    : [target];
+                var selection = CreateWindowScreenshotSelection(target);
                 var revision = _windowShapeRevision;
-                var region = targets.Length > 1 ? _state.Selected : target.Client;
-                var pixels = await Task.Run(() => CaptureSelectedWindows(targets, region, work.Token), work.Token);
+                var region = selection.Region;
+                var pixels = await Task.Run(() => CaptureWindowScreenshot(selection, work.Token), work.Token);
                 work.Token.ThrowIfCancellationRequested();
                 var next = new FrozenWindowScreenshot(target, region, pixels.Pixels, pixels.Hdr, pixels.NativeFrames);
                 try

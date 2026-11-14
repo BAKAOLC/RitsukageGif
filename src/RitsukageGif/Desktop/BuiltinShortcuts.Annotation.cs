@@ -14,8 +14,15 @@ namespace RitsukageGif.Desktop
         internal static string? ResolvePinnedAnnotation(IReadOnlyList<BuiltinShortcutBinding> bindings,
             KeyEventArgs args)
         {
-            var action = Resolve(bindings, BuiltinShortcutContexts.Pinned, args);
-            return action is not null && IsPinnedAnnotationAction(action) ? action : null;
+            if (args.Handled || BuiltinShortcutTextInput.OwnsKey(args)) return null;
+            foreach (var binding in bindings)
+                if (binding.ContextKey == BuiltinShortcutContexts.Pinned &&
+                    binding.DefinitionId != "builtin.selection.cancel.0" &&
+                    IsPinnedAnnotationAction(binding.Action) &&
+                    BuiltinKeys.Matches(binding.Gesture.Key, args.Key) &&
+                    binding.Gesture.KeyModifiers == args.KeyModifiers)
+                    return binding.Action;
+            return null;
         }
 
         internal static IReadOnlyList<SelectionShortcutIssue> ValidateAnnotationBindings(
@@ -38,6 +45,8 @@ namespace RitsukageGif.Desktop
                            gesture.KeyModifiers == binding.Modifiers;
                 }) ?? registrations[0];
                 foreach (var pin in external.Where(item => item.ContextKey == BuiltinShortcutContexts.Pinned &&
+                                                           !item.DefinitionId.StartsWith("builtin.selection.",
+                                                               StringComparison.Ordinal) &&
                                                            IsPinnedAnnotationAction(item.Action) &&
                                                            BuiltinKeys.Normalize(item.Gesture.Key, mixing) == key &&
                                                            item.Gesture.KeyModifiers == binding.Modifiers))

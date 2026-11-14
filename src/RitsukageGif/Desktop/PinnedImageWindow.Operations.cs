@@ -11,8 +11,7 @@ namespace RitsukageGif.Desktop
 
         private async Task CopyRecognizedTextAsync()
         {
-            var output = await CaptureOutputAsync(OutputColorMode.Sdr, _lifetime.Token);
-            var png = output.Png;
+            var (png, output) = await PrepareRecognitionInputAsync();
             var preferences = RecognitionPreferencesProvider().Normalize();
             var recognition = await RecognitionOutput.RecognizeAsync(png, preferences,
                 TextRecognitionServiceProvider?.Invoke() ?? DefaultTextRecognition, _lifetime.Token);
@@ -34,7 +33,7 @@ namespace RitsukageGif.Desktop
                 await clipboard.FlushAsync();
             }
 
-            await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output);
+            if (output is not null) await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Recognize, output);
         }
 
         private Task ToggleAnnotationToolbarAsync()
@@ -46,10 +45,10 @@ namespace RitsukageGif.Desktop
 
         private async Task DragContentAsync(PointerPressedEventArgs args)
         {
-            var (png, windowShape, captureScaling) = await CurrentImageAsync();
-            var sdr = _hdrSource is null
-                ? png
-                : (await Task.Run(() => PinnedImageContent.Decode(png, _lifetime.Token), _lifetime.Token)).SdrPng!;
+            var output = await CaptureOutputAsync(OutputColorMode.Both, _lifetime.Token);
+            var png = output.Hdr is { } hdr
+                ? await HdrImageService.EncodePngAsync(hdr, _lifetime.Token)
+                : output.Png;
             var files = new ScreenshotClipboardFileStore(Path.Combine(Path.GetTempPath(), "RitsukageGif", "Drag"));
             await files.CleanupAsync(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             var path = await files.CreateAsync(png, ScreenshotClipboardFileFormat.Png,
@@ -60,8 +59,8 @@ namespace RitsukageGif.Desktop
                 var file = await StorageProvider.TryGetFileFromPathAsync(path) ?? throw new IOException(path);
                 var transfer = new DataTransfer();
                 var item = new DataTransferItem();
-                ClipboardPlatformFormats.SetImage(item, png, "image/png", sdr);
-                ClipboardWindowShape.Write(item, windowShape, captureScaling);
+                ClipboardPlatformFormats.SetImage(item, png, "image/png", output.Png);
+                ClipboardWindowShape.Write(item, output.WindowShape, output.CaptureScaling);
                 item.Set(DataFormat.File, file);
                 transfer.Add(item);
                 _mouseGesture.Reset();

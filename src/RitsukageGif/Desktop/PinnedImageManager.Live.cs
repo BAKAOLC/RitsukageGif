@@ -36,7 +36,8 @@ namespace RitsukageGif.Desktop
                     AttachWindow(window);
                     try
                     {
-                        window.SetCapturePlacement(position, default);
+                        window.SetNewPinPlacement(Preferences.DisplayPosition, position, default,
+                            PinnedGroupPointer.Read);
                         ShowNewPin(window);
                         transferred = true;
                     }

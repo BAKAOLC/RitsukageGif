@@ -6,9 +6,7 @@ namespace RitsukageGif.Desktop
 
         private void RebuildToolColumns(ToolbarPreferences preferences)
         {
-            _annotationTools.Rebuild([
-                .. preferences.Columns.Select(IReadOnlyList<ScreenshotTool> (column) => column),
-            ]);
+            _annotationTools.Rebuild(preferences);
         }
 
         private void HideToolGroups()

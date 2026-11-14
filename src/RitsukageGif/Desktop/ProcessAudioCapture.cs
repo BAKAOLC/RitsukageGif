@@ -122,11 +122,6 @@ namespace RitsukageGif.Desktop
             return start;
         }
 
-        internal static string Query(string executable, params string[] arguments)
-        {
-            return Query(executable, CancellationToken.None, false, arguments);
-        }
-
         [SuppressMessage("Design", "CA1068",
             Justification = "The cancellation token precedes the final variadic native process argument list.")]
         internal static string Query(string executable, CancellationToken token, bool waitForPermission,

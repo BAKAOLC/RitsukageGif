@@ -10,5 +10,6 @@ namespace RitsukageGif.Desktop
         bool Checked,
         bool Separator,
         string Label,
-        KeyGesture? Gesture);
+        KeyGesture? Gesture,
+        byte[]? IconPng);
 }

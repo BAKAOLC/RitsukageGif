@@ -18,6 +18,9 @@ namespace RitsukageGif.Desktop
             _sourceWork?.Cancel();
             if ((_overlayFrame is null && pixels is null) ||
                 (_overlayFrame is { } old && old.Region == region && ReferenceEquals(old.Pixels, pixels))) return;
+            await CancelDuplicatePixelWorkForSourceAsync();
+            token.ThrowIfCancellationRequested();
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_sourceWork is null) _sourceWasBusy = IsBusy;
             // ReSharper disable once MethodHasAsyncOverload
             _pixelPreviewWork?.Cancel();

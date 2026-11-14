@@ -1,22 +1,24 @@
+using System.Diagnostics;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Layout;
 using Avalonia.Media;
 
 namespace RitsukageGif.Desktop
 {
-    internal sealed class AnnotationToolsStrip : StackPanel, IDisposable
+    internal sealed partial class AnnotationToolsStrip : StackPanel, IDisposable
     {
         private readonly Action? _adjustTools;
-        private readonly bool _recording;
 
         private readonly Dictionary<Button, (ScreenshotTool Tool, Control Icon, TextBlock? Label,
             TextBlock? Shortcut, TextBlock Title, TextBlock TipShortcut)> _contents = [];
-        private readonly List<(Button Button, Button? Drop, IReadOnlyList<ScreenshotTool> Tools)> _groups = [];
 
         private readonly Dictionary<ScreenshotTool, Button> _groupButtons = [];
+        private readonly List<(Button Button, Button? Drop, IReadOnlyList<ScreenshotTool> Tools)> _groups = [];
         private readonly Dictionary<ScreenshotTool, Button> _menuButtons = [];
         private readonly List<Flyout> _menus = [];
+        private readonly bool _recording;
         private readonly Dictionary<Button, ScreenshotTool> _remembered = [];
         private readonly ScreenshotAnnotationSession _session;
         private IReadOnlyList<SelectionCommandDefinition> _shortcuts = [];
@@ -29,7 +31,9 @@ namespace RitsukageGif.Desktop
             _recording = recording;
             Orientation = Orientation.Horizontal;
             Spacing = 2;
-            Rebuild(ScreenshotToolCatalog.DefaultGroups);
+            AttachedToVisualTree += (_, _) => AttachMenuOwners();
+            DetachedFromVisualTree += (_, _) => DetachMenuOwners();
+            Rebuild(session.ToolbarPreferences);
             _session.Changed += Refresh;
             UiText.LanguageChanged += Refresh;
         }
@@ -39,12 +43,25 @@ namespace RitsukageGif.Desktop
         public void Dispose()
         {
             HideFlyouts();
+            DetachMenuOwners();
             _session.Changed -= Refresh;
             UiText.LanguageChanged -= Refresh;
         }
 
-        internal void Rebuild(IReadOnlyList<IReadOnlyList<ScreenshotTool>> groups)
+        internal event Action? BlockedToolClicked;
+
+        internal void Rebuild(ToolbarPreferences preferences)
         {
+            var groups = preferences.Columns.Where(column => column.Count > 0).ToArray();
+            if (groups.Length == _groups.Count &&
+                !groups.Where((tools, index) => !tools.SequenceEqual(_groups[index].Tools)).Any())
+            {
+                foreach (var (anchor, _, tools) in _groups)
+                    _remembered[anchor] = RememberedTool(preferences, tools);
+                Refresh();
+                return;
+            }
+
             HideFlyouts();
             _menus.Clear();
             _groups.Clear();
@@ -57,11 +74,11 @@ namespace RitsukageGif.Desktop
             {
                 if (tools.Count == 0) continue;
                 var button = CreateButton(tools[0]);
-                _remembered.Add(button, tools[0]);
-                button.Click += (_, _) => Select(
-                    ScreenshotToolCatalog.CanonicalTool(_session.Tool) == _remembered[button]
-                        ? ScreenshotTool.Select
-                        : _remembered[button]);
+                var first = tools[0];
+                _remembered.Add(button, RememberedTool(preferences, tools));
+                button.Click += (_, _) => Select(ActiveTool(button) is not null
+                    ? ScreenshotTool.Select
+                    : _remembered[button]);
                 foreach (var tool in tools) _groupButtons.Add(tool, button);
                 foreach (var tool in tools)
                 {
@@ -69,7 +86,18 @@ namespace RitsukageGif.Desktop
                     item.Width = double.NaN;
                     item.HorizontalAlignment = HorizontalAlignment.Stretch;
                     item.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-                    item.Click += (_, _) => Select(tool);
+                    item.Click += (_, _) =>
+                    {
+                        if (IsBlockedInRecording(tool))
+                        {
+                            Select(tool);
+                            return;
+                        }
+
+                        _remembered[button] = tool;
+                        Select(tool);
+                        _session.RememberToolbarColumn(first, tool);
+                    };
                     _menuButtons.Add(tool, item);
                 }
 
@@ -110,9 +138,15 @@ namespace RitsukageGif.Desktop
 
                     var menu = new Flyout
                     {
+                        Placement = PlacementMode.TopEdgeAlignedLeft,
+                        PlacementConstraintAdjustment = PopupPositionerConstraintAdjustment.FlipY |
+                                                        PopupPositionerConstraintAdjustment.SlideX,
                         OverlayDismissEventPassThrough = true,
                         Content = new ThemeVariantScope { Child = choices },
                     };
+                    ConfigureMenu(menu, choices);
+                    long? lastClose = null;
+                    menu.Closed += (_, _) => lastClose = Stopwatch.GetTimestamp();
                     _menus.Add(menu);
                     drop = new()
                     {
@@ -120,6 +154,7 @@ namespace RitsukageGif.Desktop
                         Focusable = false, Background = Brushes.Transparent, BorderThickness = new(0),
                     };
                     drop.Content = DropDownChevron.Create(drop);
+                    var dropdown = drop;
                     drop.Click += (_, _) => ShowChoices();
                     group.Children.Add(drop);
 
@@ -133,28 +168,35 @@ namespace RitsukageGif.Desktop
                     void ShowChoices()
                     {
                         if (_session.IsBusy || !_session.CanAnnotate) return;
-                        var open = menu.IsOpen;
+                        if (menu.IsOpen)
+                        {
+                            menu.Hide();
+                            return;
+                        }
+
+                        if (lastClose is { } closed &&
+                            Stopwatch.GetElapsedTime(closed) < TimeSpan.FromMilliseconds(200)) return;
                         HideFlyouts();
-                        if (!open) menu.ShowAt(button);
+                        menu.ShowAt(dropdown);
                     }
                 }
 
                 group.PointerWheelChanged += (_, args) =>
                 {
                     if (_session.IsBusy || !_session.CanAnnotate || args.Delta.Y == 0 || tools.Count < 2) return;
-                    var index = tools.ToList().IndexOf(_remembered[button]);
+                    var index = tools.IndexOf(ActiveTool(button) ?? _remembered[button]);
                     var next = tools[(index + (args.Delta.Y > 0 ? tools.Count - 1 : 1)) % tools.Count];
-                    if (!_menuButtons[next].IsEnabled)
+                    if (IsBlockedInRecording(next) || !_menuButtons[next].IsEnabled)
                     {
                         args.Handled = true;
                         return;
                     }
 
-                    var active = _groupButtons.GetValueOrDefault(ScreenshotToolCatalog.CanonicalTool(_session.Tool)) ==
-                                 button;
+                    var active = ActiveTool(button) is not null;
                     _remembered[button] = next;
                     if (active) Select(next);
                     else Refresh();
+                    _session.RememberToolbarColumn(first, next);
                     args.Handled = true;
                 };
                 _groups.Add((button, drop, tools));
@@ -173,10 +215,10 @@ namespace RitsukageGif.Desktop
         internal void Refresh()
         {
             var current = ScreenshotToolCatalog.CanonicalTool(_session.Tool);
-            if (_groupButtons.TryGetValue(current, out var anchor)) _remembered[anchor] = current;
+            _groupButtons.TryGetValue(current, out var anchor);
             foreach (var (button, drop, _) in _groups)
             {
-                var tool = _remembered[button];
+                var tool = button == anchor ? current : _remembered[button];
                 UpdateButton(button, tool, button == anchor, false);
                 if (drop is not null)
                 {
@@ -188,6 +230,19 @@ namespace RitsukageGif.Desktop
             }
 
             foreach (var (tool, button) in _menuButtons) UpdateButton(button, tool, current == tool, true);
+        }
+
+        private static ScreenshotTool RememberedTool(ToolbarPreferences preferences,
+            IReadOnlyList<ScreenshotTool> tools)
+        {
+            var first = tools[0];
+            return preferences.ColumnValues.GetValueOrDefault(first.ToString(), first);
+        }
+
+        private ScreenshotTool? ActiveTool(Button button)
+        {
+            var tool = ScreenshotToolCatalog.CanonicalTool(_session.Tool);
+            return _groupButtons.GetValueOrDefault(tool) == button ? tool : null;
         }
 
         private static Button CreateButton(ScreenshotTool tool)
@@ -254,11 +309,10 @@ namespace RitsukageGif.Desktop
             controls.TipShortcut.IsVisible = gesture is not null;
             button.Tag = definition.NameKey;
             button.SetValue(AutomationProperties.NameProperty, name);
-            button.IsEnabled =
-                (!_recording || ScreenshotToolCatalog.Get(ScreenshotToolCatalog.CanonicalTool(tool))
-                    .SupportsRecording) && (tool == ScreenshotTool.AutoMosaic
-                    ? _session.CanDetectPrivacy && _session is { IsBusy: false, CanAnnotate: true }
-                    : _session is { IsBusy: false, CanAnnotate: true });
+            var blocked = IsBlockedInRecording(tool);
+            button.IsEnabled = _session is { IsBusy: false, CanAnnotate: true } &&
+                               (tool != ScreenshotTool.AutoMosaic || blocked || _session.CanDetectPrivacy);
+            button.Opacity = blocked ? .45 : 1;
             button.Background = Brushes.Transparent;
             button.Foreground = active && !menu ? AppTheme.Accent : AppTheme.Ink;
             button.BorderBrush = active && menu ? AppTheme.Outline : Brushes.Transparent;
@@ -266,11 +320,21 @@ namespace RitsukageGif.Desktop
             button.Classes.Set("active-tool", active && !menu);
         }
 
+        private bool IsBlockedInRecording(ScreenshotTool tool)
+        {
+            return _recording && !ScreenshotToolCatalog.Get(ScreenshotToolCatalog.CanonicalTool(tool))
+                .SupportsRecording;
+        }
+
         private void Select(ScreenshotTool tool)
         {
-            if (_recording &&
-                !ScreenshotToolCatalog.Get(ScreenshotToolCatalog.CanonicalTool(tool)).SupportsRecording) return;
             HideFlyouts();
+            if (IsBlockedInRecording(tool))
+            {
+                BlockedToolClicked?.Invoke();
+                return;
+            }
+
             _session.CancelPrivacyDetection();
             _session.SelectDrawingTool(tool);
         }

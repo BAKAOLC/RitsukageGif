@@ -84,6 +84,7 @@ namespace RitsukageGif.Desktop
             new(SelectionCommand.Undo, Key.Z, KeyModifiers.Control, "AnimationUndo"),
             new(SelectionCommand.Redo, Key.Y, KeyModifiers.Control, "AnimationRedo"),
             new(SelectionCommand.Cancel, Key.Escape, KeyModifiers.None, "SelectionCommandCancel"),
+            new(SelectionCommand.Cancel, Key.W, KeyModifiers.Control, "SelectionCommandCancel", ScreenshotOnly: true),
             new(SelectionCommand.TogglePolylineArrows, Key.Tab, KeyModifiers.None, "AnnotationTogglePolylineArrows"),
             new(SelectionCommand.ToggleControls, Key.Tab, KeyModifiers.None, "SelectionCommandControls"),
             new(SelectionCommand.ToggleSource, Key.None, KeyModifiers.None, "SelectionCommandSource"),

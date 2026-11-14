@@ -27,7 +27,9 @@
 
         internal void RequestRecording()
         {
-            if (CanStartRecording) RecordingRequested?.Invoke();
+            if (!CanStartRecording) return;
+            CommitTextEdit();
+            RecordingRequested?.Invoke();
         }
     }
 }

@@ -84,6 +84,7 @@ namespace RitsukageGif.Desktop
 
         private void HandleOwnedKeyDown(object? sender, KeyEventArgs args)
         {
+            if (_tools.HandleMenuKey(args, true)) return;
             if (_disposed || args.Handled || Session.IsEditingText || IsTextInput(args.Source)) return;
             if (Session.HandleNumberCaptionKey(args.Key, args.KeyModifiers, true))
             {
@@ -118,6 +119,7 @@ namespace RitsukageGif.Desktop
 
         private void HandleOwnedKeyUp(object? sender, KeyEventArgs args)
         {
+            if (_tools.HandleMenuKey(args, false)) return;
             if (!_disposed && Session.HandleNumberCaptionKey(args.Key, args.KeyModifiers, false)) args.Handled = true;
             Session.ReleasePolylineArrowKey(args.Key);
             _heldKeys.Remove(args.Key);

@@ -10,6 +10,9 @@ namespace RitsukageGif.Desktop
     {
         private readonly List<(NativeMenuItemSeparator Separator, NativeMenuItem Next)> _traySeparatorSlots = [];
         private TrayIcon? _tray;
+        private NativeMenuItem? _trayClearRecords;
+        private NativeMenuItem? _trayDisableFullscreen;
+        private NativeMenuItem? _trayGuide, _trayUpdate;
         private NativeMenuItem? _trayShow, _trayExit, _traySettings, _trayToggleShortcuts;
 
         private bool CanHideToTray => !IsClosing && PortableTrayState.HostAvailable &&
@@ -18,9 +21,6 @@ namespace RitsukageGif.Desktop
         internal bool CanHideMainWindowToTray => CanHideToTray && !IsConfiguring && !IsSelecting &&
                                                  View is { IsVisible: true } view &&
                                                  !view.OwnedWindows.Any(window => window.IsVisible);
-        private NativeMenuItem? _trayClearRecords;
-        private NativeMenuItem? _trayDisableFullscreen;
-        private NativeMenuItem? _trayGuide, _trayUpdate;
 
         private void InitializeTray()
         {
@@ -110,7 +110,8 @@ namespace RitsukageGif.Desktop
             _trayShow!.Header = UiText.Get(mainVisible ? "TrayHideMain" : "TrayShowMain");
             _trayShow.IsEnabled = mainVisible ? CanHideMainWindowToTray : !IsClosing && !IsSelecting;
             _trayClearRecords!.Header = UiText.Get("ClearRecords");
-            _trayClearRecords.IsEnabled = !IsClosing && !IsSelecting && _clearRecordsWindow is null;
+            _trayClearRecords.IsEnabled = !IsClosing && !IsSelecting &&
+                                          _clearRecordsWindow is null or { IsVisible: true };
             _traySettings!.Header = UiText.Get("Settings");
             _traySettings.IsEnabled = !IsClosing && !IsSelecting && !IsConfiguring;
             _trayExit!.Header = UiText.Get("TrayExit");

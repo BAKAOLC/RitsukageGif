@@ -40,8 +40,7 @@ namespace RitsukageGif.Desktop
             _preview.VerticalAlignment = VerticalAlignment.Stretch;
             Content = new Border
             {
-                Background = Brushes.Black, BorderBrush = AppTheme.Outline,
-                BorderThickness = new(BorderWidth), Child = _preview,
+                Background = Brushes.Black, Child = _preview,
             };
             TransientWindowShell.Configure(this);
             if (OperatingSystem.IsWindows()) Win32Properties.AddWindowStylesCallback(this, FilterStyles);
@@ -236,7 +235,7 @@ namespace RitsukageGif.Desktop
             var height = area.Height - border * 2;
             if (width < 1 || height < 1 || image.Width <= 0 || image.Height <= 0) return default;
             var target = Math.Max(1, TargetShortEdge * scale - border * 2);
-            var ratio = Math.Min((double)width / image.Width, (double)height / image.Height);
+            var ratio = Math.Min(1, Math.Min((double)width / image.Width, (double)height / image.Height));
             ratio = Math.Min(ratio, target /
                                     (axis == ScrollCaptureAxis.Vertical ? image.Width : image.Height));
             return new(Math.Max(1, (int)Math.Floor(image.Width * ratio)) + border * 2,

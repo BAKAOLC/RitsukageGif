@@ -8,7 +8,8 @@ namespace RitsukageGif.Desktop
         private readonly Dictionary<PinnedDocumentWindow, PinnedDocumentState> _pendingDocuments = [];
         private readonly Dictionary<string, PinnedDocumentState> _unrestoredDocuments = new(StringComparer.Ordinal);
 
-        private async Task<int> ReadDocumentsAsync(bool restore, CancellationToken token, string? group = null)
+        private async Task<int> ReadDocumentsAsync(bool restore, CancellationToken token, string? group = null,
+            bool loadClosed = false)
         {
             var path = Path.Combine(_sessionDirectory!, "documents.json");
             if (!File.Exists(path)) return 0;
@@ -32,10 +33,14 @@ namespace RitsukageGif.Desktop
                     continue;
                 }
 
+                if (entry is { ClosedAtUtcTicks: > 0 } && !loadClosed) continue;
                 if (group is not null && entry is { Window.Group: var entryGroup } && entryGroup != group) continue;
                 token.ThrowIfCancellationRequested();
-                if (entry is null || !ValidState(entry.Window, entry.Thumbnail is { Enabled: true }) ||
+                if (entry is null || entry.ClosedAtUtcTicks < 0 || entry.ClosedAtUtcTicks > DateTime.MaxValue.Ticks ||
+                    !ValidState(entry.Window, entry.Thumbnail is { Enabled: true }) ||
                     !ValidDocument(entry.Document) ||
+                    (entry.Translation is { } translation &&
+                     (entry.Document is not (PinnedTextDocument or PinnedHtmlDocument) || !translation.IsValid)) ||
                     !double.IsFinite(entry.Width) || entry.Width > 32768 ||
                     entry.Width < (entry.Thumbnail is { Enabled: true }
                         ? PinnedWindowPresentation.ShadeInset * 2 + 1
@@ -53,7 +58,8 @@ namespace RitsukageGif.Desktop
                     continue;
                 }
 
-                if (_documentWindows.Any(window => window.Id == entry.Window.Id))
+                if (_documentWindows.Any(window => window.Id == entry.Window.Id) ||
+                    _closedDocuments.Any(closed => closed.State.Window.Id == entry.Window.Id))
                 {
                     _unrestoredDocuments.Remove(entry.Window.Id);
                     continue;
@@ -72,6 +78,12 @@ namespace RitsukageGif.Desktop
                     PinLogger.ZLogWarning(
                         $"Stored document content was rejected before restoration. ErrorType={error.GetType().Name} Code={error.HResult}");
                     rejected++;
+                    continue;
+                }
+
+                if (entry.ClosedAtUtcTicks > 0)
+                {
+                    _closedDocuments.Add((entry, entry.ClosedAtUtcTicks));
                     continue;
                 }
 
@@ -167,7 +179,11 @@ namespace RitsukageGif.Desktop
                     CaptureMaskVisibility(window, state.Window);
                     return state;
                 })
-                .Concat(_unrestoredDocuments.Values).ToArray();
+                .Concat(_unrestoredDocuments.Values)
+                .Concat(_closedDocuments.Select(item => item.State with
+                {
+                    Window = item.State.Window.CopyWindowState(), ClosedAtUtcTicks = item.ClosedAt,
+                })).ToArray();
             Directory.CreateDirectory(_sessionDirectory!);
             var path = Path.Combine(_sessionDirectory!, "documents.json");
             var staging = path + ".tmp";

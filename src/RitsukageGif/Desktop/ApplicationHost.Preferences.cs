@@ -40,6 +40,7 @@ namespace RitsukageGif.Desktop
             selection.ScrollCapturePreferences = Settings.ScrollCapture;
             selection.ScrollAutoCropChanged = PersistScrollAutoCrop;
             selection.ScrollClearConfirmationChanged = PersistScrollClearConfirmation;
+            selection.ScrollWarningSuppressed = PersistScrollWarningSuppression;
             selection.InitializePreferences(Settings.SelectionDetectControls, Settings.SelectionSnappingMode,
                 Settings.SelectionHints, Settings.CapturePreferences);
             selection.InitializeAppearancePreferences(Settings.Appearance);
@@ -87,6 +88,13 @@ namespace RitsukageGif.Desktop
         {
             if (IsClosing || Settings.ScrollCapture.SkipClearConfirmation == skip) return;
             Settings.ScrollCapture = Settings.ScrollCapture with { SkipClearConfirmation = skip };
+            SaveCapturePreferences();
+        }
+
+        private void PersistScrollWarningSuppression(ScrollCaptureWarningKind kind)
+        {
+            if (IsClosing || Settings.ScrollCapture.IsWarningSuppressed(kind)) return;
+            Settings.ScrollCapture = Settings.ScrollCapture.SuppressWarning(kind);
             SaveCapturePreferences();
         }
 

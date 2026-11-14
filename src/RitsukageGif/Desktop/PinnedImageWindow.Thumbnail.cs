@@ -19,9 +19,15 @@ namespace RitsukageGif.Desktop
             ? region
             : new(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height);
 
-        private void ToggleThumbnail()
+        private void ToggleThumbnail(Avalonia.PixelPoint? screenAnchor = null)
         {
             if (LiveCaptureActive || IsOperationLocked(PinnedLockRestrictions.Move) || _annotation is not null) return;
+            if (screenAnchor is { } anchor)
+            {
+                SetThumbnailDisplay(!_isThumbnail, anchor);
+                return;
+            }
+
             var region = _isThumbnail
                 ? new(0, 0, (int)_bitmap.Size.Width, (int)_bitmap.Size.Height)
                 : InitialQuickThumbnailRegion();
@@ -112,15 +118,6 @@ namespace RitsukageGif.Desktop
             UpdateVisibleRegion();
             RefreshHdrPreview();
             StateChanged?.Invoke(this, EventArgs.Empty);
-        }
-
-        private async Task<(byte[] Png, CaptureWindowShape? Shape, double CaptureScaling)> CurrentImageAsync()
-        {
-            var output = await CaptureOutputAsync(OutputColorMode.Both, _lifetime.Token);
-            var png = output.Hdr is { } hdr
-                ? await HdrImageService.EncodePngAsync(hdr, _lifetime.Token)
-                : output.Png;
-            return (png, output.WindowShape, output.CaptureScaling);
         }
     }
 }

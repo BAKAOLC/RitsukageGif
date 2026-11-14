@@ -45,10 +45,25 @@ namespace RitsukageGif.Desktop
                 new(new(region.X, region.Y, region.Width, region.Height), targetClip));
         }
 
-        private async Task CopyOriginalImageAsync()
+        private async Task CopyMenuImageAsync(bool original)
         {
-            var output = await CaptureSceneOutputAsync(OutputColorModeProvider(), _lifetime.Token);
-            await CopyImageAsync(output);
+            var mode = OutputColorModeProvider();
+            var token = _lifetime.Token;
+            var output = original
+                ? await CaptureSceneOutputAsync(mode, token)
+                : await CapturePreferredOutputAsync(mode, token);
+            try
+            {
+                await CopyImageAsync(output);
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                PinLogger.ZLogError(error, $"Pinned image clipboard operation failed.");
+                if (!_closed) Presentation.ShowMessage(UiText.Get("PinnedImageCopyFailed"));
+                return;
+            }
+
+            if (!_closed) Presentation.ShowMessage(UiText.Get("PinnedImageCopySucceeded"));
             await SaveAutomaticallyAsync(ScreenshotAutoSaveTriggers.Copy, output);
         }
 

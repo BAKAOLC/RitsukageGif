@@ -1,4 +1,4 @@
-﻿using Avalonia.Controls;
+using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 
 namespace RitsukageGif.Desktop
@@ -28,13 +28,14 @@ namespace RitsukageGif.Desktop
             var menu = new ContextMenu();
             Presentation.ConnectMenu(menu);
             ConfigureFileMenu(menu);
-            menu.Items.Add(Command("PinnedDocumentCopyImage", CopyRenderedImageAsync, "copy-image"));
-            if (Document is not PinnedFilesDocument)
-                menu.Items.Add(Command("PinnedImageCopyFile", CopyAsFileAsync, "copy-file"));
-            menu.Items.Add(Command("PinnedDocumentSaveImage", SaveRenderedImageAsync, "save"));
             if (Document is PinnedTextDocument or PinnedHtmlDocument)
             {
-                menu.Items.Add(new Separator());
+                var copySelected = Command("PinnedImageCopySelectedText", () =>
+                    _textView is { SelectedText.Length: > 0 } text
+                        ? CopySelectedDocumentTextAsync(text)
+                        : Task.CompletedTask, "copy-selected-text");
+                copySelected.IsVisible = false;
+                menu.Items.Add(copySelected);
                 var selectable = Command("PinnedTextSelectable", () =>
                 {
                     SetSelectable(!Selectable);
@@ -43,13 +44,6 @@ namespace RitsukageGif.Desktop
                 selectable.Tag = "text-selection";
                 selectable.ToggleType = MenuItemToggleType.CheckBox;
                 menu.Items.Add(selectable);
-                var selectAll = Command("PinnedTextSelectAll", () =>
-                {
-                    _textView?.SelectAll();
-                    return Task.CompletedTask;
-                });
-                selectAll.Tag = "text-select-all";
-                menu.Items.Add(selectAll);
                 MenuItem? ignore = null;
                 if (Document is PinnedHtmlDocument)
                 {
@@ -63,27 +57,33 @@ namespace RitsukageGif.Desktop
                     menu.Items.Add(ignore);
                 }
 
+                var translate = Command("PinnedInlineTranslate", ToggleInlineTranslationAsync, "translate-inline");
+                translate.ToggleType = MenuItemToggleType.CheckBox;
+                menu.Items.Add(translate);
+                menu.Items.Add(new Separator());
                 menu.Opened += (_, _) =>
                 {
+                    copySelected.IsVisible = _textView is { SelectedText.Length: > 0 };
                     selectable.IsChecked = Selectable;
-                    selectAll.IsEnabled = Selectable;
                     ignore?.SetCurrentValue(MenuItem.IsCheckedProperty, IgnoreFormat);
+                    translate.IsVisible = _inlineTranslation?.Cached is not null ||
+                                          ScriptTextTranslationService.ConfigurationFailure(
+                                              TranslationPreferencesProvider()) is null;
+                    translate.IsChecked = _inlineTranslation is { Enabled: true };
                 };
             }
 
+            menu.Items.Add(Command("PinnedDocumentCopyImage", CopyRenderedImageAsync, "copy-image"));
+            var copyOriginal = Command("PinnedCopyOriginalImage", () => CopyRenderedImageAsync(true),
+                "copy-original");
+            copyOriginal.IsVisible = false;
+            menu.Items.Add(copyOriginal);
+            menu.Items.Add(Command("PinnedDocumentSaveImage", SaveRenderedImageAsync, "save"));
+            var saveOriginal = Command("PinnedOriginalImageSaveAs", () => SaveRenderedImageAsync(true),
+                "save-original");
+            saveOriginal.IsVisible = false;
+            menu.Items.Add(saveOriginal);
             menu.Items.Add(new Separator());
-            var thumbnail = Command("PinnedMenuThumbnail", () =>
-            {
-                ToggleDocumentThumbnail();
-                return Task.CompletedTask;
-            }, "thumbnail");
-            thumbnail.ToggleType = MenuItemToggleType.CheckBox;
-            menu.Items.Add(thumbnail);
-            menu.Items.Add(Command("PinnedImageSelectThumbnailRegion", () =>
-            {
-                SelectDocumentThumbnailRegion();
-                return Task.CompletedTask;
-            }, "select-roi"));
             var mark = Command("PinnedMenuMark", () => SetMarkEditingAsync(!IsMarkEditing), "annotate");
             mark.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(mark);
@@ -94,15 +94,6 @@ namespace RitsukageGif.Desktop
             }, "hide-mark");
             hideMark.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(hideMark);
-            var locked = Command("PinnedMenuLock", () =>
-            {
-                _locked = !_locked;
-                RefreshPreferencePresentation();
-                StateChanged?.Invoke(this, EventArgs.Empty);
-                return Task.CompletedTask;
-            }, "lock");
-            locked.ToggleType = MenuItemToggleType.CheckBox;
-            menu.Items.Add(locked);
             var through = Command("PinnedImageMouseThrough", () =>
             {
                 SetMouseThrough(!_mouseThrough);
@@ -119,19 +110,6 @@ namespace RitsukageGif.Desktop
             }, "topmost");
             topmost.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(topmost);
-            menu.Items.Add(Command("PinnedImageMultiSelect", () =>
-            {
-                SelectionRequested?.Invoke(this);
-                return Task.CompletedTask;
-            }, "select"));
-            var group = new MenuItem();
-            group.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("PinnedMoveToGroup"));
-            menu.Items.Add(group);
-            menu.Items.Add(Command("PinnedTitleEdit", () =>
-            {
-                Presentation.Title.BeginEdit();
-                return Task.CompletedTask;
-            }, "set-title"));
             var hideOthers = Command("PinnedMenuHideOthers", () =>
             {
                 Presentation.HideOthersRequested?.Invoke();
@@ -139,33 +117,31 @@ namespace RitsukageGif.Desktop
             }, "hide-others");
             hideOthers.ToggleType = MenuItemToggleType.CheckBox;
             menu.Items.Add(hideOthers);
-            menu.Items.Add(Command("PinnedSwitchNext", () =>
-            {
-                Presentation.SwitchNextRequested?.Invoke();
-                return Task.CompletedTask;
-            }, "switch-next"));
-            var arrange = new MenuItem();
-            arrange.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("PinnedSelectionAlign"));
-            foreach (var definition in PinnedImageArrangementCommands.Catalog)
-            {
-                var item = Command(definition.TextKey,
-                    () => ArrangeSelectionRequested?.Invoke(this, definition.Arrangement) ?? Task.CompletedTask,
-                    definition.Action);
-                arrange.Items.Add(item);
-                menu.Opened += (_, _) =>
-                    item.IsEnabled = CanArrangeSelectionProvider?.Invoke(this, definition.Arrangement) == true;
-            }
-
-            menu.Items.Add(arrange);
-            menu.Items.Add(Command("PinnedSelectionSave",
-                () => SaveSelectionRequested?.Invoke(this) ?? Task.CompletedTask,
-                "selection-save"));
             menu.Items.Add(new Separator());
-            menu.Items.Add(Command("PinnedImageHide", () =>
+            var group = new MenuItem { Tag = "move-group" };
+            group.Bind(HeaderedSelectingItemsControl.HeaderProperty, LiveText.Resource("PinnedMoveToGroup"));
+            menu.Items.Add(group);
+            var thumbnail = Command("PinnedMenuThumbnail", () =>
             {
-                HideImage();
+                ToggleDocumentThumbnail(screenAnchor: new(0, 0));
                 return Task.CompletedTask;
-            }, "hide"));
+            }, "thumbnail");
+            thumbnail.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(thumbnail);
+            menu.Items.Add(Command("PinnedTitleEdit", () =>
+            {
+                Presentation.Title.BeginEdit();
+                return Task.CompletedTask;
+            }, "set-title"));
+            var locked = Command("PinnedMenuLock", () =>
+            {
+                _locked = !_locked;
+                RefreshPreferencePresentation();
+                StateChanged?.Invoke(this, EventArgs.Empty);
+                return Task.CompletedTask;
+            }, "lock");
+            locked.ToggleType = MenuItemToggleType.CheckBox;
+            menu.Items.Add(locked);
             menu.Items.Add(Command("Close", () =>
             {
                 CloseRequested?.Invoke(this, false);
@@ -176,8 +152,33 @@ namespace RitsukageGif.Desktop
                 CloseRequested?.Invoke(this, true);
                 return Task.CompletedTask;
             }, "destroy"));
+            menu.Items.Add(new Separator());
+            if (Document is not PinnedFilesDocument)
+                menu.Items.Add(Command("PinnedImageCopyFile", CopyAsFileAsync, "copy-file"));
+            menu.Items.Add(Command("PinnedImageSelectThumbnailRegion", () =>
+            {
+                SelectDocumentThumbnailRegion();
+                return Task.CompletedTask;
+            }, "select-roi"));
+            menu.Items.Add(Command("PinnedImageMultiSelect", () =>
+            {
+                SelectionRequested?.Invoke(this);
+                return Task.CompletedTask;
+            }, "select"));
+            menu.Items.Add(Command("PinnedSwitchNext", () =>
+            {
+                Presentation.SwitchNextRequested?.Invoke();
+                return Task.CompletedTask;
+            }, "switch-next"));
+            menu.Items.Add(Command("PinnedImageHide", () =>
+            {
+                HideImage();
+                return Task.CompletedTask;
+            }, "hide"));
             menu.Opened += (_, _) =>
             {
+                copyOriginal.IsVisible = saveOriginal.IsVisible =
+                    _isThumbnail || DocumentSceneViewScale is not 1 || Opacity < 1 || DisplayedTranslation is not null;
                 thumbnail.IsChecked = _isThumbnail;
                 thumbnail.IsEnabled = !IsInteractionLocked && !IsMarkEditing;
                 mark.IsChecked = IsMarkEditing;
@@ -219,6 +220,7 @@ namespace RitsukageGif.Desktop
             };
             Presentation.AddSourceMimeCommands(menu, PreferencesProvider);
             Presentation.AddConfigurationCommand(menu);
+            AddColorCopyCommands(menu);
             return menu;
         }
 

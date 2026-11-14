@@ -97,8 +97,15 @@ namespace RitsukageGif.Desktop
 
         private void AdjustOpacity(double step)
         {
-            if (OpacityAdjustmentRequested is { } adjust) adjust(this, step);
-            else Opacity = PinnedOpacityStep.Apply(Opacity, step);
+            if (OpacityAdjustmentRequested is { } adjust)
+            {
+                adjust(this, step);
+            }
+            else
+            {
+                Opacity = PinnedOpacityStep.Apply(Opacity, step);
+                Presentation.ShowOpacityMessage();
+            }
         }
 
         private MenuItem ProcessingCommand(string label, Func<Task> action)
@@ -121,6 +128,12 @@ namespace RitsukageGif.Desktop
         }
 
         private async Task ResetImageProcessingAsync()
+        {
+            await ResetImageProcessingCoreAsync();
+            Presentation.ShowOpacityMessage();
+        }
+
+        private async Task ResetImageProcessingCoreAsync()
         {
             await ApplyImageProcessingAsync(default, _lifetime.Token);
             _viewTransform = default;

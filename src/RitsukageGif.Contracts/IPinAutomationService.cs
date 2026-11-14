@@ -35,6 +35,7 @@ namespace RitsukageGif.Contracts
         Task CopyAsync(string id, PinCopyKind kind = PinCopyKind.Image,
             PinOutputView view = PinOutputView.Preferred, CancellationToken token = default);
 
+        Task<bool> TranslationAsync(string id, bool? enabled = null, CancellationToken token = default);
         Task<string?> TextAsync(string id, CancellationToken token = default);
         Task<string?> HtmlAsync(string id, CancellationToken token = default);
         Task<PinInfo> TransformAsync(string id, PinTransform transform, CancellationToken token = default);

@@ -22,10 +22,10 @@ namespace RitsukageGif.Desktop
         private readonly Popup _cropPopup = new() { IsLightDismissEnabled = false };
         private readonly Button _cropTrailing = new();
         private readonly Button _move = new();
-        private readonly List<Button> _outputButtons = [];
+        private readonly List<(Button Button, ScrollingCaptureAction Action)> _outputButtons = [];
         private bool _cropButtonHovered;
-        private IDisposable? _cropCloseTimer;
         private bool _cropPanelHovered;
+        private IDisposable? _cropVisibilityTimer;
         private bool _previewExcluded;
 
         private Border BuildControls(WindowTarget? target, bool respondShortcuts)
@@ -34,20 +34,9 @@ namespace RitsukageGif.Desktop
             {
                 Orientation = Orientation.Horizontal, Spacing = 2, Margin = new(4),
             };
-            var grip = new ToolbarDragHandle(this, () => _manualToolbarPosition = true, Reposition)
-            {
-                [!IsEnabledProperty] = _move[!IsEnabledProperty],
-            };
-            grip.Bind(AutomationProperties.NameProperty, LiveText.Resource("ToolbarMove"));
-            grip.Bind(ToolTip.TipProperty, LiveText.Resource("ToolbarMove"));
-            controls.Children.Add(grip);
-            PositionChanged += (_, _) =>
-            {
-                if (_manualToolbarPosition && IsVisible) RefreshLivePreview();
-            };
             ScalingChanged += (_, _) =>
             {
-                if (IsVisible) Reposition();
+                if (IsVisible && _dragStart is null) Reposition();
             };
             _screens.Changed += ToolbarScreensChanged;
             Closed += (_, _) => _screens.Changed -= ToolbarScreensChanged;
@@ -55,35 +44,51 @@ namespace RitsukageGif.Desktop
             _size.VerticalAlignment = VerticalAlignment.Center;
             _size.Margin = new(4, 0);
             _size.Text = $"{_region.Width} × {_region.Height}";
-            ToolTip.SetTip(_size, _status);
+            _size.Bind(ToolTip.TipProperty, _status.GetObservable(TextBlock.TextProperty));
             controls.Children.Add(_size);
-            SetCompactContent(_move, "ScrollCaptureMove", "ScreenshotScrollVertical", true);
+
             _move.AddHandler(PointerPressedEvent, (_, args) =>
             {
-                if (_outputting || !args.GetCurrentPoint(_move).Properties.IsLeftButtonPressed) return;
-                _session.AutomaticEnabled = false;
-                _dragStart = _move.PointToScreen(args.GetPosition(_move));
-                _dragPosition = _axis == ScrollCaptureAxis.Vertical ? _region.Y : _region.X;
+                if (_closed || _outputting || _dragStart is not null ||
+                    !args.GetCurrentPoint(_move).Properties.IsLeftButtonPressed) return;
                 args.Pointer.Capture(_move);
+                if (!ReferenceEquals(args.Pointer.Captured, _move)) return;
+                _dragStart = _move.PointToScreen(args.GetPosition(_move));
+                _dragRegion = _region;
+                _dragStartedWhileCapturing = _captureStarted;
+                _session.SetAutomaticDragging(true);
                 args.Handled = true;
             }, RoutingStrategies.Tunnel);
             _move.AddHandler(PointerMovedEvent, (_, args) =>
             {
                 if (_dragStart is not { } start) return;
+                if (_captureStarted != _dragStartedWhileCapturing)
+                {
+                    args.Pointer.Capture(null);
+                    args.Handled = true;
+                    return;
+                }
+
                 var point = _move.PointToScreen(args.GetPosition(_move));
-                MoveRegion(
-                    _dragPosition + (_axis == ScrollCaptureAxis.Vertical ? point.Y - start.Y : point.X - start.X));
+                MoveRegion(_dragRegion.X + point.X - start.X, _dragRegion.Y + point.Y - start.Y);
                 args.Handled = true;
             }, RoutingStrategies.Tunnel);
             _move.AddHandler(PointerReleasedEvent, (_, args) =>
             {
                 if (_dragStart is null) return;
                 _dragStart = null;
+                _session.SetAutomaticDragging(false);
                 args.Handled = true;
                 args.Pointer.Capture(null);
                 Reposition();
             }, RoutingStrategies.Tunnel);
-            _move.PointerCaptureLost += (_, _) => _dragStart = null;
+            _move.PointerCaptureLost += (_, _) =>
+            {
+                if (_dragStart is null) return;
+                _dragStart = null;
+                _session.SetAutomaticDragging(false);
+                if (IsVisible && !_closed) Reposition();
+            };
             controls.Children.Add(_move);
             controls.Children.Add(Separator());
             _direction.Width = 112;
@@ -120,7 +125,6 @@ namespace RitsukageGif.Desktop
                 _cropPanelHovered = false;
                 RefreshCropVisibility();
             };
-            crop.Click += (_, _) => _cropPopup.IsOpen = !_cropPopup.IsOpen;
             _cropPopup.Opened += (_, _) =>
             {
                 _previewExcluded = _cropPopup.Child is { } child && GetTopLevel(child) is { } root && Exclude(root);
@@ -138,40 +142,50 @@ namespace RitsukageGif.Desktop
             _startStop.Click += async (_, _) => await ToggleCaptureAsync();
             _startStop.IsVisible = !_startAutomatically;
             controls.Children.Add(_startStop);
-            controls.Children.Add(Separator());
             var edit = OutputButton(new(), "ScrollCaptureEdit", "ScrollCaptureEdit", ScrollingCaptureAction.Edit);
             if (respondShortcuts) AddShortcutHint(edit, "edit");
             controls.Children.Add(edit);
-            controls.Children.Add(OutputButton(new(), "ScrollCaptureOcrCopy", "RecognizeText",
-                ScrollingCaptureAction.OcrCopy));
-            controls.Children.Add(OutputButton(new(), "ScreenshotPin", "ScreenshotPin", ScrollingCaptureAction.Pin));
-            controls.Children.Add(OutputButton(new(), "ScreenshotSave", "ScreenshotSave", ScrollingCaptureAction.Save));
-            controls.Children.Add(OutputButton(new(), "ScrollCaptureQuickSave", "ScrollCaptureQuickSave",
-                ScrollingCaptureAction.QuickSave));
+            var ocr = OutputButton(new(), "ScrollCaptureOcrCopy", "RecognizeText", ScrollingCaptureAction.OcrCopy);
+            var pin = OutputButton(new(), "ScreenshotPin", "ScreenshotPin", ScrollingCaptureAction.Pin);
+            var save = OutputButton(new(), "ScreenshotSave", "ScreenshotSave", ScrollingCaptureAction.Save);
+            var quickSave = OutputButton(new(), "ScrollCaptureQuickSave", "ScrollCaptureQuickSave",
+                ScrollingCaptureAction.QuickSave);
+            controls.Children.Add(ocr);
+            controls.Children.Add(pin);
+            controls.Children.Add(save);
+            controls.Children.Add(quickSave);
             var close = new Button();
             SetCompactContent(close, "ScrollCaptureClose", "Cancel", true);
-            close.Click += (_, _) => Close();
+            close.Click += async (_, _) => await CloseByUserAsync();
             controls.Children.Add(close);
             controls.Children.Add(
-                OutputButton(_finish, "ScreenshotCopy", "ScreenshotCopy", ScrollingCaptureAction.Copy));
+                OutputButton(_finish, "CaptureActionCopyAndClose", "ScreenshotCopy", ScrollingCaptureAction.Copy));
             if (respondShortcuts)
             {
                 AddShortcutHint(_startStop, "start-stop");
-                AddShortcutHint(_finish, "finish");
+                AddShortcutHint(_finish, "copy");
+                AddShortcutHint(close, "cancel");
+                AddShortcutHint(ocr, "ocr-copy");
+                AddShortcutHint(pin, "pin");
+                AddShortcutHint(save, "save");
+                AddShortcutHint(quickSave, "quick-save");
             }
 
-            AddShortcutHint(close, "cancel");
             _status.FontSize = 12;
             _status.MaxWidth = 320;
+            _status.Margin = new(8, 0, 8, 6);
+            _status.HorizontalAlignment = HorizontalAlignment.Left;
             var scroller = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
                 MaxWidth = MaxWidth - 2, Content = controls,
             };
-            var host = new Grid();
+            var host = new Grid { RowDefinitions = new("Auto,Auto") };
             host.Children.Add(scroller);
             host.Children.Add(_cropPopup);
+            Grid.SetRow(_status, 1);
+            host.Children.Add(_status);
             UpdateDirectionControls();
             SetOutputActionsEnabled(false);
             return new()
@@ -182,7 +196,7 @@ namespace RitsukageGif.Desktop
         {
             SetCompactContent(button, key, icon, true);
             button.Click += async (_, _) => await CompleteCapture(action);
-            _outputButtons.Add(button);
+            _outputButtons.Add((button, action));
             return button;
         }
 
@@ -194,7 +208,8 @@ namespace RitsukageGif.Desktop
         private void SetOutputActionsEnabled(bool enabled)
         {
             enabled &= !_outputting;
-            foreach (var button in _outputButtons) button.IsEnabled = enabled;
+            var length = enabled ? _session.OutputAxisLength : 0;
+            foreach (var (button, action) in _outputButtons) button.IsEnabled = IsOutputActionAvailable(action, length);
             _move.IsEnabled = !_outputting && _captureStarted;
             _direction.IsEnabled = _startStop.IsEnabled = !_outputting;
             _automatic.IsEnabled = !_outputting && !_connectingAutomatic &&
@@ -248,24 +263,20 @@ namespace RitsukageGif.Desktop
 
         private void RefreshCropVisibility()
         {
-            _cropCloseTimer?.Dispose();
-            _cropCloseTimer = null;
-            if (_cropButtonHovered || _cropPanelHovered)
+            _cropVisibilityTimer?.Dispose();
+            _cropVisibilityTimer = null;
+            var visible = !_closed && !_outputting && (_cropButtonHovered || _cropPanelHovered);
+            if (_cropPopup.IsOpen == visible) return;
+            _cropVisibilityTimer = DispatcherTimer.RunOnce(() =>
             {
-                if (!_closed && !_outputting) _cropPopup.IsOpen = true;
-            }
-            else
-            {
-                _cropCloseTimer = DispatcherTimer.RunOnce(() =>
-                {
-                    _cropCloseTimer = null;
-                    if (!_cropButtonHovered && !_cropPanelHovered) _cropPopup.IsOpen = false;
-                }, TimeSpan.FromMilliseconds(200));
-            }
+                _cropVisibilityTimer = null;
+                _cropPopup.IsOpen = !_closed && !_outputting && (_cropButtonHovered || _cropPanelHovered);
+            }, visible ? TimeSpan.Zero : TimeSpan.FromMilliseconds(200));
         }
 
         private void ResetCapture(ScrollCaptureAxis axis, int leading, int trailing, bool start)
         {
+            ResetCaptureWarnings();
             _axis = axis;
             _captureStarted = false;
             _session.ConfigureAxis(axis, _region);
@@ -287,6 +298,7 @@ namespace RitsukageGif.Desktop
             _statusNoticeKey = null;
             SetOutputActionsEnabled(false);
             if (start) StartCapture();
+            else UpdateResizeTargets();
             RefreshStatus();
             RefreshLivePreview();
         }
@@ -294,12 +306,24 @@ namespace RitsukageGif.Desktop
         private void UpdateDirectionControls()
         {
             var vertical = _axis == ScrollCaptureAxis.Vertical;
-            _move.Cursor = new(vertical ? StandardCursorType.SizeNorthSouth : StandardCursorType.SizeWestEast);
-            SetCompactContent(_move, "ScrollCaptureMove",
-                vertical ? "ScreenshotScrollVertical" : "ScreenshotScrollHorizontal", true);
+            UpdateMoveControl();
             UpdateCrop(_cropLeading, vertical ? "ScrollCaptureCropTop" : "ScrollCaptureCropLeft", vertical ? 180 : 90);
             UpdateCrop(_cropTrailing, vertical ? "ScrollCaptureCropBottom" : "ScrollCaptureCropRight",
                 vertical ? 0 : 270);
+        }
+
+        private void UpdateMoveControl()
+        {
+            var vertical = _axis == ScrollCaptureAxis.Vertical;
+            _move.Cursor = new(!_captureStarted
+                ? StandardCursorType.SizeAll
+                : vertical
+                    ? StandardCursorType.SizeNorthSouth
+                    : StandardCursorType.SizeWestEast);
+            SetCompactContent(_move, "ScrollCaptureMove",
+                !_captureStarted ? "AnimationPan" :
+                vertical ? "ScreenshotScrollVertical" : "ScreenshotScrollHorizontal",
+                true);
         }
 
         private static void UpdateCrop(Button button, string key, double rotation)

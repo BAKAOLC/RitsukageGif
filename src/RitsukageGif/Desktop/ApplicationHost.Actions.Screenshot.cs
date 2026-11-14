@@ -62,7 +62,8 @@ namespace RitsukageGif.Desktop
                     or ActionScreenshotOutput.RecognizeFormula =>
                     ScreenshotOutputAction.Copy,
                 ActionScreenshotOutput.Pin => ScreenshotOutputAction.Pin,
-                ActionScreenshotOutput.Save or ActionScreenshotOutput.QuickSave => ScreenshotOutputAction.Save,
+                ActionScreenshotOutput.Save => ScreenshotOutputAction.Save,
+                ActionScreenshotOutput.QuickSave => ScreenshotOutputAction.QuickSave,
                 _ => throw new ArgumentOutOfRangeException(nameof(action)),
             };
             Func<Window?, ScreenshotResult, CancellationToken, Task<bool>>? handler = null;
@@ -106,7 +107,12 @@ namespace RitsukageGif.Desktop
             }
 
             token.ThrowIfCancellationRequested();
-            var invocation = new ScreenshotInvocation(propagateErrors);
+            var deferCopyOutput = output is ActionScreenshotOutput.CopyText or ActionScreenshotOutput.RecognizeText or
+                ActionScreenshotOutput.RecognizeTable or ActionScreenshotOutput.RecognizeFormula;
+            var invocation = new ScreenshotInvocation(propagateErrors)
+            {
+                DeferCopyOutput = deferCopyOutput, CommandToken = token,
+            };
             var operation = ScreenshotAsync(source, region, confirm, GlobalActions.Definition(action.Kind).AutoConfirm,
                 target, handler, action.Kind == GlobalActionKind.CaptureActiveWindow,
                 GlobalActions.ScreenshotDelay(action), GlobalActions.Definition(action.Kind).StartWithScrolling,
@@ -130,6 +136,7 @@ namespace RitsukageGif.Desktop
             token.ThrowIfCancellationRequested();
             await RecognitionWindow.ShowAsync(owner ?? _services.Context, result.Png, mode,
                 preferences: Settings.Recognition, token: token, translationPreferences: Settings.Translation,
+                requireResult: _screenshotInvocation.Value?.PropagateErrors == true,
                 copyFormatChanged: PersistFormulaCopyFormat,
                 originalImageVisibilityChanged: PersistRecognitionOriginalImage,
                 latexFormatChanged: PersistFormulaLatexFormat,
@@ -137,6 +144,46 @@ namespace RitsukageGif.Desktop
                 copyDirectlyNextTime: () => DisableRecognitionConfirmation(RecognitionConfirmationKind.Screenshot),
                 dialogPreferencesChanged: PersistRecognitionDialog);
             return true;
+        }
+
+        private async Task RunScreenshotRecognitionAsync(ScreenshotRecognitionRequest request,
+            Func<ScreenshotResult, ScreenshotAutoSaveTriggers, CancellationToken, Task>? output, bool requireResult,
+            CancellationToken token)
+        {
+            var settings = Settings;
+            var preferences = settings.Recognition;
+            var screenshot = request.Screenshot;
+            if (request.Mode == RecognitionMode.Text && !preferences.ShowDialogOnRecognition)
+            {
+                var recognition = await RecognitionOutput.RecognizeAsync(screenshot.Png, preferences,
+                    _pinnedImages.TextRecognitionService, token);
+                var text = RecognitionTextFormatter.Format(recognition, preferences);
+                token.ThrowIfCancellationRequested();
+                if (string.IsNullOrWhiteSpace(text))
+                    throw new InvalidOperationException(UiText.Get("RecognitionEmpty"));
+
+                var clipboard = _services.Context.Clipboard ??
+                                throw new InvalidOperationException(UiText.Get("ClipboardFailed"));
+                await clipboard.SetTextAsync(text);
+                await clipboard.FlushAsync();
+                token.ThrowIfCancellationRequested();
+                PlayScreenshotSound(ScreenshotSoundTiming.Copy);
+                if (output is not null) await output(screenshot, ScreenshotAutoSaveTriggers.Recognize, token);
+                return;
+            }
+
+            await RecognitionWindow.ShowAsync(_services.Context, screenshot.Png, request.Mode,
+                output is null
+                    ? null
+                    : workToken => output(screenshot, ScreenshotAutoSaveTriggers.Recognize, workToken),
+                preferences,
+                translationPreferences: settings.Translation, copyFormatChanged: PersistFormulaCopyFormat,
+                originalImageVisibilityChanged: PersistRecognitionOriginalImage,
+                latexFormatChanged: PersistFormulaLatexFormat,
+                copyDirectlyNextTime: () => DisableRecognitionConfirmation(RecognitionConfirmationKind.Screenshot),
+                dialogPreferencesChanged: PersistRecognitionDialog,
+                imageSaveQuality: () => Settings.ScreenshotSave.Quality,
+                requireResult: requireResult, token: token);
         }
 
         private async Task<bool> CopyActionScreenshotTextAsync(Window? owner, ScreenshotResult result,
@@ -152,6 +199,7 @@ namespace RitsukageGif.Desktop
             {
                 await RecognitionWindow.ShowAsync(owner, result.Png, RecognitionMode.Text,
                     preferences: Settings.Recognition, initialResult: recognition, token: token,
+                    requireResult: _screenshotInvocation.Value?.PropagateErrors == true,
                     translationPreferences: Settings.Translation,
                     originalImageVisibilityChanged: PersistRecognitionOriginalImage,
                     copyDirectlyNextTime: () => DisableRecognitionConfirmation(RecognitionConfirmationKind.Screenshot),
@@ -172,13 +220,15 @@ namespace RitsukageGif.Desktop
         private async Task<bool> QuickSaveActionScreenshotAsync(Window? owner, ScreenshotResult result,
             string directory, CancellationToken token)
         {
-            if (result.Action != ScreenshotOutputAction.Save) return await OutputScreenshotAsync(owner, result, token);
+            if (result.Action != ScreenshotOutputAction.QuickSave)
+                return await OutputScreenshotAsync(owner, result, token);
             token.ThrowIfCancellationRequested();
-            var preferences = Settings.ScreenshotSave.Normalize().Quick;
+            var preferences = ScreenshotSaveForOutput.Normalize().Quick;
             var format = result.ColorMode == OutputColorMode.Sdr ? preferences.Format : StaticImageFormat.Png;
             var path = (preferences with { Directory = directory }).CreatePath(Settings.OutputDirectory,
                 ScreenshotName(result), format);
-            return await SaveScreenshotAsync(result, path, preferences, false, false, token);
+            return await SaveScreenshotAsync(result, path, preferences, false, false, token,
+                owner as ScreenshotScrollingWindow);
         }
 
         private async Task PinActionClipboardAsync(CancellationToken token)

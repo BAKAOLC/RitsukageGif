@@ -62,7 +62,7 @@ namespace RitsukageGif.Desktop
             Cursor = SelectionCursors[StandardCursorType.Cross];
             _canvas = new(region, pixels, radius, threshold, coordinator.ScreenshotPreview)
             {
-                ExternalHintsSurface = true,
+                ExternalHintsSurface = true, IsScreenshot = coordinator.ScreenshotMode,
                 ShortcutBindings = coordinator.ShortcutBindings,
                 CoordinateUnit = coordinator.SelectionCoordinateUnit,
                 Scale = scaling, ShowControls = coordinator.CanDetectControls,
@@ -102,7 +102,19 @@ namespace RitsukageGif.Desktop
                     coordinator.ExecuteToolbarCommand, dialogScopeProvider: coordinator.BeginSelectionDialog,
                     shortcutBindingsProvider: () => coordinator.ShortcutBindings);
                 layers.Children.Add(_annotationSurface);
-                layers.Children.Add(_screenshotToolbar);
+                if (sourceLocal || coordinator.ScreenshotPreview)
+                {
+                    layers.Children.Add(_screenshotToolbar);
+                }
+                else
+                {
+                    _screenshotToolbar.UseDesktopPlacement(coordinator, this);
+                    _screenshotToolbar.PointerEntered += (_, _) => coordinator.ActivateDesktopScreenshotToolbar(this);
+                    _screenshotToolbar.AddHandler(PointerPressedEvent,
+                        (_, _) => coordinator.ActivateDesktopScreenshotToolbar(this), RoutingStrategies.Tunnel, true);
+                    layers.Children.Add(new Canvas { ClipToBounds = true, Children = { _screenshotToolbar } });
+                }
+
                 annotations.Changed += AnnotationChanged;
                 _screenshotToolbar.Refresh(default, default, false);
             }
@@ -159,6 +171,7 @@ namespace RitsukageGif.Desktop
             };
             AddHandler(KeyDownEvent, (_, args) =>
             {
+                if (_screenshotToolbar?.HandleAnnotationMenuKey(args, true) == true) return;
                 if (coordinator.HandleTextInputKey(args.Key, true, FocusManager.GetFocusedElement() is TextBox))
                     return;
 
@@ -169,6 +182,7 @@ namespace RitsukageGif.Desktop
             }, RoutingStrategies.Tunnel, true);
             AddHandler(KeyUpEvent, (_, args) =>
             {
+                if (_screenshotToolbar?.HandleAnnotationMenuKey(args, false) == true) return;
                 if (coordinator.HandleTextInputKey(args.Key, false, FocusManager.GetFocusedElement() is TextBox))
                     return;
 
@@ -199,6 +213,43 @@ namespace RitsukageGif.Desktop
         }
 
         public PixelRect Region { get; }
+
+        internal double ScreenshotToolbarScale => _canvas.Scale;
+
+        internal void HideDesktopScreenshotPanels()
+        {
+            _screenshotToolbar?.HideDesktopPanels();
+        }
+
+        internal void RefreshDesktopScreenshotToolbar(bool positionOnly)
+        {
+            if (_screenshotToolbar is null) return;
+            var previousBounds = _canvas.ReservedBounds;
+            _canvas.ReservedBounds = default;
+            if (_screenshotToolbar.IsVisible && positionOnly && _screenshotToolbar.UpdateDesktopDragPosition())
+                _canvas.ReservedBounds = _screenshotToolbar.OccupiedBounds;
+            else
+                RefreshScreenshotToolbar(_coordinator.Snapshot.Region, _lastPoint);
+            if (_regionInfo.IsVisible && _canvas.ReservedBounds != previousBounds &&
+                (_canvas.ReservedBounds.Intersects(_regionInfo.OccupiedBounds.Inflate(4)) || !positionOnly))
+            {
+                _regionInfo.Update(Region, _canvas.Scale, _coordinator.OwnsRegionInformation(this),
+                    _canvas.ReservedBounds, _canvas.SecondaryReservedBounds, _canvas.FrameReservedBounds,
+                    _canvas.ModePickerReservedBounds);
+                _canvas.InformationReservedBounds = _regionInfo.OccupiedBounds;
+                _canvas.InteractiveInformationVisible = _regionInfo.IsVisible;
+            }
+
+            InvalidateCanvas();
+        }
+
+        private void RefreshScreenshotToolbar(PixelRect selected, PixelPoint point)
+        {
+            if (_screenshotToolbar is null) return;
+            _screenshotToolbar.Scale = _canvas.Scale;
+            _screenshotToolbar.Refresh(selected, point, _coordinator.OwnsScreenshotToolbar(this));
+            if (_screenshotToolbar.IsVisible) _canvas.ReservedBounds = _screenshotToolbar.OccupiedBounds;
+        }
 
         private void InvalidateCanvas()
         {
@@ -236,6 +287,8 @@ namespace RitsukageGif.Desktop
             _lastMode = mode;
             _canvas.Selected = selected;
             _canvas.Snapshot = _coordinator.Snapshot;
+            if (_coordinator.ScreenshotMode && !selected.IsEmpty)
+                _canvas.SelectionMarkerScale = _coordinator.SelectionMarkerScale(selected);
             _canvas.HintMode = _coordinator.HintMode;
             _canvas.CapturePreferences = _coordinator.CapturePreferences;
             _canvas.MagnifierAnnotations = _coordinator.Annotations;
@@ -297,12 +350,7 @@ namespace RitsukageGif.Desktop
 
             _annotationSurface?.Scale = _canvas.Scale;
             _canvas.ReservedBounds = default;
-            if (_screenshotToolbar is not null)
-            {
-                _screenshotToolbar.Scale = _canvas.Scale;
-                _screenshotToolbar.Refresh(selected, point, _coordinator.OwnsScreenshotToolbar(this));
-                if (_screenshotToolbar.IsVisible) _canvas.ReservedBounds = _screenshotToolbar.OccupiedBounds;
-            }
+            RefreshScreenshotToolbar(selected, point);
 
             if (_selectionActions is not null)
             {

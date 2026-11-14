@@ -5,10 +5,10 @@ namespace RitsukageGif.Desktop
         TranslationService? service = null,
         Func<string, CancellationToken, ValueTask<string?>>? readCredential = null) : ITextTranslationService
     {
-
-        private readonly TranslationService _service = service ?? new();
         private readonly Func<string, CancellationToken, ValueTask<string?>> _readCredential =
             readCredential ?? CredentialVault.ReadAsync;
+
+        private readonly TranslationService _service = service ?? new();
 
         public Task<TextTranslationCapabilities> GetCapabilitiesAsync(CancellationToken token = default)
         {
@@ -16,7 +16,8 @@ namespace RitsukageGif.Desktop
             var current = preferences() with { };
             var failure = ConfigurationFailure(current);
             return Task.FromResult(new TextTranslationCapabilities(true, failure is null,
-                current.Provider.ToString(), current.SourceLanguage, current.TargetLanguage, 100000, failure));
+                current.Provider.ToString(), current.SourceLanguage, current.TargetLanguage,
+                TranslationService.MaximumInputLength, failure));
         }
 
         public async Task<TextTranslationResult> TranslateAsync(string text, TextTranslationOptions? options = null,
@@ -26,14 +27,14 @@ namespace RitsukageGif.Desktop
             var current = preferences() with { };
             if (options?.TimeoutSeconds is { } timeout) current = current with { TimeoutSeconds = timeout };
             if (ConfigurationFailure(current) is { } failure) throw new ArgumentException(failure);
-            if (string.IsNullOrWhiteSpace(text) || text.Length > 100000)
+            if (string.IsNullOrWhiteSpace(text) || text.Length > TranslationService.MaximumInputLength)
                 throw new ArgumentException("Translation text must contain between 1 and 100000 characters.",
                     nameof(text));
             var apiKey = "";
             if (current.UseApiKey)
             {
                 apiKey = await _readCredential(current.CredentialKey, token) ??
-                         throw new InvalidOperationException("The configured translation credential is missing.");
+                         throw new InvalidOperationException(UiText.Get("TranslationCredentialMissing"));
                 token.ThrowIfCancellationRequested();
             }
 
@@ -44,7 +45,7 @@ namespace RitsukageGif.Desktop
             return new(result.Text, result.DetectedSourceLanguage);
         }
 
-        private static string? ConfigurationFailure(TranslationPreferences value)
+        internal static string? ConfigurationFailure(TranslationPreferences value)
         {
             if (!Enum.IsDefined(value.Provider)) return "Unknown translation provider.";
             if (!Uri.TryCreate(value.Endpoint, UriKind.Absolute, out var endpoint) ||

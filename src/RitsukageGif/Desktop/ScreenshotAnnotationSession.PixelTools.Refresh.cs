@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Point = Avalonia.Point;
 
 namespace RitsukageGif.Desktop
@@ -8,6 +9,7 @@ namespace RitsukageGif.Desktop
     {
         private PixelRect _pixelPreviewBounds;
         private (PixelRect Region, byte[] Pixels)[] _pixelPreviewFrames = [];
+        private bool _pixelPreviewQueued;
         private (ScreenshotAnnotation Original, Point[] Points)[] _pixelPreviewState = [];
         private CancellationTokenSource? _pixelPreviewWork;
 
@@ -30,10 +32,22 @@ namespace RitsukageGif.Desktop
 
         private void RefreshPixelPreviews()
         {
-            if (_disposed || IsBusy || IsDrawing || PixelPreviewMatches() ||
-                !_annotations.Any(annotation =>
-                    annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase))
-                return;
+            if (_pixelPreviewQueued || !CanRefreshPixelPreviews()) return;
+            _pixelPreviewQueued = true;
+            Dispatcher.UIThread.Post(RefreshQueuedPixelPreviews);
+        }
+
+        private bool CanRefreshPixelPreviews()
+        {
+            return !_disposed && !IsBusy && !IsDrawing && !PixelPreviewMatches() &&
+                   _annotations.Any(annotation =>
+                       annotation.Tool is ScreenshotTool.Mosaic or ScreenshotTool.Blur or ScreenshotTool.SmartErase);
+        }
+
+        private void RefreshQueuedPixelPreviews()
+        {
+            _pixelPreviewQueued = false;
+            if (!CanRefreshPixelPreviews()) return;
             _pixelPreviewWork?.Cancel();
             _pixelPreviewState = [.. _annotations.Select(annotation => (annotation, annotation.Points.ToArray()))];
             _pixelPreviewBounds = AnnotationBounds;

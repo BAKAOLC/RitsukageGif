@@ -13,7 +13,7 @@ namespace RitsukageGif.Desktop
         private ScreenshotAnnotationImage? _watermarkSource;
         public ScreenshotAnnotationProperties Properties { get; private set; } = new();
         public bool AnnotationsVisible { get; private set; } = true;
-        public bool IsDrawingPolyline => _gesture?.Tool == ScreenshotTool.Polyline;
+        public bool IsDrawingPolyline => _duplicateSource is null && _gesture?.Tool == ScreenshotTool.Polyline;
 
         public bool GlobalNumberCounter => _behavior.GlobalNumberCounter;
 
@@ -78,7 +78,9 @@ namespace RitsukageGif.Desktop
         {
             if (_disposed || !CanAnnotate || IsBusy || (IsDrawing && !IsDrawingPolyline)) return Task.CompletedTask;
             var numberFormatChanged = Properties.NumberFormat != properties.NumberFormat;
+            RememberPolylineEndpoints();
             Properties = properties.Normalize();
+            RememberPolylineEndpoints();
             if (numberFormatChanged && (_selected?.Tool ?? Tool) == ScreenshotTool.Number)
             {
                 StoreToolStyle(ScreenshotTool.Number);

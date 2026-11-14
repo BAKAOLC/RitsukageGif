@@ -11,7 +11,7 @@ namespace RitsukageGif.Desktop
         {
             if (OperatingSystem.IsWindows())
             {
-                var point = NativeMethods.Mouse();
+                if (NativeMethods.GetCursorPos(out var point) == 0) return null;
                 return new(point.X, point.Y);
             }
 

@@ -27,6 +27,7 @@ namespace RitsukageGif.Desktop
                 {
                     DisableInFullscreen = !Settings.HotkeyPolicy.DisableInFullscreen,
                 };
+                _settingsWindow?.SynchronizeFullscreenShortcutPolicy(Settings.HotkeyPolicy.DisableInFullscreen);
                 QueueSettingsSave(Settings);
                 RegisterHotkeys();
                 RefreshActionMenus();
@@ -67,6 +68,10 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(pinSeparator);
             InitializePinMenus(menu);
             _traySeparatorSlots.Add((pinSeparator, _trayPinImages!));
+            menu.Items.Add(_trayRestorePins!);
+            menu.Items.Add(_trayUnlockPins!);
+            menu.Items.Add(_trayShow);
+            menu.Items.Add(_trayPresets);
             menu.Items.Add(_trayClearRecords);
             menu.Items.Add(_traySettings);
             var helpSeparator = new NativeMenuItemSeparator();
@@ -74,17 +79,7 @@ namespace RitsukageGif.Desktop
             menu.Items.Add(_trayGuide);
             menu.Items.Add(_trayUpdate);
             _traySeparatorSlots.Add((helpSeparator, _trayGuide));
-            var ownSeparator = new NativeMenuItemSeparator();
-            menu.Items.Add(ownSeparator);
-            menu.Items.Add(_trayShow);
-            menu.Items.Add(_trayRestorePins!);
-            menu.Items.Add(_trayUnlockPins!);
-            menu.Items.Add(_trayPresets);
-            _traySeparatorSlots.Add((ownSeparator, _trayShow));
-            var exitSeparator = new NativeMenuItemSeparator();
-            menu.Items.Add(exitSeparator);
             menu.Items.Add(_trayExit);
-            _traySeparatorSlots.Add((exitSeparator, _trayExit));
             PopulateActionMenus(menu);
             RefreshTrayMenu(menu);
             return menu;

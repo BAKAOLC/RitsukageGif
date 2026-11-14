@@ -15,8 +15,5 @@ namespace RitsukageGif.Desktop
 
         [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", SetLastError = true)]
         internal static partial nint MouseHookModule(nint name);
-
-        [LibraryImport("user32.dll")]
-        internal static partial int GetSystemMetrics(int index);
     }
 }
