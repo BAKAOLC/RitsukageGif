@@ -95,13 +95,17 @@ struct CaptureHelper {
             guard let display = content.displays.first(where: { $0.displayID == requested }) else {
                 throw CaptureFailure.sourceLost
             }
-            let excluded = content.applications.filter { $0.processID == getppid() || $0.processID == getpid() }
-            let included = content.windows.filter {
+            let included = content.windows.first {
                 options.includedWindowTitle != nil && $0.title == options.includedWindowTitle &&
-                    $0.owningApplication?.processID == getppid()
+                  $0.owningApplication?.processID == getppid()
             }
-            if options.includedWindowTitle != nil && included.isEmpty { throw CaptureFailure.sourceLost }
-            filter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: included)
+            if options.includedWindowTitle != nil && included == nil { throw CaptureFailure.sourceLost }
+            let excluded = content.windows.filter {
+                ($0.owningApplication?.processID == getpid() ||
+                  ($0.owningApplication?.processID == getppid() && options.excludedWindows.contains($0.windowID))) &&
+                  $0.windowID != included?.windowID
+            }
+            filter = SCContentFilter(display: display, excludingWindows: excluded)
             bounds = CGDisplayBounds(display.displayID)
             displayId = display.displayID
             sourceId = "display:\(displayId)"

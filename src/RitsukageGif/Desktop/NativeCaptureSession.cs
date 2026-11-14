@@ -12,42 +12,30 @@ namespace RitsukageGif.Desktop
         private static readonly Lock SharedLock = new();
         private static NativeCaptureSession? _shared;
         private static long _sharedVersion;
+        private static long _generations;
         private readonly string _authorizationId = Guid.NewGuid().ToString("N");
+        private readonly SemaphoreSlim _commands = new(1, 1);
+        private readonly bool _cursor, _retainHdr;
         private readonly TaskCompletionSource _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly int _fps;
         private readonly object _gate = new();
+        private readonly long _generation = Interlocked.Increment(ref _generations);
         private readonly Process _process;
         private readonly Task _reader, _errors;
+        private readonly Dictionary<long, TaskCompletionSource<NativeCaptureMetadata>> _replies = [];
         private readonly CancellationTokenSource _stop = new();
+        private NativeCaptureCapabilities? _capabilities;
+        private byte[]? _cursorPixels;
         private string _diagnostic = "";
         private bool _disposed;
         private Exception? _failure;
-        private NativeCapturePacket? _packet;
+        private ulong _frameSequence;
         private CapturedFrameSet? _frames;
         private NativeCaptureGeometry? _geometry, _sourceGeometry;
-        private NativeCaptureCapabilities? _capabilities;
-        private NativeCaptureCursor? _pointer;
-        private byte[]? _cursorPixels;
-        private string? _sourceReason, _hdrReason, _pointerReason;
-        private readonly SemaphoreSlim _commands = new(1, 1);
-        private readonly Dictionary<long, TaskCompletionSource<NativeCaptureMetadata>> _replies = [];
         private long _nextRequest;
-        private ulong _frameSequence;
-        private readonly long _generation = Interlocked.Increment(ref _generations);
-        private static long _generations;
-
-        public static PixelRect? SourceBounds
-        {
-            get
-            {
-                lock (SharedLock)
-                {
-                    if (_shared is not { } session) return null;
-                    lock (session._gate)
-                        return session._frames is null ? null : session._sourceGeometry?.Bounds;
-                }
-            }
-        }
+        private NativeCapturePacket? _packet;
+        private NativeCaptureCursor? _pointer;
+        private string? _sourceReason, _hdrReason, _pointerReason;
 
         private NativeCaptureSession(string mode, bool cursor, int fps, PixelRect? monitor = null, nint window = 0,
             bool retainHdr = false, bool pointerInput = false, string? includedWindowTitle = null)
@@ -78,10 +66,20 @@ namespace RitsukageGif.Desktop
 
             if (monitor is { } bounds && OperatingSystem.IsMacOS())
                 Add("--id", NativeDisplayCatalog.Resolve(bounds).DisplayId);
-            if (mode == "screen" && includedWindowTitle is not null && OperatingSystem.IsMacOS())
+            if (mode == "screen" && OperatingSystem.IsMacOS())
             {
-                start.ArgumentList.Add("--include-window-title");
-                start.ArgumentList.Add(includedWindowTitle);
+                var exclusions = TransientWindowShell.CaptureExclusions();
+                if (exclusions.Length > 0)
+                {
+                    start.ArgumentList.Add("--exclude-windows");
+                    start.ArgumentList.Add(string.Join(',', exclusions));
+                }
+
+                if (includedWindowTitle is not null)
+                {
+                    start.ArgumentList.Add("--include-window-title");
+                    start.ArgumentList.Add(includedWindowTitle);
+                }
             }
 
             if (window != 0)
@@ -104,6 +102,19 @@ namespace RitsukageGif.Desktop
             }
         }
 
+        public static PixelRect? SourceBounds
+        {
+            get
+            {
+                lock (SharedLock)
+                {
+                    if (_shared is not { } session) return null;
+                    lock (session._gate)
+                        return session._frames is null ? null : session._sourceGeometry?.Bounds;
+                }
+            }
+        }
+
         public static bool SourceIsWindow
         {
             get
@@ -119,7 +130,6 @@ namespace RitsukageGif.Desktop
                 lock (_gate) return !_disposed && _failure is null && !_process.HasExited;
             }
         }
-        private readonly bool _cursor, _retainHdr;
 
         public void Dispose()
         {

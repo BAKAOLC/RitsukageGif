@@ -9,7 +9,8 @@ namespace RitsukageGif.Desktop
         internal static WindowTarget? FindLivePinAtPoint(PixelPoint point)
         {
             if (!OperatingSystem.IsWindows())
-                return List().FirstOrDefault(target => target.Bounds.Contains(point));
+                return List().FirstOrDefault(target => target.ProcessId != Environment.ProcessId &&
+                                                       target.Bounds.Contains(point));
 
             var previous = SetCandidateDpiContext(-4);
             try
@@ -18,7 +19,8 @@ namespace RitsukageGif.Desktop
                 if (hit == 0) return null;
                 var root = GetAncestor(hit, 2);
                 if (root == 0) root = hit;
-                if (GetWindowThreadProcessId(root, out var processId) == 0) return null;
+                if (GetWindowThreadProcessId(root, out var processId) == 0 || processId == Environment.ProcessId)
+                    return null;
                 var target = new WindowTarget(root, string.Empty, string.Empty, default, default)
                 {
                     ProcessId = processId,

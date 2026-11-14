@@ -92,7 +92,7 @@ namespace RitsukageGif.Desktop
             {
                 if (NativeMethods.IsWindowVisible(handle) == 0 || NativeMethods.IsIconic(handle) != 0) continue;
                 if (GetWindowThreadProcessId(handle, out var pid) == 0) continue;
-                if (pid == Environment.ProcessId) continue;
+                if (pid == Environment.ProcessId && IsInternalCaptureWindow(handle)) continue;
                 try
                 {
                     if (!processes.TryGetValue(pid, out var name))

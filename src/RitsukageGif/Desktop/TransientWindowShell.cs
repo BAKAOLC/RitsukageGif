@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Platform;
 
 namespace RitsukageGif.Desktop
 {
@@ -9,6 +11,7 @@ namespace RitsukageGif.Desktop
     {
         private const uint AppWindow = 0x00040000;
         private const uint ToolWindow = 0x00000080;
+        private static readonly ConcurrentDictionary<nint, byte> WindowIds = new();
 
         private static readonly AttachedProperty<bool> ConfiguredProperty =
             AvaloniaProperty.RegisterAttached<Window, bool>("TransientShellConfigured", typeof(TransientWindowShell));
@@ -32,6 +35,43 @@ namespace RitsukageGif.Desktop
 
             window.SetValue(ConfiguredProperty, true);
             window.Closed += Closed;
+            if (window.IsVisible) Opened(window, EventArgs.Empty);
+            else window.Opened += Opened;
+        }
+
+        internal static bool IsTransient(nint id)
+        {
+            return WindowIds.ContainsKey(id);
+        }
+
+        internal static nint[] CaptureExclusions()
+        {
+            return [.. WindowIds.Keys];
+        }
+
+        [LibraryImport("/usr/lib/libobjc.A.dylib", EntryPoint = "sel_registerName",
+            StringMarshalling = StringMarshalling.Utf8)]
+        private static partial nint RegisterSelector(string name);
+
+        [LibraryImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+        private static partial nint GetWindowNumber(nint target, nint selector);
+
+        private static void Opened(object? sender, EventArgs args)
+        {
+            if (sender is not Window window) return;
+            var id = NativeId(window);
+            if (id == 0) return;
+            WindowIds.TryAdd(id, 0);
+            window.Closed += (_, _) => WindowIds.TryRemove(id, out _);
+            window.Opened -= Opened;
+        }
+
+        private static nint NativeId(Window window)
+        {
+            var handle = window.TryGetPlatformHandle();
+            if (!OperatingSystem.IsMacOS()) return handle?.Handle ?? 0;
+            if (handle is not IMacOSTopLevelPlatformHandle { NSWindow: not 0 } mac) return 0;
+            return GetWindowNumber(mac.NSWindow, RegisterSelector("windowNumber"));
         }
 
         private static (uint Style, uint ExtendedStyle) FilterStyles(uint style, uint extendedStyle)
@@ -43,6 +83,7 @@ namespace RitsukageGif.Desktop
         {
             if (sender is not Window window) return;
             window.Closed -= Closed;
+            window.Opened -= Opened;
             if (OperatingSystem.IsWindows()) Win32Properties.RemoveWindowStylesCallback(window, FilterStyles);
             window.ClearValue(ConfiguredProperty);
         }

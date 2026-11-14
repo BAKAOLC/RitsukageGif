@@ -80,7 +80,7 @@ namespace RitsukageGif.Desktop
                     var pid = pidFormat == 32 && processProperty.Length >= IntPtr.Size
                         ? BitConverter.ToInt32(processProperty)
                         : 0;
-                    if (pid == Environment.ProcessId) continue;
+                    if (pid == Environment.ProcessId && TransientWindowShell.IsTransient(window)) continue;
                     var title = ReadText(display, window, "_NET_WM_NAME");
                     if (title.Length == 0) title = ReadText(display, window, "WM_NAME");
                     if (title.Length == 0) continue;
@@ -111,7 +111,11 @@ namespace RitsukageGif.Desktop
                                 attributes.Height + top + bottom);
                     }
 
-                    if (!bounds.IsEmpty) result.Add(new(window, process, title, bounds, client));
+                    if (!bounds.IsEmpty)
+                        result.Add(new(window, process, title, bounds, client)
+                        {
+                            ProcessId = (uint)Math.Max(0, pid),
+                        });
                 }
 
                 return result;

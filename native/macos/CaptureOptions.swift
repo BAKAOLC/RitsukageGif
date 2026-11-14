@@ -9,6 +9,7 @@ struct CaptureOptions {
     let hdr: Bool
     let generation: Int64
     let includedWindowTitle: String?
+    let excludedWindows: Set<CGWindowID>
 
     init(_ arguments: [String]) throws {
         guard let mode = arguments.first,
@@ -19,7 +20,7 @@ struct CaptureOptions {
         var position = 1
         while position < arguments.count {
             let name = arguments[position]
-            guard ["--id", "--fps", "--cursor", "--color", "--generation", "--include-window-title"].contains(name),
+            guard ["--id", "--fps", "--cursor", "--color", "--generation", "--include-window-title", "--exclude-windows"].contains(name),
                   position + 1 < arguments.count, values[name] == nil else { throw CaptureFailure.invalidArguments }
             values[name] = arguments[position + 1]
             position += 2
@@ -29,6 +30,14 @@ struct CaptureOptions {
         let included = values["--include-window-title"]
         if let title = included, title.isEmpty || mode != "screen" {
             throw CaptureFailure.invalidArguments
+        }
+        var excluded: Set<CGWindowID> = []
+        if let list = values["--exclude-windows"] {
+            guard mode == "screen" else { throw CaptureFailure.invalidArguments }
+            for field in list.split(separator: ",", omittingEmptySubsequences: false) {
+                guard let id = CGWindowID(field), id != 0 else { throw CaptureFailure.invalidArguments }
+                excluded.insert(id)
+            }
         }
         guard let parsedFPS = Int32(values["--fps"] ?? "30"), (1...240).contains(parsedFPS),
               let parsedCursor = Int(values["--cursor"] ?? "1"), (0...1).contains(parsedCursor),
@@ -44,5 +53,6 @@ struct CaptureOptions {
         hdr = values["--color"] == "hdr"
         generation = parsedGeneration
         includedWindowTitle = included
+        excludedWindows = excluded
     }
 }

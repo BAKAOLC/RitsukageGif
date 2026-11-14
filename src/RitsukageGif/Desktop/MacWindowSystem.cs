@@ -58,16 +58,20 @@ namespace RitsukageGif.Desktop
                     if (line.Length > 1024 * 1024) throw new IOException(UiText.Get("CaptureFailed"));
                     using var document = JsonDocument.Parse(line);
                     var result = new List<WindowTarget>();
+                    // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
                     foreach (var window in document.RootElement.EnumerateArray())
                     {
-                        if (window.TryGetProperty("pid", out var pid) && pid.GetInt32() == Environment.ProcessId)
-                            continue;
+                        var handle = (nint)window.GetProperty("handle").GetInt64();
+                        if (TransientWindowShell.IsTransient(handle)) continue;
                         var bounds = Rectangle(window.GetProperty("bounds"));
                         if (bounds.IsEmpty) continue;
-                        result.Add(new((nint)window.GetProperty("handle").GetInt64(),
+                        result.Add(new(handle,
                             window.GetProperty("process").GetString() ?? "",
                             window.GetProperty("title").GetString() ?? "",
-                            bounds, Rectangle(window.GetProperty("client"))));
+                            bounds, Rectangle(window.GetProperty("client")))
+                        {
+                            ProcessId = window.GetProperty("pid").GetUInt32(),
+                        });
                     }
 
                     _windows = result;

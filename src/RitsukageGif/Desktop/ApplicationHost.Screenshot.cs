@@ -196,8 +196,6 @@ namespace RitsukageGif.Desktop
             bool startWithRecording = false, ScreenshotInvocation? invocation = null)
         {
             await WaitForCaptureHistoryAsync(token);
-            var previousView = View;
-            var wasVisible = previousView?.IsVisible == true;
             var recordingRequested = false;
             NativeCaptureSessionReference? recordingSource = null;
             SelectionResult? recordingSelection = null;
@@ -209,12 +207,8 @@ namespace RitsukageGif.Desktop
                                     outputHandler is null
                 ? await ScreenshotPasteGuard.CaptureTargetAsync(token)
                 : null;
-            using var settingsVisibility = await CaptureWindowVisibilityLease.HideAsync(_settingsWindow,
-                () => !IsClosing, token);
             try
             {
-                HostLogger.ZLogDebug($"Screenshot waiting for application windows to hide.");
-                await CaptureWindowVisibility.HideAsync(previousView, token);
                 if (delay > TimeSpan.Zero) await Task.Delay(delay, token);
                 token.ThrowIfCancellationRequested();
                 PlayScreenshotSound(ScreenshotSoundTiming.Start);
@@ -431,20 +425,6 @@ namespace RitsukageGif.Desktop
             finally
             {
                 recordingSource?.Dispose();
-                if (!IsClosing && !recordingRequested && wasVisible && previousView is not null)
-                {
-                    var activate = previousView.ShowActivated;
-                    previousView.ShowActivated = false;
-                    try
-                    {
-                        previousView.Show();
-                    }
-                    finally
-                    {
-                        previousView.ShowActivated = activate;
-                    }
-                }
-
                 if (showPendingEditor && !token.IsCancellationRequested &&
                     invocation?.CommandToken.IsCancellationRequested != true)
                     ShowPendingImageEditor();

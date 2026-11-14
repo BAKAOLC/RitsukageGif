@@ -46,7 +46,7 @@ namespace RitsukageGif.Desktop
 
         private void AddHook(uint first, uint last)
         {
-            var hook = SetWinEventHook(first, last, 0, Marshal.GetFunctionPointerForDelegate(_callback), 0, 0, 2);
+            var hook = SetWinEventHook(first, last, 0, Marshal.GetFunctionPointerForDelegate(_callback), 0, 0, 0);
             if (hook == 0) throw new Win32Exception(Marshal.GetLastPInvokeError());
             _hooks.Add(hook);
         }
@@ -55,6 +55,7 @@ namespace RitsukageGif.Desktop
             uint time)
         {
             if (_disposed || _queued) return;
+            if (TransientWindowShell.IsTransient(window)) return;
             if (eventType >= 0x8000 && (objectId != 0 || childId != 0 || eventType is not
                     (0x8000 or 0x8001 or 0x8002 or 0x8003 or 0x8004 or 0x800A or 0x800B or 0x800C or 0x800F or
                     0x8017 or 0x8018))) return;

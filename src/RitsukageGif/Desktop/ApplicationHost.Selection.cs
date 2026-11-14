@@ -112,49 +112,20 @@ namespace RitsukageGif.Desktop
         private async Task SelectCoreAsync(CaptureSourceKind source, CancellationToken token)
         {
             await WaitForCaptureHistoryAsync(token);
-            var viewBeforeSelection = View;
-            var wasVisible = viewBeforeSelection?.IsVisible == true;
-            using var settingsVisibility = await CaptureWindowVisibilityLease.HideAsync(_settingsWindow,
-                () => !IsClosing, token);
-            var completed = false;
-            try
-            {
-                await CaptureWindowVisibility.HideAsync(viewBeforeSelection, token);
-                token.ThrowIfCancellationRequested();
-                using var selection = new SelectionCoordinator(Screens, Settings.SnapRadius, Settings.EdgeThreshold,
-                    source == CaptureSourceKind.Window, Settings.Cursor, Settings.Fps);
-                ConfigureSelectionPreferences(selection);
-                _selection = selection;
-                var result = await selection.ShowAsync();
-                token.ThrowIfCancellationRequested();
-                if (result is not null)
-                {
-                    ValidateRegion(result.Region, !DesktopCapture.UsesSourceSelection && !result.WindowSource);
-                    selection.CommitSource(token);
-                    DeactivatePreset();
-                    SetRegion(result.Region, !DesktopCapture.UsesSourceSelection && !result.WindowSource);
-                    _manualPreset = result.CreatePreset();
-                    _captureHistory.RecordRegion(result);
-                    Settings.CaptureSource = result.WindowSource ? CaptureSourceKind.Window : CaptureSourceKind.Screen;
-                    completed = true;
-                }
-            }
-            finally
-            {
-                if (!IsClosing && wasVisible && viewBeforeSelection is not null)
-                {
-                    var activate = viewBeforeSelection.ShowActivated;
-                    viewBeforeSelection.ShowActivated = completed;
-                    try
-                    {
-                        viewBeforeSelection.Show();
-                    }
-                    finally
-                    {
-                        viewBeforeSelection.ShowActivated = activate;
-                    }
-                }
-            }
+            using var selection = new SelectionCoordinator(Screens, Settings.SnapRadius, Settings.EdgeThreshold,
+                source == CaptureSourceKind.Window, Settings.Cursor, Settings.Fps);
+            ConfigureSelectionPreferences(selection);
+            _selection = selection;
+            var result = await selection.ShowAsync();
+            token.ThrowIfCancellationRequested();
+            if (result is null) return;
+            ValidateRegion(result.Region, !DesktopCapture.UsesSourceSelection && !result.WindowSource);
+            selection.CommitSource(token);
+            DeactivatePreset();
+            SetRegion(result.Region, !DesktopCapture.UsesSourceSelection && !result.WindowSource);
+            _manualPreset = result.CreatePreset();
+            _captureHistory.RecordRegion(result);
+            Settings.CaptureSource = result.WindowSource ? CaptureSourceKind.Window : CaptureSourceKind.Screen;
         }
 
         private Task SelectWindowAsync(string process, string title)

@@ -104,9 +104,20 @@ namespace RitsukageGif.Desktop
         {
             process = 0;
             if (NativeMethods.IsWindowVisible(handle) == 0 || NativeMethods.IsIconic(handle) != 0 ||
-                GetWindowThreadProcessId(handle, out process) == 0 || process == Environment.ProcessId) return false;
+                GetWindowThreadProcessId(handle, out process) == 0 ||
+                (process == Environment.ProcessId && IsInternalCaptureWindow(handle))) return false;
             return GetCandidateCloak(handle, 14, out var cloaked, sizeof(int)) != 0 || cloaked == 0;
         }
+
+        private static bool IsInternalCaptureWindow(nint handle)
+        {
+            return TransientWindowShell.IsTransient(handle) ||
+                   (GetWindowDisplayAffinity(handle, out var affinity) && affinity != 0);
+        }
+
+        [LibraryImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetWindowDisplayAffinity(nint window, out uint affinity);
 
         [LibraryImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
         private static partial int GetCandidateCloak(nint window, uint attribute, out int value, int size);
