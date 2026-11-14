@@ -219,13 +219,13 @@ namespace RitsukageGif.Desktop
 
         private void RefreshLivePreview()
         {
-            if (_closed || _session.Paused || _outputting || _preview.Image is null)
+            if (_closed || _outputting || _preview.Image is null)
             {
                 _imagePreviewWindow?.Hide();
                 return;
             }
 
-            _imagePreviewWindow ??= new(_preview, this);
+            _imagePreviewWindow ??= new(_preview);
             var bounds = new PixelRect(Position.X, Position.Y, (int)Math.Ceiling(Bounds.Width * RenderScaling),
                 (int)Math.Ceiling(Bounds.Height * RenderScaling));
             _imagePreviewWindow.Update(_screens, _region, _axis, bounds);

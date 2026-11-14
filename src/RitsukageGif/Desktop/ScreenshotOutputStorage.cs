@@ -13,21 +13,31 @@ namespace RitsukageGif.Desktop
             OutputColorMode colorMode, AppearanceDialogStyle style, ScreenshotNameContext? context = null,
             CancellationToken token = default)
         {
+            return PickPathAsync(owner, storage, preferences, outputDirectory, titleKey, colorMode, style, context,
+                false, token);
+        }
+
+        internal static Task<string?> PickPathAsync(Window? owner, IStorageProvider storage,
+            ScreenshotSaveProfile preferences, string? outputDirectory, string titleKey,
+            OutputColorMode colorMode, AppearanceDialogStyle style, ScreenshotNameContext? context, bool pngOnly,
+            CancellationToken token)
+        {
             if (style == AppearanceDialogStyle.Modern)
                 return ScreenshotSaveDialog.PickAsync(owner, storage, preferences.Normalize(),
                     outputDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
-                    titleKey, colorMode, context ?? new(DateTime.Now), token);
-            return PickSystemPathAsync(storage, preferences, outputDirectory, titleKey, colorMode, context, token);
+                    titleKey, colorMode, context ?? new(DateTime.Now), pngOnly, token);
+            return PickSystemPathAsync(storage, preferences, outputDirectory, titleKey, colorMode, context, pngOnly,
+                token);
         }
 
         private static async Task<string?> PickSystemPathAsync(IStorageProvider storage,
             ScreenshotSaveProfile preferences, string? outputDirectory, string titleKey,
-            OutputColorMode colorMode, ScreenshotNameContext? context, CancellationToken token)
+            OutputColorMode colorMode, ScreenshotNameContext? context, bool pngOnly, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             var normalized = preferences.Normalize();
             var format = colorMode == OutputColorMode.Sdr ? normalized.Format : StaticImageFormat.Png;
-            var extension = normalized.DialogExtension(colorMode);
+            var extension = pngOnly ? ".png" : normalized.DialogExtension(colorMode);
             context ??= new(DateTime.Now);
             var name = Path.ChangeExtension(normalized.CreateFileName(context, format), extension);
             FilePickerFileType[] formats =
@@ -36,14 +46,16 @@ namespace RitsukageGif.Desktop
                 new("BMP") { Patterns = ["*.bmp"] }, new("WebP") { Patterns = ["*.webp"] },
                 new("AVIF") { Patterns = ["*.avif"] },
             ];
-            var choices = colorMode switch
-            {
-                OutputColorMode.Sdr => formats,
-                OutputColorMode.Hdr =>
-                    [new("HDR PNG") { Patterns = ["*.png"] }, new("OpenEXR") { Patterns = ["*.exr"] }],
-                OutputColorMode.Both => [new("PNG") { Patterns = ["*.png"] }],
-                _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
-            };
+            var choices = pngOnly
+                ? [new("PNG") { Patterns = ["*.png"] }]
+                : colorMode switch
+                {
+                    OutputColorMode.Sdr => formats,
+                    OutputColorMode.Hdr =>
+                        [new("HDR PNG") { Patterns = ["*.png"] }, new("OpenEXR") { Patterns = ["*.exr"] }],
+                    OutputColorMode.Both => [new("PNG") { Patterns = ["*.png"] }],
+                    _ => throw new ArgumentOutOfRangeException(nameof(colorMode)),
+                };
             if (!string.IsNullOrWhiteSpace(normalized.Directory) || !string.IsNullOrWhiteSpace(outputDirectory))
                 outputDirectory = normalized.ResolveDirectory(outputDirectory ?? "", context);
             using var directory = string.IsNullOrWhiteSpace(outputDirectory)

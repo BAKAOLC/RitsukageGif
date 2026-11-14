@@ -13,14 +13,28 @@ namespace RitsukageGif.Desktop
         private CancellationToken _outputToken;
         private bool _outputting;
         private bool _saveOnUserClose;
+
+        private Func<ScreenshotScrollingWindow, ScrollingCaptureAction, CancellationToken, Task<bool>>?
+            _streamingOutputHandler;
+
         internal PixelPoint? CaptureOutputOrigin => _session.OutputOrigin;
-        internal bool IsFileOnlyCapture => _session.OutputAxisLength > MaximumNonFileOutputLength;
+
+        internal bool IsFileOnlyCapture => _session.OutputAxisLength > MaximumNonFileOutputLength ||
+                                           _session.RequiresStreamingExport;
+
+        internal (int Width, int Height) StreamingSize => _session.StreamingSize;
+
+        internal void WriteStreamingPng(Stream stream, int width, int height, bool hdr, CaptureDecoration decoration,
+            CancellationToken token)
+        {
+            _session.WriteStreamingPng(stream, width, height, hdr, decoration, token);
+        }
 
         private Task CloseByUserAsync()
         {
             if (_closed || _outputting) return Task.CompletedTask;
             if (_saveOnUserClose && !_outputToken.IsCancellationRequested && _lastCaptureStatus is not null &&
-                IsOutputActionAvailable(ScrollingCaptureAction.Close, _session.OutputAxisLength))
+                IsOutputActionAvailable(ScrollingCaptureAction.Close, _session.OutputAxisLength, IsFileOnlyCapture))
                 return CompleteCapture(ScrollingCaptureAction.Close);
             Close();
             return Task.CompletedTask;
@@ -29,13 +43,14 @@ namespace RitsukageGif.Desktop
         private Task CompleteCapture(ScrollingCaptureAction action)
         {
             if (_closed || _outputting || _lastCaptureStatus is null ||
-                !IsOutputActionAvailable(action, _session.OutputAxisLength)) return Task.CompletedTask;
+                !IsOutputActionAvailable(action, _session.OutputAxisLength, IsFileOnlyCapture))
+                return Task.CompletedTask;
             return _outputTask = CompleteCaptureCoreAsync(action);
         }
 
-        private static bool IsOutputActionAvailable(ScrollingCaptureAction action, int length)
+        private static bool IsOutputActionAvailable(ScrollingCaptureAction action, int length, bool fileOnly)
         {
-            return length > 0 && (length <= MaximumNonFileOutputLength ||
+            return length > 0 && (!fileOnly ||
                                   action is ScrollingCaptureAction.Save or ScrollingCaptureAction.QuickSave);
         }
 
@@ -55,7 +70,7 @@ namespace RitsukageGif.Desktop
             ScrollingUiLogger.ZLogInformation($"Scrolling output started. Action={action.ToString()}");
             try
             {
-                if (!IsOutputActionAvailable(action, _session.OutputAxisLength)) return;
+                if (!IsOutputActionAvailable(action, _session.OutputAxisLength, IsFileOnlyCapture)) return;
                 if (hideCaptureSurfaces)
                 {
                     Opacity = 0;
@@ -64,18 +79,29 @@ namespace RitsukageGif.Desktop
                     foreach (var mask in _maskWindows) mask.Hide();
                 }
 
-                var image = await Task.Run(() => _session.ExportAsync(_outputToken), _outputToken);
+                bool accepted;
+                if (hideCaptureSurfaces)
+                {
+                    if (_streamingOutputHandler is null)
+                        throw new InvalidOperationException(UiText.Get("ScrollCaptureStreamingPngRequired"));
+                    accepted = await _streamingOutputHandler(this, action, _outputToken);
+                }
+                else
+                {
+                    var image = await Task.Run(() => _session.ExportAsync(_outputToken), _outputToken);
+                    _outputToken.ThrowIfCancellationRequested();
+                    if (_closed) return;
+                    accepted = _outputHandler is null || await _outputHandler(this, image, action, _outputToken);
+                }
+
                 _outputToken.ThrowIfCancellationRequested();
                 if (_closed) return;
-                var accepted = _outputHandler is null ||
-                               await _outputHandler(this, image, action, _outputToken);
-                _outputToken.ThrowIfCancellationRequested();
-                if (_closed) return;
+                var size = StreamingSize;
                 ScrollingUiLogger.ZLogInformation(
-                    $"Scrolling output completed. Action={action.ToString()} Accepted={accepted} Width={image.Width} Height={image.Height}");
+                    $"Scrolling output completed. Action={action.ToString()} Accepted={accepted} Width={size.Width} Height={size.Height}");
                 if (!accepted) return;
                 if (action != ScrollingCaptureAction.Close)
-                    _outputResult = new(image, action) { OutputOrigin = CaptureOutputOrigin };
+                    _outputResult = new(action);
                 _completed.TrySetResult(action != ScrollingCaptureAction.Close);
                 Close();
             }

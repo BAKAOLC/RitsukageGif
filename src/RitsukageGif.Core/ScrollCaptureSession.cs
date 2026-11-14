@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace RitsukageGif.Core
 {
-    public sealed partial class ScrollCaptureSession
+    public sealed partial class ScrollCaptureSession : IDisposable
     {
         private static readonly ILogger Logger = LogHub.GetLogger("Core.ScrollCapture");
         private readonly int _axisLength;
@@ -10,7 +10,6 @@ namespace RitsukageGif.Core
         private readonly int _height;
         private readonly ScrollCaptureOptions _options;
         private readonly int _rowBytes;
-        private byte[] _scratch;
         private readonly int _storageRowBytes;
         private readonly int _width;
         private long _attemptedFrames;
@@ -21,6 +20,7 @@ namespace RitsukageGif.Core
         private bool _limitReported;
         private long _nextLogAt;
         private int _rowStripIndex;
+        private byte[] _scratch;
         private List<Strip> _strips = [];
         private UndoState? _undo;
 
@@ -32,7 +32,7 @@ namespace RitsukageGif.Core
             _autoCropOnReverse = _options.AutoCropOnReverse;
             if (!Enum.IsDefined(_options.Axis) || _options.LeadingInset < 0 || _options.TrailingInset < 0
                 || _options.MinimumOverlap is < 0.2 or > 0.8 || !double.IsFinite(_options.MinimumOverlap)
-                || _options.MaximumLength < 1 || _options.MaximumBytes < 1)
+                || _options.MaximumLength < 1 || _options.MaximumBytes < 1 || _options.MaximumDiskBytes < 1)
                 throw new ArgumentException("Invalid scrolling capture options.", nameof(options));
             _width = width;
             _height = height;
@@ -47,7 +47,8 @@ namespace RitsukageGif.Core
             _workspaceBytes = 2L * viewportBytes + (long)_axisLength * _crossLength +
                               (long)_axisLength * sizeof(double);
             if (_axisLength > _options.MaximumLength ||
-                _workspaceBytes + (long)_storageRowBytes * _axisLength * 2 > _options.MaximumBytes)
+                _workspaceBytes + (long)_storageRowBytes * _axisLength * (_options.UseDiskStorage ? 1 : 2) >
+                _options.MaximumBytes)
                 throw new ArgumentException("The capture area exceeds the memory or length limit.", nameof(options));
             _scratch = new byte[viewportBytes];
             _referencePixels = new byte[viewportBytes];
@@ -75,6 +76,10 @@ namespace RitsukageGif.Core
 
         public int CurrentOffset { get; private set; }
 
+        public bool RequiresStreamingExport => _options.UseDiskStorage &&
+                                               (long)(_end - StartOffset) * _storageRowBytes + _workspaceBytes >
+                                               _options.MaximumBytes;
+
         public int Width => _options.Axis == ScrollCaptureAxis.Vertical ? _crossLength : _end - StartOffset;
         public int Height => _options.Axis == ScrollCaptureAxis.Vertical ? _end - StartOffset : _crossLength;
 
@@ -89,11 +94,13 @@ namespace RitsukageGif.Core
         {
             if (frames.Sdr.Width != _width || frames.Sdr.Height != _height)
                 throw new ArgumentException("The frame dimensions must remain unchanged.", nameof(frames));
+            ObjectDisposedException.ThrowIf(_disposed, this);
             token.ThrowIfCancellationRequested();
             var inputBytes = CapturedFramePixels.TryGetStraightBgraArray(frames.Sdr, out _)
                 ? 0
                 : checked((long)_width * _height * 4);
-            if (_workspaceBytes + _storedPayloadBytes + _undoExtraPayloadBytes + inputBytes > _options.MaximumBytes)
+            if (_workspaceBytes + (_options.UseDiskStorage ? 0 : _storedPayloadBytes + _undoExtraPayloadBytes) +
+                inputBytes > _options.MaximumBytes)
                 return Result(ScrollCaptureStatus.LimitReached);
             var pixels = CapturedFramePixels.ToStraightBgra(frames.Sdr, token);
             return TryAppendCore(pixels, frames.Hdr, screenX, screenY, token, inputBytes);
@@ -102,6 +109,7 @@ namespace RitsukageGif.Core
         private ScrollCaptureResult TryAppendCore(ReadOnlySpan<byte> bgra, CapturedFrame? hdr, int screenX, int screenY,
             CancellationToken token, long inputBytes = 0)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_options.RetainHdr) ValidateHdr(hdr);
             if (bgra.Length != (long)_width * _height * 4)
                 throw new ArgumentException("The frame dimensions must remain unchanged.", nameof(bgra));
@@ -118,7 +126,12 @@ namespace RitsukageGif.Core
                 if (!CanAllocateStrip(inputBytes, firstPayload, _axisLength))
                     return Result(ScrollCaptureStatus.LimitReached);
                 var first = CreateStrip(0, _axisLength, 0, pixels, hdr, token);
-                token.ThrowIfCancellationRequested();
+                if (token.IsCancellationRequested)
+                {
+                    ReleaseStrip(first);
+                    token.ThrowIfCancellationRequested();
+                }
+
                 _strips.Add(first);
                 _storedPayloadBytes = firstPayload;
                 _end = _axisLength;
@@ -128,7 +141,7 @@ namespace RitsukageGif.Core
                 return Result(ScrollCaptureStatus.Started, 0, _axisLength, 1);
             }
 
-            var match = FindMatch(pixels, token, out var masked);
+            var match = FindMatch(pixels, token, out var masked, out var exactEdgeBytes);
             if (match.Status == ScrollCaptureStatus.AlreadyCovered)
             {
                 token.ThrowIfCancellationRequested();
@@ -161,7 +174,7 @@ namespace RitsukageGif.Core
             if (nextEnd - nextStart > _options.MaximumLength)
                 return Result(ScrollCaptureStatus.LimitReached, offset);
             var prepend = nextStart < StartOffset;
-            if (!TryFindHandoff(pixels, offset, masked, token, out var handoff))
+            if (!TryFindHandoff(pixels, offset, masked, exactEdgeBytes, token, out var handoff))
                 return Result(ScrollCaptureStatus.Unmatched);
             var begin = prepend ? offset : handoff;
             var end = prepend ? handoff : nextEnd;
@@ -170,9 +183,22 @@ namespace RitsukageGif.Core
                 out var compactPayload, out var compactIndex);
             if (!CanAllocateStrip(inputBytes, payload + compactPayload, nextEnd - nextStart))
                 return Result(ScrollCaptureStatus.LimitReached, offset);
-            if (compactIndex >= 0) retained[compactIndex] = CompactBoundary(retained[compactIndex], token);
-            var strip = CreateStrip(begin, end, offset, pixels, hdr, token);
-            token.ThrowIfCancellationRequested();
+            Strip? compact = null;
+            Strip? strip = null;
+            try
+            {
+                if (compactIndex >= 0)
+                    retained[compactIndex] = compact = CompactBoundary(retained[compactIndex], token);
+                strip = CreateStrip(begin, end, offset, pixels, hdr, token);
+                token.ThrowIfCancellationRequested();
+            }
+            catch
+            {
+                ReleaseStrip(compact);
+                ReleaseStrip(strip);
+                throw;
+            }
+
             retained.Insert(prepend ? 0 : retained.Count, strip);
             var undo = new UndoState(StartOffset, _end, CurrentOffset, prepend, _strips);
             _undoExtraPayloadBytes = _storedPayloadBytes - sharedPayload;
@@ -180,7 +206,9 @@ namespace RitsukageGif.Core
             _strips = retained;
             _rowStripIndex = 0;
             if (_captureDirection == 0 && movement != 0) _captureDirection = movement;
+            ReleaseDiscarded(_undo?.RestoreStrips, _strips, undo.RestoreStrips);
             _undo = undo;
+            _retainsCroppedDiskRange = false;
             StartOffset = nextStart;
             _end = nextEnd;
             CurrentOffset = offset;
@@ -193,12 +221,15 @@ namespace RitsukageGif.Core
         public bool Undo()
         {
             if (_undo is not { } state) return false;
+            var discarded = _strips;
             if (state.RestoreStrips is { } original) _strips = original;
             else _strips.RemoveAt(state.Prepend ? 0 : _strips.Count - 1);
             StartOffset = state.Start;
             _end = state.End;
             CurrentOffset = state.LastOffset;
             _undo = null;
+            _retainsCroppedDiskRange = false;
+            if (!ReferenceEquals(discarded, _strips)) ReleaseDiscarded(discarded, _strips, null);
             _rowStripIndex = 0;
             _storedPayloadBytes = PayloadBytes(_strips);
             _undoExtraPayloadBytes = 0;
@@ -210,23 +241,31 @@ namespace RitsukageGif.Core
 
         public ScrollCaptureImage ExportPixels(CancellationToken token = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_strips.Count == 0) throw new InvalidOperationException("No frame has been accepted.");
+            if (RequiresStreamingExport)
+                throw new InvalidOperationException(
+                    "The capture exceeds the memory available for non-streaming export.");
             token.ThrowIfCancellationRequested();
             Logger.ZLogDebug(
                 $"Scrolling capture export started: width={Width}, height={Height}, strips={_strips.Count}");
             var output = new byte[checked(Width * Height * 4)];
-            foreach (var strip in _strips)
-            {
-                token.ThrowIfCancellationRequested();
-                if (_options.Axis == ScrollCaptureAxis.Vertical)
-                    strip.Pixels.AsSpan(strip.DataOffset, (strip.End - strip.Start) * _rowBytes)
-                        .CopyTo(output.AsSpan((strip.Start - StartOffset) * _rowBytes));
-                else
-                    for (var axis = strip.Start; axis < strip.End; axis++)
-                    for (var cross = 0; cross < _crossLength; cross++)
-                        strip.Pixels.AsSpan(strip.DataOffset + (axis - strip.Start) * _rowBytes + cross * 4, 4)
-                            .CopyTo(output.AsSpan((cross * Width + axis - StartOffset) * 4, 4));
-            }
+            if (_options.UseDiskStorage)
+                for (var y = 0; y < Height; y++)
+                    CopyOutputRow(y, output.AsSpan(y * Width * 4, Width * 4), token: token);
+            else
+                foreach (var strip in _strips)
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (_options.Axis == ScrollCaptureAxis.Vertical)
+                        strip.Pixels.AsSpan(strip.DataOffset, (strip.End - strip.Start) * _rowBytes)
+                            .CopyTo(output.AsSpan((strip.Start - StartOffset) * _rowBytes));
+                    else
+                        for (var axis = strip.Start; axis < strip.End; axis++)
+                        for (var cross = 0; cross < _crossLength; cross++)
+                            strip.Pixels.AsSpan(strip.DataOffset + (axis - strip.Start) * _rowBytes + cross * 4, 4)
+                                .CopyTo(output.AsSpan((cross * Width + axis - StartOffset) * 4, 4));
+                }
 
             var image = new ScrollCaptureImage(output, Width, Height)
             {
@@ -289,13 +328,19 @@ namespace RitsukageGif.Core
             return new(status, offset, added, confidence, Width, Height);
         }
 
-        private ReadOnlySpan<byte> Row(int position)
+        private ReadOnlySpan<byte> Row(int position, bool next = false)
+        {
+            var strip = FindStrip(position);
+            return ReadRow(strip, position, false, next);
+        }
+
+        private Strip FindStrip(int position)
         {
             if (_rowStripIndex < _strips.Count)
             {
                 var cached = _strips[_rowStripIndex];
                 if (position >= cached.Start && position < cached.End)
-                    return cached.Pixels.AsSpan(cached.DataOffset + (position - cached.Start) * _rowBytes, _rowBytes);
+                    return cached;
             }
 
             var low = 0;
@@ -315,7 +360,7 @@ namespace RitsukageGif.Core
                 else
                 {
                     _rowStripIndex = middle;
-                    return strip.Pixels.AsSpan(strip.DataOffset + (position - strip.Start) * _rowBytes, _rowBytes);
+                    return strip;
                 }
             }
 

@@ -24,6 +24,12 @@ namespace RitsukageGif.Core
             }, token);
         }
 
+        public static void PublishStaged(IReadOnlyList<string> staged, IReadOnlyList<string> destinations,
+            bool overwrite)
+        {
+            VideoOutputTransaction.Publish(staged, destinations, overwrite);
+        }
+
         private static async Task WriteAsync(string path, Func<Stream, CancellationToken, Task> write,
             CancellationToken token = default)
         {

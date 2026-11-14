@@ -290,6 +290,11 @@ namespace RitsukageGif.Desktop
                 };
 
                 selection.ScreenshotOutputHandler = OutputAsync;
+                selection.ScrollingFileOutputHandler =
+                    (owner, scrollAction, mode, scaling, decoration, annotations, cancellation) =>
+                        SaveStreamingScreenshotAsync(owner, scrollAction, mode, scaling, decoration, annotations,
+                            invocation,
+                            cancellation);
                 // ReSharper restore AccessToDisposedClosure
                 HostLogger.ZLogInformation($"Screenshot selection initialization requested.");
                 if (await selection.ShowAsync() is { } completed)

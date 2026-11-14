@@ -11,6 +11,7 @@ namespace RitsukageGif.Desktop
         internal ScreenshotScrollingWarningDialog(ScrollCaptureWarningKind kind)
         {
             var fileOnly = kind == ScrollCaptureWarningKind.FileOnly;
+            var title = fileOnly ? "ScrollCaptureFileOnlyWarningTitle" : "ScrollCaptureMatchFailureWarningTitle";
             Width = 420;
             CanResize = false;
             SizeToContent = SizeToContent.Height;
@@ -19,9 +20,7 @@ namespace RitsukageGif.Desktop
             Foreground = AppTheme.Ink;
             Topmost = true;
             TransientWindowShell.Configure(this);
-            Bind(TitleProperty, LiveText.Resource(fileOnly
-                ? "ScrollCaptureFileOnlyWarningTitle"
-                : "ScrollCaptureMatchFailureWarningTitle"));
+            Bind(TitleProperty, LiveText.Resource(title));
             _doNotAskAgain.Bind(ContentProperty, LiveText.Resource("ScrollCaptureDoNotAskAgain"));
             var buttons = new StackPanel
             {
@@ -53,6 +52,13 @@ namespace RitsukageGif.Desktop
                 Margin = new(12), Spacing = 8,
                 Children =
                 {
+                    new TextBlock
+                    {
+                        [!TextBlock.TextProperty] = LiveText.Resource(title),
+                        FontWeight = FontWeight.SemiBold,
+                        Foreground = AppTheme.Error,
+                        TextWrapping = TextWrapping.Wrap,
+                    },
                     new TextBlock
                     {
                         [!TextBlock.TextProperty] = LiveText.Resource(fileOnly

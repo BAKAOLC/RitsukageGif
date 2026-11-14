@@ -4,6 +4,9 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotScrollingSession
     {
+        private const int MaximumStreamingLength = 2_000_000;
+        private const int CaptureIntervalMilliseconds = 50;
+        private const int PreviewIntervalMilliseconds = 100;
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.ScrollCapture");
         private static long _sessionSequence;
         private readonly FrozenScreenshotCursor? _cursor;
@@ -49,8 +52,7 @@ namespace RitsukageGif.Desktop
             _previewMaximumWidth = axis == ScrollCaptureAxis.Vertical ? 400 : 1600;
             _initialRegion = initialRegion;
             _position = axis == ScrollCaptureAxis.Vertical ? initialRegion.Y : initialRegion.X;
-            _stitching = new(options.Width, options.Height,
-                new() { Axis = axis, AutoCropOnReverse = autoCropOnReverse, RetainHdr = retainHdr });
+            _stitching = CreateStitching(options.Width, options.Height, axis, autoCropOnReverse);
         }
 
         internal int Generation => Volatile.Read(ref _generation);
@@ -105,8 +107,8 @@ namespace RitsukageGif.Desktop
                 _axis = newAxis;
                 _initialRegion = region;
                 _position = _axis == ScrollCaptureAxis.Vertical ? region.Y : region.X;
-                _stitching = new(PhysicalSize(region.Width), PhysicalSize(region.Height),
-                    new() { Axis = _axis, AutoCropOnReverse = AutoCropOnReverse, RetainHdr = _retainHdr });
+                ReplaceStitching(CreateStitching(PhysicalSize(region.Width), PhysicalSize(region.Height), newAxis,
+                    AutoCropOnReverse));
                 _firstRegion = null;
                 _configured = false;
                 _fileOnlyWarningResolved = false;
@@ -131,13 +133,9 @@ namespace RitsukageGif.Desktop
                     (_axis == ScrollCaptureAxis.Vertical ? _stitching.Height : _stitching.Width) > 0)
                     throw new InvalidOperationException();
                 if (leading != 0 || trailing != 0)
-                    _stitching = new(PhysicalSize(_initialRegion.Width), PhysicalSize(_initialRegion.Height),
-                        new()
-                        {
-                            Axis = _axis, LeadingInset = PhysicalOffset(leading),
-                            TrailingInset = PhysicalOffset(trailing),
-                            AutoCropOnReverse = AutoCropOnReverse, RetainHdr = _retainHdr,
-                        });
+                    ReplaceStitching(CreateStitching(PhysicalSize(_initialRegion.Width),
+                        PhysicalSize(_initialRegion.Height), _axis, AutoCropOnReverse, PhysicalOffset(leading),
+                        PhysicalOffset(trailing)));
                 _leadingInset = PhysicalOffset(leading);
                 _trailingInset = PhysicalOffset(trailing);
                 _configured = true;
@@ -146,6 +144,28 @@ namespace RitsukageGif.Desktop
 
         public event Action<ScrollCaptureResult, ScrollCaptureImage?, bool, int>? Updated;
         public event Action<string>? Failed;
+
+        private ScrollCaptureSession CreateStitching(int width, int height, ScrollCaptureAxis axis,
+            bool autoCropOnReverse, int leading = 0, int trailing = 0)
+        {
+            return new(width, height, new()
+            {
+                Axis = axis, LeadingInset = leading, TrailingInset = trailing, AutoCropOnReverse = autoCropOnReverse,
+                RetainHdr = _retainHdr, UseDiskStorage = true, MaximumLength = MaximumStreamingLength,
+            });
+        }
+
+        private void ReplaceStitching(ScrollCaptureSession replacement)
+        {
+            var previous = _stitching;
+            _stitching = replacement;
+            previous.Dispose();
+        }
+
+        internal void DisposeStitching()
+        {
+            lock (_sync) _stitching.Dispose();
+        }
 
         internal bool SupportsStoppedResize(PixelRect region)
         {
@@ -198,6 +218,7 @@ namespace RitsukageGif.Desktop
                 await Task.Delay(200, token).ConfigureAwait(false);
                 while (!token.IsCancellationRequested)
                 {
+                    var frameStarted = Environment.TickCount64;
                     var generation = Generation;
                     var captureEpoch = 0;
                     try
@@ -311,7 +332,8 @@ namespace RitsukageGif.Desktop
                                     }
 
                                     ObserveAutomatic(result, region, token);
-                                    if ((_previewDirty && Environment.TickCount64 - _lastPreview >= 500) ||
+                                    if ((_previewDirty && Environment.TickCount64 - _lastPreview >=
+                                            PreviewIntervalMilliseconds) ||
                                         result.Status != ScrollCaptureStatus.LimitReached ||
                                         _lastResult is not { Status: ScrollCaptureStatus.LimitReached })
                                         Publish(result, previousSize != (_stitching.Width, _stitching.Height) ||
@@ -349,7 +371,8 @@ namespace RitsukageGif.Desktop
                         }
                     }
 
-                    await Task.Delay(100, token).ConfigureAwait(false);
+                    var delay = CaptureIntervalMilliseconds - (Environment.TickCount64 - frameStarted);
+                    if (delay > 0) await Task.Delay((int)delay, token).ConfigureAwait(false);
                 }
             }
             finally
@@ -371,7 +394,7 @@ namespace RitsukageGif.Desktop
             _lastResult = result;
             ScrollCaptureImage? preview = null;
             _previewDirty |= changed;
-            if (_previewDirty && (Paused || Environment.TickCount64 - _lastPreview >= 500))
+            if (_previewDirty && (Paused || Environment.TickCount64 - _lastPreview >= PreviewIntervalMilliseconds))
             {
                 preview = _stitching.ExportPreviewPixels(_previewMaximumWidth, _previewMaximumHeight);
                 _lastPreview = Environment.TickCount64;

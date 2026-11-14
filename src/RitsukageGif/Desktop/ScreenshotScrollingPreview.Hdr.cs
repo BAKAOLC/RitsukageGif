@@ -13,7 +13,7 @@ namespace RitsukageGif.Desktop
         private HdrPreviewHost? _hdrPreview;
         private bool _hdrUnavailable;
         private Size _presentedSize;
-        private (PixelRect Viewport, bool Matched)? _presentedViewport;
+        private (PixelRect Viewport, bool Matched, Rect ImageBounds)? _presentedViewport;
 
         internal void UpdateHdr(ScrollCaptureImage? image)
         {
@@ -57,18 +57,36 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            if (_presentedViewport == (Viewport, Matched)) return;
-            _presentedViewport = (Viewport, Matched);
+            var imageBounds = ImageRectangle(_presentedSize);
+            if (imageBounds.Width <= 0 || imageBounds.Height <= 0 ||
+                _presentedViewport == (Viewport, Matched, imageBounds)) return;
+            var visible = imageBounds.Intersect(new(_presentedSize));
+            var scaleX = hdr.Width / imageBounds.Width;
+            var scaleY = hdr.Height / imageBounds.Height;
+            var cropLeft = Math.Clamp((int)Math.Floor((visible.X - imageBounds.X) * scaleX), 0, hdr.Width - 1);
+            var cropTop = Math.Clamp((int)Math.Floor((visible.Y - imageBounds.Y) * scaleY), 0, hdr.Height - 1);
+            var cropRight = Math.Clamp((int)Math.Ceiling((visible.Right - imageBounds.X) * scaleX), cropLeft + 1,
+                hdr.Width);
+            var cropBottom = Math.Clamp((int)Math.Ceiling((visible.Bottom - imageBounds.Y) * scaleY), cropTop + 1,
+                hdr.Height);
+            var width = cropRight - cropLeft;
+            var height = cropBottom - cropTop;
+            _presentedViewport = (Viewport, Matched, imageBounds);
             var white = TopLevel.GetTopLevel(this)?.TryGetPlatformHandle() is { } handle
                 ? HdrPreviewHost.DisplayWhiteLevel(handle.Handle,
                     hdr.ColorInfo.SdrWhiteNits / FrameColorInfo.ScRgbReferenceWhiteNits)
                 : 1;
-            var size = checked(hdr.Width * hdr.Height);
+            var size = checked(width * height);
             var sdr = ArrayPool<byte>.Shared.Rent(checked(size * 4));
             var half = ArrayPool<byte>.Shared.Rent(checked(size * 8));
-            _hdrImage.Pixels.CopyTo(sdr, 0);
-            for (var y = 0; y < hdr.Height; y++)
-                hdr.Pixels.Span.Slice(y * hdr.Stride, hdr.Width * 8).CopyTo(half.AsSpan(y * hdr.Width * 8));
+            for (var y = 0; y < height; y++)
+            {
+                _hdrImage.Pixels.AsSpan(((cropTop + y) * hdr.Width + cropLeft) * 4, width * 4)
+                    .CopyTo(sdr.AsSpan(y * width * 4));
+                hdr.Pixels.Span.Slice((cropTop + y) * hdr.Stride + cropLeft * 8, width * 8)
+                    .CopyTo(half.AsSpan(y * width * 8));
+            }
+
             if (Matched && ImageSize is { Width: > 0, Height: > 0 })
             {
                 var left = Math.Clamp((int)((long)Viewport.X * hdr.Width / ImageSize.Width), 0, hdr.Width - 1);
@@ -77,11 +95,7 @@ namespace RitsukageGif.Desktop
                     hdr.Width - 1);
                 var bottom = Math.Clamp((int)((long)Viewport.Bottom * hdr.Height / ImageSize.Height) - 1, top,
                     hdr.Height - 1);
-                var scale = ImageRectangle(_presentedSize).Width / ImageSize.Width;
-                var thickness =
-                    scale > 0
-                        ? Math.Max(1, (int)Math.Ceiling(PreviewBorder * hdr.Width / (ImageSize.Width * scale)))
-                        : 4;
+                var thickness = Math.Clamp((int)Math.Ceiling(PreviewBorder * scaleX), 1, 8);
                 var red = Linear(ViewportColor.R, white);
                 var green = Linear(ViewportColor.G, white);
                 var blue = Linear(ViewportColor.B, white);
@@ -101,16 +115,17 @@ namespace RitsukageGif.Desktop
                 }
             }
 
-            using var frame = new PreviewFrame(sdr, hdr.Width, hdr.Height, 0, half,
+            using var frame = new PreviewFrame(sdr, width, height, 0, half,
                 hdr.ColorInfo.SdrWhiteNits / FrameColorInfo.ScRgbReferenceWhiteNits, hdr.AlphaMode);
             _hdrPreview.SetFrame(frame);
-            InvalidateArrange();
             return;
 
             void Paint(int x, int y, Half red, Half green, Half blue)
             {
-                if ((uint)x >= (uint)hdr.Width || (uint)y >= (uint)hdr.Height) return;
-                var offset = (y * hdr.Width + x) * 8;
+                x -= cropLeft;
+                y -= cropTop;
+                if ((uint)x >= (uint)width || (uint)y >= (uint)height) return;
+                var offset = (y * width + x) * 8;
                 BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset), red);
                 BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 2), green);
                 BinaryPrimitives.WriteHalfLittleEndian(half.AsSpan(offset + 4), blue);
@@ -127,13 +142,9 @@ namespace RitsukageGif.Desktop
         protected override Size ArrangeOverride(Size finalSize)
         {
             if (_hdrPreview is null || ImageSize.Width <= 0 || ImageSize.Height <= 0) return finalSize;
-            _hdrPreview.Arrange(ImageRectangle(finalSize));
-            if (_presentedSize != finalSize)
-            {
-                _presentedSize = finalSize;
-                _presentedViewport = null;
-                UpdateHdr(null);
-            }
+            _presentedSize = finalSize;
+            _hdrPreview.Arrange(ImageRectangle(finalSize).Intersect(new(finalSize)));
+            UpdateHdr(null);
 
             return finalSize;
         }

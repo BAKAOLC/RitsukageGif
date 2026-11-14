@@ -1236,7 +1236,7 @@ X {0}, Y {1}</value>
     <value>长截图</value>
   </data>
   <data name="ScrollCaptureLimit" xml:space="preserve">
-    <value>已达到长度或内存上限。滚回已拼接范围，或完成截图。</value>
+    <value>已达到长度或内存上限。可保存现有长图，或滚回已拼接范围后裁掉多余内容。</value>
   </data>
   <data name="ScrollCaptureFileOnlyWarningTitle" xml:space="preserve"><value>即将进入超长截图模式</value></data>
   <data name="ScrollCaptureFileOnlyWarningMessage" xml:space="preserve"><value>长图超过 29,000 像素后只能保存到文件。可停止自动滚动并完成当前截图，或继续捕获。</value></data>
@@ -1245,11 +1245,12 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureContinue" xml:space="preserve"><value>继续</value></data>
   <data name="ScrollCaptureStop" xml:space="preserve"><value>停止</value></data>
   <data name="ScrollCaptureFileOnlyWarning" xml:space="preserve">
-    <value>长图超过 29,000 像素后只能保存到文件。</value>
+    <value>即将进入超长截图模式。超过 29,000 像素后仅可保存文件。</value>
   </data>
   <data name="ScrollCaptureFileOnly" xml:space="preserve">
-    <value>长图已超过 29,000 像素，只能保存到文件。</value>
+    <value>超长截图仅可保存为 PNG。裁短后可恢复复制、贴图、识别和编辑。</value>
   </data>
+  <data name="ScrollCaptureStreamingPngRequired" xml:space="preserve"><value>超长截图只能保存为 PNG。</value></data>
   <data name="ScrollCaptureObstructed" xml:space="preserve">
     <value>请将此面板移到采集框外以继续。</value>
   </data>

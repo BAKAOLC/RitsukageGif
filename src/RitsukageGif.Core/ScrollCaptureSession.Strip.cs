@@ -5,9 +5,14 @@ namespace RitsukageGif.Core
         private sealed record Strip(
             int Start,
             int End,
-            byte[] Pixels,
+            byte[]? Pixels,
             int DataOffset = 0,
             byte[]? HdrPixels = null,
-            IReadOnlyList<FrameColorRegion>? HdrRegions = null);
+            IReadOnlyList<FrameColorRegion>? HdrRegions = null,
+            DiskStrip? Disk = null)
+        {
+            internal long StorageBytes =>
+                Disk?.LogicalLength ?? (Pixels?.LongLength ?? 0) + (HdrPixels?.LongLength ?? 0);
+        }
     }
 }

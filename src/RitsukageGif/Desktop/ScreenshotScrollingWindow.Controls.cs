@@ -172,9 +172,12 @@ namespace RitsukageGif.Desktop
             }
 
             _status.FontSize = 12;
-            _status.MaxWidth = 320;
-            _status.Margin = new(8, 0, 8, 6);
-            _status.HorizontalAlignment = HorizontalAlignment.Left;
+            _statusPanel.Child = _status;
+            _statusPanel.MaxWidth = 440;
+            _statusPanel.Margin = new(5, 0, 5, 5);
+            _statusPanel.Padding = new(7, 4);
+            _statusPanel.BorderThickness = new(2, 0, 0, 0);
+            _statusPanel.HorizontalAlignment = HorizontalAlignment.Left;
             var scroller = new ScrollViewer
             {
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -184,8 +187,8 @@ namespace RitsukageGif.Desktop
             var host = new Grid { RowDefinitions = new("Auto,Auto") };
             host.Children.Add(scroller);
             host.Children.Add(_cropPopup);
-            Grid.SetRow(_status, 1);
-            host.Children.Add(_status);
+            Grid.SetRow(_statusPanel, 1);
+            host.Children.Add(_statusPanel);
             UpdateDirectionControls();
             SetOutputActionsEnabled(false);
             return new()
@@ -209,7 +212,9 @@ namespace RitsukageGif.Desktop
         {
             enabled &= !_outputting;
             var length = enabled ? _session.OutputAxisLength : 0;
-            foreach (var (button, action) in _outputButtons) button.IsEnabled = IsOutputActionAvailable(action, length);
+            var fileOnly = IsFileOnlyCapture;
+            foreach (var (button, action) in _outputButtons)
+                button.IsEnabled = IsOutputActionAvailable(action, length, fileOnly);
             _move.IsEnabled = !_outputting && _captureStarted;
             _direction.IsEnabled = _startStop.IsEnabled = !_outputting;
             _automatic.IsEnabled = !_outputting && !_connectingAutomatic &&
@@ -287,6 +292,7 @@ namespace RitsukageGif.Desktop
             _preview.Viewport = default;
             _preview.Matched = false;
             _preview.UpdateHdr(null);
+            _preview.UpdateView(axis);
             _preview.InvalidateVisual();
             _bitmap?.Dispose();
             _bitmap = null;

@@ -1,7 +1,4 @@
 namespace RitsukageGif.Desktop
 {
-    internal sealed record ScrollingCaptureResult(ScrollCaptureImage Image, ScrollingCaptureAction Action)
-    {
-        public PixelPoint? OutputOrigin { get; init; }
-    }
+    internal sealed record ScrollingCaptureResult(ScrollingCaptureAction Action);
 }

@@ -42,7 +42,9 @@ namespace RitsukageGif.Core
 
             token.ThrowIfCancellationRequested();
             if (retained.Count == 0) return false;
+            ReleaseDiscarded(_undo?.RestoreStrips, retained, _strips);
             _undo = new(StartOffset, _end, CurrentOffset, false, _strips);
+            _retainsCroppedDiskRange = _options.UseDiskStorage;
             var retainedPayload = PayloadBytes(retained);
             _undoExtraPayloadBytes = _storedPayloadBytes - retainedPayload;
             _storedPayloadBytes = retainedPayload;

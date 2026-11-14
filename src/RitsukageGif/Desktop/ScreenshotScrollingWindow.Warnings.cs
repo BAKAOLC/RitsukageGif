@@ -8,21 +8,23 @@ namespace RitsukageGif.Desktop
     {
         private static readonly TimeSpan MatchFailureWarningDelay = TimeSpan.FromSeconds(3);
         private readonly Action<ScrollCaptureWarningKind>? _warningSuppressed;
-        private ScrollCapturePreferences _warningPreferences;
+        private bool _fileOnlyWarningShown;
+        private long _matchFailureStarted;
         private ScreenshotScrollingWarningDialog? _warningDialog;
         private bool _warningExcluded;
-        private bool _fileOnlyWarningShown;
-        private bool _matchFailureWarningShown;
-        private long _matchFailureStarted;
+        private ScrollCapturePreferences _warningPreferences;
         private bool _warningQueued;
         private Task? _warningTask;
 
         private bool HasCaptureDialog => _clearDialog is not null || _warningDialog is not null;
 
+        private bool ShowMatchFailureHint => _matchFailureStarted != 0 &&
+                                             !_warningPreferences.SkipMatchFailureWarning &&
+                                             Stopwatch.GetElapsedTime(_matchFailureStarted) >= MatchFailureWarningDelay;
+
         private void ResetCaptureWarnings()
         {
             _fileOnlyWarningShown = false;
-            _matchFailureWarningShown = false;
             _matchFailureStarted = 0;
             _warningQueued = false;
         }
@@ -36,17 +38,12 @@ namespace RitsukageGif.Desktop
             if (_warningQueued || HasCaptureDialog || _outputting || _closed || _outputToken.IsCancellationRequested ||
                 _obstructed || _session.Paused || !_captureStarted || _dragStart is not null) return;
 
-            ScrollCaptureWarningKind kind;
-            if (!_fileOnlyWarningShown && _session.OutputAxisLength > FileOnlyWarningLength)
-                kind = ScrollCaptureWarningKind.FileOnly;
-            else if (!_matchFailureWarningShown && _matchFailureStarted != 0 &&
-                     Stopwatch.GetElapsedTime(_matchFailureStarted) >= MatchFailureWarningDelay)
-                kind = ScrollCaptureWarningKind.MatchFailure;
-            else return;
+            if (_fileOnlyWarningShown || _session.OutputAxisLength <= FileOnlyWarningLength) return;
+            const ScrollCaptureWarningKind kind = ScrollCaptureWarningKind.FileOnly;
 
             if (_warningPreferences.IsWarningSuppressed(kind))
             {
-                MarkWarningShown(kind);
+                _fileOnlyWarningShown = true;
                 return;
             }
 
@@ -58,21 +55,12 @@ namespace RitsukageGif.Desktop
                 _warningQueued = false;
                 if (_closed || _outputToken.IsCancellationRequested || _outputting || HasCaptureDialog ||
                     _obstructed || _session.Paused || _dragStart is not null ||
-                    (kind == ScrollCaptureWarningKind.FileOnly
-                        ? _session.OutputAxisLength <= FileOnlyWarningLength
-                        : _matchFailureStarted == 0))
+                    _session.OutputAxisLength <= FileOnlyWarningLength)
                     return;
 
-                MarkWarningShown(kind);
+                _fileOnlyWarningShown = true;
                 _warningTask = ShowCaptureWarningAsync(kind, generation);
             });
-        }
-
-        private void MarkWarningShown(ScrollCaptureWarningKind kind)
-        {
-            if (kind == ScrollCaptureWarningKind.FileOnly) _fileOnlyWarningShown = true;
-            else _matchFailureWarningShown = true;
-            _matchFailureStarted = 0;
         }
 
         private async Task ShowCaptureWarningAsync(ScrollCaptureWarningKind kind, int generation)

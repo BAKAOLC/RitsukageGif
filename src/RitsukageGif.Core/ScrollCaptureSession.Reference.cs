@@ -27,11 +27,11 @@ namespace RitsukageGif.Core
             }
         }
 
-        private ReadOnlySpan<byte> ReferenceRow(int position, bool previous)
+        private ReadOnlySpan<byte> ReferenceRow(int position, bool previous, bool next = false)
         {
             return previous
                 ? _referencePixels.AsSpan((position - _referenceOffset) * _rowBytes, _rowBytes)
-                : Row(position);
+                : Row(position, next);
         }
 
         private bool ActiveSample(int position, int offset, int cross)

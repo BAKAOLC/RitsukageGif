@@ -9,17 +9,24 @@ namespace RitsukageGif.Core
 
         public static DecorationGeometry Measure(int width, int height, CaptureDecoration decoration)
         {
+            var geometry = MeasureGeometry(width, height, decoration);
+            if ((long)width * height > 128L * 1024 * 1024)
+                throw new ArgumentOutOfRangeException(nameof(width));
+            if ((long)geometry.Width * geometry.Height > 128L * 1024 * 1024)
+                throw new ArgumentException(UiText.Get("RecordingTooLarge"), nameof(decoration));
+            return geometry;
+        }
+
+        private static DecorationGeometry MeasureGeometry(int width, int height, CaptureDecoration decoration)
+        {
             ArgumentNullException.ThrowIfNull(decoration);
             decoration.Validate();
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
             ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-            if ((long)width * height > 128L * 1024 * 1024)
-                throw new ArgumentOutOfRangeException(nameof(width));
             var padding = decoration.Kind == CaptureDecorationKind.None ? 0 : (long)decoration.Strength;
             var outputWidth = width + padding * 2;
             var outputHeight = height + padding * 2;
-            if (outputWidth > int.MaxValue || outputHeight > int.MaxValue ||
-                outputWidth * outputHeight > 128L * 1024 * 1024)
+            if (outputWidth > int.MaxValue || outputHeight > int.MaxValue)
                 throw new ArgumentException(UiText.Get("RecordingTooLarge"), nameof(decoration));
             return new((int)outputWidth, (int)outputHeight, new((int)padding, (int)padding));
         }

@@ -19,8 +19,11 @@ namespace RitsukageGif.Core
         private Strip CreateStrip(int begin, int end, int offset, byte[] pixels, CapturedFrame? hdr,
             CancellationToken token)
         {
-            var sdr = pixels.AsSpan((begin - offset) * _rowBytes, (end - begin) * _rowBytes).ToArray();
-            if (!_options.RetainHdr) return new(begin, end, sdr);
+            var sdr = pixels.AsSpan((begin - offset) * _rowBytes, (end - begin) * _rowBytes);
+            if (!_options.RetainHdr)
+                return _options.UseDiskStorage
+                    ? StoreDiskStrip(begin, end, sdr, default, null, token)
+                    : new(begin, end, [.. sdr]);
             var source = hdr!;
             var vertical = _options.Axis == ScrollCaptureAxis.Vertical;
             var rowBytes = checked(_crossLength * 8);
@@ -79,15 +82,22 @@ namespace RitsukageGif.Core
                     if (!clipped.IsEmpty) regions.Add(item with { Region = clipped });
                 }
 
-            return new(begin, end, sdr, HdrPixels: output, HdrRegions: regions);
+            return _options.UseDiskStorage
+                ? StoreDiskStrip(begin, end, sdr, output, regions, token)
+                : new(begin, end, [.. sdr], HdrPixels: output, HdrRegions: regions);
         }
 
         private CapturedFrame ExportHdr(int width, int height, CancellationToken token)
         {
             var output = new byte[checked(width * height * 8)];
             var vertical = _options.Axis == ScrollCaptureAxis.Vertical;
-            var stripIndex = 0;
-            if (width == Width && height == Height)
+            if (width == Width && height == Height && _options.UseDiskStorage)
+            {
+                for (var y = 0; y < height; y++)
+                    CopyOutputRow(y, output.AsSpan(y * width * 8, width * 8), true, token);
+            }
+            else if (width == Width && height == Height)
+            {
                 foreach (var strip in _strips)
                 {
                     token.ThrowIfCancellationRequested();
@@ -101,24 +111,32 @@ namespace RitsukageGif.Core
                                                     ((axis - strip.Start) * _crossLength + cross) * 8, 8)
                                 .CopyTo(output.AsSpan((cross * width + axis - StartOffset) * 8, 8));
                 }
+            }
             else
-                for (var y = 0; y < height; y++)
+            {
+                var axisSize = vertical ? height : width;
+                var crossSize = vertical ? width : height;
+                var axisLength = _end - StartOffset;
+                for (var axis = 0; axis < axisSize; axis++)
                 {
                     token.ThrowIfCancellationRequested();
-                    var sourceY = (int)((long)y * Height / height);
-                    for (var x = 0; x < width; x++)
+                    var position = StartOffset + (int)((long)axis * axisLength / axisSize);
+                    var row = ReadRow(FindStrip(position), position, true);
+                    for (var cross = 0; cross < crossSize; cross++)
                     {
-                        var sourceX = (int)((long)x * Width / width);
-                        var axis = StartOffset + (vertical ? sourceY : sourceX);
-                        while (stripIndex > 0 && axis < _strips[stripIndex].Start) stripIndex--;
-                        while (axis >= _strips[stripIndex].End) stripIndex++;
-                        var strip = _strips[stripIndex];
-                        var sourceOffset = strip.DataOffset * 2 +
-                                           ((axis - strip.Start) * _crossLength + (vertical ? sourceX : sourceY)) * 8;
-                        strip.HdrPixels!.AsSpan(sourceOffset, 8).CopyTo(output.AsSpan((y * width + x) * 8, 8));
+                        var sourceCross = (int)((long)cross * _crossLength / crossSize);
+                        var destination = vertical ? axis * width + cross : cross * width + axis;
+                        row.Slice(sourceCross * 8, 8).CopyTo(output.AsSpan(destination * 8, 8));
                     }
                 }
+            }
 
+            return NewHdrFrame(width, height, output, ExportHdrRegions(width, height, new(0, 0, width, height)));
+        }
+
+        private List<FrameColorRegion> ExportHdrRegions(int width, int height, PixelRect crop)
+        {
+            var vertical = _options.Axis == ScrollCaptureAxis.Vertical;
             var regions = new List<FrameColorRegion>();
             var outputBounds = vertical
                 ? new PixelRect(0, StartOffset, Width, Height)
@@ -138,16 +156,24 @@ namespace RitsukageGif.Core
                 var top = (int)(((long)y * height + Height - 1) / Height);
                 var right = (int)(((long)(x + clipped.Width) * width + Width - 1) / Width);
                 var bottom = (int)(((long)(y + clipped.Height) * height + Height - 1) / Height);
-                if (right > left && bottom > top)
-                    regions.Add(item with { Region = new(left, top, right - left, bottom - top) });
+                var scaled = new PixelRect(left, top, right - left, bottom - top).Intersect(crop);
+                if (!scaled.IsEmpty)
+                    regions.Add(item with { Region = scaled with { X = scaled.X - crop.X, Y = scaled.Y - crop.Y } });
             }
 
-            var hasHdrSource = regions.Any(region => region.ColorInfo.IsHdrSource);
-            var color = regions.Count == 0
-                ? new(hasHdrSource)
-                : regions[0].ColorInfo with { IsHdrSource = hasHdrSource };
+            return regions;
+        }
+
+        private CapturedFrame NewHdrFrame(int width, int height, byte[] output, List<FrameColorRegion> regions)
+        {
             return new(width, height, checked(width * 8), CapturePixelFormat.Rgba16FloatScRgb, output,
-                color, CaptureAlphaMode.Premultiplied, _hdrRevision, regions);
+                OutputColorInfo(regions), CaptureAlphaMode.Premultiplied, _hdrRevision, regions);
+        }
+
+        private static FrameColorInfo OutputColorInfo(List<FrameColorRegion> regions)
+        {
+            var hasHdrSource = regions.Any(region => region.ColorInfo.IsHdrSource);
+            return regions.Count == 0 ? new(false) : regions[0].ColorInfo with { IsHdrSource = hasHdrSource };
         }
     }
 }

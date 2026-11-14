@@ -123,7 +123,7 @@ namespace RitsukageGif.Core
             _frames = checked(_frames + 1);
         }
 
-        private static void FilterRow(ReadOnlySpan<byte> input, Span<byte> output)
+        internal static void FilterRow(ReadOnlySpan<byte> input, Span<byte> output)
         {
             output[0] = input[2];
             output[1] = input[1];

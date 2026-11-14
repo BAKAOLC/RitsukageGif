@@ -15,6 +15,12 @@ namespace RitsukageGif.Core
                 if ((position & 31) == 0) token.ThrowIfCancellationRequested();
                 var input = pixels.AsSpan((position - offset) * _rowBytes, _rowBytes);
                 var stored = ReferenceRow(position, previous);
+                if (!masked && input.SequenceEqual(stored))
+                {
+                    _verificationErrors[count++] = 0;
+                    continue;
+                }
+
                 var sum = 0L;
                 var bytes = 0;
                 for (var cross = 0; cross < _crossLength; cross++)

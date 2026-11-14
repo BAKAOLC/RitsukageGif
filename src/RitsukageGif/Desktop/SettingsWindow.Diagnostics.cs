@@ -16,7 +16,8 @@ namespace RitsukageGif.Desktop
             });
             var token = lifetime.Token;
             var panel = Page();
-            var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
+            var status = new TextBlock
+                { IsVisible = false, TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
             var buttons = new WrapPanel { Orientation = Orientation.Horizontal };
             Add("DiagnosticsOpenLogs", () =>
             {
@@ -32,7 +33,7 @@ namespace RitsukageGif.Desktop
                 });
             Add("DiagnosticsExport", async () =>
             {
-                if (await DiagnosticsActions.ExportAsync(this, token)) status.Text = UiText.Get("DiagnosticsExported");
+                if (await DiagnosticsActions.ExportAsync(this, token)) ShowStatus(UiText.Get("DiagnosticsExported"));
             });
             Add("DiagnosticsReportIssue", () =>
             {
@@ -47,6 +48,12 @@ namespace RitsukageGif.Desktop
             });
             panel.Children.Add(status);
             return SettingsSection("DiagnosticsHeading", panel);
+
+            void ShowStatus(string message)
+            {
+                status.Text = message;
+                status.IsVisible = true;
+            }
 
             void Add(string key, Func<Task> action)
             {
@@ -68,7 +75,7 @@ namespace RitsukageGif.Desktop
                     {
                         LogHub.GetLogger("Desktop.Diagnostics")
                             .ZLogError(error, $"Diagnostic action failed. Action={key}");
-                        status.Text = error.Message;
+                        ShowStatus(error.Message);
                     }
                     finally
                     {

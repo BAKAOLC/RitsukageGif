@@ -2,10 +2,17 @@ namespace RitsukageGif.Core
 {
     public sealed partial class ScrollCaptureSession
     {
-        private bool TryFindHandoff(byte[] pixels, int offset, bool masked, CancellationToken token, out int handoff)
+        private bool TryFindHandoff(byte[] pixels, int offset, bool masked, int exactEdgeBytes,
+            CancellationToken token, out int handoff)
         {
             var from = Math.Max(StartOffset, offset);
             var to = Math.Min(_end, offset + _axisLength);
+            if (exactEdgeBytes > 0)
+            {
+                handoff = from + (to - from) / 2;
+                return true;
+            }
+
             var runStart = from;
             var bestStart = from;
             var bestLength = 0;
@@ -21,13 +28,19 @@ namespace RitsukageGif.Core
                 var input = pixels.AsSpan((position - offset) * _rowBytes, _rowBytes);
                 var next = pixels.AsSpan((position - offset + 1) * _rowBytes, _rowBytes);
                 var stored = Row(position);
-                var storedNext = Row(position + 1);
+                var storedNext = Row(position + 1, true);
+                if (!input.SequenceEqual(stored) && RowDifference(input, stored) > 4)
+                {
+                    runStart = position + 1;
+                    continue;
+                }
+
                 var texture = 0L;
                 for (var index = 0; index < _rowBytes; index += 4)
                 for (var channel = 0; channel < 3; channel++)
                     texture += Math.Min(Math.Abs(next[index + channel] - input[index + channel]),
                         Math.Abs(storedNext[index + channel] - stored[index + channel]));
-                var reliable = RowDifference(input, stored) <= 4 && (double)texture / (_crossLength * 3) >= 2;
+                var reliable = (double)texture / (_crossLength * 3) >= 2;
                 if (!reliable)
                 {
                     runStart = position + 1;
@@ -41,7 +54,10 @@ namespace RitsukageGif.Core
             }
 
             handoff = bestStart + bestLength / 2;
-            return bestLength >= 2;
+            if (bestLength >= 2) return true;
+            if (masked || to - from < 2 || !ExactOverlap(pixels, offset, false, token)) return false;
+            handoff = from + (to - from) / 2;
+            return true;
         }
 
         private int ChangedPixels(int row)
@@ -81,9 +97,9 @@ namespace RitsukageGif.Core
                         End = to,
                         DataOffset = checked(strip.DataOffset + (from - strip.Start) * _rowBytes),
                     });
-                if (from == strip.Start && to == strip.End)
+                if (strip.Disk is not null || (from == strip.Start && to == strip.End))
                 {
-                    sharedPayload += strip.Pixels.LongLength + (strip.HdrPixels?.LongLength ?? 0);
+                    sharedPayload += strip.StorageBytes;
                 }
                 else
                 {

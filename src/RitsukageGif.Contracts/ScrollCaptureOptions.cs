@@ -5,6 +5,7 @@ namespace RitsukageGif.Contracts
         public ScrollCaptureAxis Axis { get; init; }
         public bool AutoCropOnReverse { get; init; }
         public bool RetainHdr { get; init; }
+        public bool UseDiskStorage { get; init; }
         public int LeadingInset { get; init; }
         public int TrailingInset { get; init; }
 
@@ -13,6 +14,9 @@ namespace RitsukageGif.Contracts
 
         // ReSharper disable once AutoPropertyCanBeMadeGetOnly.Global
         public long MaximumBytes { get; init; } = 256L * 1024 * 1024;
+
+        // ReSharper disable once AutoPropertyCanBeMadeGetOnly.Global
+        public long MaximumDiskBytes { get; init; } = 8L * 1024 * 1024 * 1024;
 
         // ReSharper disable once AutoPropertyCanBeMadeGetOnly.Global
         public double MinimumOverlap { get; init; } = 0.3;

@@ -2,13 +2,25 @@ namespace RitsukageGif.Core
 {
     public sealed partial class ScrollCaptureSession
     {
-        private ScrollCaptureResult FindMatch(byte[] pixels, CancellationToken token, out bool useDifferenceMask)
+        private ScrollCaptureResult FindMatch(byte[] pixels, CancellationToken token, out bool useDifferenceMask,
+            out int exactEdgeBytes)
         {
             useDifferenceMask = false;
+            exactEdgeBytes = 0;
             if (_hasReference)
             {
                 var direct = FindMatchAgainst(pixels, true, false, token);
                 if (direct.Status is ScrollCaptureStatus.Appended or ScrollCaptureStatus.AlreadyCovered) return direct;
+                if (FindSparseMatch(pixels, true, token) is { } sparse) return sparse;
+                if (SparseEdgeBytes > 0 &&
+                    FindSparseMatch(pixels, true, token, SparseEdgeBytes) is
+                        { Status: ScrollCaptureStatus.Appended } inner &&
+                    ExactOverlap(pixels, inner.Offset, false, token, SparseEdgeBytes))
+                {
+                    exactEdgeBytes = SparseEdgeBytes;
+                    return inner;
+                }
+
                 BuildDifferenceMask(pixels, token);
                 var masked = FindMatchAgainst(pixels, true, true, token);
                 if (masked.Status == ScrollCaptureStatus.Appended && HasDistributedMotion(pixels, masked.Offset, token))
@@ -18,7 +30,25 @@ namespace RitsukageGif.Core
                 }
             }
 
+            if (_options.UseDiskStorage && _end - StartOffset > _axisLength * 2L)
+            {
+                if (FindSparseMatch(pixels, false, token) is { } exact) return exact;
+                if (SparseEdgeBytes > 0 && FindSparseMatch(pixels, false, token, SparseEdgeBytes) is { } sparse)
+                {
+                    exactEdgeBytes = SparseEdgeBytes;
+                    return sparse;
+                }
+            }
+
             var history = FindMatchAgainst(pixels, false, false, token);
+            if (history.Status is not (ScrollCaptureStatus.Unmatched or ScrollCaptureStatus.Ambiguous)) return history;
+            if (FindSparseMatch(pixels, false, token) is { } sparseHistory) return sparseHistory;
+            if (SparseEdgeBytes > 0 && FindSparseMatch(pixels, false, token, SparseEdgeBytes) is { } innerHistory)
+            {
+                exactEdgeBytes = SparseEdgeBytes;
+                return innerHistory;
+            }
+
             if (!_hasReference || history.Status != ScrollCaptureStatus.Unmatched ||
                 !TryFindRegionalMotion(pixels, token, out var offset, out var confidence)) return history;
             // Regional evidence must not change an already covered viewport without a verified join.
@@ -33,17 +63,29 @@ namespace RitsukageGif.Core
             var end = previous ? _referenceOffset + _axisLength : _end;
             var current = previous ? _referenceOffset : CurrentOffset;
             if (!masked && Score(pixels, current, 48, 48, out _, previous, false) < 0.05 &&
-                VerifyMatch(pixels, current, previous, false, token))
+                ExactOverlap(pixels, current, previous, token))
                 return Result(ScrollCaptureStatus.AlreadyCovered, current, 0, 1);
             var minimum = Math.Max(16, (int)Math.Ceiling(_axisLength * _options.MinimumOverlap));
             var first = start - _axisLength + minimum;
             var last = end - minimum;
+            if (!previous && _options.UseDiskStorage)
+            {
+                first = Math.Max(first, current - _axisLength);
+                last = Math.Min(last, current + _axisLength);
+            }
+
             Span<int> offsets = stackalloc int[12];
             Span<double> scores = stackalloc double[12];
             scores.Fill(double.PositiveInfinity);
-            for (var offset = first; offset <= last; offset++)
+            // Visit the last confirmed viewport first, then search both directions to tighten the score bound early.
+            if (first > last) return Result(ScrollCaptureStatus.Unmatched);
+            var center = Math.Clamp(current, first, last);
+            var left = center;
+            var right = center + 1;
+            for (var visited = 0; left >= first || right <= last; visited++)
             {
-                if ((offset & 127) == 0) token.ThrowIfCancellationRequested();
+                if ((visited & 127) == 0) token.ThrowIfCancellationRequested();
+                var offset = left >= first && (right > last || center - left <= right - center) ? left-- : right++;
                 if (masked && offset == current) continue;
                 var score = Score(pixels, offset, 12, 12, out var texture, previous, masked, scores[^1]);
                 if (texture < 2 || score >= scores[^1]) continue;
@@ -59,32 +101,36 @@ namespace RitsukageGif.Core
                 offsets[index] = offset;
             }
 
-            var best = double.PositiveInfinity;
-            var second = double.PositiveInfinity;
-            var bestOffset = 0;
             for (var i = 0; i < offsets.Length; i++)
             {
                 if (!double.IsFinite(scores[i])) continue;
                 token.ThrowIfCancellationRequested();
                 var score = Score(pixels, offsets[i], 64, 64, out var texture, previous, masked);
-                if (texture < 2) continue;
-                if (score < best)
-                {
-                    second = best;
-                    best = score;
-                    bestOffset = offsets[i];
-                }
-                else
-                {
-                    second = Math.Min(second, score);
-                }
+                scores[i] = texture >= 2 && score <= 6 ? score : double.PositiveInfinity;
             }
 
-            if (best > 6) return Result(ScrollCaptureStatus.Unmatched);
+            var bestOffset = 0;
+            var best = double.PositiveInfinity;
+            while (true)
+            {
+                var candidate = 0;
+                for (var i = 1; i < scores.Length; i++)
+                    if (scores[i] < scores[candidate])
+                        candidate = i;
+                var score = scores[candidate];
+                if (!double.IsFinite(score) || score >= best * 1.5 + 0.15) break;
+                scores[candidate] = double.PositiveInfinity;
+                var offset = offsets[candidate];
+                if (!VerifyMatch(pixels, offset, previous, masked, token)) continue;
+                if (double.IsFinite(best))
+                    return Result(ScrollCaptureStatus.Ambiguous, bestOffset, 0, Math.Clamp(1 - best / 12, 0, 1));
+
+                best = score;
+                bestOffset = offset;
+            }
+
+            if (!double.IsFinite(best)) return Result(ScrollCaptureStatus.Unmatched);
             var confidence = Math.Clamp(1 - best / 12, 0, 1);
-            if (second < best * 1.5 + 0.15)
-                return Result(ScrollCaptureStatus.Ambiguous, bestOffset, 0, confidence);
-            if (!VerifyMatch(pixels, bestOffset, previous, masked, token)) return Result(ScrollCaptureStatus.Unmatched);
             return Result(ScrollCaptureStatus.Appended, bestOffset, 0, confidence);
         }
 
@@ -118,7 +164,7 @@ namespace RitsukageGif.Core
                 var current = pixels.AsSpan((position - offset) * _rowBytes, _rowBytes);
                 var next = pixels.AsSpan((position - offset + 1) * _rowBytes, _rowBytes);
                 var stored = ReferenceRow(position, previous);
-                var storedNext = ReferenceRow(position + 1, previous);
+                var storedNext = ReferenceRow(position + 1, previous, true);
                 var error = 0.0;
                 var samples = 0;
                 for (var x = 0; x < crossSamples; x++)

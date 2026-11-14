@@ -22,6 +22,17 @@ namespace RitsukageGif.Desktop
 
         public PixelSize Resolve(int width, int height)
         {
+            var (outputWidth, outputHeight) = Measure(width, height);
+            outputWidth = Math.Max(1, Math.Round(outputWidth, MidpointRounding.AwayFromZero));
+            outputHeight = Math.Max(1, Math.Round(outputHeight, MidpointRounding.AwayFromZero));
+            if (outputWidth > int.MaxValue || outputHeight > int.MaxValue ||
+                outputWidth * outputHeight > 128L * 1024 * 1024)
+                throw new ArgumentException("The screenshot output exceeds the pixel limit.");
+            return new((int)outputWidth, (int)outputHeight);
+        }
+
+        internal (double Width, double Height) Measure(int width, int height)
+        {
             if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
             double outputWidth;
             double outputHeight;
@@ -48,12 +59,7 @@ namespace RitsukageGif.Desktop
                     throw new ArgumentException("Invalid screenshot output dimensions.");
             }
 
-            outputWidth = Math.Max(1, Math.Round(outputWidth, MidpointRounding.AwayFromZero));
-            outputHeight = Math.Max(1, Math.Round(outputHeight, MidpointRounding.AwayFromZero));
-            if (outputWidth > int.MaxValue || outputHeight > int.MaxValue ||
-                outputWidth * outputHeight > 128L * 1024 * 1024)
-                throw new ArgumentException("The screenshot output exceeds the pixel limit.");
-            return new((int)outputWidth, (int)outputHeight);
+            return (outputWidth, outputHeight);
         }
     }
 }

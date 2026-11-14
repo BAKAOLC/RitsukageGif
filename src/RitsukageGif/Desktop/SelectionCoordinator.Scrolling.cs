@@ -14,6 +14,10 @@ namespace RitsukageGif.Desktop
         internal Action<bool>? ScrollClearConfirmationChanged { get; set; }
         internal Action<ScrollCaptureWarningKind>? ScrollWarningSuppressed { get; set; }
         internal Func<ScreenshotResult, CancellationToken, Task>? ScrollingCloseOutputHandler { get; set; }
+
+        internal Func<ScreenshotScrollingWindow, ScrollingCaptureAction, OutputColorMode, double, CaptureDecoration,
+            ScreenshotAnnotationSession, CancellationToken, Task<bool>>? ScrollingFileOutputHandler { get; set; }
+
         internal bool ScreenshotPreview { get; private set; }
         internal bool WasScrollingScreenshot { get; private set; }
         private bool UsesLocalSource => ScreenshotPreview || DesktopCapture.UsesSourceSelection;
@@ -99,7 +103,11 @@ namespace RitsukageGif.Desktop
                             : (owner as ScreenshotScrollingWindow)?.CaptureOutputOrigin ?? outputOrigin, token),
                     ScrollCapturePreferences.AutoCropOnReverse, SetScrollAutoCrop, colorMode, initialAction,
                     ScrollCapturePreferences.SkipClearConfirmation, SetScrollClearConfirmation,
-                    ScrollingCloseOutputHandler is not null, ScrollCapturePreferences, SuppressScrollWarning);
+                    ScrollingCloseOutputHandler is not null, ScrollCapturePreferences, SuppressScrollWarning,
+                    ScrollingFileOutputHandler is { } streaming
+                        ? (owner, action, token) =>
+                            streaming(owner, action, colorMode, captureScaling, Decoration, annotations, token)
+                        : null);
                 SelectionLogger.ZLogInformation(
                     $"Scrolling capture returned. SelectionId={_selectionId} Finished={_finished} HasFrame={captured is not null} Action={captured?.Action.ToString()}");
                 if (_finished) return;

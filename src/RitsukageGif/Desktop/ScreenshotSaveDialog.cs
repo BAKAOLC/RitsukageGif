@@ -11,7 +11,7 @@ namespace RitsukageGif.Desktop
         private string? _path;
 
         private ScreenshotSaveDialog(IStorageProvider storage, ScreenshotSaveProfile profile, string fallback,
-            string titleKey, OutputColorMode mode, ScreenshotNameContext context)
+            string titleKey, OutputColorMode mode, ScreenshotNameContext context, bool pngOnly)
         {
             Title = UiText.Get(titleKey);
             Width = 620;
@@ -23,13 +23,15 @@ namespace RitsukageGif.Desktop
             Classes.Add("settings-window");
             var directory = new TextBox { Text = profile.ResolveDirectory(fallback, context) };
             var name = new TextBox { Text = Path.GetFileNameWithoutExtension(profile.CreateFileName(context)) };
-            var extensions = mode switch
-            {
-                OutputColorMode.Sdr => new[] { ".png", ".jpg", ".bmp", ".webp", ".avif" },
-                OutputColorMode.Hdr => [".png", ".exr"],
-                OutputColorMode.Both => [".png"],
-                _ => throw new ArgumentOutOfRangeException(nameof(mode)),
-            };
+            var extensions = pngOnly
+                ? [".png"]
+                : mode switch
+                {
+                    OutputColorMode.Sdr => new[] { ".png", ".jpg", ".bmp", ".webp", ".avif" },
+                    OutputColorMode.Hdr => [".png", ".exr"],
+                    OutputColorMode.Both => [".png"],
+                    _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+                };
             var preferred = profile.DialogExtension(mode);
             if (preferred == ".jpeg") preferred = ".jpg";
             var format = new ComboBox
@@ -136,10 +138,10 @@ namespace RitsukageGif.Desktop
 
         internal static async Task<string?> PickAsync(Window? owner, IStorageProvider storage,
             ScreenshotSaveProfile profile, string fallback, string titleKey, OutputColorMode mode,
-            ScreenshotNameContext context, CancellationToken token)
+            ScreenshotNameContext context, bool pngOnly, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            var window = new ScreenshotSaveDialog(storage, profile, fallback, titleKey, mode, context);
+            var window = new ScreenshotSaveDialog(storage, profile, fallback, titleKey, mode, context, pngOnly);
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             window.Closed += (_, _) => completion.TrySetResult();
             await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));

@@ -14,15 +14,19 @@ namespace RitsukageGif.Core
             var height = Math.Max(1, (int)(Height * scale));
             var pixels = new byte[checked(width * height * 4)];
             var vertical = _options.Axis == ScrollCaptureAxis.Vertical;
-            for (var y = 0; y < height; y++)
+            var axisSize = vertical ? height : width;
+            var crossSize = vertical ? width : height;
+            var axisLength = _end - StartOffset;
+            for (var axis = 0; axis < axisSize; axis++)
             {
                 token.ThrowIfCancellationRequested();
-                var sourceY = (int)((long)y * Height / height);
-                for (var x = 0; x < width; x++)
+                var sourceAxis = (int)((long)axis * axisLength / axisSize);
+                var row = Row(StartOffset + sourceAxis);
+                for (var cross = 0; cross < crossSize; cross++)
                 {
-                    var sourceX = (int)((long)x * Width / width);
-                    var row = Row(StartOffset + (vertical ? sourceY : sourceX));
-                    row.Slice((vertical ? sourceX : sourceY) * 4, 4).CopyTo(pixels.AsSpan((y * width + x) * 4, 4));
+                    var sourceCross = (int)((long)cross * _crossLength / crossSize);
+                    var destination = vertical ? axis * width + cross : cross * width + axis;
+                    row.Slice(sourceCross * 4, 4).CopyTo(pixels.AsSpan(destination * 4, 4));
                 }
             }
 

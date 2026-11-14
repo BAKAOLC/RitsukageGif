@@ -8,28 +8,30 @@ namespace RitsukageGif.Desktop
 {
     internal sealed partial class ScreenshotScrollingPreviewWindow : Window
     {
-        private const double BorderWidth = 4;
+        private const double BorderWidth = 2;
         private const double Gap = 15;
         private const double TargetShortEdge = 200;
+        private const double TargetLongEdge = 300;
+        private const uint NoActivate = 0x08000000;
+        private const uint Transparent = 0x20;
         private static readonly ILogger Logger = LogHub.GetLogger("Desktop.Capture.ScrollingPreview");
         private readonly ScreenshotScrollingPreview _preview;
-        private readonly Window _toolbar;
         private bool _captureExcluded;
         private bool _closed;
         private nint _nativeHandle;
+        private PixelRect _placedBounds;
+        private double _placedScale;
         private bool _placementFailed;
 
-        public ScreenshotScrollingPreviewWindow(ScreenshotScrollingPreview preview, Window toolbar)
+        public ScreenshotScrollingPreviewWindow(ScreenshotScrollingPreview preview)
         {
             _preview = preview;
-            _toolbar = toolbar;
             WindowDecorations = WindowDecorations.None;
             ShowActivated = false;
             ShowInTaskbar = false;
             Topmost = true;
             CanResize = false;
             Focusable = false;
-            IsHitTestVisible = false;
             WindowStartupLocation = WindowStartupLocation.Manual;
             MinWidth = 0;
             MinHeight = 0;
@@ -40,7 +42,7 @@ namespace RitsukageGif.Desktop
             _preview.VerticalAlignment = VerticalAlignment.Stretch;
             Content = new Border
             {
-                Background = Brushes.Black, Child = _preview,
+                Background = Brushes.Black, Child = _preview, Padding = new(BorderWidth),
             };
             TransientWindowShell.Configure(this);
             if (OperatingSystem.IsWindows()) Win32Properties.AddWindowStylesCallback(this, FilterStyles);
@@ -94,8 +96,6 @@ namespace RitsukageGif.Desktop
                 return;
             }
 
-            var border = (int)Math.Ceiling(BorderWidth * 2 * scale);
-            PreviewPixelSize = new(Math.Max(1, bounds.Width - border), Math.Max(1, bounds.Height - border));
             var inside = !bounds.Intersect(region).IsEmpty;
             if (OperatingSystem.IsWindows())
             {
@@ -112,17 +112,15 @@ namespace RitsukageGif.Desktop
             }
 
             var firstShow = !IsVisible;
-            Position = new(bounds.X, bounds.Y);
-            Width = bounds.Width / scale;
-            Height = bounds.Height / scale;
-            if (firstShow) Show();
-            _preview.InvalidateVisual();
-            if (OperatingSystem.IsWindows())
+            _preview.UpdateView(axis);
+            if (firstShow || _placedBounds != bounds || !_placedScale.Equals(scale))
             {
-                var toolbar = _toolbar.TryGetPlatformHandle() is { HandleDescriptor: "HWND" } handle
-                    ? handle.Handle
-                    : 0;
-                if (!SetWindowPos(_nativeHandle, toolbar != 0 ? toolbar : -1, bounds.X, bounds.Y, bounds.Width,
+                Position = new(bounds.X, bounds.Y);
+                Width = bounds.Width / scale;
+                Height = bounds.Height / scale;
+                if (firstShow) Show();
+                if (OperatingSystem.IsWindows() &&
+                    !SetWindowPos(_nativeHandle, -1, bounds.X, bounds.Y, bounds.Width,
                         bounds.Height, 0x0210))
                 {
                     if (!_placementFailed)
@@ -134,10 +132,13 @@ namespace RitsukageGif.Desktop
                 }
 
                 _placementFailed = false;
+                _placedBounds = bounds;
+                _placedScale = scale;
             }
 
-            PreviewPixelSize = new(Math.Max(1, (int)Math.Ceiling((Width - BorderWidth * 2) * RenderScaling)),
-                Math.Max(1, (int)Math.Ceiling((Height - BorderWidth * 2) * RenderScaling)));
+            var shortEdge = Math.Clamp((int)Math.Ceiling(TargetShortEdge * RenderScaling * 2), 1, 768);
+            var longEdge = Math.Clamp(1048576 / shortEdge, 1, 4096);
+            PreviewPixelSize = axis == ScrollCaptureAxis.Vertical ? new(shortEdge, longEdge) : new(longEdge, shortEdge);
             if (firstShow)
                 Logger.ZLogInformation(
                     $"Scrolling live preview shown. Axis={axis.ToString()}, InsideCapture={inside}, CaptureExcluded={_captureExcluded}, Bounds={bounds}");
@@ -150,11 +151,10 @@ namespace RitsukageGif.Desktop
             Marshal.SetLastPInvokeError(0);
             var style = GetWindowLong(handle.Handle, -20);
             if (style == 0 && Marshal.GetLastPInvokeError() != 0) return false;
-            var extended = (style | 0x08000000 | 0x80 | 0x20 | 0x80000) & ~0x00040000;
+            var extended = FilterStyles(0, (uint)style).ExtendedStyle;
             Marshal.SetLastPInvokeError(0);
-            if (SetWindowLong(handle.Handle, -20, extended) == 0 && Marshal.GetLastPInvokeError() != 0)
+            if (SetWindowLong(handle.Handle, -20, (int)extended) == 0 && Marshal.GetLastPInvokeError() != 0)
                 return false;
-            if (!SetLayeredWindowAttributes(handle.Handle, 0, 255, 2)) return false;
             _nativeHandle = handle.Handle;
             _captureExcluded = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041) &&
                                SetWindowDisplayAffinity(handle.Handle, 0x11);
@@ -163,20 +163,30 @@ namespace RitsukageGif.Desktop
 
         private static (uint Style, uint ExtendedStyle) FilterStyles(uint style, uint extendedStyle)
         {
-            return (style, (extendedStyle | 0x08000000 | 0x80 | 0x20 | 0x80000) & ~0x00040000u);
+            return (style, (extendedStyle | NoActivate) & ~Transparent);
         }
 
         private static PixelRect FindPlacement(PixelRect area, PixelRect region, ScrollCaptureAxis axis,
             PixelRect toolbar, double scale, PixelSize image, bool allowInside)
         {
-            var size = FitImage(area, axis, scale, image);
-            if (size.Width <= 0 || size.Height <= 0) return default;
             var gap = (int)Math.Ceiling(Gap * scale);
             var sides = axis == ScrollCaptureAxis.Vertical ? new[] { 0, 1, 2, 3 } : [2, 3, 0, 1];
             foreach (var side in sides)
+            {
+                var available = side switch
+                {
+                    0 => area with { Width = area.Right - Math.Max(area.X, region.Right + gap) },
+                    1 => area with { Width = Math.Min(area.Right, region.X - gap) - area.X },
+                    2 => area with { Height = area.Bottom - Math.Max(area.Y, region.Bottom + gap) },
+                    _ => area with { Height = Math.Min(area.Bottom, region.Y - gap) - area.Y },
+                };
+                var size = FitImage(available, axis, scale, image);
+                if (size.Width <= 0 || size.Height <= 0) continue;
                 if (side < 2)
                 {
-                    var x = side == 0 ? region.Right + gap : region.X - gap - size.Width;
+                    var x = side == 0
+                        ? Math.Max(area.X, region.Right + gap)
+                        : Math.Min(area.Right, region.X - gap) - size.Width;
                     foreach (var y in new[]
                              {
                                  region.Y, toolbar.Bottom + gap, toolbar.Y - gap - size.Height, area.Y,
@@ -190,7 +200,9 @@ namespace RitsukageGif.Desktop
                 }
                 else
                 {
-                    var y = side == 2 ? region.Bottom + gap : region.Y - gap - size.Height;
+                    var y = side == 2
+                        ? Math.Max(area.Y, region.Bottom + gap)
+                        : Math.Min(area.Bottom, region.Y - gap) - size.Height;
                     foreach (var x in new[]
                              {
                                  region.X, toolbar.Right + gap, toolbar.X - gap - size.Width, area.X,
@@ -202,20 +214,21 @@ namespace RitsukageGif.Desktop
                         if (Fits(candidate, area, toolbar) && candidate.Intersect(region).IsEmpty) return candidate;
                     }
                 }
+            }
 
             if (!allowInside) return default;
             var inside = area.Intersect(region);
-            size = FitImage(inside, axis, scale, image);
-            if (size.Width <= 0 || size.Height <= 0) return default;
+            var insideSize = FitImage(inside, axis, scale, image);
+            if (insideSize.Width <= 0 || insideSize.Height <= 0) return default;
             foreach (var point in new[]
                      {
-                         new Avalonia.PixelPoint(inside.Right - size.Width, inside.Y),
+                         new Avalonia.PixelPoint(inside.Right - insideSize.Width, inside.Y),
                          new Avalonia.PixelPoint(inside.X, inside.Y),
-                         new Avalonia.PixelPoint(inside.Right - size.Width, inside.Bottom - size.Height),
-                         new Avalonia.PixelPoint(inside.X, inside.Bottom - size.Height),
+                         new Avalonia.PixelPoint(inside.Right - insideSize.Width, inside.Bottom - insideSize.Height),
+                         new Avalonia.PixelPoint(inside.X, inside.Bottom - insideSize.Height),
                      })
             {
-                var candidate = new PixelRect(point.X, point.Y, size.Width, size.Height);
+                var candidate = new PixelRect(point.X, point.Y, insideSize.Width, insideSize.Height);
                 if (Fits(candidate, area, toolbar)) return candidate;
             }
 
@@ -231,15 +244,15 @@ namespace RitsukageGif.Desktop
             PixelSize image)
         {
             var border = (int)Math.Ceiling(BorderWidth * scale);
-            var width = area.Width - border * 2;
-            var height = area.Height - border * 2;
-            if (width < 1 || height < 1 || image.Width <= 0 || image.Height <= 0) return default;
-            var target = Math.Max(1, TargetShortEdge * scale - border * 2);
-            var ratio = Math.Min(1, Math.Min((double)width / image.Width, (double)height / image.Height));
-            ratio = Math.Min(ratio, target /
-                                    (axis == ScrollCaptureAxis.Vertical ? image.Width : image.Height));
-            return new(Math.Max(1, (int)Math.Floor(image.Width * ratio)) + border * 2,
-                Math.Max(1, (int)Math.Floor(image.Height * ratio)) + border * 2);
+            var vertical = axis == ScrollCaptureAxis.Vertical;
+            var shortEdge = Math.Min(vertical ? area.Width : area.Height,
+                (int)Math.Ceiling(TargetShortEdge * scale));
+            var longEdge = Math.Min(vertical ? area.Height : area.Width, (int)Math.Ceiling(TargetLongEdge * scale));
+            if (shortEdge < 64 * scale || longEdge < 64 * scale) return default;
+            var aspect = vertical ? (double)image.Height / image.Width : (double)image.Width / image.Height;
+            longEdge = Math.Min(longEdge, Math.Max(shortEdge / 2,
+                (int)Math.Ceiling((shortEdge - border * 2) * Math.Min(aspect, 2)) + border * 2));
+            return vertical ? new(shortEdge, longEdge) : new(longEdge, shortEdge);
         }
 
         [LibraryImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
@@ -247,10 +260,6 @@ namespace RitsukageGif.Desktop
 
         [LibraryImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
         private static partial int SetWindowLong(nint window, int index, int value);
-
-        [LibraryImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static partial bool SetLayeredWindowAttributes(nint window, uint color, byte alpha, uint flags);
 
         [LibraryImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

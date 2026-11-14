@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -36,9 +37,11 @@ namespace RitsukageGif.Desktop
         private readonly bool _startAutomatically;
         private readonly Button _startStop = new();
         private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Foreground = AppTheme.Muted };
+        private readonly Border _statusPanel = new();
         private readonly bool _windowSource;
         private ScrollCaptureAxis _axis;
         private WriteableBitmap? _bitmap;
+        private string? _boundStatusKey;
         private string? _captureFailure;
         private bool _captureInitialized;
         private bool _captureStarted;
@@ -46,15 +49,14 @@ namespace RitsukageGif.Desktop
         private bool _closed;
 
         private PixelRect _dragRegion;
-        private bool _dragStartedWhileCapturing;
         private Avalonia.PixelPoint? _dragStart;
+        private bool _dragStartedWhileCapturing;
         private bool _excluded;
         private ScrollCaptureStatus? _lastCaptureStatus;
         private bool _obstructed;
         private PixelRect _region;
         private bool _skipClearConfirmation;
         private string? _statusNoticeKey;
-        private string? _boundStatusKey;
         private bool _updatingDirection;
 
         private ScreenshotScrollingWindow(Screens screens, PixelRect region, ScrollCaptureAxis axis,
@@ -242,7 +244,9 @@ namespace RitsukageGif.Desktop
             ScrollCaptureInitialAction initialAction = ScrollCaptureInitialAction.DoNotStartAutomatically,
             bool skipClearConfirmation = false, Action<bool>? clearConfirmationChanged = null,
             bool saveOnUserClose = false, ScrollCapturePreferences? warningPreferences = null,
-            Action<ScrollCaptureWarningKind>? warningSuppressed = null)
+            Action<ScrollCaptureWarningKind>? warningSuppressed = null,
+            Func<ScreenshotScrollingWindow, ScrollingCaptureAction, CancellationToken, Task<bool>>?
+                streamingOutputHandler = null)
         {
             Dispatcher.UIThread.VerifyAccess();
             token.ThrowIfCancellationRequested();
@@ -259,6 +263,7 @@ namespace RitsukageGif.Desktop
             window._outputToken = captureToken;
             window._saveOnUserClose = saveOnUserClose;
             window._outputHandler = outputHandler;
+            window._streamingOutputHandler = streamingOutputHandler;
             await using var registration = token.Register(() => Dispatcher.UIThread.Post(window.Close));
             Task? running = null;
             window.Closed += CancelCapture;
@@ -329,6 +334,7 @@ namespace RitsukageGif.Desktop
                 }
                 finally
                 {
+                    window._session.DisposeStitching();
                     window.Closed -= CancelCapture;
                     ScrollingUiLogger.ZLogInformation(
                         $"Scrolling window operation ended. OperationId={operationId} Closed={window._closed}");
@@ -373,6 +379,17 @@ namespace RitsukageGif.Desktop
             Dispatcher.UIThread.Post(() =>
             {
                 if (_closed || generation != _session.Generation) return;
+                var imageSize = new PixelSize(result.Width, result.Height);
+                var matched = _preview.ImageSize == imageSize && _session.HasMatchedViewport;
+                var viewport = _session.PreviewViewport;
+                if (preview is null && _lastCaptureStatus == result.Status && _preview.Matched == matched &&
+                    _preview.Viewport == viewport)
+                {
+                    ObserveCaptureWarnings(result.Status);
+                    RefreshStatus();
+                    return;
+                }
+
                 SetOutputActionsEnabled(!_outputting && result is { Width: > 0, Height: > 0 });
                 _size.Text = $"{result.Width} × {result.Height}";
                 _lastCaptureStatus = result.Status;
@@ -382,9 +399,9 @@ namespace RitsukageGif.Desktop
                     _captureFailure = null;
                 RefreshStatus();
                 SetStartStopContent();
-                _preview.ImageSize = new(result.Width, result.Height);
-                _preview.Matched = _session.HasMatchedViewport;
-                _preview.Viewport = _session.PreviewViewport;
+                if (preview is not null) _preview.ImageSize = imageSize;
+                _preview.Matched = preview is null ? matched : _session.HasMatchedViewport;
+                _preview.Viewport = viewport;
                 _preview.InvalidateVisual();
                 if (preview is null)
                 {
@@ -414,7 +431,7 @@ namespace RitsukageGif.Desktop
                 if (_boundStatusKey is not null || _status.Text != failure)
                     _status.Text = failure;
                 _boundStatusKey = null;
-                _status.IsVisible = true;
+                UpdateStatusAppearance(true, true);
                 return;
             }
 
@@ -422,7 +439,7 @@ namespace RitsukageGif.Desktop
                 ? "ScrollCaptureObstructed"
                 : _statusNoticeKey ?? (_lastCaptureStatus == ScrollCaptureStatus.LimitReached
                     ? "ScrollCaptureLimit"
-                    : _session.OutputAxisLength > MaximumNonFileOutputLength
+                    : IsFileOnlyCapture
                         ? "ScrollCaptureFileOnly"
                         : _session.OutputAxisLength > FileOnlyWarningLength
                             ? "ScrollCaptureFileOnlyWarning"
@@ -438,7 +455,18 @@ namespace RitsukageGif.Desktop
                 _status.Bind(TextBlock.TextProperty, LiveText.Resource(key));
             }
 
-            _status.IsVisible = notice is not null;
+            var lengthWarning = notice is "ScrollCaptureLimit" or "ScrollCaptureFileOnly" or
+                "ScrollCaptureFileOnlyWarning";
+            UpdateStatusAppearance(notice is not null || ShowMatchFailureHint, lengthWarning);
+        }
+
+        private void UpdateStatusAppearance(bool visible, bool emphasized)
+        {
+            _statusPanel.IsVisible = visible;
+            _statusPanel.Background = emphasized ? AppTheme.SurfaceTint : null;
+            _statusPanel.BorderBrush = emphasized ? AppTheme.Error : null;
+            _status.Foreground = emphasized ? AppTheme.Error : AppTheme.Muted;
+            _status.FontWeight = emphasized ? FontWeight.SemiBold : FontWeight.Normal;
         }
     }
 }

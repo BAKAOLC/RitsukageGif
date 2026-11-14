@@ -1236,7 +1236,7 @@ X {0}, Y {1}</value>
     <value>Scrolling capture</value>
   </data>
   <data name="ScrollCaptureLimit" xml:space="preserve">
-    <value>Length or memory limit reached. Scroll back into the stitched area or finish.</value>
+    <value>Length or memory limit reached. Save the current capture or scroll back into the stitched area and trim it.</value>
   </data>
   <data name="ScrollCaptureFileOnlyWarningTitle" xml:space="preserve"><value>Approaching the long screenshot output limit</value></data>
   <data name="ScrollCaptureFileOnlyWarningMessage" xml:space="preserve"><value>Captures longer than 29,000 pixels can only be saved to a file. Stop automatic scrolling to finish at the current size, or continue capturing.</value></data>
@@ -1245,11 +1245,12 @@ X {0}, Y {1}</value>
   <data name="ScrollCaptureContinue" xml:space="preserve"><value>Continue</value></data>
   <data name="ScrollCaptureStop" xml:space="preserve"><value>Stop</value></data>
   <data name="ScrollCaptureFileOnlyWarning" xml:space="preserve">
-    <value>Captures longer than 29,000 pixels can only be saved to a file.</value>
+    <value>Ultra-long capture ahead. Beyond 29,000 pixels, only file saving is available.</value>
   </data>
   <data name="ScrollCaptureFileOnly" xml:space="preserve">
-    <value>This capture exceeds 29,000 pixels and can only be saved to a file.</value>
+    <value>Ultra-long capture. Save as PNG or trim to restore copy, pin, recognition and editing.</value>
   </data>
+  <data name="ScrollCaptureStreamingPngRequired" xml:space="preserve"><value>Ultra-long screenshots can only be saved as PNG.</value></data>
   <data name="ScrollCaptureObstructed" xml:space="preserve">
     <value>Move this panel outside the capture region to continue.</value>
   </data>

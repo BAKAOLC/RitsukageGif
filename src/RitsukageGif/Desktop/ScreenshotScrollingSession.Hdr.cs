@@ -53,20 +53,24 @@ namespace RitsukageGif.Desktop
             for (var y = 0; y < area.Height; y++)
             {
                 token.ThrowIfCancellationRequested();
-                for (var x = 0; x < area.Width; x++)
-                {
-                    var source = (y * area.Width + x) * 4;
-                    var destination = ((area.Y + y) * width + area.X + x) * 4;
-                    var alpha = pixels[source + 3];
-                    if (alpha == 0) continue;
-                    var behindAlpha = output[destination + 3];
-                    var combined = alpha + (behindAlpha * (255 - alpha) + 127) / 255;
-                    for (var channel = 0; channel < 3; channel++)
-                        output[destination + channel] = (byte)((pixels[source + channel] * alpha +
-                                                                output[destination + channel] * behindAlpha *
-                                                                (255 - alpha) / 255 + combined / 2) / combined);
-                    output[destination + 3] = (byte)combined;
-                }
+                BlendCursorRow(output.AsSpan(((area.Y + y) * width + area.X) * 4, area.Width * 4),
+                    pixels.AsSpan(y * area.Width * 4, area.Width * 4));
+            }
+        }
+
+        private static void BlendCursorRow(Span<byte> output, ReadOnlySpan<byte> pixels)
+        {
+            for (var offset = 0; offset < pixels.Length; offset += 4)
+            {
+                var alpha = pixels[offset + 3];
+                if (alpha == 0) continue;
+                var behindAlpha = output[offset + 3];
+                var combined = alpha + (behindAlpha * (255 - alpha) + 127) / 255;
+                for (var channel = 0; channel < 3; channel++)
+                    output[offset + channel] = (byte)((pixels[offset + channel] * alpha +
+                                                       output[offset + channel] * behindAlpha *
+                                                       (255 - alpha) / 255 + combined / 2) / combined);
+                output[offset + 3] = (byte)combined;
             }
         }
     }
